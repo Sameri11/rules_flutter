@@ -386,15 +386,7 @@ maven.install(
         "https://maven.google.com",
         "https://repo1.maven.org/maven2",
     ],
-    # Every artifact above is already reduced to one version, so "pinned" makes
-    # those chosen versions authoritative over transitive suggestions rather
-    # than failing resolution when a pom asks for something older.
-    #
-    # Fine for an app this size; NOT enough for a large real graph. AndroidX
-    # poms carry Maven *strict* ranges no POM-based resolver can satisfy, so a
-    # real app needs `resolver = "gradle"` plus a `lock_file` instead. See
-    # docs/package-recipes.md -> "The breadth check".
-    version_conflict_policy = "pinned",
+{resolution}
 )
 use_repo(maven, "flutter_maven")
 """
@@ -402,12 +394,40 @@ use_repo(maven, "flutter_maven")
 
 
 
-def _module_segment(coordinates):
+# Two ways to settle versions, and which one a project needs depends on its
+# dependency graph rather than on taste -- so the consumer picks.
+#
+# coursier is the default and resolves a small graph fine. It cannot resolve a
+# large AndroidX one: those poms carry Maven *strict* ranges (the same artifact
+# demanded as `[2.7.0,2.7.0]` down one path and `[2.5.1,2.5.1]` down another),
+# which no POM-based resolver can satisfy. Gradle reads the Gradle Module
+# Metadata AndroidX also publishes, where the constraints are loose, and is the
+# only resolver that gets through -- at the cost of requiring a lock file, which
+# only coursier may omit.
+_COURSIER_RESOLUTION = """    # Every artifact above is already reduced to one version, so "pinned" makes
+    # those chosen versions authoritative over transitive suggestions rather
+    # than failing resolution when a pom asks for something older.
+    version_conflict_policy = "pinned","""
+
+_PINNED_RESOLUTION = """    resolver = "{resolver}",
+    # Only the coursier resolver may omit a lock file. Repin with
+    # `bazel run @flutter_maven//:pin` -- note @unpinned_flutter_maven's alias is
+    # broken under bzlmod.
+    lock_file = "{lock_file}","""
+
+
+def _module_segment(coordinates, resolver, lock_file):
     return _MODULE_SEGMENT_HEADER.format(
         artifacts = "".join([
             "\n        \"{}\",".format(c)
             for c in highest_versions(coordinates)
         ]),
+        resolution = (
+            _COURSIER_RESOLUTION if resolver == "coursier" else _PINNED_RESOLUTION.format(
+                resolver = resolver,
+                lock_file = lock_file,
+            )
+        ),
     )
 
 
@@ -1381,7 +1401,11 @@ def _flutter_plugins_impl(ctx):
     # settled once, instead of shipping both to the dexer.
     ctx.file(
         "plugin_deps.MODULE.bazel",
-        _module_segment(FLUTTER_EMBEDDING_ARTIFACTS + all_coordinates),
+        _module_segment(
+            FLUTTER_EMBEDDING_ARTIFACTS + all_coordinates + ctx.attr.extra_artifacts,
+            ctx.attr.maven_resolver,
+            ctx.attr.maven_lock_file,
+        ),
     )
 
     ctx.file(
@@ -1461,6 +1485,12 @@ Only needed to resolve a recipe for a package that is not a Flutter plugin --
 such recipe declares nothing extra.""",
             allow_single_file = True,
         ),
+        "maven_resolver": attr.string(
+            default = "coursier",
+            values = ["coursier", "gradle", "maven"],
+        ),
+        "maven_lock_file": attr.string(),
+        "extra_artifacts": attr.string_list(),
         "recipes": attr.string_dict(
             doc = "Package name -> JSON {bzl, macro} naming the recipe to hand generation to.",
         ),
@@ -1496,6 +1526,34 @@ Required only if a plugins.package() recipe names a package that is not a Flutte
 plugin -- a package with a Dart build hook and no android/ module never appears
 in .flutter-plugins-dependencies, so there is nothing else to resolve it from.""",
             allow_single_file = True,
+        ),
+        "extra_artifacts": attr.string_list(
+            doc = """Maven coordinates to add to the resolution, attributable to no package.
+
+`plugins.package(artifacts = ...)` covers a coordinate some *plugin* needs. This
+covers the rest: an artifact the resolver should have pulled in and did not.
+
+The case it exists for is Kotlin Multiplatform. A KMP module publishes `-android`
+and `-jvm` (sometimes `-desktop`) children, and rules_jvm_external's gradle
+resolver resolves as a plain JVM consumer, so an Android app silently gets the
+wrong one -- `androidx.lifecycle:lifecycle-runtime` resolves to
+`lifecycle-runtime-desktop`, which has no `ReportFragment`, and the app compiles
+cleanly then dies on launch with NoClassDefFoundError. Naming the `-android`
+variant here forces it into the graph. See rules_jvm_external#1605.""",
+        ),
+        "maven_resolver": attr.string(
+            default = "coursier",
+            values = ["coursier", "gradle", "maven"],
+            doc = """Which resolver settles the Maven graph.
+
+`coursier` (the default) needs no lock file and handles a small graph. A real
+app's AndroidX graph needs `gradle`, which is the only resolver that reads Gradle
+Module Metadata and so the only one that can satisfy the strict version ranges
+AndroidX poms carry -- see docs/package-recipes.md. `gradle` and `maven` both
+require `maven_lock_file`.""",
+        ),
+        "maven_lock_file": attr.string(
+            doc = "Label of the maven_install.json lock file, e.g. \"//:maven_install.json\".",
         ),
         "embedding": attr.label(
             default = "@flutter_embedding//jar:file",
@@ -1562,7 +1620,17 @@ resolve in that module's repo mapping, not this one's.""",
 def _flutter_plugins_ext_impl(ctx):
     overrides = {}
     recipes = {}
-    for mod in ctx.modules:
+
+    # Dependencies first, then the root module, so the root's entry for a
+    # package wins. A dependency may legitimately ship a recipe for something it
+    # depends on -- that is why `package` is not restricted to the root the way
+    # `project` is -- but the application being built has the final say.
+    #
+    # Without this, these rules' own demo-app recipes leaked into a consumer's
+    # graph and silently replaced theirs: smooth_app declared a `rive_native`
+    # recipe, got flutter_bazel's, and failed loading a `@@//tools/flutter`
+    # label that does not exist in a consumer's main repo.
+    for mod in [m for m in ctx.modules if not m.is_root] + [m for m in ctx.modules if m.is_root]:
         for package in mod.tags.package:
             if package.artifacts:
                 overrides[package.name] = json.encode(package.artifacts)
@@ -1602,6 +1670,9 @@ def _flutter_plugins_ext_impl(ctx):
                 name = "flutter_plugins",
                 metadata = project.metadata,
                 package_config = project.package_config,
+                extra_artifacts = project.extra_artifacts,
+                maven_resolver = project.maven_resolver,
+                maven_lock_file = project.maven_lock_file,
                 overrides = overrides,
                 recipes = recipes,
                 # The embedding label comes from the root module; defs and

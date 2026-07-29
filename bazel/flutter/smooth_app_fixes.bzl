@@ -11,7 +11,20 @@ in the rules. The `# GAP:` note on each says what would retire it.
 """
 
 load("@rules_android//rules:rules.bzl", "android_library")
+load("@@//tools/flutter:recipe.bzl", "flutter_native_contribution")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+
+def _no_native(name):
+    """Declare that this package contributes no native library, deliberately.
+
+    Every recipe must define `<name>_flutter_native`; the generated aggregate
+    depends on that name, so a recipe that forgets one fails at analysis rather
+    than producing a target nothing references. These recipes patch a *build*
+    and ship no .so, so they say so explicitly -- which is what `empty` is for.
+    Staying silent is the failure this convention exists to catch.
+    """
+    flutter_native_contribution(name = name + "_flutter_native", empty = True)
+
 
 def _srcs(info, extension):
     """Sources by extension, recovered from the staged tree rather than trusted.
@@ -48,6 +61,7 @@ def url_launcher_android_recipe(name, info):
         outs = ["BuildConfig.java"],
         cmd = "cat > $@ <<'EOF'\n" + _BUILD_CONFIG.format(package = info.namespace) + "EOF",
     )
+    _no_native(name)
 
     kt_android_library(
         name = name,
@@ -58,6 +72,7 @@ def url_launcher_android_recipe(name, info):
         resource_files = info.resource_files,
         deps = [info.embedding] + info.plugin_deps + info.coordinates,
     )
+
 
 # --- mobile_scanner ----------------------------------------------------------
 
@@ -81,6 +96,8 @@ def mobile_scanner_recipe(name, info):
             "@flutter_maven//:com_google_guava_guava",
         ],
     )
+    _no_native(name)
+
 
 # --- sqflite_android ---------------------------------------------------------
 
@@ -103,6 +120,8 @@ def sqflite_android_recipe(name, info):
             "@flutter_maven//:org_jetbrains_annotations",
         ],
     )
+    _no_native(name)
+
 
 # --- shared_preferences_android ----------------------------------------------
 
@@ -135,3 +154,5 @@ def shared_preferences_android_recipe(name, info):
         resource_files = info.resource_files,
         deps = [info.embedding] + info.plugin_deps + info.coordinates,
     )
+    _no_native(name)
+
