@@ -90,7 +90,7 @@ consumer-supplied recipes; see "Package recipes" below.
 | `tools/flutter/recipe.bzl` | The recipe contract: `FlutterNativeInfo`, `flutter_native_contribution`, `flutter_native_libs` |
 | `bazel/flutter/` | This project's *own* recipes, as a consuming project would write them |
 | `plugin_deps.MODULE.bazel` | Generated, committed, `include()`d — the build's only `maven.install` |
-| `tools/flutter/embedding.bzl` | Maven coordinates of the Flutter embedding — the source of truth |
+| `tools/flutter/embedding.bzl` | Flutter embedding's Maven coordinates, and `flutter_embedding_library()` — the macro a consuming project instantiates |
 | `tools/flutter/maven.bzl` | Coordinate → label mangling and highest-wins version reconciliation |
 | `app/` | Minimal Flutter app used as the test subject |
 | `packages/mylib/` | A `path:` dependency, used to test input declaration |

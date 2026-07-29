@@ -10,7 +10,7 @@ load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load("@rules_java//java:defs.bzl", "java_import")
 load("//tools/flutter:defs.bzl", "jni_lib_jar", "strip_native_libs")
-load("//tools/flutter:embedding.bzl", "FLUTTER_EMBEDDING_DEPS")
+load("//tools/flutter:embedding.bzl", "flutter_embedding_deps", "flutter_embedding_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,6 +18,14 @@ package(default_visibility = ["//visibility:public"])
 # aggregate is generated from .flutter-plugins-dependencies, so adding a plugin
 # to pubspec.yaml is the only step -- see //tools/flutter:plugins.bzl.
 PLUGINS = ["@flutter_plugins//:all"]
+
+# The engine jar with its AndroidX dependencies attached. Instantiated here, in
+# the app, rather than inside the rules: its deps come from @flutter_maven, which
+# this project's MODULE.bazel creates from this project's plugin coordinates. A
+# label naming it from inside //tools/flutter would resolve against the *rules'*
+# dependencies instead -- which is exactly the bug that made these rules
+# unusable as a bazel_dep. See //tools/flutter:embedding.bzl.
+flutter_embedding_library(name = "flutter_embedding")
 
 # The AOT snapshot, wrapped as lib/arm64-v8a/libapp.so inside a jar.
 # android_binary extracts native libs from jars on the classpath, which is the
@@ -79,7 +87,7 @@ android_library(
     name = "generated_plugin_registrant",
     srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
     deps = PLUGINS + [
-        "//tools/flutter:flutter_embedding",
+        ":flutter_embedding",
         # @Keep / @NonNull. java_import deps are not re-exported to a consumer's
         # compile classpath, so this is declared here rather than inherited
         # through :flutter_embedding.
@@ -125,8 +133,8 @@ android_binary(
         # libflutter.so, stripped -- see :flutter_engine_stripped
         ":flutter_engine",
         # io.flutter.* embedding classes
-        "//tools/flutter:flutter_embedding",
-    ] + FLUTTER_EMBEDDING_DEPS + PLUGINS,
+        ":flutter_embedding",
+    ] + flutter_embedding_deps() + PLUGINS,
 )
 
 # The generated manifest names ".MainActivity".
@@ -136,5 +144,5 @@ android_binary(
 kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/demo_app/MainActivity.kt"],
-    deps = ["//tools/flutter:flutter_embedding"],
+    deps = [":flutter_embedding"],
 )

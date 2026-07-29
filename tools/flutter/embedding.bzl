@@ -19,6 +19,7 @@ regardless of version, so a plugin could silently downgrade an artifact declared
 here.
 """
 
+load("@rules_java//java:defs.bzl", "java_import")
 load(":maven.bzl", "maven_label")
 
 FLUTTER_EMBEDDING_ARTIFACTS = [
@@ -40,16 +41,55 @@ FLUTTER_EMBEDDING_ARTIFACTS = [
 
 # Targets that exist in the resolved repository without being declared above,
 # because something else pulls them in transitively.
-_TRANSITIVE_DEPS = [
-    # androidx.annotation became a KMP module at 1.7: the declared artifact is
-    # metadata-only and carries no class files. It satisfies runtime resolution
-    # (its pom points at annotation-jvm) but not a strict compile classpath, and
-    # @NonNull is on essentially every FlutterPlugin method, so anything
-    # compiling against the embedding needs the jvm artifact.
-    "@flutter_maven//:androidx_annotation_annotation_jvm",
-]
+#
+# androidx.annotation became a KMP module at 1.7: the declared artifact is
+# metadata-only and carries no class files. It satisfies runtime resolution (its
+# pom points at annotation-jvm) but not a strict compile classpath, and @NonNull
+# is on essentially every FlutterPlugin method, so anything compiling against
+# the embedding needs the jvm artifact.
+_TRANSITIVE_DEPS = ["//:androidx_annotation_annotation_jvm"]
 
-FLUTTER_EMBEDDING_DEPS = [
-    maven_label(coordinate)
-    for coordinate in FLUTTER_EMBEDDING_ARTIFACTS
-] + _TRANSITIVE_DEPS
+def flutter_embedding_deps(maven_repo = "@flutter_maven"):
+    """Labels of the embedding's AndroidX dependencies in `maven_repo`.
+
+    A function of the repository rather than a constant, because the repository
+    belongs to the *consuming* project: its coordinate list is that project's
+    plugins merged with these, so it is created by that project's MODULE.bazel
+    and is not visible from inside these rules. See flutter_embedding_library.
+    """
+    return [
+        maven_label(coordinate, repo = maven_repo)
+        for coordinate in FLUTTER_EMBEDDING_ARTIFACTS
+    ] + [maven_repo + dep for dep in _TRANSITIVE_DEPS]
+
+def flutter_embedding_library(name = "flutter_embedding", maven_repo = "@flutter_maven"):
+    """The engine jar re-imported with its AndroidX dependencies attached.
+
+    **Instantiated by the consuming project, not by these rules**, because its
+    deps live in a Maven repository the consumer's MODULE.bazel creates. A macro
+    here and a target there is the only arrangement that works: a label like
+    `@flutter_maven//:x` written inside this module would resolve against *this*
+    module's dependencies, so a consumer would silently compile against whatever
+    Maven graph these rules happen to declare for their own demo app.
+
+    The AndroidX deps are `exports`, not just `deps`. Gradle attaches the
+    embedding to every plugin as an *api* dependency precisely so its API
+    surface propagates -- `FlutterPlugin` annotates its methods with androidx
+    @NonNull, so a plugin cannot compile against the embedding without also
+    seeing androidx.annotation. Bazel does not re-export `deps` to a consumer's
+    compile classpath, so without this every plugin target fails Turbine with
+    "symbol not found androidx.annotation.NonNull".
+
+    Desugaring resolves supertypes per-target, which is why the deps hang here,
+    on the target that holds the classes, rather than on android_binary: with
+    them only there, singlejar fails with "WindowMetricsCalculator needed on the
+    classpath for desugaring io/flutter/util/ViewUtils".
+    """
+    deps = flutter_embedding_deps(maven_repo)
+    java_import(
+        name = name,
+        jars = ["@flutter_embedding//jar:file"],
+        deps = deps,
+        exports = deps,
+        visibility = ["//visibility:public"],
+    )

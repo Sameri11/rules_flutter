@@ -1497,6 +1497,18 @@ plugin -- a package with a Dart build hook and no android/ module never appears
 in .flutter-plugins-dependencies, so there is nothing else to resolve it from.""",
             allow_single_file = True,
         ),
+        "embedding": attr.label(
+            default = "@flutter_embedding//jar:file",
+            doc = """The `flutter_embedding_library` target every plugin compiles against.
+
+Supplied by the consuming project because the target must live there: its deps
+are Maven artifacts resolved from that project's own coordinate list, and a
+label naming them from inside these rules would resolve against these rules'
+dependencies instead. Instantiate it with
+`//tools/flutter:embedding.bzl%flutter_embedding_library` and pass the result
+here. The default is the bare engine jar, which compiles but leaves plugins
+without androidx.annotation -- enough to fail loudly rather than silently.""",
+        ),
     },
 )
 
@@ -1570,7 +1582,21 @@ def _flutter_plugins_ext_impl(ctx):
                     "macro": package.macro,
                 })
 
+    # `project` is honoured from the **root module only**, and deliberately.
+    #
+    # It names a repository (`flutter_plugins`) and describes one application, so
+    # a dependency declaring one would both collide on the name and generate the
+    # wrong graph. Bazel's own guidance is that only the root module should
+    # directly affect repository names. Without this, adding these rules as a
+    # bazel_dep fails immediately -- their own demo app's project tag fires
+    # alongside the consumer's.
+    #
+    # `package` tags are *not* restricted this way: they name pub packages, not
+    # repositories, so a library module may reasonably ship a recipe for a
+    # package it depends on.
     for mod in ctx.modules:
+        if not mod.is_root:
+            continue
         for project in mod.tags.project:
             flutter_plugins(
                 name = "flutter_plugins",
@@ -1578,10 +1604,11 @@ def _flutter_plugins_ext_impl(ctx):
                 package_config = project.package_config,
                 overrides = overrides,
                 recipes = recipes,
-                # Resolved here, in the module that owns the label, so the
-                # generated repository does not have to reason about repo
+                # The embedding label comes from the root module; defs and
+                # recipe_bzl are resolved here, in the module that owns them, so
+                # the generated repository does not have to reason about repo
                 # mapping to find them.
-                embedding = str(Label("//tools/flutter:flutter_embedding")),
+                embedding = str(project.embedding),
                 defs = str(Label("//tools/flutter:defs.bzl")),
                 recipe_bzl = str(Label("//tools/flutter:recipe.bzl")),
             )

@@ -1,5 +1,3 @@
-load("@rules_java//java:defs.bzl", "java_import")
-load(":embedding.bzl", "FLUTTER_EMBEDDING_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,26 +5,3 @@ exports_files([
     "check_path_deps.py",
     "check_native_assets.py",
 ])
-
-# The engine jar re-imported with its AndroidX dependencies attached, so they
-# sit on the classpath of the target that actually holds the classes.
-# Desugaring resolves supertypes per-target: with the deps only on
-# android_binary, singlejar fails with "WindowMetricsCalculator needed on the
-# classpath for desugaring io/flutter/util/ViewUtils".
-#
-# Lives here rather than in the app package because plugins compile against it
-# as well -- @flutter_plugins targets reference this label.
-#
-# The AndroidX deps are `exports`, not just `deps`. Gradle attaches the
-# embedding to every plugin as an *api* dependency precisely so its API surface
-# propagates -- `FlutterPlugin` annotates its methods with androidx @NonNull, so
-# a plugin cannot compile against the embedding without also seeing
-# androidx.annotation. Bazel does not re-export `deps` to a consumer's compile
-# classpath, so without this every plugin target fails Turbine with
-# "symbol not found androidx.annotation.NonNull".
-java_import(
-    name = "flutter_embedding",
-    jars = ["@flutter_embedding//jar:file"],
-    deps = FLUTTER_EMBEDDING_DEPS,
-    exports = FLUTTER_EMBEDDING_DEPS,
-)

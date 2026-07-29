@@ -17,6 +17,9 @@ plugins.project(
     # plugin and so appears nowhere in the metadata file. Written by the same
     # `pub get`, and the only thing that resolves such a package to a directory.
     package_config = "//app:.dart_tool/package_config.json",
+    # The embedding target lives in the app, not in the rules -- see
+    # //app/android/app:BUILD.bazel.
+    embedding = "//app/android/app:flutter_embedding",
 )
 
 # Per-package escape hatches. `plugins.package()` is the only one there is: it
