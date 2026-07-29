@@ -278,15 +278,18 @@
   "moduleExtensions": {
     "//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "ylKQ5FrnVvmRcUWe/S0XMHvLqh6rcUBUuBcqr3BDd4A=",
-        "usagesDigest": "AqsLQ2+4MMWtatRwwGe8oPzoaHOJXFZhzUgUT2xJR0M=",
+        "bzlTransitiveDigest": "5P1huKzHVRVd9gqEdTWZ9AqquHzzf4P/sw+nJT1dKtI=",
+        "usagesDigest": "t2lBPQqVic7PAlu0OQTgOpCczO8FmNnx8GRkjSY/iXw=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "flutter_plugins": {
             "repoRuleId": "@@//tools/flutter:plugins.bzl%flutter_plugins",
             "attributes": {
               "metadata": "@@//app:.flutter-plugins-dependencies",
-              "overrides": {},
+              "overrides": {
+                "audioplayers_android": "[\"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4\",\"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4\"]",
+                "camera_android_camerax": "[\"androidx.camera:camera-core:1.6.0\",\"androidx.camera:camera-camera2:1.6.0\",\"androidx.camera:camera-lifecycle:1.6.0\",\"androidx.camera:camera-video:1.6.0\"]"
+              },
               "embedding": "'@@//tools/flutter:flutter_embedding'",
               "defs": "'@@//tools/flutter:defs.bzl'"
             }

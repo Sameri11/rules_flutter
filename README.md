@@ -64,7 +64,13 @@ Verified properties:
 
 What is *not* done: `versionCode` /
 `versionName` (empty — Flutter derives them from `pubspec.yaml`), plugins using
-ndk-build or with unreadable dependency coordinates, release signing, hermetic SDK
+ndk-build, plugins shipping prebuilt `jniLibs` rather than buildable source, and
+plugins with dependency coordinates the scraper cannot read — including, for now,
+any plugin declaring versions in a `build.gradle.kts` or inside a
+`buildscript { }` block, which need a `plugins.override()` until those two gaps
+are closed. Also native assets (an FFI `.so`
+shipped through Dart's native-assets mechanism reaches the APK under `assets/`,
+where it cannot be loaded), release signing, hermetic SDK
 download, ABIs other than arm64, and iOS. See "Known limitations" and
 [`docs_internal/overview.md`](docs_internal/overview.md).
 
@@ -104,6 +110,9 @@ publish them.
 - [`docs_internal/plugins.md`](docs_internal/plugins.md) — the plugin build in full: the two
   registrants, the source library, Maven resolution without Gradle, the gate, and
   the CMake native path.
+- [`docs_internal/build-performance.md`](docs_internal/build-performance.md) — measured
+  against vanilla `flutter` on a real app: where the time goes, and the two
+  changes that would make this build faster than the tool it wraps.
 - [`docs_internal/running-on-device.md`](docs_internal/running-on-device.md) — build, boot an
   emulator, install, launch, and verify.
 
@@ -215,6 +224,42 @@ action taking eleven inputs, none of them framework or pub-cache sources. This i
 though not closed, by version stamping; see below. `unused_inputs_list` cannot
 help here — it only prunes inputs, never adds them. Fully closing it requires
 declaring pub packages as real inputs, i.e. limitation #1.
+
+**5. Native assets are packaged as assets, not libraries.** A package can ship a
+`.so` that Dart opens over FFI through Dart's native-assets mechanism rather than
+as a Flutter plugin — a third class of native library beside `libapp.so` and a
+CMake plugin's output. `flutter build bundle`, which `flutter_assets` shells out
+to, writes it *inside* the asset tree, so it reaches the APK under `assets/`;
+only `lib/<abi>/` entries are installed as libraries, and `DynamicLibrary.open`
+then fails at runtime. Nothing fails at build time, and `AssetManifest.bin` stays
+byte-identical to the reference, a native asset not being a declared `assets:`
+entry. Fixing it means splitting the `.so` out of the tree artifact and sending
+it down the `jni_lib_jar` path that already carries `libapp.so`. See
+[`docs_internal/android-packaging.md`](docs_internal/android-packaging.md) →
+"Native assets".
+
+**6. No incremental Dart compilation — the inner loop only ties vanilla
+Flutter.** Measured on a real app (811 sources), editing a single `.dart` file
+costs 17.9s against `flutter assemble`'s 17.1s, and editing a file that 290
+others import costs the same as editing one nothing imports. Neither system
+compiles incrementally for release AOT, so the unit of work is the whole program
+and caching has nothing to bite on. Bazel wins only the no-op (0.97s vs 2.0s)
+and the cold build (17.5s vs 24.9s).
+
+The cost is one action: `frontend_server` spends **14.5s** on whole-program parse
+and kernel generation, while `gen_snapshot` takes 0.5s. Tree-shaking is free —
+dropping `--tfa` is *slower*, because the dill grows from 5.2 MB to 174 MB.
+
+`frontend_server` supports incremental compilation (it is what hot reload
+drives), and `flutter build --release` cannot use it. Driving it from a Bazel
+persistent worker is the one change that would make this build faster than the
+tool it wraps rather than merely equal to it — plausibly ~3s against 17s once
+limitation #7 is also fixed. See
+[`docs_internal/build-performance.md`](docs_internal/build-performance.md).
+
+**7. The asset action spends ~90% of its time staging.** 12.5s to wrap a 1.08s
+command, because inputs are copied one process at a time. See "Staging" below;
+the fix is a single-pass copy.
 
 ## Invalidation strategy
 
@@ -509,6 +554,15 @@ the pre-staging output.
 Bazel provides no managed scratch directory for local actions: `$TMPDIR` is the
 shared system temp and is not cleaned, so the action uses `mktemp -d` plus a
 `trap`.
+
+**Cost — unfixed, and it dominates the action.** The loop spawns `mkdir -p` and
+`cp` per file. On a real app that is 1544 files and roughly 3000 processes,
+measured at 7.7s standalone and ~11s in-action, wrapping a `flutter build bundle`
+that takes **1.08s** — so the asset action is ~90% staging. The demo app has ~20
+files, which is why it never showed. Staging itself must stay; only the per-file
+spawning is waste, and one `pax -rw`, `rsync -a --files-from=`, or tar pipe
+replaces it. Expected 12.5s → ~1.5s. See
+[`docs_internal/build-performance.md`](docs_internal/build-performance.md).
 
 **Staging does not fix the startup lock** — handled separately. The `flutter` CLI serializes
 concurrent invocations (`Waiting for another flutter command to release the

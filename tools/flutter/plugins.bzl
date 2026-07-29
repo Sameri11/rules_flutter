@@ -41,6 +41,11 @@ load(":maven.bzl", "highest_versions", "maven_label")
 #                          a variable defined outside the file, or a version
 #                          supplied by a BOM. Resolving it would mean executing
 #                          Groovy.
+#   prebuilt_jni_libs      the module ships no buildable native source and
+#                          expects prebuilt .so files under src/main/jniLibs,
+#                          which a Gradle task downloads on demand. Building
+#                          from source is not an option and packaging the
+#                          libraries is not implemented.
 #
 # Removing an entry here is the whole mechanism for widening support: no
 # consumer, and no other part of this file, encodes the distinction.
@@ -48,13 +53,19 @@ load(":maven.bzl", "highest_versions", "maven_label")
 _GATED_REASONS = [
     "ndk_build",
     "unresolved_dep",
+    "prebuilt_jni_libs",
 ]
 
-_NATIVE_BUILD_MARKERS = [
-    "externalNativeBuild",
-    "CMakeLists",
-    "ndkVersion",
-]
+# Two things a module can say that mean "I compile native code", matched in
+# _native_build_reasons. `ndkVersion` is deliberately not one of them: it pins
+# *which* NDK AGP uses if something needs one, and the current Flutter plugin
+# template sets it unconditionally (`ndkVersion = flutter.ndkVersion`), so it
+# says nothing about whether the module compiles anything. Treating it as a
+# marker classified integration_test -- which ships no native code at all -- as
+# a CMake plugin, and the build then died looking for a CMakeLists that was
+# never going to exist.
+_NATIVE_BLOCK = "externalNativeBuild"
+_CMAKELISTS = "CMakeLists"
 
 # ndk-build is the other externalNativeBuild backend. It is driven by an
 # Android.mk rather than a CMakeLists, so the CMake path cannot build it.
@@ -389,20 +400,47 @@ def _extract_dependencies(build_gradle_text):
     body = _strip_buildscript(build_gradle_text)
     variables = _collect_variables(body)
 
+    # Markers are matched against the code alone, and `externalNativeBuild` only
+    # where it opens a block. rive_native names it in a comment *and* in a task
+    # name it matches on (`it.name.startsWith("externalNativeBuild")`) while
+    # declaring no native build whatsoever; a substring search over the whole
+    # file classified it as a CMake plugin and the fetch then died looking for a
+    # CMakeLists that does not exist. A CMakeLists named by `path` stays a plain
+    # substring match -- specific enough by itself, and it is not always the
+    # first token on its line.
+    code_lines = [
+        line
+        for line in body.split("\n")
+        if not line.strip().startswith("//")
+    ]
+    code = "\n".join(code_lines)
+
     coordinates = []
     reasons = []
-    for marker in _NATIVE_BUILD_MARKERS:
-        if marker in body:
-            reasons.append("external_native_build")
+
+    declares_native = _CMAKELISTS in code
+    for line in code_lines:
+        if line.strip().startswith(_NATIVE_BLOCK):
+            declares_native = True
             break
+    if declares_native:
+        reasons.append("external_native_build")
 
     # ndk-build is a separate backend from CMake and nothing here runs it, so it
     # is reported under its own code and stays gated.
     for marker in _NDK_BUILD_MARKERS:
-        if marker in body:
+        if marker in code:
             if "ndk_build" not in reasons:
                 reasons.append("ndk_build")
             break
+
+    # No native build of its own, yet it expects .so files under jniLibs: the
+    # libraries come from somewhere outside the build. rive_native downloads
+    # them in a Gradle Exec task that shells out to `dart run rive_native:setup`.
+    # Left ungated this would compile to a perfectly good android_library with no
+    # library behind it, and fail on the first FFI call at runtime.
+    if not declares_native and "jniLibs" in code:
+        reasons.append("prebuilt_jni_libs")
 
     for line in body.split("\n"):
         stripped = line.strip()
@@ -558,12 +596,42 @@ def _dart_plugin_class(ctx, package_root, name):
     return dart_class, dart_file if dart_file else "{}.dart".format(name)
 
 
+def _namespace(build_gradle_text):
+    """Read the `namespace` AGP assigns the module, from build.gradle.
+
+    AGP 7 deprecated the manifest's `package=` and AGP 8 removed it, so a plugin
+    written against a current AGP declares its package name here instead and
+    ships a bare `<manifest />`. This is the authoritative source of the two:
+    where both exist AGP errors on a disagreement rather than reconciling them.
+
+    Matched line by line rather than by substring, so that `testNamespace` and a
+    coordinate mentioning the word are not mistaken for it. `namespace 'x'`
+    (Groovy) and `namespace = "x"` (Kotlin, and the Groovy assignment form) are
+    both accepted.
+    """
+    for line in _strip_buildscript(build_gradle_text).splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("namespace"):
+            continue
+        rest = stripped[len("namespace"):].lstrip()
+        if rest.startswith("="):
+            rest = rest[1:].lstrip()
+        if not rest or rest[0] not in "'\"":
+            continue
+        quote = rest[0]
+        end = rest.find(quote, 1)
+        if end == -1:
+            continue
+        return rest[1:end]
+    return None
+
+
 def _manifest_package(ctx, manifest_path):
     """Read the `package=` attribute from a library manifest.
 
-    AGP takes this from the `namespace` in build.gradle now, but the attribute
-    is still present in every plugin manifest and is what Bazel's android rules
-    read, so it is the more direct source.
+    The pre-AGP-8 spelling of `namespace`, and the fallback for a plugin that
+    predates the migration. Bazel's android rules still read this attribute, so
+    where it is present it needs no translation.
     """
     text = ctx.read(manifest_path)
     marker = "package="
@@ -810,6 +878,8 @@ def _flutter_plugins_impl(ctx):
                     hint = (
                         "supply its coordinates with plugins.override()"
                         if "unresolved_dep" in gated
+                        else "package its prebuilt jniLibs, which is not implemented"
+                        if "prebuilt_jni_libs" in gated
                         else "port the module to CMake, which is built"
                     ),
                 ),
@@ -850,9 +920,22 @@ def _flutter_plugins_impl(ctx):
         if not srcs:
             fail("Plugin {} has no Android sources under {}/src/main".format(name, android))
 
-        package = _manifest_package(ctx, root.get_child("android/src/main/AndroidManifest.xml"))
+        # Two spellings of one thing, tried newest first. Reading only the
+        # manifest was enough for the demo app's plugins and is not enough in
+        # the wild: four of smooth_app's thirty carry a bare `<manifest />` and
+        # name themselves in build.gradle, while qr_code_scanner is the mirror
+        # case, predating `namespace` entirely.
+        package = _namespace(ctx.read(build_gradle))
         if not package:
-            fail("Plugin {} has no package= in its AndroidManifest.xml".format(name))
+            package = _manifest_package(ctx, root.get_child("android/src/main/AndroidManifest.xml"))
+        if not package:
+            fail(
+                ("Plugin {} names itself nowhere this can read: no `namespace` in " +
+                 "{}/build.gradle and no package= in its AndroidManifest.xml.").format(
+                    name,
+                    android,
+                ),
+            )
 
         # The native half, for plugins whose build.gradle drives CMake.
         native = ""
