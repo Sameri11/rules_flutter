@@ -2,6 +2,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:rive_common/rive_text.dart';
+import 'package:rive_native/rive_native.dart' as rive_native;
+import 'package:sqlite3/sqlite3.dart';
 import 'package:mylib/mylib.dart';
 
 void main() {
@@ -82,12 +84,58 @@ class _MyHomePageState extends State<MyHomePage> {
   // here; none of those are visible from a successful build.
   String _rive = 'pending';
 
+  // sqlite3 is the *native assets* case, and the only check here that does not
+  // go through a Flutter plugin at all -- it has no android/ module, so the
+  // plugin machinery never sees it. Its libsqlite3.so comes from a Dart build
+  // hook, and the VM finds it by asset id
+  // (`package:sqlite3/src/ffi/libsqlite3.g.dart`) rather than by library name.
+  //
+  // `sqlite3.version` is an FFI call through @Native/addressOf, so it exercises
+  // three independent things at once, none of which a successful build shows:
+  // the .so reached lib/<abi>/ in the APK, the asset mapping was compiled into
+  // the kernel, and the mapping points at the right filename.
+  String _sqlite = 'pending';
+
+  // rive_native is the counterpart to rive_common: an ordinary Kotlin Android
+  // module whose native half is never compiled -- a Gradle Exec task downloads
+  // it. RiveNative.init() returns false rather than throwing when the library
+  // is absent, so the result is reported either way instead of being swallowed.
+  String _riveNative = 'pending';
+
   @override
   void initState() {
     super.initState();
     _checkConnectivity();
     _checkPicker();
     _checkRive();
+    _checkSqlite();
+    _checkRiveNative();
+  }
+
+  Future<void> _checkRiveNative() async {
+    late final String result;
+    try {
+      result = await rive_native.RiveNative.init() ? 'success' : 'failed: init returned false';
+    } catch (e) {
+      result = 'failed: $e';
+    }
+    debugPrint('rive_native: $result');
+    if (mounted) {
+      setState(() => _riveNative = result);
+    }
+  }
+
+  Future<void> _checkSqlite() async {
+    late final String result;
+    try {
+      result = sqlite3.version.toString();
+    } catch (e) {
+      result = 'failed: $e';
+    }
+    debugPrint('sqlite3: $result');
+    if (mounted) {
+      setState(() => _sqlite = result);
+    }
   }
 
   Future<void> _checkRive() async {
@@ -188,6 +236,8 @@ class _MyHomePageState extends State<MyHomePage> {
             Text('connectivity: $_connectivity'),
             Text('image_picker: $_picker'),
             Text('rive_common: $_rive'),
+            Text('sqlite3: $_sqlite'),
+            Text('rive_native: $_riveNative'),
           ],
         ),
       ),

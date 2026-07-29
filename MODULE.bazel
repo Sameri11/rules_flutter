@@ -13,14 +13,24 @@ use_repo(flutter, "flutter_sdk", "flutter_engine_arm64", "flutter_embedding")
 plugins = use_extension("//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
     metadata = "//app:.flutter-plugins-dependencies",
+    # Needed only because a recipe below names `sqlite3`, which is not a Flutter
+    # plugin and so appears nowhere in the metadata file. Written by the same
+    # `pub get`, and the only thing that resolves such a package to a directory.
+    package_config = "//app:.dart_tool/package_config.json",
 )
 
+# Per-package escape hatches. `plugins.package()` is the only one there is: it
+# carries both the module-time facts (Maven coordinates) and the analysis-time
+# ones (which recipe builds this package), because those cross a phase boundary
+# and cannot be expressed by the same mechanism -- see the tag_class comment in
+# //tools/flutter:plugins.bzl.
+#
 # Coordinates the scraper refuses to guess at, supplied by hand. Each is a
 # version the plugin does hold in its own build.gradle, in a place the scraper
 # does not look -- see the note on each -- so these are transcriptions, not
 # choices, and they go stale silently when the plugin is upgraded. Fixing the
 # two gaps in the scraper would retire both entries.
-plugins.override(
+plugins.package(
     name = "audioplayers_android",
     # `ext.coroutines_version = '1.6.4'`, declared inside the `buildscript {}`
     # block that _strip_buildscript drops before variables are collected.
@@ -32,7 +42,7 @@ plugins.override(
     ],
 )
 
-plugins.override(
+plugins.package(
     name = "camera_android_camerax",
     # `val cameraxVersion = "1.6.0"` -- this plugin is Kotlin DSL, and
     # _collect_variables reads `def`, `ext.` and bare assignment but not `val`.
@@ -114,8 +124,89 @@ register_toolchains("@androidsdk//:all")
 # 6.10+ loads aar_import from @rules_android//android:rules.bzl. 6.9 used the
 # legacy @build_bazel_rules_android name, which is not visible under bzlmod and
 # breaks AAR resolution on Bazel 9.
-bazel_dep(name = "rules_jvm_external", version = "7.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
 
 # Maven coordinates the Flutter plugins declare. Generated -- see
 # //tools/flutter:plugins.bzl and //app:plugins_check.
 include("//:plugin_deps.MODULE.bazel")
+
+# --- Packages that fall outside the standard build ---------------------------
+#
+# Both are declared with plugins.package() above and built by recipes in
+# //bazel/flutter. What is left here is the part a recipe cannot do: fetching.
+# A repository rule cannot be called from a macro, and pinning a download is a
+# module-time act, so the archives are named here and the recipes consume them.
+#
+# Keeping the fetch here rather than inside an action is the point. Upstream both
+# packages download at build time -- rive_native from a Gradle Exec task, sqlite3
+# from inside its Dart build hook -- with no record of what arrived. Declared this
+# way the hashes land in MODULE.bazel.lock and no action touches the network.
+#
+# sqlite3 is not a Flutter plugin: no android/ module, nothing in
+# .flutter-plugins-dependencies. Its native half comes from hook/build.dart,
+# whose default path (no user defines) is PrecompiledFromGithubAssets -- a
+# download from a GitHub release with the sha256 published in the package's own
+# lib/src/hook/asset_hashes.dart. So it is an http_file, exactly.
+#
+# Both the tag and the hash are transcribed from asset_hashes.dart for the
+# resolved version (3.5.0), and verified against the downloaded bytes.
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_file(
+    name = "libsqlite3_android_arm64",
+    urls = ["https://github.com/simolus3/sqlite3.dart/releases/download/" +
+            "sqlite3-3.5.0/libsqlite3.arm64.android.so"],
+    sha256 = "e99515af1d7119fb61843ae5e597344e7f258563de3a7e5a3869f627aab2887b",
+    # The bundle's NativeAssetsManifest.json already says
+    # ["absolute", "libsqlite3.so"], so the name has to be exactly this or dlopen
+    # misses. //bazel/flutter:sqlite3.bzl restates it as a code_assets entry,
+    # which makes the recipe fail rather than the app.
+    downloaded_file_path = "libsqlite3.so",
+)
+
+# The recipes themselves. Each names a .bzl in this project and a macro in it;
+# //tools/flutter:plugins.bzl generates a BUILD that loads the macro by canonical
+# label and hands it the facts the generator would have used.
+plugins.package(
+    name = "rive_native",
+    bzl_file = "//bazel/flutter:rive_native.bzl",
+    macro = "rive_native_recipe",
+)
+
+plugins.package(
+    name = "sqlite3",
+    bzl_file = "//bazel/flutter:sqlite3.bzl",
+    macro = "sqlite3_recipe",
+)
+
+# rive_native: an ordinary Kotlin Android module whose native half is never
+# compiled. Upstream, a Gradle `Exec` task shells out to
+# `dart run rive_native:setup -p android`, which downloads this exact archive and
+# unpacks it into src/main/jniLibs/. Nothing here runs Gradle, so the .so simply
+# never arrives -- hence the `prebuilt_jni_libs` gate.
+#
+# URL built the way bin/setup.dart:464 builds it:
+#   .../rive_native_versions/<uri-encoded version.txt>/rive_native_artifacts_<platform>.zip
+# version.txt is `0.1.10+2`, so the `+` is percent-encoded.
+#
+# The sha256 below is ours, but it is not a free-floating transcription: the
+# package ships hash.txt, whose "android" sha512 pins this same zip
+# byte-for-byte (verified). So an upgrade that changes the archive is detectable
+# rather than silent -- a guard target for that is worth having later.
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "rive_native_android",
+    urls = ["https://rive-flutter-artifacts.rive.app/rive_native_versions/" +
+            "0.1.10%2B2/rive_native_artifacts_android.zip"],
+    sha256 = "765a4e5e7e244eb849c76af105d5dc9a33fa02401cd37e6f24720d8c8941498b",
+    # The archive holds <abi>/librive_native.so for all four Android ABIs at its
+    # root. Only arm64-v8a is used; the APK is arm64-only.
+    build_file_content = """
+filegroup(
+    name = "arm64_v8a",
+    srcs = ["arm64-v8a/librive_native.so"],
+    visibility = ["//visibility:public"],
+)
+""",
+)

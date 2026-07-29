@@ -369,6 +369,23 @@ def _flutter_assets_impl(ctx):
     # .last_build_id is flutter_tools bookkeeping and is the only file in the
     # bundle that varies between otherwise identical runs. Removing it makes the
     # tree artifact reproducible.
+    #
+    # native_assets/ is dropped for a different reason: it does not belong in a
+    # bundle at all. When a package produces a code asset through a Dart build
+    # hook, `flutter build bundle` runs the hook and writes the resulting library
+    # to native_assets/jniLibs/lib/<abi>/, *inside* the asset tree -- where the
+    # dynamic loader cannot reach it, because APK assets are read through
+    # AssetManager rather than mapped. `flutter assemble` puts that same tree
+    # *beside* the bundle, for Gradle to package as a JNI library.
+    #
+    # Here the library reaches lib/<abi>/ through a package recipe instead (see
+    # docs/package-recipes.md), so leaving this copy would ship the same bytes
+    # twice -- 1.8 MB for sqlite3 alone -- and would also keep the bundle one
+    # file larger than the reference `flutter assemble` produces.
+    #
+    # NativeAssetsManifest.json is a *sibling* of this directory and is
+    # deliberately kept: it is the id -> filename mapping the engine reads at
+    # runtime, and it is correct as written. Only the misplaced library goes.
     cmd = """set -euo pipefail
 EXECROOT="$PWD"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
@@ -389,6 +406,7 @@ cd "$STAGE/{pkg}"
     --asset-dir="$EXECROOT/{out}" \
     --suppress-analytics >/dev/null
 rm -f "$EXECROOT/{out}/.last_build_id"
+rm -rf "$EXECROOT/{out}/native_assets"
 """.format(
         pkg = ctx.label.package,
         manifest = manifest.path,
@@ -486,6 +504,62 @@ target from CI, or wire it into a test suite, before enabling a shared cache."""
         "path_deps": attr.label_list(allow_files = True),
         "_checker": attr.label(
             default = "//tools/flutter:check_path_deps.py",
+            allow_single_file = True,
+        ),
+    },
+)
+
+def _native_assets_check_impl(ctx):
+    marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+
+    # The manifest lives inside the asset tree artifact, so its path is derived
+    # rather than declared. flutter_tools writes it at the bundle root --
+    # `additionalContent: {'NativeAssetsManifest.json': ...}` in
+    # build_system/targets/common.dart.
+    manifest = ctx.file.assets.path + "/NativeAssetsManifest.json"
+
+    args = ctx.actions.args()
+    args.add(ctx.file._checker)
+    args.add("--manifest", manifest)
+    args.add("--jar", ctx.file.native_libs)
+    args.add("--out", marker)
+
+    ctx.actions.run_shell(
+        command = 'exec python3 "$@"',
+        arguments = [args],
+        inputs = [ctx.file.assets, ctx.file.native_libs, ctx.file._checker],
+        outputs = [marker],
+        env = FLUTTER_ENV,
+        mnemonic = "NativeAssetsCheck",
+        progress_message = "Checking Dart code assets %{label}",
+    )
+
+    return [DefaultInfo(files = depset([marker]))]
+
+native_assets_check = rule(
+    implementation = _native_assets_check_impl,
+    doc = """Fails the build if a Dart code asset has no library behind it.
+
+A package with a build hook declares an asset id; the Dart VM resolves it to a
+filename through the bundle's NativeAssetsManifest.json and dlopens that name
+from lib/<abi>/. Nothing else connects the two halves -- the manifest comes from
+flutter_tools, the library only from a package recipe -- so a package with no
+recipe builds green and dies on its first FFI call.
+
+Cheap enough to depend on from the app; see //app:native_assets_check.""",
+    attrs = {
+        "assets": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "A flutter_assets tree artifact.",
+        ),
+        "native_libs": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The jar of recipe-contributed libraries, @flutter_plugins//:native_libs_jar.",
+        ),
+        "_checker": attr.label(
+            default = "//tools/flutter:check_native_assets.py",
             allow_single_file = True,
         ),
     },

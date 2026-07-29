@@ -57,6 +57,28 @@ dependencies:
   # text engine to prove the compiled .so actually loads and runs.
   rive_common: ^0.4.15
 
+  # Fourth: the *native assets* case, and not a Flutter plugin at all -- no
+  # android/ module, so nothing in .flutter-plugins-dependencies refers to it.
+  # Its native half comes from a Dart build hook (hook/build.dart), which by
+  # default downloads a prebuilt libsqlite3.so from a GitHub release. The Dart
+  # VM then resolves it by *asset id* rather than by library name, through a
+  # mapping that has to be compiled into the kernel.
+  #
+  # See docs_internal/package-recipes.md -- this is class D, and it is here to
+  # make the gap visible at runtime rather than in a design note.
+  sqlite3: ^3.3.3
+
+  # Fifth: a plugin whose Android module is entirely ordinary -- one Kotlin
+  # source, a manifest, a namespace -- except that its native half is never
+  # compiled. A Gradle `Exec` task shells out to `dart run rive_native:setup`,
+  # which downloads a prebuilt archive and unpacks it into src/main/jniLibs/.
+  # Nothing here runs Gradle, so the .so simply never arrives.
+  #
+  # This is class C in docs_internal/package-recipes.md, and it is currently
+  # gated `prebuilt_jni_libs` -- so building the app fails, by design, rather
+  # than shipping an android_library with no library behind it.
+  rive_native: ^0.1.10
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

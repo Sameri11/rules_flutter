@@ -118,6 +118,10 @@ android_binary(
         ":main_activity",
         ":generated_plugin_registrant",
         ":libapp",
+        # Every .so a package recipe contributed, in one jar -- rive_native's
+        # downloaded library and sqlite3's build-hook one. Generated alongside
+        # :all from the same manifest, so adding a recipe changes nothing here.
+        "@flutter_plugins//:native_libs",
         # libflutter.so, stripped -- see :flutter_engine_stripped
         ":flutter_engine",
         # io.flutter.* embedding classes

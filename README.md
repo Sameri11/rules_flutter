@@ -29,6 +29,10 @@ bazel build //app:assets       ->  .../app/assets/flutter_assets/  (tree artifac
 bazel build //app/android/app:demo_app -> …/demo_app.apk  (signed APK)
 ```
 
+**Note:** two packages that fall outside the standard build — `rive_native`
+(native half downloaded, not compiled) and `sqlite3` (a Dart build hook) — are
+built by **consumer-supplied recipes**. See "Package recipes" below.
+
 Verified properties:
 
 - **Matches the reference.** Both `libapp.so` and the asset bundle are
@@ -62,26 +66,29 @@ Verified properties:
   string comes from the `//packages/mylib` path dependency, so the whole chain
   (kernel -> AOT -> APK) is demonstrably executing our Dart code.
 
-What is *not* done: `versionCode` /
-`versionName` (empty — Flutter derives them from `pubspec.yaml`), plugins using
-ndk-build, plugins shipping prebuilt `jniLibs` rather than buildable source, and
-plugins with dependency coordinates the scraper cannot read — including, for now,
-any plugin declaring versions in a `build.gradle.kts` or inside a
-`buildscript { }` block, which need a `plugins.override()` until those two gaps
-are closed. Also native assets (an FFI `.so`
-shipped through Dart's native-assets mechanism reaches the APK under `assets/`,
-where it cannot be loaded), release signing, hermetic SDK
-download, ABIs other than arm64, and iOS. See "Known limitations" and
-[`docs_internal/overview.md`](docs_internal/overview.md).
+What is *not* done: `versionCode` / `versionName` (empty — Flutter derives them
+from `pubspec.yaml`), plugins using ndk-build, and plugins with dependency
+coordinates the scraper cannot read — including, for now, any plugin declaring
+versions in a `build.gradle.kts` or inside a `buildscript { }` block, which need
+a `plugins.package(artifacts = ...)` until those two gaps are closed. Also
+release signing, hermetic SDK download, ABIs other than arm64, and iOS. See
+"Known limitations" and [`docs_internal/overview.md`](docs_internal/overview.md).
+
+Two things once on that list — plugins shipping prebuilt `jniLibs`, and **native
+assets** (a `.so` produced by a Dart build hook) — now work through
+consumer-supplied recipes; see "Package recipes" below.
 
 ## Layout
 
 | Path | Role |
 | --- | --- |
 | `tools/flutter/repo.bzl` | Repo rule locating the SDK, exposing its tools as targets |
-| `tools/flutter/defs.bzl` | `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
+| `tools/flutter/defs.bzl` | `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `native_assets_check`, `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
 | `tools/flutter/check_path_deps.py` | Script behind `pub_path_deps_check` |
-| `tools/flutter/plugins.bzl` | Repo rule generating one target per native Android plugin, their Maven coordinates, and the CMake targets for native ones |
+| `tools/flutter/check_native_assets.py` | Script behind `native_assets_check` |
+| `tools/flutter/plugins.bzl` | Repo rule generating one target per native Android plugin, their Maven coordinates, the CMake targets for native ones, and the `plugins.package()` extension |
+| `tools/flutter/recipe.bzl` | The recipe contract: `FlutterNativeInfo`, `flutter_native_contribution`, `flutter_native_libs` |
+| `bazel/flutter/` | This project's *own* recipes, as a consuming project would write them |
 | `plugin_deps.MODULE.bazel` | Generated, committed, `include()`d — the build's only `maven.install` |
 | `tools/flutter/embedding.bzl` | Maven coordinates of the Flutter embedding — the source of truth |
 | `tools/flutter/maven.bzl` | Coordinate → label mangling and highest-wins version reconciliation |
@@ -110,6 +117,10 @@ publish them.
 - [`docs_internal/plugins.md`](docs_internal/plugins.md) — the plugin build in full: the two
   registrants, the source library, Maven resolution without Gradle, the gate, and
   the CMake native path.
+- [`docs_internal/package-recipes.md`](docs_internal/package-recipes.md) — how a project
+  supplies its own build instructions for a package outside the standard build:
+  the `plugins.package()` tag, the recipe contract, the Bazel phase boundary that
+  forced its shape, and what was measured on a device.
 - [`docs_internal/build-performance.md`](docs_internal/build-performance.md) — measured
   against vanilla `flutter` on a real app: where the time goes, and the two
   changes that would make this build faster than the tool it wraps.
@@ -126,8 +137,62 @@ bazel build //app:assets_debug      # debug bundle, ships kernel_blob.bin
 bazel build //app:path_deps_check   # guard: fails on undeclared path: deps
 bazel build //app:plugins_check     # guard: fails on stale plugin_deps.MODULE.bazel
 bazel build //app:dart_registrant_check  # guard: fails on stale Dart plugin registrant
+bazel build //app:native_assets_check    # guard: fails on a code asset with no recipe
 bazel build //app/android/app:demo_app   # signed APK
 ```
+
+### Package recipes
+
+Some pub packages cannot be described statically by any amount of scraping.
+`rive_native` downloads its `.so` from a CDN inside a Gradle `Exec` task;
+`sqlite3` ships a Dart build hook that decides at build time whether to
+download, compile, or link a system library. Neither is buildable from source,
+and `sqlite3` is not even a Flutter plugin — it has no `android/` module, so the
+plugin machinery never sees it.
+
+For these, a consuming project supplies its own build instructions:
+
+```python
+plugins.package(
+    name = "rive_native",
+    bzl_file = "//bazel/flutter:rive_native.bzl",
+    macro = "rive_native_recipe",
+)
+```
+
+The rules generate a BUILD file that loads that macro **by canonical label** and
+hands it everything the generator knows — enumerated sources, namespace,
+resolved Maven labels, the reason codes it is answering. The recipe's own
+`load()` statements then resolve in the *consuming project's* repo mapping, so a
+recipe can use rulesets these rules have never heard of. `@flutter_plugins//<name>`
+remains the label a consumer names, recipe or not.
+
+A recipe is also the **per-package reversal of the gate**: `prebuilt_jni_libs`
+stays gated for every package that has not been given an answer, instead of
+being switched off globally the moment one plugin needs it.
+
+And `//app:native_assets_check` makes the class-D failure loud. A package with a
+build hook declares an asset id that the Dart VM resolves to a filename and
+`dlopen`s; nothing else in the build connects that to whether a library actually
+reached `lib/<abi>/`. The check compares the two and fails at build time, where
+previously the first signal was an FFI call on a device.
+
+Both work on an arm64 API 35 emulator, with the `.so` files in the APK
+byte-identical to what upstream ships:
+
+```
+sqlite3: Version(libVersion: 3.53.3, …)      rive_native: success
+```
+
+Exercised at scale against [smooth-app](https://github.com/openfoodfacts/smooth-app)
+(30 Android plugins): all 30 classify with none gated — 28 from source, `jni` via
+CMake, `rive_native` via recipe. Building them is blocked outside these rules: AndroidX
+poms carry Maven strict ranges no POM-based resolver can satisfy, so
+`resolver = "gradle"` is required, and that hits
+[rules_jvm_external#1605](https://github.com/bazel-contrib/rules_jvm_external/issues/1605).
+
+See [`docs_internal/package-recipes.md`](docs_internal/package-recipes.md) for
+the design, the Bazel constraints that forced it, and what was measured.
 
 ### Fresh clone
 

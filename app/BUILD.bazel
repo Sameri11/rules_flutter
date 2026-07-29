@@ -3,6 +3,7 @@ load(
     "dart_kernel",
     "flutter_assets",
     "flutter_aot_library",
+    "native_assets_check",
     "pub_path_deps_check",
     "pub_plugins_check",
 )
@@ -90,6 +91,18 @@ pub_plugins_check(
     name = "dart_registrant_check",
     committed = "lib/dart_plugin_registrant.dart",
     expected = "@flutter_plugins//:dart_plugin_registrant.dart",
+)
+
+# Guard: fails if a package produces a Dart code asset that no recipe supplies.
+#
+# The asset bundle names the libraries the VM will dlopen; the recipes say which
+# ones actually reach lib/<abi>/. Nothing else compares them, and a mismatch is
+# invisible until the first FFI call at runtime -- the app builds, installs and
+# launches first.
+native_assets_check(
+    name = "native_assets_check",
+    assets = ":assets",
+    native_libs = "@flutter_plugins//:native_libs_jar",
 )
 
 # Guard: fails if a path: dependency is missing from PATH_DEPS.

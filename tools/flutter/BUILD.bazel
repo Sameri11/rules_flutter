@@ -3,7 +3,10 @@ load(":embedding.bzl", "FLUTTER_EMBEDDING_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["check_path_deps.py"])
+exports_files([
+    "check_path_deps.py",
+    "check_native_assets.py",
+])
 
 # The engine jar re-imported with its AndroidX dependencies attached, so they
 # sit on the classpath of the target that actually holds the classes.

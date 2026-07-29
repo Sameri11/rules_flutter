@@ -12,19 +12,34 @@ plugin's package root into an external repository, and generate one target per
 plugin. A plugin whose `build.gradle` drives CMake also gets its `CMakeLists`
 built with the NDK, and the resulting `.so` attached to the same label.
 
-Two properties are deliberate, because they are what makes the gate in
+Three properties are deliberate, because they are what makes the gate in
 `_GATED_REASONS` reversible rather than permanent:
 
   1. **The strategy is not in the label.** `@flutter_plugins//<name>` is the
-     label whether the plugin was built from source alone or from source plus
-     CMake. Moving a plugin between them is a change to this file, never to a
-     consumer.
+     label whether the plugin was built from source alone, from source plus
+     CMake, or by a recipe the consuming project supplied. Moving a plugin
+     between them is a change here or in a recipe, never in a consumer.
 
   2. **Plugins are classified by *reason*, not by decision.** A plugin carries
      reason codes like `ndk_build`; routing is a single lookup against
      `_GATED_REASONS`. When a reason becomes supported, deleting its entry from
      that list re-routes every plugin carrying it at once -- which is exactly
      how `external_native_build` stopped being gated.
+
+  3. **A package the generator cannot describe can be described by its user.**
+     `plugins.package(bzl_file =, macro =)` names a macro in the consuming
+     project; the BUILD generated for that package does nothing but load it by
+     canonical label and hand over the facts. Because the load is canonical, the
+     recipe's own `load()` statements resolve in *that project's* repo mapping,
+     so a recipe may use rulesets this module has never heard of. This is also
+     the per-package reversal of the gate: a reason stays gated for every package
+     that has not been given an answer. See docs_internal/package-recipes.md.
+
+     The registry is keyed on **pub package, not plugin**, because the packages
+     that need it most are not always plugins -- `sqlite3` ships a Dart build
+     hook and no `android/` module, so it appears nowhere in
+     `.flutter-plugins-dependencies` and is resolved through
+     `package_config.json` instead.
 """
 
 load(":embedding.bzl", "FLUTTER_EMBEDDING_ARTIFACTS")
@@ -44,12 +59,20 @@ load(":maven.bzl", "highest_versions", "maven_label")
 #   prebuilt_jni_libs      the module ships no buildable native source and
 #                          expects prebuilt .so files under src/main/jniLibs,
 #                          which a Gradle task downloads on demand. Building
-#                          from source is not an option and packaging the
-#                          libraries is not implemented.
+#                          from source is not an option, so the answer is a
+#                          recipe -- see plugins.package() below.
 #
-# Removing an entry here is the whole mechanism for widening support: no
+# Removing an entry here is the *global* mechanism for widening support: no
 # consumer, and no other part of this file, encodes the distinction.
 # `external_native_build` left this list when the CMake path landed.
+#
+# There is now a second, per-package mechanism, and the two compose. A reason is
+# gated unless the package has a recipe -- `plugins.package(bzl_file =, macro =)`
+# -- in which case generation is handed over wholesale and the gate does not
+# apply, because the recipe is by definition an answer to it. That is what keeps
+# this list honest: `prebuilt_jni_libs` stays gated for every package that has
+# not been given an answer, instead of being deleted globally the moment one
+# plugin needs it.
 _GATED_REASONS = [
     "ndk_build",
     "unresolved_dep",
@@ -239,6 +262,106 @@ android_library(
 )
 """
 
+# A package built by a recipe. The generated BUILD does nothing but hand over:
+# load the macro the consuming project named, and call it with the facts.
+#
+# The `@@` is load bearing. This repository's repo mapping is *this module's*,
+# so an apparent name like `@rules_kotlin//...` written here would resolve
+# against this module's bazel_deps, and the user's repos are not reachable by
+# apparent name at all. A canonical label bypasses repo mapping -- and once the
+# user's .bzl is loaded, its own load() statements resolve in *their* mapping, so
+# a recipe can use rulesets this module has never heard of.
+_RECIPE_TEMPLATE = """
+# {name} is built by a recipe supplied by the consuming project:
+#   {bzl}%{macro}
+# rather than by the standard generator.{gate_note}
+#
+# The facts the generator would have used are in package_info.bzl beside this
+# file. It is a struct rather than a macro signature so the contract can grow
+# without breaking every recipe; `contract_version` is there to be checked.
+load("{bzl}", "{macro}")
+load(":package_info.bzl", "PACKAGE_INFO")
+
+{macro}(
+    name = "{name}",
+    info = PACKAGE_INFO,
+)
+"""
+
+_PACKAGE_INFO_TEMPLATE = '''# Generated by //tools/flutter:plugins.bzl -- do not edit.
+#
+# Everything the standard generator knows about {name}, handed to its recipe.
+# Paths are relative to this package. Sources are enumerated rather than left to
+# a glob() because the tree is reached through symlinks into ~/.pub-cache, which
+# glob() does not see through reliably.
+PACKAGE_INFO = struct(
+    # Bumped when a field is removed or changes meaning. Adding a field does not
+    # bump it, which is the point of passing a struct at all.
+    contract_version = 1,
+    name = "{name}",
+    # False for a package that is not a Flutter plugin -- no android/ module, and
+    # nothing in .flutter-plugins-dependencies refers to it. Most of the fields
+    # below are then empty.
+    is_plugin = {is_plugin},
+    # Every file staged for this package, root-relative. `android_srcs` and
+    # `resource_files` below are this list *classified*, and classification is
+    # exactly the thing a recipe may need to route around: a source the generator
+    # put in the wrong bucket, or dropped, is still present here.
+    #
+    # This is what makes a recipe a real escape hatch rather than a slightly
+    # different view of the same mistake. `flutter_image_compress_common` ships
+    # ExifKeeper.java under src/main/kotlin/, which the enumerator missed
+    # entirely; a recipe could have recovered with
+    #
+    #     srcs = [f for f in info.all_files
+    #             if f.startswith("android/src/main/") and f.endswith((".java", ".kt"))]
+    #
+    # without knowing which file had been dropped.
+    all_files = {all_files},
+    android_srcs = {android_srcs},
+    android_manifest = {android_manifest},
+    resource_files = {resource_files},
+    namespace = {namespace},
+    # Maven coordinates scraped from the plugin's build.gradle, already merged
+    # into the single maven.install. Labels here are resolvable.
+    coordinates = {coordinates},
+    plugin_deps = {plugin_deps},
+    # Reason codes the generator raised. A recipe exists to answer these, so it
+    # is given them rather than having to rediscover them.
+    reasons = {reasons},
+    abi = "{abi}",
+    api_level = {api_level},
+    embedding = "{embedding}",
+)
+'''
+
+# Loaded into the aggregate BUILD only, which is why it is separate from
+# _BUILD_LOADS: a plugin's own BUILD has no use for these.
+_NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_libs")
+load("@rules_java//java:defs.bzl", "java_import")
+"""
+
+# The second aggregate: every .so that a recipe contributed, in one jar, wrapped
+# so the app can name a single label.
+#
+# A recipe *must* define `<name>_flutter_native` -- that is the contract, and
+# depending on it by convention is what makes a forgotten one fail at analysis
+# instead of producing a target nothing references. Which was the original defect
+# this milestone exists to prevent.
+_NATIVE_LIBS_TEMPLATE = """
+flutter_native_libs(
+    name = "native_libs_jar",
+    abi = "{abi}",
+    deps = [{deps}
+    ],
+)
+
+java_import(
+    name = "native_libs",
+    jars = [":native_libs_jar"],
+)
+"""
+
 _MODULE_SEGMENT_HEADER = """# Generated by //tools/flutter:plugins.bzl -- do not edit by hand.
 #
 # The complete Maven artifact list: the Flutter embedding's own dependencies
@@ -266,6 +389,11 @@ maven.install(
     # Every artifact above is already reduced to one version, so "pinned" makes
     # those chosen versions authoritative over transitive suggestions rather
     # than failing resolution when a pom asks for something older.
+    #
+    # Fine for an app this size; NOT enough for a large real graph. AndroidX
+    # poms carry Maven *strict* ranges no POM-based resolver can satisfy, so a
+    # real app needs `resolver = "gradle"` plus a `lock_file` instead. See
+    # docs/package-recipes.md -> "The breadth check".
     version_conflict_policy = "pinned",
 )
 use_repo(maven, "flutter_maven")
@@ -729,6 +857,50 @@ def _cmake_subdirectory(build_gradle_text):
     return "/".join(["android"] + parts)
 
 
+def _cmake_output_names(cmakelists_text):
+    """Target -> OUTPUT_NAME, for targets that rename their artifact.
+
+    `set_target_properties(<target> PROPERTIES ... OUTPUT_NAME "<name>")` makes
+    the file `lib<name>.so` rather than `lib<target>.so`. Missing this is not a
+    silent error but it is a confusing one: the CMake build *succeeds* and the
+    copy afterwards fails with `cp: libjni.so: No such file or directory`,
+    which reads as a build failure rather than a naming mismatch.
+
+    `jni` (jnigen's runtime) is the case that surfaced it -- `add_library(jni
+    SHARED ...)` followed by `OUTPUT_NAME "dartjni"`.
+    """
+    names = {}
+    rest = cmakelists_text
+    for _ in range(100):
+        at = rest.find("set_target_properties")
+        if at == -1:
+            break
+        rest = rest[at + len("set_target_properties"):]
+        close = rest.find(")")
+        if close == -1:
+            break
+        block = rest[:close]
+        marker = block.find("OUTPUT_NAME")
+        if marker == -1:
+            continue
+
+        # The target is the first argument; the new name is the first quoted
+        # run after the keyword. A generator expression in either is not
+        # something string scraping can resolve, so it is left alone and the
+        # add_library name stands.
+        head = block.replace("(", " ")
+        for whitespace in ["\n", "\r", "\t"]:
+            head = head.replace(whitespace, " ")
+        arguments = [a for a in head.split(" ") if a]
+        if not arguments:
+            continue
+        target = arguments[0]
+        output = _quoted(block[marker:])
+        if output and "$" not in target and "$" not in output:
+            names[target] = output
+    return names
+
+
 def _cmake_shared_libraries(cmakelists_text):
     """Names of the SHARED libraries a CMakeLists defines, as lib<name>.so.
 
@@ -736,6 +908,7 @@ def _cmake_shared_libraries(cmakelists_text):
     loud: the build fails with the file missing rather than producing a
     silently empty result.
     """
+    output_names = _cmake_output_names(cmakelists_text)
     libraries = []
     rest = cmakelists_text
     for _ in range(100):
@@ -756,6 +929,9 @@ def _cmake_shared_libraries(cmakelists_text):
         # .so; a STATIC helper library is linked into one and never shipped.
         if len(arguments) >= 2 and "SHARED" in arguments[1:]:
             name = arguments[0]
+            # The artifact is named after OUTPUT_NAME where one is set, not
+            # after the CMake target.
+            name = output_names.get(name, name)
             if "$" not in name and "lib{}.so".format(name) not in libraries:
                 libraries.append("lib{}.so".format(name))
     return libraries
@@ -811,14 +987,74 @@ def _ndk_root(ctx):
     return str(toolchain_file)
 
 
+def _package_roots(ctx):
+    """Every pub package in the resolution, name -> absolute root.
+
+    `.flutter-plugins-dependencies` lists only what Gradle would see: packages
+    with an `android/` module. A recipe has to be able to name a package that is
+    not a plugin at all -- `sqlite3` ships a Dart build hook and no Android
+    module, so nothing in that file refers to it -- and `package_config.json`,
+    written by the same `pub get`, resolves every package by name.
+
+    Absolute file:// URIs into ~/.pub-cache, which is exactly why packages are
+    reached through an external repository: Bazel cannot glob outside the
+    workspace.
+    """
+    if not ctx.attr.package_config:
+        return {}
+
+    roots = {}
+    config = json.decode(ctx.read(ctx.attr.package_config))
+    for package in config.get("packages", []):
+        root = package.get("rootUri", "")
+        if root.startswith("file://"):
+            roots[package["name"]] = root[len("file://"):].rstrip("/")
+    return roots
+
+
+def _stage_package(ctx, name, package_root):
+    """Symlink a package's entries into `<name>/`, returning the staged root.
+
+    A real directory of symlinked *entries*, never a symlink to the directory:
+    ctx.file("<name>/BUILD.bazel") would otherwise write straight *through* the
+    symlink into ~/.pub-cache, mutating a cache pub treats as immutable and
+    shares with every project on the machine.
+    """
+    for child in ctx.path(package_root).readdir():
+        if child.basename.startswith("."):
+            continue
+        ctx.symlink(child, "{}/{}".format(name, child.basename))
+    return ctx.path(name)
+
+
+def _write_recipe(ctx, name, recipe, info, gate_note = ""):
+    """Emit the hand-over BUILD and the package_info.bzl beside it."""
+    ctx.file(
+        "{}/BUILD.bazel".format(name),
+        _BUILD_PACKAGE + _RECIPE_TEMPLATE.format(
+            name = name,
+            bzl = recipe["bzl"],
+            macro = recipe["macro"],
+            gate_note = gate_note,
+        ),
+    )
+    ctx.file("{}/package_info.bzl".format(name), _PACKAGE_INFO_TEMPLATE.format(**info))
+
+
 def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
     plugins = metadata.get("plugins", {}).get("android", [])
     overrides = {k: json.decode(v) for k, v in ctx.attr.overrides.items()}
+    recipes = {k: json.decode(v) for k, v in ctx.attr.recipes.items()}
 
     manifest = []
     all_coordinates = []
     dart_registrations = []
+
+    # Names a recipe was registered for that the plugin loop never reached --
+    # either not a plugin at all, or a Dart-only implementation. Whittled down as
+    # plugins are processed; whatever is left is handled afterwards.
+    unmatched_recipes = {k: v for k, v in recipes.items()}
 
     # Resolved on first use, so a project with no CMake plugin needs no NDK at
     # all -- and one that does gets the version check before anything is
@@ -864,6 +1100,71 @@ def _flutter_plugins_impl(ctx):
 
         gated = [r for r in reasons if r in _GATED_REASONS]
 
+        # A recipe takes over generation for this plugin entirely, gate and all.
+        # Checked before the gate rather than after: a recipe is by definition an
+        # answer to whatever reason was raised, and the reasons are passed on so
+        # it can see what it is answering.
+        #
+        # It applies to healthy plugins too. Someone may know a better way to
+        # build a package than the generator does, and refusing that would only
+        # push them to fork the rules -- so the substitution is allowed and
+        # recorded in plugins.json instead of being prevented.
+        recipe = unmatched_recipes.pop(name, None)
+        if recipe != None:
+            _stage_package(ctx, name, package_root)
+            root = ctx.path(name)
+            # Both roots, both extensions -- see the note on the standard path.
+            java_srcs = (
+                _list_files(ctx, root, "android/src/main/java", [".java"]) +
+                _list_files(ctx, root, "android/src/main/kotlin", [".java"])
+            )
+            kotlin_srcs = (
+                _list_files(ctx, root, "android/src/main/kotlin", [".kt"]) +
+                _list_files(ctx, root, "android/src/main/java", [".kt"])
+            )
+            package = _namespace(ctx.read(build_gradle))
+            if not package:
+                manifest_path = root.get_child("android/src/main/AndroidManifest.xml")
+                if manifest_path.exists:
+                    package = _manifest_package(ctx, manifest_path)
+            _write_recipe(
+                ctx,
+                name,
+                recipe,
+                {
+                    "name": name,
+                    "is_plugin": "True",
+                    "all_files": repr(_list_all_files(ctx, root, ["build"])),
+                    "android_srcs": repr(java_srcs + kotlin_srcs),
+                    "android_manifest": repr("android/src/main/AndroidManifest.xml"),
+                    "resource_files": repr(_list_files(ctx, root, "android/src/main/res", [])),
+                    "namespace": repr(package),
+                    "coordinates": repr([maven_label(c) for c in coordinates]),
+                    "plugin_deps": repr([
+                        "//{n}:{n}".format(n = d)
+                        for d in plugin.get("dependencies", [])
+                    ]),
+                    "reasons": repr(reasons),
+                    "abi": ctx.attr.abi,
+                    "api_level": ctx.attr.api_level,
+                    "embedding": ctx.attr.embedding,
+                },
+                gate_note = (
+                    "\n# Reasons that would otherwise gate it: {}.".format(", ".join(gated))
+                    if gated
+                    else ""
+                ),
+            )
+            manifest.append({
+                "name": name,
+                "reasons": reasons,
+                "strategy": "recipe:{}%{}".format(recipe["bzl"], recipe["macro"]),
+                "coordinates": coordinates,
+                "is_plugin": True,
+            })
+            all_coordinates.extend([c for c in coordinates if c not in all_coordinates])
+            continue
+
         if gated:
             # Deliberately not a fail(): that aborts the repository fetch, so a
             # single unsupported plugin makes every *other* plugin unfetchable
@@ -876,11 +1177,9 @@ def _flutter_plugins_impl(ctx):
                     name = name,
                     reasons = ", ".join(gated),
                     hint = (
-                        "supply its coordinates with plugins.override()"
+                        "supply its coordinates with plugins.package(artifacts = ...)"
                         if "unresolved_dep" in gated
-                        else "package its prebuilt jniLibs, which is not implemented"
-                        if "prebuilt_jni_libs" in gated
-                        else "port the module to CMake, which is built"
+                        else "give it a recipe with plugins.package(bzl_file = ..., macro = ...)"
                     ),
                 ),
             )
@@ -889,6 +1188,7 @@ def _flutter_plugins_impl(ctx):
                 "reasons": reasons,
                 "strategy": "gated",
                 "coordinates": coordinates,
+                "is_plugin": True,
             })
             continue
 
@@ -903,19 +1203,25 @@ def _flutter_plugins_impl(ctx):
         # It also has to be the package root and not android/: a CMake plugin's
         # CMakeLists reaches outside the Gradle module (rive_common's reaches
         # into ../ios and, through that, ../common_source).
-        for child in ctx.path(package_root).readdir():
-            if child.basename.startswith("."):
-                continue
-            ctx.symlink(child, "{}/{}".format(name, child.basename))
-
-        root = ctx.path(name)
-        java_srcs = _list_files(ctx, root, "android/src/main/java", [".java"])
-        kotlin_srcs = _list_files(ctx, root, "android/src/main/kotlin", [".kt"])
-
-        # A plugin's java/ tree may hold .kt too -- the source set is what
-        # build.gradle names, not what the directory is called -- so classify on
-        # the extensions actually found rather than on the directory.
-        kotlin_srcs = kotlin_srcs + _list_files(ctx, root, "android/src/main/java", [".kt"])
+        root = _stage_package(ctx, name, package_root)
+        # Both source roots are scanned for *both* extensions, and the split is
+        # by extension alone. The source set is what build.gradle names, not what
+        # the directory is called: the Flutter template writes
+        # `main.java.srcDirs += 'src/main/kotlin'`, which makes java/ and kotlin/
+        # one set that AGP compiles together, so either may hold either.
+        #
+        # Scanning only java/ for .java missed flutter_image_compress_common,
+        # whose ExifKeeper.**java** sits under src/main/kotlin/ beside the
+        # Kotlin that calls it -- `unresolved reference 'ExifKeeper'`, from a
+        # file that was simply never passed to the compiler.
+        java_srcs = (
+            _list_files(ctx, root, "android/src/main/java", [".java"]) +
+            _list_files(ctx, root, "android/src/main/kotlin", [".java"])
+        )
+        kotlin_srcs = (
+            _list_files(ctx, root, "android/src/main/kotlin", [".kt"]) +
+            _list_files(ctx, root, "android/src/main/java", [".kt"])
+        )
         srcs = java_srcs + kotlin_srcs
         if not srcs:
             fail("Plugin {} has no Android sources under {}/src/main".format(name, android))
@@ -1009,8 +1315,57 @@ def _flutter_plugins_impl(ctx):
             "reasons": reasons,
             "strategy": "source+cmake" if native else "source",
             "coordinates": coordinates,
+            "is_plugin": True,
         })
         all_coordinates.extend([c for c in coordinates if c not in all_coordinates])
+
+    # Recipes for packages the loop above never reached. This is the whole reason
+    # the registry is keyed on *pub package* rather than on plugin: `sqlite3`
+    # ships a Dart build hook and no android/ module, so it appears nowhere in
+    # .flutter-plugins-dependencies and a plugin-keyed registry could never name
+    # it. package_config.json, written by the same `pub get`, resolves it.
+    if unmatched_recipes:
+        roots = _package_roots(ctx)
+        for name in sorted(unmatched_recipes.keys()):
+            recipe = unmatched_recipes[name]
+            if name not in roots:
+                fail(
+                    ("plugins.package() registered a recipe for `{}`, but no such " +
+                     "package is in the resolution.\n" +
+                     "Checked .flutter-plugins-dependencies and {}.\n" +
+                     "Either the name is misspelled, or the package is not a " +
+                     "dependency of this app.").format(
+                        name,
+                        ctx.attr.package_config or "(no package_config given)",
+                    ),
+                )
+            _stage_package(ctx, name, roots[name])
+            root = ctx.path(name)
+            _write_recipe(ctx, name, recipe, {
+                "name": name,
+                "all_files": repr(_list_all_files(ctx, root, ["build"])),
+                # Not a plugin: no Gradle module, so none of the Android facts
+                # exist and a recipe for one of these is normally doing nothing
+                # but attaching a library.
+                "is_plugin": "False",
+                "android_srcs": repr([]),
+                "android_manifest": repr(None),
+                "resource_files": repr([]),
+                "namespace": repr(None),
+                "coordinates": repr([]),
+                "plugin_deps": repr([]),
+                "reasons": repr([]),
+                "abi": ctx.attr.abi,
+                "api_level": ctx.attr.api_level,
+                "embedding": ctx.attr.embedding,
+            })
+            manifest.append({
+                "name": name,
+                "reasons": [],
+                "strategy": "recipe:{}%{}".format(recipe["bzl"], recipe["macro"]),
+                "coordinates": [],
+                "is_plugin": False,
+            })
 
     # The Maven coordinates every plugin needs, as a MODULE.bazel segment.
     #
@@ -1046,18 +1401,32 @@ def _flutter_plugins_impl(ctx):
     # The one place the chosen strategy per plugin is recorded.
     ctx.file("plugins.json", json.encode({"plugins": manifest}))
 
-    # Aggregate, so the app depends on "every native plugin" rather than on a
-    # hand-maintained list that has to be edited in lockstep with pubspec.yaml.
-    # `pub get` rewrites the registrant to instantiate each plugin class, so a
-    # list that drifts fails the registrant compile -- loud, but still manual.
+    # Two aggregates, so the app depends on "every plugin" and "every native
+    # library a recipe contributed" rather than on hand-maintained lists that
+    # have to be edited in lockstep with pubspec.yaml.
+    #
+    # They are separate because their members differ: `:all` is an
+    # android_library and can only export Java/Kotlin targets, while a recipe for
+    # a non-plugin package -- sqlite3 -- has no such target to export and
+    # contributes only a .so.
     ctx.file(
         "BUILD.bazel",
         _BUILD_HEADER +
+        _NATIVE_LIBS_LOADS.format(recipe = ctx.attr.recipe_bzl) +
         "exports_files([\"plugin_deps.MODULE.bazel\", \"plugins.json\", \"dart_plugin_registrant.dart\"])\n\n" +
         "android_library(\n    name = \"all\",\n    exports = [{}\n    ],\n)\n".format(
             "".join([
                 "\n        \"//{n}:{n}\",".format(n = p["name"])
                 for p in manifest
+                if p["is_plugin"]
+            ]),
+        ) +
+        _NATIVE_LIBS_TEMPLATE.format(
+            abi = ctx.attr.abi,
+            deps = "".join([
+                "\n        \"//{n}:{n}_flutter_native\",".format(n = p["name"])
+                for p in manifest
+                if p["strategy"].startswith("recipe:")
             ]),
         ),
     )
@@ -1080,6 +1449,21 @@ flutter_plugins = repository_rule(
             doc = "Label of //tools/flutter:defs.bzl, for android_native_lib_jar.",
             mandatory = True,
         ),
+        "recipe_bzl": attr.string(
+            doc = "Label of //tools/flutter:recipe.bzl, for flutter_native_libs.",
+            mandatory = True,
+        ),
+        "package_config": attr.label(
+            doc = """The project's .dart_tool/package_config.json.
+
+Only needed to resolve a recipe for a package that is not a Flutter plugin --
+.flutter-plugins-dependencies does not list those. Optional so a project with no
+such recipe declares nothing extra.""",
+            allow_single_file = True,
+        ),
+        "recipes": attr.string_dict(
+            doc = "Package name -> JSON {bzl, macro} naming the recipe to hand generation to.",
+        ),
         "abi": attr.string(
             default = "arm64-v8a",
             doc = "Android ABI native plugin code is built for.",
@@ -1089,7 +1473,7 @@ flutter_plugins = repository_rule(
             doc = "minSdkVersion CMake builds target; matches the app's manifest_values.",
         ),
         "overrides": attr.string_dict(
-            doc = "Plugin name -> JSON list of Maven coordinates the scraper could not read.",
+            doc = "Package name -> JSON list of Maven coordinates the scraper could not read.",
         ),
     },
     # ANDROID_NDK_HOME selects the NDK *and* its CMake toolchain file, so a
@@ -1105,19 +1489,59 @@ _project = tag_class(
             allow_single_file = True,
             mandatory = True,
         ),
+        "package_config": attr.label(
+            doc = """The project's .dart_tool/package_config.json.
+
+Required only if a plugins.package() recipe names a package that is not a Flutter
+plugin -- a package with a Dart build hook and no android/ module never appears
+in .flutter-plugins-dependencies, so there is nothing else to resolve it from.""",
+            allow_single_file = True,
+        ),
     },
 )
 
-# The per-plugin escape hatch. A plugin whose build.gradle cannot be read
-# statically -- a BOM-supplied version, a variable from the root project -- is
-# unblocked by naming its coordinates here, without touching the rules and
-# without weakening the gate for anything else.
-_override = tag_class(
+# The per-package escape hatch, and the only one. Everything a consuming project
+# can say about a single pub package is said here.
+#
+# One tag rather than several because the alternatives -- an `override` for
+# coordinates, a `recipe` for build logic, a `replace` for redirection -- are
+# three names to learn for one concept. crate_universe's `crate.annotation()`
+# takes the same shape for the same reason: one tag, many optional attributes.
+#
+# The attributes do split, though, and the split is not cosmetic. It follows a
+# phase boundary Bazel enforces:
+#
+#   module/fetch time   `artifacts` feeds the single maven.install, which is
+#                       resolved before any BUILD file is loaded.
+#   analysis time       `bzl_file`/`macro` name a macro that runs during loading,
+#                       long after Maven resolution has finished.
+#
+# Which is why `artifacts` cannot simply be something a recipe declares: a macro
+# runs far too late to add anything to the resolution, and pulling deps from a
+# *second* maven.install would resurrect the version-skew bug that the
+# single-install rule in _MODULE_SEGMENT_HEADER exists to prevent.
+_package = tag_class(
     attrs = {
-        "name": attr.string(mandatory = True, doc = "Plugin name."),
-        "artifacts": attr.string_list(
+        "name": attr.string(
             mandatory = True,
-            doc = "Maven coordinates this plugin needs, group:artifact:version.",
+            doc = "pub package name. Need not be a Flutter plugin.",
+        ),
+        "artifacts": attr.string_list(
+            doc = """Maven coordinates the scraper could not read statically.
+
+For a BOM-supplied version, or a variable defined outside the plugin's own
+build.gradle. Clears the `unresolved_dep` reason for this package.""",
+        ),
+        "bzl_file": attr.label(
+            allow_single_file = [".bzl"],
+            doc = """A .bzl in the consuming project holding this package's recipe.
+
+Resolved relative to the module that writes the tag, so its canonical form is
+what the generated BUILD loads -- and the recipe's own load() statements then
+resolve in that module's repo mapping, not this one's.""",
+        ),
+        "macro": attr.string(
+            doc = "Name of the macro in bzl_file. Called as macro(name, info).",
         ),
     },
 )
@@ -1125,24 +1549,45 @@ _override = tag_class(
 
 def _flutter_plugins_ext_impl(ctx):
     overrides = {}
+    recipes = {}
     for mod in ctx.modules:
-        for override in mod.tags.override:
-            overrides[override.name] = json.encode(override.artifacts)
+        for package in mod.tags.package:
+            if package.artifacts:
+                overrides[package.name] = json.encode(package.artifacts)
+            if package.bzl_file and not package.macro:
+                fail("plugins.package(name = \"{}\") gives bzl_file but no macro".format(
+                    package.name,
+                ))
+            if package.macro and not package.bzl_file:
+                fail("plugins.package(name = \"{}\") gives macro but no bzl_file".format(
+                    package.name,
+                ))
+            if package.bzl_file:
+                recipes[package.name] = json.encode({
+                    # Canonical, because the generated repo's repo mapping is
+                    # this module's and cannot see the user's apparent names.
+                    "bzl": str(package.bzl_file),
+                    "macro": package.macro,
+                })
+
     for mod in ctx.modules:
         for project in mod.tags.project:
             flutter_plugins(
                 name = "flutter_plugins",
                 metadata = project.metadata,
+                package_config = project.package_config,
                 overrides = overrides,
+                recipes = recipes,
                 # Resolved here, in the module that owns the label, so the
                 # generated repository does not have to reason about repo
                 # mapping to find them.
                 embedding = str(Label("//tools/flutter:flutter_embedding")),
                 defs = str(Label("//tools/flutter:defs.bzl")),
+                recipe_bzl = str(Label("//tools/flutter:recipe.bzl")),
             )
 
 
 flutter_plugins_ext = module_extension(
     implementation = _flutter_plugins_ext_impl,
-    tag_classes = {"project": _project, "override": _override},
+    tag_classes = {"project": _project, "package": _package},
 )

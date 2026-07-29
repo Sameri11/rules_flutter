@@ -7,6 +7,13 @@
 # to publish.
 /docs_internal/
 
+# Real-world test subject: a shallow clone of openfoodfacts/smooth-app, used to
+# exercise these rules against a plugin graph nobody chose to suit them (30
+# Android plugins). It is a nested git repository, so it cannot be tracked here
+# without submodule machinery, and vendoring someone else's app into this one is
+# not the intent. Re-clone it to reproduce; see docs/package-recipes.md.
+/third_party/
+
 .DS_Store
 
 # Gradle output. app/android/.gitignore is template-managed by `flutter create`
