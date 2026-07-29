@@ -1,0 +1,5 @@
+# The root package exists so MODULE.bazel can include() the generated plugin
+# dependency segment, which requires it to be a label.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["plugin_deps.MODULE.bazel"])

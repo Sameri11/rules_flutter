@@ -1,0 +1,91 @@
+module(
+    name = "flutter_bazel",
+    version = "0.1.0",
+)
+
+flutter = use_extension("//tools/flutter:repo.bzl", "flutter")
+use_repo(flutter, "flutter_sdk", "flutter_engine_arm64", "flutter_embedding")
+
+# One target per native Android plugin, read from the same
+# .flutter-plugins-dependencies that Gradle's FlutterAppPluginLoaderPlugin uses.
+# `pub get` rewrites that file, so adding a plugin to pubspec.yaml is what
+# changes this graph -- nothing here is edited per plugin.
+plugins = use_extension("//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins.project(
+    metadata = "//app:.flutter-plugins-dependencies",
+)
+use_repo(plugins, "flutter_plugins")
+
+# --- Android ---------------------------------------------------------------
+# http_jar generates a java_import, so rules_java must be visible to this
+# module for the engine artifact repos to load.
+bazel_dep(name = "rules_java", version = "9.3.0")
+bazel_dep(name = "rules_android", version = "0.7.3")
+
+# Kotlin is the default language of the flutter Android template; MainActivity
+# is generated as .kt. Compiling it directly avoids maintaining a Java twin.
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+
+# --- Native plugin builds (CMake) -------------------------------------------
+# `externalNativeBuild` plugins ship C/C++ that AGP compiles by running CMake.
+# We run the plugin's own CMakeLists too, rather than translating it: a
+# CMakeLists we cannot accommodate then fails at build time instead of yielding
+# a .so that loads and misbehaves. See docs/plugins.md.
+#
+# The NDK's own build/cmake/android.toolchain.cmake is what plugin CMakeLists
+# are written and tested against, and it is handed to cmake() through a
+# CMAKE_TOOLCHAIN_FILE cache entry -- a documented rules_foreign_cc attribute
+# that suppresses its synthesized crosstool. Letting it synthesize one instead
+# does not link the NDK C++ STL and dies at link time.
+bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
+
+# Explicit rather than inherited: the native cc rules were removed from Bazel,
+# so `rules_cc` has to be visible to this module for //tools/flutter:defs.bzl to
+# load find_cc_toolchain.bzl -- which is how the strip rules reach the NDK's
+# llvm-strip instead of hardcoding a path.
+bazel_dep(name = "rules_cc", version = "0.2.17")
+
+# Supplies the cc_toolchain that cmake() resolves for the Android platform, and
+# locates the NDK. Both this and the CMAKE_TOOLCHAIN_FILE above read
+# ANDROID_NDK_HOME, so there is one source of truth for the path.
+#
+# NDK 28 is the enforced minimum -- see the version guard in plugins.bzl.
+bazel_dep(name = "rules_android_ndk", version = "0.1.5")
+
+android_ndk_repository_extension = use_extension(
+    "@rules_android_ndk//:extension.bzl",
+    "android_ndk_repository_extension",
+)
+use_repo(android_ndk_repository_extension, "androidndk")
+
+register_toolchains("@androidndk//:all")
+
+remote_android_extensions = use_extension(
+    "@bazel_tools//tools/android:android_extensions.bzl",
+    "remote_android_tools_extensions",
+)
+use_repo(remote_android_extensions, "android_gmaven_r8", "android_tools")
+
+android_sdk_repository_extension = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+use_repo(android_sdk_repository_extension, "androidsdk")
+
+register_toolchains("@androidsdk//:all")
+
+# The Maven artifacts -- the embedding's AndroidX dependencies and every
+# plugin's -- are declared in the generated segment included at the bottom of
+# this file, not here. They must be one maven.install: two install tags sharing
+# a repository name merge into a single resolution in which the later tag wins
+# outright, which let a plugin downgrade an artifact the embedding declared.
+# The coordinates themselves live in //tools/flutter:embedding.bzl.
+#
+# 6.10+ loads aar_import from @rules_android//android:rules.bzl. 6.9 used the
+# legacy @build_bazel_rules_android name, which is not visible under bzlmod and
+# breaks AAR resolution on Bazel 9.
+bazel_dep(name = "rules_jvm_external", version = "7.0")
+
+# Maven coordinates the Flutter plugins declare. Generated -- see
+# //tools/flutter:plugins.bzl and //app:plugins_check.
+include("//:plugin_deps.MODULE.bazel")

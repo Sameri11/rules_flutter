@@ -1,0 +1,5 @@
+name: mylib
+description: A local path dependency, used to test input declaration.
+version: 1.0.0
+environment:
+  sdk: ^3.12.0

@@ -1,0 +1,44 @@
+# Execution policy is expressed per-action in tools/flutter/defs.bzl, not
+# globally: release actions carry `no-sandbox` + `no-remote-exec` so they remain
+# remote-cacheable, while debug actions add `local` to opt out entirely.
+#
+# A global `--spawn_strategy=local` would flatten that distinction and force
+# every action local, including ones that could sandbox, so it is deliberately
+# not set here.
+common --enable_bzlmod
+
+# To share release artifacts across machines, point this at a cache endpoint.
+# Note: keys currently embed absolute paths (package_config.json, and the .dill
+# it produces), so cross-machine hits will miss until those are canonicalised.
+# See the "Remote caching" section of README.md before enabling.
+# build --remote_cache=grpc://...
+
+# Bazel's manifest merger strips <uses-permission> and <uses-permission-sdk-23>
+# from every dependency manifest before merging -- see removePermissions() in
+# ManifestMergerAction.java, gated on this flag, which defaults to off. The
+# policy behind that default is that an app should declare its own permissions
+# rather than inherit them silently.
+#
+# Flutter plugins are built the other way round: a plugin declares what it needs
+# in its own AndroidManifest.xml and Gradle merges it up. connectivity_plus
+# declares ACCESS_NETWORK_STATE and nothing else does, so without this flag the
+# APK builds, installs, launches and registers the plugin -- and then reports
+# the wrong connectivity state at runtime, with no build-time signal at all.
+build --merge_android_manifest_permissions
+
+# rules_android 0.7.3 builds its own dexer tools (DexFileSplitter et al) from
+# source, and they fail to compile under JDK 25: turbine_direct_graal errors out
+# running AutoValue/AutoBuilder annotation processors. Pinning the toolchain to
+# 17 is what makes android_binary work on Bazel 9.
+build --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
+build --java_language_version=17 --java_runtime_version=remotejdk_17
+
+# Forward ANDROID_NDK_HOME from the client environment rather than baking a
+# path in here, which would be machine-specific. It selects both the NDK
+# cc_toolchain (rules_android_ndk) and the CMake toolchain file a native plugin
+# is built with, so the two can never disagree.
+#
+# Must be NDK 28+; //tools/flutter:plugins.bzl refuses older ones. 27 and below
+# default to 4 KB page alignment, and such a .so crashes the loader on 16 KB
+# devices instead of failing cleanly.
+common --repo_env=ANDROID_NDK_HOME

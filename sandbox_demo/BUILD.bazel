@@ -1,0 +1,2 @@
+load(":demo.bzl", "demo")
+demo(name = "demo", declared = "declared.txt")

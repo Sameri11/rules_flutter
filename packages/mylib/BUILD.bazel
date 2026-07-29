@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+# Exposed so dependents can declare these sources as build inputs. A path
+# dependency's content is invisible to pubspec.lock, so without this the
+# compile has an undeclared input.
+filegroup(
+    name = "srcs",
+    srcs = glob(["lib/**/*.dart"]) + ["pubspec.yaml"],
+)
