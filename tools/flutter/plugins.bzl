@@ -407,7 +407,7 @@ use_repo(maven, "flutter_maven")
 _COURSIER_RESOLUTION = """    # Every artifact above is already reduced to one version, so "pinned" makes
     # those chosen versions authoritative over transitive suggestions rather
     # than failing resolution when a pom asks for something older.
-    version_conflict_policy = "pinned","""
+    version_conflict_policy = "pinned",{coursier_options}"""
 
 _PINNED_RESOLUTION = """    resolver = "{resolver}",
     # Only the coursier resolver may omit a lock file. Repin with
@@ -416,14 +416,20 @@ _PINNED_RESOLUTION = """    resolver = "{resolver}",
     lock_file = "{lock_file}","""
 
 
-def _module_segment(coordinates, resolver, lock_file):
+def _module_segment(coordinates, resolver, lock_file, coursier_options):
     return _MODULE_SEGMENT_HEADER.format(
         artifacts = "".join([
             "\n        \"{}\",".format(c)
             for c in highest_versions(coordinates)
         ]),
         resolution = (
-            _COURSIER_RESOLUTION if resolver == "coursier" else _PINNED_RESOLUTION.format(
+            _COURSIER_RESOLUTION.format(
+                coursier_options = (
+                    "\n    additional_coursier_options = [{}\n    ],".format(
+                        "".join(["\n        \"{}\",".format(o) for o in coursier_options]),
+                    ) if coursier_options else ""
+                ),
+            ) if resolver == "coursier" else _PINNED_RESOLUTION.format(
                 resolver = resolver,
                 lock_file = lock_file,
             )
@@ -1405,6 +1411,7 @@ def _flutter_plugins_impl(ctx):
             FLUTTER_EMBEDDING_ARTIFACTS + all_coordinates + ctx.attr.extra_artifacts,
             ctx.attr.maven_resolver,
             ctx.attr.maven_lock_file,
+            ctx.attr.coursier_options,
         ),
     )
 
@@ -1490,6 +1497,7 @@ such recipe declares nothing extra.""",
             values = ["coursier", "gradle", "maven"],
         ),
         "maven_lock_file": attr.string(),
+        "coursier_options": attr.string_list(),
         "extra_artifacts": attr.string_list(),
         "recipes": attr.string_dict(
             doc = "Package name -> JSON {bzl, macro} naming the recipe to hand generation to.",
@@ -1526,6 +1534,22 @@ Required only if a plugins.package() recipe names a package that is not a Flutte
 plugin -- a package with a Dart build hook and no android/ module never appears
 in .flutter-plugins-dependencies, so there is nothing else to resolve it from.""",
             allow_single_file = True,
+        ),
+        "coursier_options": attr.string_list(
+            doc = """Extra flags for the coursier CLI, when `maven_resolver = "coursier"`.
+
+The reason this exists is variant selection. coursier reads Gradle Module
+Metadata and can be told which variant of a Kotlin Multiplatform module an
+Android consumer wants:
+
+    coursier_options = [
+        "--variant", "org.jetbrains.kotlin.platform.type=androidJvm|jvm",
+        "--variant", "org.gradle.jvm.environment=android|standard-jvm",
+    ]
+
+Without it, KMP modules resolve to their `-jvm` (or `-desktop`) children and the
+app compiles cleanly then dies on launch -- see rules_jvm_external#1605. The
+gradle resolver has no equivalent knob.""",
         ),
         "extra_artifacts": attr.string_list(
             doc = """Maven coordinates to add to the resolution, attributable to no package.
@@ -1670,6 +1694,7 @@ def _flutter_plugins_ext_impl(ctx):
                 name = "flutter_plugins",
                 metadata = project.metadata,
                 package_config = project.package_config,
+                coursier_options = project.coursier_options,
                 extra_artifacts = project.extra_artifacts,
                 maven_resolver = project.maven_resolver,
                 maven_lock_file = project.maven_lock_file,
