@@ -397,13 +397,23 @@ use_repo(maven, "flutter_maven")
 # Two ways to settle versions, and which one a project needs depends on its
 # dependency graph rather than on taste -- so the consumer picks.
 #
-# coursier is the default and resolves a small graph fine. It cannot resolve a
-# large AndroidX one: those poms carry Maven *strict* ranges (the same artifact
-# demanded as `[2.7.0,2.7.0]` down one path and `[2.5.1,2.5.1]` down another),
-# which no POM-based resolver can satisfy. Gradle reads the Gradle Module
-# Metadata AndroidX also publishes, where the constraints are loose, and is the
-# only resolver that gets through -- at the cost of requiring a lock file, which
-# only coursier may omit.
+# coursier is the default and carries a real app. AndroidX poms do hold Maven
+# *strict* ranges (the same artifact demanded as `[2.7.0,2.7.0]` down one path
+# and `[2.5.1,2.5.1]` down another) that no POM-based resolver can widen, but
+# coursier reports every such conflict in one run rather than one per run, and
+# on smooth_app's 30-plugin graph there were exactly three. Declaring those
+# three makes them the consumer's own coordinates, which the
+# `version_conflict_policy = "pinned"` below is authoritative over.
+#
+# gradle reads the Gradle Module Metadata AndroidX also publishes, where the
+# same constraints are loose, so it settles them with nothing declared -- but it
+# requires a lock file, and it records a *variant's* checksum against the root
+# coordinate's URL, so KMP modules and guava fail their integrity check
+# (rules_jvm_external#1605). Working around that means pinning guava to `-jre`,
+# i.e. shipping the desktop build into an Android app.
+#
+# Both were measured to produce byte-identical resolved versions and APKs that
+# behave identically on device. See docs_internal/package-recipes.md.
 _COURSIER_RESOLUTION = """    # Every artifact above is already reduced to one version, so "pinned" makes
     # those chosen versions authoritative over transitive suggestions rather
     # than failing resolution when a pom asks for something older.
@@ -1538,43 +1548,84 @@ in .flutter-plugins-dependencies, so there is nothing else to resolve it from.""
         "coursier_options": attr.string_list(
             doc = """Extra flags for the coursier CLI, when `maven_resolver = "coursier"`.
 
-The reason this exists is variant selection. coursier reads Gradle Module
+The reason this exists is variant selection. Recent coursier reads Gradle Module
 Metadata and can be told which variant of a Kotlin Multiplatform module an
 Android consumer wants:
 
     coursier_options = [
+        "--enable-modules",
         "--variant", "org.jetbrains.kotlin.platform.type=androidJvm|jvm",
         "--variant", "org.gradle.jvm.environment=android|standard-jvm",
     ]
 
-Without it, KMP modules resolve to their `-jvm` (or `-desktop`) children and the
-app compiles cleanly then dies on launch -- see rules_jvm_external#1605. The
-gradle resolver has no equivalent knob.""",
+**This needs a newer coursier than rules_jvm_external ships.** 7.1 bundles
+coursier 2.1.24 (released 2025-01-09), which rejects both flags outright with
+`Unrecognized argument`; every piece of coursier's Gradle Module Metadata work
+landed after it. Override the CLI without patching the rules:
+
+    common --repo_env=COURSIER_URL=https://github.com/coursier/coursier/releases/download/v2.1.25-M26/coursier.jar
+    common --repo_env=COURSIER_SHA256=97647d0378b877db2552a29caec075de1bae86375f0343ba82cf52d69193eb5e
+
+On 2.1.25-M26 that combination was verified to resolve `guava-33.5.0-android`
+and `datastore-preferences-android` correctly. Note `--enable-modules` is
+required: `--variant` alone leaves coursier on the POM path, where the flags do
+nothing. Note also coursier#3725 -- with modules enabled, BOM strict-version
+pins are reported as dependency edges, which rules_jvm_external reads as cycles.
+
+Naming the `-android` coordinate in `extra_artifacts` is the cheaper route and
+needs none of this; see there. The gradle resolver has no equivalent knob at
+all.""",
         ),
         "extra_artifacts": attr.string_list(
             doc = """Maven coordinates to add to the resolution, attributable to no package.
 
-`plugins.package(artifacts = ...)` covers a coordinate some *plugin* needs. This
-covers the rest: an artifact the resolver should have pulled in and did not.
+`plugins.package(artifacts = ...)` covers a coordinate some *plugin* needs, and
+adds it to that plugin's deps as well. This covers the rest: an artifact the
+resolution should have contained and did not, attached to no plugin. Prefer it
+whenever the scraper already found the label -- adding a coordinate a plugin
+already declares fails with "Label is duplicated in the deps attribute".
 
-The case it exists for is Kotlin Multiplatform. A KMP module publishes `-android`
-and `-jvm` (sometimes `-desktop`) children, and rules_jvm_external's gradle
-resolver resolves as a plain JVM consumer, so an Android app silently gets the
-wrong one -- `androidx.lifecycle:lifecycle-runtime` resolves to
-`lifecycle-runtime-desktop`, which has no `ReportFragment`, and the app compiles
-cleanly then dies on launch with NoClassDefFoundError. Naming the `-android`
-variant here forces it into the graph. See rules_jvm_external#1605.""",
+Two uses, both seen on a real graph:
+
+**Kotlin Multiplatform variants.** A KMP module publishes `-android` and `-jvm`
+(sometimes `-desktop`) children, and neither resolver picks the Android one: the
+gradle resolver resolves as a plain JVM consumer, and coursier is POM-based and
+never sees the variants at all. So `androidx.lifecycle:lifecycle-runtime`
+resolves to `lifecycle-runtime-desktop`, which has no `ReportFragment`, and the
+app compiles cleanly then dies on launch with NoClassDefFoundError. Naming the
+`-android` coordinate here forces it in. See rules_jvm_external#1605.
+
+**Strict version ranges, under coursier.** AndroidX poms demand the same
+artifact at two incompatible hard versions down two paths. Naming the artifact
+here makes it one of the consumer's own coordinates, which
+`version_conflict_policy = "pinned"` then settles. smooth_app needed exactly
+three (`emoji2`, `lifecycle-viewmodel`, `savedstate`).
+
+Also the place to pin a version a package declares dynamically: Flutter's own
+integration_test asks for `androidx.test:runner:1.2+`, and `+` tracks upstream
+releases rather than pinning -- `1.4+` resolves to `1.4.1-alpha03`.""",
         ),
         "maven_resolver": attr.string(
             default = "coursier",
             values = ["coursier", "gradle", "maven"],
             doc = """Which resolver settles the Maven graph.
 
-`coursier` (the default) needs no lock file and handles a small graph. A real
-app's AndroidX graph needs `gradle`, which is the only resolver that reads Gradle
-Module Metadata and so the only one that can satisfy the strict version ranges
-AndroidX poms carry -- see docs/package-recipes.md. `gradle` and `maven` both
-require `maven_lock_file`.""",
+`coursier` (the default) needs no lock file and carries a real app: smooth_app's
+30-plugin AndroidX graph resolves on it. AndroidX poms do hold strict version
+ranges no POM-based resolver can widen, but coursier reports them all in one run
+and there were three; name them in `extra_artifacts` and
+`version_conflict_policy = "pinned"` settles them.
+
+`gradle` reads Gradle Module Metadata and needs nothing declared for those
+ranges, but it requires `maven_lock_file` and records a variant's checksum
+against the root coordinate's URL, so guava and KMP modules fail their integrity
+check -- rules_jvm_external#1605. The workaround is pinning guava to `-jre`,
+which puts the desktop build in an Android APK.
+
+Both were measured to resolve identical versions and produce APKs that behave
+identically on device, so this is a maintenance trade rather than a correctness
+one. See docs_internal/package-recipes.md. `gradle` and `maven` both require
+`maven_lock_file`.""",
         ),
         "maven_lock_file": attr.string(
             doc = "Label of the maven_install.json lock file, e.g. \"//:maven_install.json\".",

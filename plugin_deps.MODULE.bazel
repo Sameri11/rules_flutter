@@ -38,11 +38,6 @@ maven.install(
     # Every artifact above is already reduced to one version, so "pinned" makes
     # those chosen versions authoritative over transitive suggestions rather
     # than failing resolution when a pom asks for something older.
-    #
-    # Fine for an app this size; NOT enough for a large real graph. AndroidX
-    # poms carry Maven *strict* ranges no POM-based resolver can satisfy, so a
-    # real app needs `resolver = "gradle"` plus a `lock_file` instead. See
-    # docs/package-recipes.md -> "The breadth check".
     version_conflict_policy = "pinned",
 )
 use_repo(maven, "flutter_maven")

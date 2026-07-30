@@ -278,15 +278,38 @@
   "moduleExtensions": {
     "//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "BS5c50agAO8ziK6n6+HRLOo+5yP2SQueBbbUzry9LBY=",
-        "usagesDigest": "/0VdiUrm78KMfYqC9FOOkYXund7EXtvs1V1m/DmOT6A=",
-        "recordedInputs": [],
+        "bzlTransitiveDigest": "7m0dqzc8WsDgMvEivakszIIID61Z8H/rqNDJkA5Nmw0=",
+        "usagesDigest": "Bqe3ALmiR7ZQ8RJUNfNljQAW/erMR+qDpKU7U+GCq8o=",
+        "recordedInputs": [
+          "REPO_MAPPING:,rules_java rules_java+",
+          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
+          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
+          "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
+          "REPO_MAPPING:protobuf+,rules_java rules_java+",
+          "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
+          "REPO_MAPPING:rules_cc+,platforms platforms",
+          "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java+,bazel_features bazel_features+",
+          "REPO_MAPPING:rules_java+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_java+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_java+,com_google_protobuf protobuf+",
+          "REPO_MAPPING:rules_java+,compatibility_proxy rules_java++compatibility_proxy+compatibility_proxy",
+          "REPO_MAPPING:rules_java+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java++compatibility_proxy+compatibility_proxy,rules_java rules_java+"
+        ],
         "generatedRepoSpecs": {
           "flutter_plugins": {
             "repoRuleId": "@@//tools/flutter:plugins.bzl%flutter_plugins",
             "attributes": {
               "metadata": "@@//app:.flutter-plugins-dependencies",
               "package_config": "@@//app:.dart_tool/package_config.json",
+              "coursier_options": [],
+              "extra_artifacts": [],
+              "maven_resolver": "coursier",
+              "maven_lock_file": "",
               "overrides": {
                 "audioplayers_android": "[\"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4\",\"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4\"]",
                 "camera_android_camerax": "[\"androidx.camera:camera-core:1.6.0\",\"androidx.camera:camera-camera2:1.6.0\",\"androidx.camera:camera-lifecycle:1.6.0\",\"androidx.camera:camera-video:1.6.0\"]"
@@ -295,7 +318,7 @@
                 "rive_native": "{\"bzl\":\"@@//bazel/flutter:rive_native.bzl\",\"macro\":\"rive_native_recipe\"}",
                 "sqlite3": "{\"bzl\":\"@@//bazel/flutter:sqlite3.bzl\",\"macro\":\"sqlite3_recipe\"}"
               },
-              "embedding": "'@@//tools/flutter:flutter_embedding'",
+              "embedding": "'@@//app/android/app:flutter_embedding'",
               "defs": "'@@//tools/flutter:defs.bzl'",
               "recipe_bzl": "'@@//tools/flutter:recipe.bzl'"
             }
