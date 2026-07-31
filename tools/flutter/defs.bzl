@@ -359,8 +359,24 @@ def _flutter_assets_impl(ctx):
     # staging only the app directory would break them. Hosted packages are
     # unaffected, their rootUris being absolute into ~/.pub-cache.
     #
-    # cp -c uses APFS clonefile where available, making the copy near-free; the
-    # fallback covers other filesystems. Sources may be read-only, hence chmod.
+    # One tar reads the manifest, another extracts, and the archive crosses a
+    # memory pipe without touching disk. This replaced a per-file `mkdir -p` +
+    # `cp` loop that spawned two processes per input: 1546 files took ~9s, and
+    # the tar pipe takes ~0.95s. `-T` is supported by both bsdtar and GNU tar,
+    # which is why this rather than `pax` (marginally faster, but not installed
+    # everywhere) or `rsync` (slower, and macOS 15 swapped it for openrsync).
+    #
+    # Deliberately uncompressed. The archive only ever crosses a pipe, so a
+    # filter can shrink the one part of the transfer that was already free while
+    # charging CPU on both ends -- measured, gzip costs +0.7s and xz +6.6s. Two
+    # filters are worse than slow: bsdtar pads its output to the 10240-byte
+    # block size when writing to a pipe, and zstd and lz4 are external programs
+    # here rather than linked-in, so their decompressor hits that padding, fails
+    # with ERROR_frameType_unknown, and drops the tail of the archive. The
+    # `pipefail` above is what turns that into a failed build rather than a
+    # stage silently missing files. See docs_internal/staging-experiments.md.
+    #
+    # Sources may be read-only, hence chmod.
     #
     # --no-pub matters: `flutter build` runs pub get by default, which would put
     # implicit dependency resolution -- and a possible network call -- inside a
@@ -391,11 +407,7 @@ EXECROOT="$PWD"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
-while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    mkdir -p "$STAGE/$(dirname "$f")"
-    cp -c "$f" "$STAGE/$f" 2>/dev/null || cp "$f" "$STAGE/$f"
-done < "{manifest}"
+tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
 
 cd "$STAGE/{pkg}"

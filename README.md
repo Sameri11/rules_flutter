@@ -318,13 +318,16 @@ dropping `--tfa` is *slower*, because the dill grows from 5.2 MB to 174 MB.
 `frontend_server` supports incremental compilation (it is what hot reload
 drives), and `flutter build --release` cannot use it. Driving it from a Bazel
 persistent worker is the one change that would make this build faster than the
-tool it wraps rather than merely equal to it — plausibly ~3s against 17s once
-limitation #7 is also fixed. See
+tool it wraps rather than merely equal to it — plausibly ~7s against 17s, now
+that limitation #7 is fixed and the asset action's floor is known. See
 [`docs_internal/build-performance.md`](docs_internal/build-performance.md).
 
-**7. The asset action spends ~90% of its time staging.** 12.5s to wrap a 1.08s
-command, because inputs are copied one process at a time. See "Staging" below;
-the fix is a single-pass copy.
+**7. ~~The asset action spends ~90% of its time staging.~~** **Fixed.** Inputs
+were copied one process at a time; a single tar pipe stages them in one pass and
+the action went 13.2s → 4.8s on a real app, byte-identical output. What is left
+is `flutter build bundle` itself (~3.6s), which no staging change can touch. See
+"Staging" below and
+[`docs_internal/staging-experiments.md`](docs_internal/staging-experiments.md).
 
 ## Invalidation strategy
 
@@ -594,10 +597,7 @@ STAGE="$(mktemp -d "${TMPDIR:-/tmp}/flutter_assets.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
 # every declared input, copied to its execroot-relative path
-while IFS= read -r f; do
-    mkdir -p "$STAGE/$(dirname "$f")"
-    cp -c "$f" "$STAGE/$f" 2>/dev/null || cp "$f" "$STAGE/$f"
-done < <manifest>
+tar -cf - -T <manifest> | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
 
 cd "$STAGE/app"
@@ -620,14 +620,20 @@ Bazel provides no managed scratch directory for local actions: `$TMPDIR` is the
 shared system temp and is not cleaned, so the action uses `mktemp -d` plus a
 `trap`.
 
-**Cost — unfixed, and it dominates the action.** The loop spawns `mkdir -p` and
-`cp` per file. On a real app that is 1544 files and roughly 3000 processes,
-measured at 7.7s standalone and ~11s in-action, wrapping a `flutter build bundle`
-that takes **1.08s** — so the asset action is ~90% staging. The demo app has ~20
-files, which is why it never showed. Staging itself must stay; only the per-file
-spawning is waste, and one `pax -rw`, `rsync -a --files-from=`, or tar pipe
-replaces it. Expected 12.5s → ~1.5s. See
-[`docs_internal/build-performance.md`](docs_internal/build-performance.md).
+**Cost — was 90% of the action, now ~20%.** Staging used to spawn `mkdir -p` and
+`cp` per file: on a real app, 1546 files and roughly 3000 processes, ~9s of an
+13.2s action. The tar pipe does the same work in **~0.95s** in one process pair,
+and the action is now **4.8s** with byte-identical output — verified down to a
+bit-identical APK. The demo app has ~13 files, which is why this never showed
+there.
+
+What is left is not staging. `flutter build bundle` on a real app costs **~3.6s**
+on its own — the 1.08s previously quoted was a demo-app number — so ~75% of the
+action is now the tool, and no staging change can reach it. Five implementations
+(tar, `pax -rw`, `pax -rw -l`, `rsync --files-from`, symlinks) were measured and
+land within 0.7s of each other; compression on the tar pipe was measured too and
+every filter loses. See
+[`docs_internal/staging-experiments.md`](docs_internal/staging-experiments.md).
 
 **Staging does not fix the startup lock** — handled separately. The `flutter` CLI serializes
 concurrent invocations (`Waiting for another flutter command to release the
