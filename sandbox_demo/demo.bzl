@@ -1,5 +1,12 @@
+"""A rule whose action reaches for a file it never declared as an input.
+
+It logs what it saw rather than failing, so the same target reports whether the
+undeclared sibling was visible: sandboxed it is not, local it is.
+"""
+
 def _impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + ".log")
+
     # Reads its declared input, then reaches for a sibling file it never declared.
     ctx.actions.run_shell(
         inputs = [ctx.file.declared],

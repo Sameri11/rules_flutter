@@ -20,10 +20,17 @@ correct `NativeAssetsManifest.json` into the bundle and the engine reads it at
 runtime; `code_assets` below is checked *against* that, not used to produce it.
 """
 
+# `@@` is load bearing -- see _RECIPE_TEMPLATE in //tools/flutter:plugins.bzl.
+# buildifier: disable=canonical-repository
 load("@@//tools/flutter:recipe.bzl", "flutter_native_contribution")
 
 def sqlite3_recipe(name, info):
-    """Attach the prebuilt libsqlite3.so the build hook would have downloaded."""
+    """Attach the prebuilt libsqlite3.so the build hook would have downloaded.
+
+    Args:
+      name: the package name the generated targets are named after.
+      info: the recipe contract struct -- see //tools/flutter:recipe.bzl.
+    """
     if info.contract_version != 1:
         fail("sqlite3_recipe understands contract 1, got {}".format(
             info.contract_version,

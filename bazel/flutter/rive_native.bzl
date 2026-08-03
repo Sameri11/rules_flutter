@@ -15,11 +15,18 @@ So the recipe replaces exactly one thing: where the library comes from. The
 Kotlin half is built the same way the generator would have built it.
 """
 
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+# `@@` is load bearing -- see _RECIPE_TEMPLATE in //tools/flutter:plugins.bzl.
+# buildifier: disable=canonical-repository
 load("@@//tools/flutter:recipe.bzl", "flutter_native_contribution")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 def rive_native_recipe(name, info):
-    """Build rive_native: Kotlin from source, .so from the archive pinned in MODULE.bazel."""
+    """Build rive_native: Kotlin from source, .so from the archive pinned in MODULE.bazel.
+
+    Args:
+      name: the package name the generated targets are named after.
+      info: the recipe contract struct -- see //tools/flutter:recipe.bzl.
+    """
     if info.contract_version != 1:
         fail("rive_native_recipe understands contract 1, got {}".format(
             info.contract_version,

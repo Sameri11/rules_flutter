@@ -12,7 +12,14 @@ def maven_label(coordinate, repo = "@flutter_maven"):
     return "{}//:{}".format(repo, mangled)
 
 def version_key(version):
-    """Sortable form of a Maven version. Numeric parts compare as numbers."""
+    """Sortable form of a Maven version. Numeric parts compare as numbers.
+
+    Args:
+      version: a coordinate's version field, e.g. `1.4.1` or `1.0-rc2`.
+
+    Returns:
+      A list comparable with `>` against another version's key.
+    """
     parts = []
     for chunk in version.replace("-", ".").split("."):
         if chunk.isdigit():
@@ -33,6 +40,12 @@ def highest_versions(coordinates):
     per-source instead is what previously let a plugin downgrade
     androidx.exifinterface from the 1.4.1 the embedding declares to 1.3.7:
     two install tags merged into one repository, and the later one simply won.
+
+    Args:
+      coordinates: `group:artifact:version` strings, in any order.
+
+    Returns:
+      Those coordinates sorted, one per group:artifact.
     """
     best = {}
     for coordinate in coordinates:

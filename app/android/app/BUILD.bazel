@@ -7,8 +7,8 @@
 # files, so this BUILD survives, but keep that in mind when upgrading templates.
 
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load("//tools/flutter:defs.bzl", "jni_lib_jar", "strip_native_libs")
 load("//tools/flutter:embedding.bzl", "flutter_embedding_deps", "flutter_embedding_library")
 
@@ -32,7 +32,7 @@ flutter_embedding_library(name = "flutter_embedding")
 # same mechanism the prebuilt engine artifact relies on.
 jni_lib_jar(
     name = "libapp_jni",
-    src = "//app:app",
+    src = "//app",
 )
 
 java_import(
@@ -110,7 +110,6 @@ android_binary(
     # rather than copied. A copy drifts, and drift is what produced the
     # missing-theme and targetSdk defects.
     manifest = "src/main/AndroidManifest.xml",
-    resource_files = glob(["src/main/res/**"]),
     # Values AGP would supply from build.gradle.kts, which the manifest itself
     # does not carry: ${applicationName} is a placeholder, and the package and
     # SDK levels live in the gradle `namespace` / `minSdk` / `targetSdk`.
@@ -122,6 +121,7 @@ android_binary(
         "minSdkVersion": "21",
         "targetSdkVersion": "36",
     },
+    resource_files = glob(["src/main/res/**"]),
     deps = [
         ":main_activity",
         ":generated_plugin_registrant",

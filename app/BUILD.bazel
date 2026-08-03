@@ -1,8 +1,8 @@
 load(
     "//tools/flutter:defs.bzl",
     "dart_kernel",
-    "flutter_assets",
     "flutter_aot_library",
+    "flutter_assets",
     "native_assets_check",
     "pub_path_deps_check",
     "pub_plugins_check",
@@ -34,11 +34,11 @@ DART_PLUGIN_REGISTRANT_URI = "package:demo_app/dart_plugin_registrant.dart"
 flutter_aot_library(
     name = "app",
     srcs = SRCS,
+    dart_plugin_registrant_uri = DART_PLUGIN_REGISTRANT_URI,
     entrypoint_uri = "package:demo_app/main.dart",
     package_config = ".dart_tool/package_config.json",
     path_deps = PATH_DEPS,
     pub_stamp = PUB_STAMP,
-    dart_plugin_registrant_uri = DART_PLUGIN_REGISTRANT_URI,
 )
 
 flutter_assets(
@@ -46,8 +46,8 @@ flutter_assets(
     srcs = SRCS,
     assets = glob(["assets/**"]),
     package_config = ".dart_tool/package_config.json",
-    pub_stamp = PUB_STAMP,
     path_deps = PATH_DEPS,
+    pub_stamp = PUB_STAMP,
     pubspec = "pubspec.yaml",
 )
 
@@ -56,12 +56,12 @@ flutter_assets(
 dart_kernel(
     name = "app_debug_kernel",
     srcs = SRCS,
+    dart_plugin_registrant_uri = DART_PLUGIN_REGISTRANT_URI,
     entrypoint_uri = "package:demo_app/main.dart",
     mode = "debug",
     package_config = ".dart_tool/package_config.json",
     path_deps = PATH_DEPS,
     pub_stamp = PUB_STAMP,
-    dart_plugin_registrant_uri = DART_PLUGIN_REGISTRANT_URI,
 )
 
 flutter_assets(
@@ -70,8 +70,8 @@ flutter_assets(
     assets = glob(["assets/**"]),
     mode = "debug",
     package_config = ".dart_tool/package_config.json",
-    pub_stamp = PUB_STAMP,
     path_deps = PATH_DEPS,
+    pub_stamp = PUB_STAMP,
     pubspec = "pubspec.yaml",
 )
 

@@ -95,6 +95,7 @@ consumer-supplied recipes; see "Package recipes" below.
 | `app/` | Minimal Flutter app used as the test subject |
 | `packages/mylib/` | A `path:` dependency, used to test input declaration |
 | `sandbox_demo/` | Probe demonstrating sandboxed vs local execution |
+| `tools/format/` | buildifier targets: workspace-wide Starlark formatting and lint |
 | `app/android/app/` | `BUILD.bazel` beside the Gradle module: `android_binary`, Kotlin `MainActivity`, AndroidX deps |
 | `docs_internal/` | Background notes — not published yet, see below |
 
@@ -140,6 +141,24 @@ bazel build //app:dart_registrant_check  # guard: fails on stale Dart plugin reg
 bazel build //app:native_assets_check    # guard: fails on a code asset with no recipe
 bazel build //app/android/app:demo_app   # signed APK
 ```
+
+### Starlark formatting
+
+```sh
+bazel run //tools/format:buildifier        # format and lint-fix in place
+bazel run //tools/format:buildifier.check  # report only, non-zero on drift
+```
+
+[buildifier](https://github.com/bazelbuild/buildtools/blob/main/buildifier/README.md)
+covers every `BUILD.bazel`, `*.bzl` and `MODULE.bazel` in the workspace, minus the
+exclusions in `//tools/format:BUILD.bazel`. `plugin_deps.MODULE.bazel` is included:
+the generator emits buildifier-canonical output, so formatting it does not put the
+committed file at odds with `//app:plugins_check`.
+
+In VS Code, `.vscode/` configures the `bazelbuild.vscode-bazel` extension to
+format Starlark on save. It needs `buildifier` on `PATH` (`brew install
+buildifier` — 8.5.1, the version pinned here); pointing it at the Bazel target
+instead would drag in toolchain resolution, and with it `ANDROID_NDK_HOME`.
 
 ### Package recipes
 
@@ -244,7 +263,8 @@ Both are easy to get wrong in ways that do not name themselves:
   [`docs_internal/plugins.md`](docs_internal/plugins.md).
 
 `.bazelrc` forwards `ANDROID_NDK_HOME` with `--repo_env` rather than hardcoding
-a machine-specific path.
+a machine-specific path. Note that *every* Bazel command in this workspace needs
+it, including ones with nothing to do with Android — see limitation #8.
 
 ## Known limitations
 
@@ -328,6 +348,31 @@ the action went 13.2s → 4.8s on a real app, byte-identical output. What is lef
 is `flutter build bundle` itself (~3.6s), which no staging change can touch. See
 "Staging" below and
 [`docs_internal/staging-experiments.md`](docs_internal/staging-experiments.md).
+
+**8. The NDK is a prerequisite of every Bazel command, not just Android ones.**
+`MODULE.bazel` calls `register_toolchains("@androidndk//:all")`, and toolchain
+resolution has to load every registered toolchain repo to look for a match. So
+any target requesting *any* toolchain fetches `@androidndk`, and
+`android_ndk_repository` fails outright when `ANDROID_NDK_HOME` is unset. That
+is why `bazel run //tools/format:buildifier` — a formatter, with no Android
+content whatsoever — needs the NDK, while the same binary reached through a
+toolchain-free target builds with the variable unset. It is also why
+`.vscode/settings.json` points at a `buildifier` on `PATH` rather than at the
+Bazel target.
+
+This compounds with limitation #3. Every platform added — iOS, desktop, web —
+and every host-only tool target pays the Android tax, on machines that have no
+other reason to hold an NDK. `@androidsdk` does not have the problem in the same
+form: with `ANDROID_HOME` unset it generates a stub and fails later, at a target
+that actually wants `aapt2`.
+
+The fix belongs upstream in `rules_android_ndk`: the repository rule should
+fetch successfully without a path and fail only when something in it is built,
+moving the error from fetch time to use time. Until then the workaround is to
+make the variable unconditionally visible to Bazel — a
+`try-import %workspace%/user.bazelrc` carrying
+`common --repo_env=ANDROID_NDK_HOME=...` — rather than relying on whichever
+shell, or GUI, launched the build having exported it.
 
 ## Invalidation strategy
 

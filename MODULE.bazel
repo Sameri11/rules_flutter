@@ -4,7 +4,7 @@ module(
 )
 
 flutter = use_extension("//tools/flutter:repo.bzl", "flutter")
-use_repo(flutter, "flutter_sdk", "flutter_engine_arm64", "flutter_embedding")
+use_repo(flutter, "flutter_embedding", "flutter_engine_arm64", "flutter_sdk")
 
 # One target per native Android plugin, read from the same
 # .flutter-plugins-dependencies that Gradle's FlutterAppPluginLoaderPlugin uses.
@@ -12,14 +12,14 @@ use_repo(flutter, "flutter_sdk", "flutter_engine_arm64", "flutter_embedding")
 # changes this graph -- nothing here is edited per plugin.
 plugins = use_extension("//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
+    # The embedding target lives in the app, not in the rules -- see
+    # //app/android/app:BUILD.bazel.
+    embedding = "//app/android/app:flutter_embedding",
     metadata = "//app:.flutter-plugins-dependencies",
     # Needed only because a recipe below names `sqlite3`, which is not a Flutter
     # plugin and so appears nowhere in the metadata file. Written by the same
     # `pub get`, and the only thing that resolves such a package to a directory.
     package_config = "//app:.dart_tool/package_config.json",
-    # The embedding target lives in the app, not in the rules -- see
-    # //app/android/app:BUILD.bazel.
-    embedding = "//app/android/app:flutter_embedding",
 )
 
 # Per-package escape hatches. `plugins.package()` is the only one there is: it
@@ -44,7 +44,6 @@ plugins.package(
         "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4",
     ],
 )
-
 plugins.package(
     name = "camera_android_camerax",
     # `val cameraxVersion = "1.6.0"` -- this plugin is Kotlin DSL, and
@@ -58,6 +57,8 @@ plugins.package(
     ],
 )
 use_repo(plugins, "flutter_plugins")
+
+bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = True)
 
 # --- Android ---------------------------------------------------------------
 # http_jar generates a java_import, so rules_java must be visible to this
@@ -157,14 +158,14 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_file(
     name = "libsqlite3_android_arm64",
-    urls = ["https://github.com/simolus3/sqlite3.dart/releases/download/" +
-            "sqlite3-3.5.0/libsqlite3.arm64.android.so"],
-    sha256 = "e99515af1d7119fb61843ae5e597344e7f258563de3a7e5a3869f627aab2887b",
     # The bundle's NativeAssetsManifest.json already says
     # ["absolute", "libsqlite3.so"], so the name has to be exactly this or dlopen
     # misses. //bazel/flutter:sqlite3.bzl restates it as a code_assets entry,
     # which makes the recipe fail rather than the app.
     downloaded_file_path = "libsqlite3.so",
+    sha256 = "e99515af1d7119fb61843ae5e597344e7f258563de3a7e5a3869f627aab2887b",
+    urls = ["https://github.com/simolus3/sqlite3.dart/releases/download/" +
+            "sqlite3-3.5.0/libsqlite3.arm64.android.so"],
 )
 
 # The recipes themselves. Each names a .bzl in this project and a macro in it;
@@ -175,7 +176,6 @@ plugins.package(
     bzl_file = "//bazel/flutter:rive_native.bzl",
     macro = "rive_native_recipe",
 )
-
 plugins.package(
     name = "sqlite3",
     bzl_file = "//bazel/flutter:sqlite3.bzl",
@@ -200,9 +200,6 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 
 http_archive(
     name = "rive_native_android",
-    urls = ["https://rive-flutter-artifacts.rive.app/rive_native_versions/" +
-            "0.1.10%2B2/rive_native_artifacts_android.zip"],
-    sha256 = "765a4e5e7e244eb849c76af105d5dc9a33fa02401cd37e6f24720d8c8941498b",
     # The archive holds <abi>/librive_native.so for all four Android ABIs at its
     # root. Only arm64-v8a is used; the APK is arm64-only.
     build_file_content = """
@@ -212,4 +209,7 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 """,
+    sha256 = "765a4e5e7e244eb849c76af105d5dc9a33fa02401cd37e6f24720d8c8941498b",
+    urls = ["https://rive-flutter-artifacts.rive.app/rive_native_versions/" +
+            "0.1.10%2B2/rive_native_artifacts_android.zip"],
 )

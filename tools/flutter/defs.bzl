@@ -251,10 +251,12 @@ def _dart_aot_elf_impl(ctx):
     so = ctx.actions.declare_file("libapp.so")
 
     args = ctx.actions.args()
+
     # --deterministic is what makes this output byte-stable across runs, and
     # therefore safe to cache. Verified: identical sha256 over repeat builds.
     args.add("--deterministic")
     args.add("--snapshot_kind=app-aot-elf")
+
     # gen_snapshot only accepts the --flag=value form here; a space-separated
     # pair makes it print usage and exit non-zero.
     args.add(so, format = "--elf=%s")
@@ -481,6 +483,7 @@ def _pub_path_deps_check_impl(ctx):
     marker = ctx.actions.declare_file(ctx.label.name + ".checked")
 
     args = ctx.actions.args()
+
     # run_shell reserves $0 for an empty placeholder, so the script arrives as
     # $1 and "$@" already includes it.
     args.add(ctx.file._checker)

@@ -10,8 +10,10 @@ That is the point of the mechanism: a project is not blocked waiting for a fix
 in the rules. The `# GAP:` note on each says what would retire it.
 """
 
-load("@rules_android//rules:rules.bzl", "android_library")
+# `@@` is load bearing -- see _RECIPE_TEMPLATE in //tools/flutter:plugins.bzl.
+# buildifier: disable=canonical-repository
 load("@@//tools/flutter:recipe.bzl", "flutter_native_contribution")
+load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 def _no_native(name):
@@ -24,7 +26,6 @@ def _no_native(name):
     Staying silent is the failure this convention exists to catch.
     """
     flutter_native_contribution(name = name + "_flutter_native", empty = True)
-
 
 def _srcs(info, extension):
     """Sources by extension, recovered from the staged tree rather than trusted.
@@ -73,7 +74,6 @@ def url_launcher_android_recipe(name, info):
         deps = [info.embedding] + info.plugin_deps + info.coordinates,
     )
 
-
 # --- mobile_scanner ----------------------------------------------------------
 
 def mobile_scanner_recipe(name, info):
@@ -98,7 +98,6 @@ def mobile_scanner_recipe(name, info):
     )
     _no_native(name)
 
-
 # --- sqflite_android ---------------------------------------------------------
 
 def sqflite_android_recipe(name, info):
@@ -121,7 +120,6 @@ def sqflite_android_recipe(name, info):
         ],
     )
     _no_native(name)
-
 
 # --- shared_preferences_android ----------------------------------------------
 
@@ -155,4 +153,3 @@ def shared_preferences_android_recipe(name, info):
         deps = [info.embedding] + info.plugin_deps + info.coordinates,
     )
     _no_native(name)
-

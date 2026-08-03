@@ -1,0 +1,29 @@
+load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+
+# Not the root package: @buildifier_prebuilt is a dev_dependency, and a load()
+# of a repo missing from a consumer's mapping fails when the package is loaded.
+
+# Passed to `find -path`, so anchored at the workspace root.
+_EXCLUDE_PATTERNS = [
+    "./third_party/*",  # gitignored smooth-app clone
+    "./bazel-*",
+    "./app/build/*",  # ~1.8 GB of Flutter output
+    "./app/.dart_tool/*",
+    "./app/android/build/*",
+    "./app/android/.gradle/*",
+    "./.git/*",
+]
+
+buildifier(
+    name = "buildifier",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "fix",
+    mode = "fix",
+)
+
+buildifier(
+    name = "buildifier.check",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+)
