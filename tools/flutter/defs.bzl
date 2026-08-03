@@ -248,7 +248,13 @@ so debug actions are tagged `local` and never cached remotely.""",
 )
 
 def _dart_aot_elf_impl(ctx):
-    so = ctx.actions.declare_file("libapp.so")
+    # Under the target name, not at the package root. The basename is fixed --
+    # the engine's Dart_LoadELF is given "libapp.so" by the embedder, and
+    # jni_lib_jar packages whatever basename it is handed -- so the target name
+    # is the only thing left to disambiguate with. Two targets in one package
+    # (two ABIs, or Android beside iOS) both declaring `libapp.so` at the root
+    # is a duplicate-output analysis error.
+    so = ctx.actions.declare_file(ctx.label.name + "/libapp.so")
 
     args = ctx.actions.args()
 
@@ -301,14 +307,17 @@ dart_aot_elf = rule(
     },
 )
 
-def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant_uri = "", **kwargs):
+def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant_uri = "", strip = True, **kwargs):
     """Convenience wrapper: Dart sources straight through to libapp.so.
 
     Release-only: debug builds ship kernel_blob.bin and never run gen_snapshot,
     so there is no AOT ELF to produce.
 
-    Note **kwargs reaches both rules, so an attribute that exists on only one of
-    them cannot be passed this way.
+    Every rule-specific attribute is a named parameter here, and **kwargs
+    carries only what both targets should share -- visibility, tags. Forwarding
+    kwargs to both instead means an attribute that exists on only one of them
+    cannot be passed at all, which stops being a footnote as soon as either rule
+    grows a per-platform or per-ABI attribute.
     """
     dart_kernel(
         name = name + "_kernel",
@@ -324,6 +333,7 @@ def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = 
     dart_aot_elf(
         name = name,
         dill = ":" + name + "_kernel",
+        strip = strip,
         **kwargs
     )
 

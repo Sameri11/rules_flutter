@@ -24,7 +24,7 @@ Working and verified on Flutter 3.44.2 / Dart 3.12.2, Bazel 9.2.0, macOS arm64,
 target `android-arm64-release`.
 
 ```
-bazel build //app:app          ->  bazel-bin/app/libapp.so   (aarch64 ELF, stripped)
+bazel build //app:app          ->  bazel-bin/app/app/libapp.so  (aarch64 ELF, stripped)
 bazel build //app:assets       ->  .../app/assets/flutter_assets/  (tree artifact)
 bazel build //app/android/app:demo_app -> …/demo_app.apk  (signed APK)
 ```
