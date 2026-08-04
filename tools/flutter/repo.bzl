@@ -35,6 +35,41 @@ filegroup(
 )
 """
 
+_HOST_ARCHES = {
+    "aarch64": "arm64",
+    "amd64": "x64",
+    "arm64": "arm64",
+    "riscv64": "riscv64",
+    "x86_64": "x64",
+}
+
+def _host_platform_name(ctx):
+    """The engine's name for this host, e.g. `darwin-arm64` or `linux-x64`."""
+    name = ctx.os.name.lower()
+    if name.startswith("mac os"):
+        host_os = "darwin"
+    elif name.startswith("linux"):
+        host_os = "linux"
+    elif name.startswith("windows"):
+        host_os = "windows"
+    else:
+        fail("Unsupported host OS for a Flutter build: '{}'.".format(ctx.os.name))
+
+    arch = _HOST_ARCHES.get(ctx.os.arch.lower())
+    if arch == None:
+        fail("Unsupported host architecture for a Flutter build: '{}'.".format(ctx.os.arch))
+
+    return "{}-{}".format(host_os, arch)
+
+def _gen_snapshot_host_dir(ctx):
+    """Host directory holding the Android gen_snapshot."""
+
+    # TODO(flutter/flutter#152281): delete the collapse and return
+    # _host_platform_name(ctx) directly, once the engine ships an arm64-native
+    # Android gen_snapshot.
+    host = _host_platform_name(ctx)
+    return "darwin-x64" if host.startswith("darwin-") else host
+
 def _resolve_flutter_root(ctx):
     """Locate the SDK from FLUTTER_ROOT, else from `flutter` on PATH.
 
@@ -73,7 +108,7 @@ def _flutter_sdk_impl(ctx):
         "dartaotruntime",
     )
     ctx.symlink(
-        "{}/darwin-x64/frontend_server_aot.dart.snapshot".format(engine),
+        "{}/dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot".format(cache),
         "frontend_server.snapshot",
     )
     ctx.symlink(
@@ -87,10 +122,20 @@ def _flutter_sdk_impl(ctx):
         "{}/common/flutter_patched_sdk".format(engine),
         "flutter_patched_sdk",
     )
-    ctx.symlink(
-        "{}/android-arm64-release/darwin-x64/gen_snapshot".format(engine),
-        "gen_snapshot_android_arm64",
+
+    gen_snapshot = "{}/android-arm64-release/{}/gen_snapshot".format(
+        engine,
+        _gen_snapshot_host_dir(ctx),
     )
+
+    # ctx.symlink creates dangling links silently, which would surface much
+    # later as a file-not-found inside the AOT action.
+    if not ctx.path(gen_snapshot).exists:
+        fail(
+            "Android gen_snapshot missing at {}.\n".format(gen_snapshot) +
+            "Run `flutter precache --android` on this host.",
+        )
+    ctx.symlink(gen_snapshot, "gen_snapshot_android_arm64")
 
     # Identity of the *active* SDK: frameworkRevision is a git commit hash, so
     # it moves on framework-only commits that leave engine artifacts identical.
