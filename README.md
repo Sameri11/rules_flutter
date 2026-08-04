@@ -142,6 +142,29 @@ bazel build //app:native_assets_check    # guard: fails on a code asset with no 
 bazel build //app/android/app:demo_app   # signed APK
 ```
 
+### Validating a change
+
+There is no `bazel test` gate yet — the guards above are plain rules, so they run
+only when built by name. Until that lands, a change is validated by running the
+set by hand:
+
+```sh
+bazel build //app:app //app/android/app:demo_app          # the artifacts
+bazel build //app:path_deps_check //app:plugins_check \
+            //app:dart_registrant_check //app:native_assets_check   # the guards
+bazel run //tools/format:buildifier.check                 # the linter
+```
+
+Then verify on a device — [`docs_internal/running-on-device.md`](docs_internal/running-on-device.md).
+That last step is not optional for anything touching the Dart or packaging path:
+this build's recurring failure mode is an artifact that compiles, packages,
+installs and *launches* while being wrong, so a green build is not evidence.
+
+The linter belongs in that set rather than in an editor hook alone. It is the
+only one of the three that fails on a file the Bazel graph never reaches, and
+`.vscode/` formats on save via a `buildifier` on `PATH` — so an edit made outside
+VS Code, or by a tool, is otherwise unchecked until review.
+
 ### Starlark formatting
 
 ```sh

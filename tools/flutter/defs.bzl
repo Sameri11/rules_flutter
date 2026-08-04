@@ -72,11 +72,12 @@ def _dart_kernel_impl(ctx):
     args.add("--sdk-root", sdk_root + "/")
     args.add("--target", "flutter")
     if release:
-        # AOT + tree-shaking + product mode. Debug keeps a full kernel, which is
-        # shipped as kernel_blob.bin rather than snapshotted.
         args.add("--aot")
         args.add("--tfa")
         args.add("-Ddart.vm.product=true")
+
+        if ctx.attr.target_os:
+            args.add("--target-os", ctx.attr.target_os)
     args.add("--packages", ctx.file.package_config)
 
     # The Dart half of plugin registration. GeneratedPluginRegistrant.java
@@ -244,6 +245,15 @@ Release output is stripped of absolute paths by gen_snapshot, so it is safe to
 share through a remote cache. Debug kernels embed source URIs and ship verbatim,
 so debug actions are tagged `local` and never cached remotely.""",
         ),
+        "target_os": attr.string(
+            default = "android",
+            values = ["android", "ios", "macos", "linux", "windows", "fuchsia", ""],
+            doc = """Target OS for `--target-os`, or "" to omit the flag.
+
+Release-only: flutter_tools passes it under `--aot` alone.
+
+""",
+        ),
     },
 )
 
@@ -307,7 +317,7 @@ dart_aot_elf = rule(
     },
 )
 
-def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant_uri = "", strip = True, **kwargs):
+def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant_uri = "", target_os = "android", strip = True, **kwargs):
     """Convenience wrapper: Dart sources straight through to libapp.so.
 
     Release-only: debug builds ship kernel_blob.bin and never run gen_snapshot,
@@ -328,6 +338,7 @@ def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = 
         path_deps = path_deps,
         dart_plugin_registrant_uri = dart_plugin_registrant_uri,
         mode = "release",
+        target_os = target_os,
         **kwargs
     )
     dart_aot_elf(
