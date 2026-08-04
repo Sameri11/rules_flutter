@@ -1,9 +1,9 @@
+load("//tools/flutter:android.bzl", "native_assets_check")
 load(
     "//tools/flutter:defs.bzl",
     "dart_kernel",
     "flutter_aot_library",
     "flutter_assets",
-    "native_assets_check",
     "pub_path_deps_check",
     "pub_plugins_check",
 )

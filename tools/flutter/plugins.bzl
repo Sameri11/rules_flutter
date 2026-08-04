@@ -132,7 +132,7 @@ _KOTLIN_BUILD_LOADS = """load("@rules_kotlin//kotlin:android.bzl", "kt_android_l
 # project with no native plugins never pulls rules_foreign_cc into analysis.
 _NATIVE_BUILD_LOADS = """load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 load("@rules_java//java:defs.bzl", "java_import")
-load("{defs}", "android_native_lib_jar")
+load("{android_bzl}", "android_native_lib_jar")
 """
 
 _BUILD_PACKAGE = """
@@ -1298,7 +1298,7 @@ def _flutter_plugins_impl(ctx):
             "{}/BUILD.bazel".format(name),
             _BUILD_LOADS +
             (_KOTLIN_BUILD_LOADS if kotlin_srcs else "") +
-            (_NATIVE_BUILD_LOADS.format(defs = ctx.attr.defs) if native else "") +
+            (_NATIVE_BUILD_LOADS.format(android_bzl = ctx.attr.android_bzl) if native else "") +
             _BUILD_PACKAGE +
             native +
             _PLUGIN_TEMPLATE.format(
@@ -1464,8 +1464,8 @@ flutter_plugins = repository_rule(
             doc = "Label of the flutter_embedding java_import every plugin compiles against.",
             mandatory = True,
         ),
-        "defs": attr.string(
-            doc = "Label of //tools/flutter:defs.bzl, for android_native_lib_jar.",
+        "android_bzl": attr.string(
+            doc = "Label of //tools/flutter:android.bzl, for android_native_lib_jar.",
             mandatory = True,
         ),
         "recipe_bzl": attr.string(
@@ -1728,12 +1728,12 @@ def _flutter_plugins_ext_impl(ctx):
                 maven_lock_file = project.maven_lock_file,
                 overrides = overrides,
                 recipes = recipes,
-                # The embedding label comes from the root module; defs and
-                # recipe_bzl are resolved here, in the module that owns them, so
+                # The embedding label comes from the root module; android_bzl
+                # and recipe_bzl are resolved here, in the module that owns them, so
                 # the generated repository does not have to reason about repo
                 # mapping to find them.
                 embedding = str(project.embedding),
-                defs = str(Label("//tools/flutter:defs.bzl")),
+                android_bzl = str(Label("//tools/flutter:android.bzl")),
                 recipe_bzl = str(Label("//tools/flutter:recipe.bzl")),
             )
 

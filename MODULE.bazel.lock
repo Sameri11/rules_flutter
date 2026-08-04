@@ -281,7 +281,7 @@
   "moduleExtensions": {
     "//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "qCq0sAmP2bHDaEyNmz1t8HmHTwNYCcHcQcERgbPtq2I=",
+        "bzlTransitiveDigest": "+eJ0pNqP4DLQSY/q5KCbe2KPF8q7rlAvt1+BGH/JVEk=",
         "usagesDigest": "HaYBtn+L2C5sA8zRmhvJ9nBDPvUooBnriO3uWp2kHJ0=",
         "recordedInputs": [
           "REPO_MAPPING:,rules_java rules_java+",
@@ -322,7 +322,7 @@
                 "sqlite3": "{\"bzl\":\"@@//bazel/flutter:sqlite3.bzl\",\"macro\":\"sqlite3_recipe\"}"
               },
               "embedding": "'@@//app/android/app:flutter_embedding'",
-              "defs": "'@@//tools/flutter:defs.bzl'",
+              "android_bzl": "'@@//tools/flutter:android.bzl'",
               "recipe_bzl": "'@@//tools/flutter:recipe.bzl'"
             }
           }

@@ -84,9 +84,9 @@ bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 
 # Explicit rather than inherited: the native cc rules were removed from Bazel,
-# so `rules_cc` has to be visible to this module for //tools/flutter:defs.bzl to
-# load find_cc_toolchain.bzl -- which is how the strip rules reach the NDK's
-# llvm-strip instead of hardcoding a path.
+# so `rules_cc` has to be visible to this module for //tools/flutter:android.bzl
+# to load find_cc_toolchain.bzl -- which is how the strip rules reach the NDK's
+# llvm-strip instead of hardcoding a path. Only the Android half needs it.
 bazel_dep(name = "rules_cc", version = "0.2.17")
 
 # Supplies the cc_toolchain that cmake() resolves for the Android platform, and

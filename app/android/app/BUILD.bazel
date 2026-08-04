@@ -9,7 +9,7 @@
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_java//java:defs.bzl", "java_import")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
-load("//tools/flutter:defs.bzl", "jni_lib_jar", "strip_native_libs")
+load("//tools/flutter:android.bzl", "jni_lib_jar", "strip_native_libs")
 load("//tools/flutter:embedding.bzl", "flutter_embedding_deps", "flutter_embedding_library")
 
 package(default_visibility = ["//visibility:public"])

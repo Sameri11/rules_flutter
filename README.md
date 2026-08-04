@@ -83,7 +83,8 @@ consumer-supplied recipes; see "Package recipes" below.
 | Path | Role |
 | --- | --- |
 | `tools/flutter/repo.bzl` | Repo rule locating the SDK, exposing its tools as targets |
-| `tools/flutter/defs.bzl` | `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `native_assets_check`, `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
+| `tools/flutter/defs.bzl` | Platform-independent rules: `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
+| `tools/flutter/android.bzl` | Android-only rules: `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `native_assets_check`. Loaded separately so a consumer building another platform never sees them |
 | `tools/flutter/check_path_deps.py` | Script behind `pub_path_deps_check` |
 | `tools/flutter/check_native_assets.py` | Script behind `native_assets_check` |
 | `tools/flutter/plugins.bzl` | Repo rule generating one target per native Android plugin, their Maven coordinates, the CMake targets for native ones, and the `plugins.package()` extension |
