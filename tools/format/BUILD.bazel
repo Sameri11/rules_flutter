@@ -1,4 +1,4 @@
-load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
 
 # Not the root package: @buildifier_prebuilt is a dev_dependency, and a load()
 # of a repo missing from a consumer's mapping fails when the package is loaded.
@@ -26,4 +26,21 @@ buildifier(
     exclude_patterns = _EXCLUDE_PATTERNS,
     lint_mode = "warn",
     mode = "check",
+)
+
+# The same check under `bazel test`. It earns its place there rather than in an
+# editor hook: it is the only check in the suite that inspects files the build
+# graph never reaches, and `.vscode/` formats on save via a buildifier on PATH,
+# so an edit made outside the editor is otherwise unchecked until review.
+buildifier_test(
+    name = "buildifier_test",
+    size = "small",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+    # Both are required to check the whole tree rather than a srcs list: the
+    # workspace label locates the root, and the check has to read files that are
+    # not declared inputs, which a sandbox would hide.
+    no_sandbox = True,
+    workspace = "//:MODULE.bazel",
 )

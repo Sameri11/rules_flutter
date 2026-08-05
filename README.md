@@ -145,26 +145,32 @@ bazel build //app/android/app:demo_app   # signed APK
 
 ### Validating a change
 
-There is no `bazel test` gate yet — the guards above are plain rules, so they run
-only when built by name. Until that lands, a change is validated by running the
-set by hand:
-
 ```sh
-bazel build //app:app //app/android/app:demo_app          # the artifacts
-bazel build //app:path_deps_check //app:plugins_check \
-            //app:dart_registrant_check //app:native_assets_check   # the guards
-bazel run //tools/format:buildifier.check                 # the linter
+bazel test //...    # the four guards + buildifier, via //app:guards_test
+                    # and //tools/format:buildifier_test
 ```
 
-Then verify on a device — [`docs_internal/running-on-device.md`](docs_internal/running-on-device.md).
-That last step is not optional for anything touching the Dart or packaging path:
-this build's recurring failure mode is an artifact that compiles, packages,
-installs and *launches* while being wrong, so a green build is not evidence.
+The guards fail as **actions**, not as test assertions, which is deliberate and
+stronger: anything depending on a guard fails too, and the result is
+remote-cacheable. `build_test` does not change that — it only gives `bazel test`
+a reason to build them, so they stop being checks that run only when someone
+remembers to name them. A tripped guard therefore reports `FAILED TO BUILD`
+rather than a test failure.
 
-The linter belongs in that set rather than in an editor hook alone. It is the
-only one of the three that fails on a file the Bazel graph never reaches, and
-`.vscode/` formats on save via a `buildifier` on `PATH` — so an edit made outside
-VS Code, or by a tool, is otherwise unchecked until review.
+Then verify on a device — [`docs_internal/running-on-device.md`](docs_internal/running-on-device.md).
+**This step is not covered by the gate and is not optional** for anything
+touching the Dart or packaging path: this build's recurring failure mode is an
+artifact that compiles, packages, installs and *launches* while being wrong, so
+a green build is not evidence.
+
+Two other things `bazel test //...` does **not** cover, worth knowing before
+trusting it:
+
+- **Consumers.** The rules are consumed by a separate module through
+  `local_path_override`, and moving a symbol between `defs.bzl` and `android.bzl`
+  breaks that module's `load()` without any target here noticing. This has
+  already happened once.
+- **Non-macOS hosts**, until CI runs on one.
 
 ### Starlark formatting
 

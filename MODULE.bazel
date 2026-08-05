@@ -60,6 +60,13 @@ use_repo(plugins, "flutter_plugins")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = True)
 
+# For build_test, which is what makes the guard rules runnable under
+# `bazel test`. The guards fail as *actions*, which is stronger than a test --
+# anything depending on them fails too -- so they are wrapped rather than
+# converted. Already in the graph via buildifier_prebuilt, so declaring it
+# direct fetches nothing new.
+bazel_dep(name = "bazel_skylib", version = "1.8.2", dev_dependency = True)
+
 # --- Android ---------------------------------------------------------------
 # http_jar generates a java_import, so rules_java must be visible to this
 # module for the engine artifact repos to load.

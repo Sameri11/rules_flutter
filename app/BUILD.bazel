@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("//tools/flutter:android.bzl", "native_assets_check")
 load(
     "//tools/flutter:defs.bzl",
@@ -110,4 +111,19 @@ pub_path_deps_check(
     name = "path_deps_check",
     path_deps = PATH_DEPS,
     pubspec_lock = "pubspec.lock",
+)
+
+# The guards above fail as *actions*, not as tests, which is the stronger
+# arrangement: anything depending on one fails too, and the result is
+# remote-cacheable. build_test does not change that -- it only gives
+# `bazel test` a reason to build them, so they stop being checks that run only
+# when someone remembers to name them.
+build_test(
+    name = "guards_test",
+    targets = [
+        ":dart_registrant_check",
+        ":native_assets_check",
+        ":path_deps_check",
+        ":plugins_check",
+    ],
 )
