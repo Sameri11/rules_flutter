@@ -1,0 +1,137 @@
+"""Every public symbol, instantiated the way a consumer would.
+
+This is an API test, not a behaviour test.
+"""
+
+load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "jni_lib_jar", "native_assets_check", "strip_native_libs")
+load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
+load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
+
+package(default_visibility = ["//visibility:private"])
+
+# --- defs.bzl: the platform-independent half ---------------------------------
+
+dart_kernel(
+    name = "kernel",
+    srcs = ["fixtures/main.dart"],
+    entrypoint_uri = "package:consumer_test/main.dart",
+    package_config = "fixtures/package_config.json",
+)
+
+dart_kernel(
+    name = "kernel_debug",
+    srcs = ["fixtures/main.dart"],
+    entrypoint_uri = "package:consumer_test/main.dart",
+    mode = "debug",
+    package_config = "fixtures/package_config.json",
+)
+
+# target_os is the 0.3 attribute. Named explicitly rather than left default, so
+# renaming or removing it fails here.
+dart_kernel(
+    name = "kernel_ios",
+    srcs = ["fixtures/main.dart"],
+    entrypoint_uri = "package:consumer_test/main.dart",
+    package_config = "fixtures/package_config.json",
+    target_os = "ios",
+)
+
+dart_aot_elf(
+    name = "aot",
+    dill = ":kernel",
+    strip = True,
+)
+
+# The macro, with every named parameter supplied -- it is the public entry point
+# most consumers use, and its signature is the thing most likely to drift.
+flutter_aot_library(
+    name = "aot_library",
+    srcs = ["fixtures/main.dart"],
+    dart_plugin_registrant_uri = "package:consumer_test/registrant.dart",
+    entrypoint_uri = "package:consumer_test/main.dart",
+    package_config = "fixtures/package_config.json",
+    path_deps = [],
+    pub_stamp = ["fixtures/pubspec.lock"],
+    strip = True,
+    target_os = "android",
+)
+
+flutter_assets(
+    name = "assets",
+    srcs = ["fixtures/main.dart"],
+    assets = [],
+    package_config = "fixtures/package_config.json",
+    pub_stamp = ["fixtures/pubspec.lock"],
+    pubspec = "fixtures/pubspec.yaml",
+)
+
+pub_path_deps_check(
+    name = "path_deps_check",
+    path_deps = [],
+    pubspec_lock = "fixtures/pubspec.lock",
+)
+
+pub_plugins_check(
+    name = "plugins_check",
+    committed = "fixtures/pubspec.yaml",
+    expected = "fixtures/pubspec.yaml",
+)
+
+# --- android.bzl: the Android half -------------------------------------------
+
+jni_lib_jar(
+    name = "jni_jar",
+    src = "fixtures/libfake.so",
+)
+
+strip_native_libs(
+    name = "stripped",
+    jar = "fixtures/fake_native_libs.jar",
+)
+
+# `src` takes rule targets, not source files -- in real use it is a
+# rules_foreign_cc cmake(). A filegroup is the cheapest stand-in that satisfies
+# that shape.
+filegroup(
+    name = "fake_cmake_output",
+    srcs = ["fixtures/libfake.so"],
+)
+
+android_native_lib_jar(
+    name = "native_lib_jar",
+    src = [":fake_cmake_output"],
+)
+
+native_assets_check(
+    name = "native_assets_check",
+    assets = ":assets",
+    native_libs = "fixtures/fake_native_libs.jar",
+)
+
+# --- recipe.bzl: the contract consumers implement ----------------------------
+#
+# The highest-value target here. This is the contract every package recipe
+# writes against, it is what a v2/v3 migration changes, and it is the cheapest
+# rule in the set to instantiate honestly.
+
+flutter_native_contribution(
+    name = "recipe_contribution",
+    code_assets = {"package:fake/fake.dart": "libfake.so"},
+    jni_libs = ["fixtures/libfake.so"],
+)
+
+# The other side of the contract: a recipe that deliberately contributes
+# nothing. VI.2 names this as the first real user of `empty` on Apple, so it
+# should keep working.
+flutter_native_contribution(
+    name = "recipe_contribution_empty",
+    empty = True,
+)
+
+flutter_native_libs(
+    name = "recipe_libs",
+    deps = [
+        ":recipe_contribution",
+        ":recipe_contribution_empty",
+    ],
+)

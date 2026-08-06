@@ -7,6 +7,9 @@ load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
 _EXCLUDE_PATTERNS = [
     "./third_party/*",  # gitignored smooth-app clone
     "./bazel-*",
+    # The consumer module's own convenience symlinks, which point into its
+    # output base. Its *sources* are still linted -- only these are skipped.
+    "./tests/consumer/bazel-*",
     "./app/build/*",  # ~1.8 GB of Flutter output
     "./app/.dart_tool/*",
     "./app/android/build/*",

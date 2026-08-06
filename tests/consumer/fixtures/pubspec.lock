@@ -1,0 +1,5 @@
+# A lock with no path: dependencies, so pub_path_deps_check has nothing to
+# object to. The rule's failure path is exercised in the root workspace.
+packages: {}
+sdks:
+  dart: ">=3.0.0 <4.0.0"

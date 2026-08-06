@@ -2,6 +2,9 @@
 # ~/Library/Caches/bazel/... and are recreated by every build.
 /bazel-*
 
+# The consumer module is its own workspace, so it grows its own set.
+/tests/consumer/bazel-*
+
 # Working notes: design reasoning, measurements and dead ends. Kept out of the
 # published repo for now -- see README "Further reading". Rename back to docs/
 # to publish.

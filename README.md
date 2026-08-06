@@ -97,6 +97,7 @@ consumer-supplied recipes; see "Package recipes" below.
 | `packages/mylib/` | A `path:` dependency, used to test input declaration |
 | `sandbox_demo/` | Probe demonstrating sandboxed vs local execution |
 | `tools/format/` | buildifier targets: workspace-wide Starlark formatting and lint |
+| `tests/consumer/` | A separate module consuming these rules through `bazel_dep`, so an API break is caught here rather than in someone else's workspace |
 | `app/android/app/` | `BUILD.bazel` beside the Gradle module: `android_binary`, Kotlin `MainActivity`, AndroidX deps |
 | `docs_internal/` | Background notes — not published yet, see below |
 
@@ -146,8 +147,8 @@ bazel build //app/android/app:demo_app   # signed APK
 ### Validating a change
 
 ```sh
-bazel test //...    # the four guards + buildifier, via //app:guards_test
-                    # and //tools/format:buildifier_test
+bazel test //...                                   # guards + buildifier
+(cd tests/consumer && bazel build --nobuild //...) # the public API, as a consumer sees it
 ```
 
 The guards fail as **actions**, not as test assertions, which is deliberate and
@@ -163,13 +164,17 @@ touching the Dart or packaging path: this build's recurring failure mode is an
 artifact that compiles, packages, installs and *launches* while being wrong, so
 a green build is not evidence.
 
-Two other things `bazel test //...` does **not** cover, worth knowing before
-trusting it:
+The second command is a separate Bazel module that reaches the rules through
+`bazel_dep` + `local_path_override`, exactly as a consumer does. It is not part
+of `//...` and cannot be — see
+[`tests/consumer/README.md`](tests/consumer/README.md) for why, and for the one
+consumer path it still does not reach. It exists because moving a symbol between
+`defs.bzl` and `android.bzl` breaks a consumer's `load()` while every check in
+this workspace stays green; that has already happened once.
 
-- **Consumers.** The rules are consumed by a separate module through
-  `local_path_override`, and moving a symbol between `defs.bzl` and `android.bzl`
-  breaks that module's `load()` without any target here noticing. This has
-  already happened once.
+Still **not** covered by either command:
+
+- **Behaviour in a consumer** — the API test analyses, it does not build.
 - **Non-macOS hosts**, until CI runs on one.
 
 ### Starlark formatting

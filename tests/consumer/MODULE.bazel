@@ -1,0 +1,13 @@
+module(
+    name = "consumer_test",
+    version = "0.0.1",
+)
+
+bazel_dep(name = "flutter_bazel", version = "0.1.0")
+local_path_override(
+    module_name = "flutter_bazel",
+    path = "../..",
+)
+
+flutter = use_extension("@flutter_bazel//tools/flutter:repo.bzl", "flutter")
+use_repo(flutter, "flutter_sdk")
