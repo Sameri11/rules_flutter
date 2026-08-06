@@ -13,6 +13,17 @@ common --enable_bzlmod
 # See the "Remote caching" section of README.md before enabling.
 # build --remote_cache=grpc://...
 
+# --- Android -----------------------------------------------------------------
+#
+# Everything below is correct *for Android* and wrong to impose on a build that
+# is not Android. The JDK pin in particular would fix a consumer's entire JVM
+# toolchain at 17 to work around a ruleset they may never load. So the flags are
+# grouped behind a --config rather than applied unconditionally, and a consumer
+# copying this file can take the group without taking the opt-in at the bottom.
+#
+# This project *is* an Android project, so it opts in on the last line. Remove
+# that line and Android builds need an explicit `--config=android`.
+
 # Bazel's manifest merger strips <uses-permission> and <uses-permission-sdk-23>
 # from every dependency manifest before merging -- see removePermissions() in
 # ManifestMergerAction.java, gated on this flag, which defaults to off. The
@@ -24,14 +35,14 @@ common --enable_bzlmod
 # declares ACCESS_NETWORK_STATE and nothing else does, so without this flag the
 # APK builds, installs, launches and registers the plugin -- and then reports
 # the wrong connectivity state at runtime, with no build-time signal at all.
-build --merge_android_manifest_permissions
+build:android --merge_android_manifest_permissions
 
 # rules_android 0.7.3 builds its own dexer tools (DexFileSplitter et al) from
 # source, and they fail to compile under JDK 25: turbine_direct_graal errors out
 # running AutoValue/AutoBuilder annotation processors. Pinning the toolchain to
 # 17 is what makes android_binary work on Bazel 9.
-build --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
-build --java_language_version=17 --java_runtime_version=remotejdk_17
+build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
+build:android --java_language_version=17 --java_runtime_version=remotejdk_17
 
 # Forward ANDROID_NDK_HOME from the client environment rather than baking a
 # path in here, which would be machine-specific. It selects both the NDK
@@ -41,4 +52,11 @@ build --java_language_version=17 --java_runtime_version=remotejdk_17
 # Must be NDK 28+; //tools/flutter:plugins.bzl refuses older ones. 27 and below
 # default to 4 KB page alignment, and such a .so crashes the loader on 16 KB
 # devices instead of failing cleanly.
-common --repo_env=ANDROID_NDK_HOME
+#
+# `common:` rather than `build:` because repository rules are evaluated by
+# `query` and `mod` too, not only by `build`.
+common:android --repo_env=ANDROID_NDK_HOME
+
+# The opt-in. One line, so a consumer building another platform deletes one line
+# rather than unpicking four flags from their comments.
+common --config=android

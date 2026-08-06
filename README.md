@@ -298,9 +298,29 @@ Both are easy to get wrong in ways that do not name themselves:
   16 KB-page device rather than failing cleanly — see
   [`docs_internal/plugins.md`](docs_internal/plugins.md).
 
-`.bazelrc` forwards `ANDROID_NDK_HOME` with `--repo_env` rather than hardcoding
-a machine-specific path. Note that *every* Bazel command in this workspace needs
-it, including ones with nothing to do with Android — see limitation #8.
+**The Android-only flags are grouped behind `--config=android`.** Four of them —
+the manifest-permission merge, the two JDK-17 pins, and the `ANDROID_NDK_HOME`
+forward — are correct for Android and wrong to impose on a build that is not
+Android; the JDK pin in particular would fix a consumer's whole JVM toolchain at
+17 to work around a ruleset they may never load. This project *is* an Android
+project, so `.bazelrc` opts in on its last line:
+
+```
+common --config=android
+```
+
+A consumer building only the Dart half, or another platform, deletes that one
+line and keeps the group. Verified: with it removed and both `ANDROID_HOME` and
+`ANDROID_NDK_HOME` unset, `//app:app` and `//app:assets` build and `libapp.so`
+is byte-identical — while the APK fails exactly as the JDK-17 comment predicts,
+`turbine_direct_graal` reporting `could not locate class file for
+java.lang.Record`.
+
+`ANDROID_NDK_HOME` is forwarded with `--repo_env` rather than hardcoded, since a
+path here would be machine-specific. It sits under `common:` rather than
+`build:` because repository rules are evaluated by `query` and `mod` too. Note
+that any target requiring *toolchain resolution* pulls in the NDK repo, even one
+with nothing to do with Android — see limitation #8.
 
 ## Known limitations
 
