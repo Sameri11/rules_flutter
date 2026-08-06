@@ -281,7 +281,7 @@
   "moduleExtensions": {
     "//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "+eJ0pNqP4DLQSY/q5KCbe2KPF8q7rlAvt1+BGH/JVEk=",
+        "bzlTransitiveDigest": "LLr9BwX4Dy9XNzSV1+qvMWelFRTV2HiN9pg6S89Yzt0=",
         "usagesDigest": "HaYBtn+L2C5sA8zRmhvJ9nBDPvUooBnriO3uWp2kHJ0=",
         "recordedInputs": [
           "REPO_MAPPING:,rules_java rules_java+",

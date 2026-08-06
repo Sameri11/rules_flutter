@@ -27,10 +27,6 @@ def rive_native_recipe(name, info):
       name: the package name the generated targets are named after.
       info: the recipe contract struct -- see //tools/flutter:recipe.bzl.
     """
-    if info.contract_version != 1:
-        fail("rive_native_recipe understands contract 1, got {}".format(
-            info.contract_version,
-        ))
 
     # Identical in kind to what the generator emits for any Kotlin plugin, and
     # deliberately so -- the label a consumer names is @flutter_plugins//rive_native
@@ -51,5 +47,5 @@ def rive_native_recipe(name, info):
     # but it is the reason this is not interchangeable with any other .so.
     flutter_native_contribution(
         name = name + "_flutter_native",
-        jni_libs = ["@rive_native_android//:arm64_v8a"],
+        libraries = {"arm64-v8a": "@rive_native_android//:arm64_v8a"},
     )

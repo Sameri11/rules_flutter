@@ -120,7 +120,18 @@ native_assets_check(
 flutter_native_contribution(
     name = "recipe_contribution",
     code_assets = {"package:fake/fake.dart": "libfake.so"},
-    jni_libs = ["fixtures/libfake.so"],
+    libraries = {"arm64-v8a": "fixtures/libfake.so"},
+)
+
+# The iOS side of contract 2. It exists here mainly to hold the shape: the
+# slice key is an .xcframework LibraryIdentifier, the code asset resolves to a
+# path inside a bundle rather than a bare soname, and neither is subject to the
+# .so gate that applies to android.
+flutter_native_contribution(
+    name = "recipe_contribution_ios",
+    code_assets = {"package:fake/fake.dart": "fake.framework/fake"},
+    libraries = {"ios-arm64_x86_64-simulator": "fixtures/fake.framework/fake"},
+    platform = "ios",
 )
 
 # The other side of the contract: a recipe that deliberately contributes
@@ -137,6 +148,13 @@ flutter_native_libs(
         ":recipe_contribution",
         ":recipe_contribution_empty",
     ],
+)
+
+flutter_native_libs(
+    name = "recipe_libs_ios",
+    platform = "ios",
+    slice = "ios-arm64_x86_64-simulator",
+    deps = [":recipe_contribution_ios"],
 )
 
 # --- the packaging join ------------------------------------------------------

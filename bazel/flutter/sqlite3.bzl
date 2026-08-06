@@ -31,16 +31,12 @@ def sqlite3_recipe(name, info):
       name: the package name the generated targets are named after.
       info: the recipe contract struct -- see //tools/flutter:recipe.bzl.
     """
-    if info.contract_version != 1:
-        fail("sqlite3_recipe understands contract 1, got {}".format(
-            info.contract_version,
-        ))
     if info.is_plugin:
         fail("sqlite3 is not expected to be a Flutter plugin; the generator saw one")
 
     flutter_native_contribution(
         name = name + "_flutter_native",
-        jni_libs = ["@libsqlite3_android_arm64//file"],
+        libraries = {"arm64-v8a": "@libsqlite3_android_arm64//file"},
         # Declared so the filename is checked rather than assumed. The VM
         # resolves this id through the bundle's NativeAssetsManifest.json, which
         # names the library by bare filename -- so a rename here is a runtime
