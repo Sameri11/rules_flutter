@@ -3,9 +3,12 @@
 This is an API test, not a behaviour test.
 """
 
-load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "jni_lib_jar", "native_assets_check", "strip_native_libs")
+load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "native_assets_check", "strip_native_libs")
+load("@flutter_bazel//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
 load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
 load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
+load("@rules_java//java:defs.bzl", "java_import")
+load(":assertions.bzl", "expect_equal")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -134,4 +137,70 @@ flutter_native_libs(
         ":recipe_contribution",
         ":recipe_contribution_empty",
     ],
+)
+
+# --- the packaging join ------------------------------------------------------
+#
+# The newest public entry point, and the one a consumer's android_binary depends
+# on. Its arguments are all supplied by the consuming project -- the embedding
+# and its Maven deps in particular cannot be resolved inside the rules -- so a
+# change to that signature is a consumer-visible break.
+
+java_import(
+    name = "fake_embedding",
+    jars = ["fixtures/fake_native_libs.jar"],
+)
+
+java_import(
+    name = "fake_plugins",
+    jars = ["fixtures/fake_native_libs.jar"],
+)
+
+java_import(
+    name = "fake_recipe_libs",
+    jars = ["fixtures/fake_native_libs.jar"],
+)
+
+java_import(
+    name = "fake_registrant",
+    jars = ["fixtures/fake_native_libs.jar"],
+)
+
+# Derives android_binary's assets_dir from the assets label. Asserted rather
+# than merely called: a silently wrong prefix is the failure it exists to
+# prevent, and this module's assets target sits in the root package, which is
+# the case that has no separator.
+expect_equal(
+    flutter_assets_dir(assets = ":assets"),
+    "assets",
+    "flutter_assets_dir(':assets')",
+)
+
+flutter_android_libs(
+    name = "bundle",
+    aot = "fixtures/libfake.so",
+    assets = ":assets",
+    embedding = ":fake_embedding",
+    embedding_deps = [],
+    engine_jar = "fixtures/fake_native_libs.jar",
+    native_libs = ":fake_recipe_libs",
+    plugins = ":fake_plugins",
+    registrant = ":fake_registrant",
+)
+
+# The contribution rule on its own, including the `empty = True` form that
+# VI.2 names as the first thing a non-Android platform needs.
+flutter_bundle_contribution(
+    name = "contribution",
+    srcs = ["fixtures/libfake.so"],
+    kind = "aot_library",
+    location = NATIVE_LIB,
+)
+
+flutter_bundle_contribution(
+    name = "contribution_empty",
+    srcs = [],
+    empty = True,
+    kind = "runtime_classes",
+    location = CLASSES,
 )

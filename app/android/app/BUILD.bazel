@@ -7,9 +7,8 @@
 # files, so this BUILD survives, but keep that in mind when upgrading templates.
 
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
-load("@rules_java//java:defs.bzl", "java_import")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
-load("//tools/flutter:android.bzl", "jni_lib_jar", "strip_native_libs")
+load("//tools/flutter:android.bzl", "flutter_android_libs", "flutter_assets_dir")
 load("//tools/flutter:embedding.bzl", "flutter_embedding_deps", "flutter_embedding_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -19,6 +18,10 @@ package(default_visibility = ["//visibility:public"])
 # to pubspec.yaml is the only step -- see //tools/flutter:plugins.bzl.
 PLUGINS = ["@flutter_plugins//:all"]
 
+# The Flutter asset bundle. Named once: android_binary needs both the target and
+# the path prefix it sits under, and those must agree.
+ASSETS = "//app:assets"
+
 # The engine jar with its AndroidX dependencies attached. Instantiated here, in
 # the app, rather than inside the rules: its deps come from @flutter_maven, which
 # this project's MODULE.bazel creates from this project's plugin coordinates. A
@@ -27,36 +30,25 @@ PLUGINS = ["@flutter_plugins//:all"]
 # unusable as a bazel_dep. See //tools/flutter:embedding.bzl.
 flutter_embedding_library(name = "flutter_embedding")
 
-# The AOT snapshot, wrapped as lib/arm64-v8a/libapp.so inside a jar.
-# android_binary extracts native libs from jars on the classpath, which is the
-# same mechanism the prebuilt engine artifact relies on.
-jni_lib_jar(
-    name = "libapp_jni",
-    src = "//app",
-)
-
-java_import(
-    name = "libapp",
-    jars = [":libapp_jni"],
-)
-
-# The engine ships from Maven with its DWARF intact -- libflutter.so is 156 MB
-# unstripped and 11 MB stripped, which is essentially the whole difference
-# between this APK and one from `flutter build apk --release`. AGP runs
-# stripDebugSymbolsRelease automatically; android_binary has no equivalent, so
-# it is done here.
+# Every Flutter contribution to the APK, joined into one target: the AOT
+# snapshot, the engine, the runtime classes, the assets, the plugin libraries,
+# the recipe libraries and the registrant. Each is named, and a bundle check
+# fails the build if one goes missing -- see //tools/flutter:bundle.bzl.
 #
-# libapp.so is deliberately absent from this: gen_snapshot --strip already
-# handled it (verified stripped, 5 symtab entries), so re-stripping would be a
-# no-op that only hides whether the AOT rule is still doing its job.
-strip_native_libs(
-    name = "flutter_engine_stripped",
-    jar = "@flutter_engine_arm64//jar:file",
-)
-
-java_import(
-    name = "flutter_engine",
-    jars = [":flutter_engine_stripped"],
+# The pieces are supplied rather than resolved in the macro because they belong
+# to this project: :flutter_embedding and its Maven deps come from this
+# project's own resolution, and @flutter_plugins is generated from this
+# project's pubspec.
+flutter_android_libs(
+    name = "flutter",
+    aot = "//app:app",
+    assets = ASSETS,
+    embedding = ":flutter_embedding",
+    embedding_deps = flutter_embedding_deps(),
+    engine_jar = "@flutter_engine_arm64//jar:file",
+    native_libs = "@flutter_plugins//:native_libs",
+    plugins = PLUGINS[0],
+    registrant = ":generated_plugin_registrant",
 )
 
 # Note: no debug-symbol artifact is produced. Stripping discards the engine's
@@ -104,8 +96,10 @@ android_library(
 
 android_binary(
     name = "demo_app",
-    assets = ["//app:assets"],
-    assets_dir = "app/assets",
+    assets = [ASSETS],
+    # Derived, not written out: the prefix has to match where the tree
+    # artifact sits, and a wrong one fails only at runtime.
+    assets_dir = flutter_assets_dir(assets = ASSETS),
     # The manifest and resources `flutter create` generated are used directly,
     # rather than copied. A copy drifts, and drift is what produced the
     # missing-theme and targetSdk defects.
@@ -122,19 +116,24 @@ android_binary(
         "targetSdkVersion": "36",
     },
     resource_files = glob(["src/main/res/**"]),
+    # The host application, and one Flutter target. Every Flutter *dependency*
+    # arrives through :flutter; the asset tree stays an attribute above, because
+    # routing it through an android_library costs 14 unread R classes in the dex
+    # for nothing -- see flutter_android_libs.
     deps = [
+        # Order decides where native libraries land in the zip: android_binary
+        # adds them in runtime-classpath walk order, and a .so is stored
+        # uncompressed and page-aligned, so moving one shifts 16 KiB of padding.
+        # Host application first, matching what this file listed before the
+        # contributions were joined -- that is what keeps the APK byte-identical
+        # across the refactor. Nothing functional depends on it; Android
+        # resolves lib/<abi>/*.so by name.
+        #
+        # The comment is also what preserves the order: buildifier sorts a list
+        # only when it carries no comments.
         ":main_activity",
-        ":generated_plugin_registrant",
-        ":libapp",
-        # Every .so a package recipe contributed, in one jar -- rive_native's
-        # downloaded library and sqlite3's build-hook one. Generated alongside
-        # :all from the same manifest, so adding a recipe changes nothing here.
-        "@flutter_plugins//:native_libs",
-        # libflutter.so, stripped -- see :flutter_engine_stripped
-        ":flutter_engine",
-        # io.flutter.* embedding classes
-        ":flutter_embedding",
-    ] + flutter_embedding_deps() + PLUGINS,
+        ":flutter",
+    ],
 )
 
 # The generated manifest names ".MainActivity".

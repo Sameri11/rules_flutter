@@ -4,6 +4,10 @@ module(
 )
 
 bazel_dep(name = "flutter_bazel", version = "0.1.0")
+
+# For the java_import stubs flutter_android_libs is handed below.
+bazel_dep(name = "rules_java", version = "9.3.0")
+
 local_path_override(
     module_name = "flutter_bazel",
     path = "../..",

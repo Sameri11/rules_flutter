@@ -20,6 +20,8 @@ Loading and analysis — `--nobuild` — of every public symbol:
 | --- | --- |
 | `defs.bzl` | `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
 | `android.bzl` | `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `native_assets_check` |
+| `bundle.bzl` | `flutter_bundle_contribution` (both forms), the location constants |
+| `android.bzl` (join) | `flutter_android_libs`, the newest consumer-facing entry point |
 | `recipe.bzl` | `flutter_native_contribution` (both the populated and `empty = True` forms), `flutter_native_libs` |
 
 That catches the two things a refactor of these rules actually breaks: a symbol

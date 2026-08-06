@@ -84,7 +84,8 @@ consumer-supplied recipes; see "Package recipes" below.
 | --- | --- |
 | `tools/flutter/repo.bzl` | Repo rule locating the SDK, exposing its tools as targets |
 | `tools/flutter/defs.bzl` | Platform-independent rules: `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
-| `tools/flutter/android.bzl` | Android-only rules: `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `native_assets_check`. Loaded separately so a consumer building another platform never sees them |
+| `tools/flutter/android.bzl` | Android-only rules: `flutter_android_libs` (the packaging join), `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `native_assets_check` |
+| `tools/flutter/bundle.bzl` | The named contributions an app makes to a platform bundle: `FlutterBundleContributionInfo`, `flutter_bundle_contribution`. Platform-independent, so a second platform reuses the vocabulary |
 | `tools/flutter/check_path_deps.py` | Script behind `pub_path_deps_check` |
 | `tools/flutter/check_native_assets.py` | Script behind `native_assets_check` |
 | `tools/flutter/plugins.bzl` | Repo rule generating one target per native Android plugin, their Maven coordinates, the CMake targets for native ones, and the `plugins.package()` extension |
@@ -140,7 +141,7 @@ bazel build //app:assets_debug      # debug bundle, ships kernel_blob.bin
 bazel build //app:path_deps_check   # guard: fails on undeclared path: deps
 bazel build //app:plugins_check     # guard: fails on stale plugin_deps.MODULE.bazel
 bazel build //app:dart_registrant_check  # guard: fails on stale Dart plugin registrant
-bazel build //app:native_assets_check    # guard: fails on a code asset with no recipe
+bazel build //app/android/app:flutter_check  # guard: bundle completeness + code assets
 bazel build //app/android/app:demo_app   # signed APK
 ```
 
@@ -225,7 +226,7 @@ A recipe is also the **per-package reversal of the gate**: `prebuilt_jni_libs`
 stays gated for every package that has not been given an answer, instead of
 being switched off globally the moment one plugin needs it.
 
-And `//app:native_assets_check` makes the class-D failure loud. A package with a
+And `//app/android/app:flutter_check` makes the class-D failure loud. A package with a
 build hook declares an asset id that the Dart VM resolves to a filename and
 `dlopen`s; nothing else in the build connects that to whether a library actually
 reached `lib/<abi>/`. The check compares the two and fails at build time, where
