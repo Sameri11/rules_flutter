@@ -25,52 +25,32 @@ Measured; see the L5 section of the design note.
 
 The shape
 ---------
-One contribution **per platform**, with libraries keyed by *slice*.
+One contribution per platform, with libraries keyed by *slice*.
 
-A slice is whatever identifies one buildable variant of that platform: an ABI on
-Android (`arm64-v8a`), an `.xcframework` LibraryIdentifier on Apple
-(`ios-arm64`, `ios-arm64_x86_64-simulator`). Apple's own identifiers are reused
+A slice identifies one buildable variant of a platform: an ABI on Android, an
+`.xcframework` LibraryIdentifier on Apple. Apple's identifiers are reused
 verbatim, because a slice there is not an architecture -- device and simulator
-differ by *variant*, and one simulator slice carries both arm64 and x86_64.
-Verified against the engine's own `Flutter.xcframework`.
+differ by variant, and one slice can carry several architectures.
 
-Platform is a target attribute rather than a prefix on a dict key, for one
-concrete reason: `code_assets` maps an asset id to the name the Dart VM resolves
-it by, and that name is platform-specific -- `libsqlite3.so` on Android,
-`sqlite3.framework/sqlite3` on iOS. Bazel attributes cannot nest dicts, so
-either the platform rides in the key as an encoding, or it moves up to the
-target. Encoded keys were prototyped: a misspelled platform surfaced as
-"contributed no library with that name", blaming the artifact for a typo. As an
-attribute with a fixed value set, the same mistake names itself.
+Platform is a target attribute rather than a prefix on a dict key because
+`code_assets` maps an asset id to the name the VM resolves it by, and that name
+is platform-specific. Bazel attributes cannot nest dicts, so the platform either
+rides in the key as an encoding or moves up to the target. As an attribute with
+a fixed value set, a typo names itself instead of surfacing later as a missing
+library.
 """
 
-# Platforms a contribution can target. A scalar with a fixed value set, rather
-# than a prefix on a dict key, so a typo fails at the attribute with the valid
-# values listed instead of surfacing later as a missing library.
-#
-# The names are `dart_kernel`'s `target_os` values, not a second vocabulary. The
-# list grows with the platform table; macOS is deliberately absent until there
-# is something to build for it.
-#
-# `ios` rather than `apple` for the same reason: macOS, when it arrives, is a
-# separate entry, not a variant of this one. flutter_tools already keys the
-# native-assets manifest that way (`macos_x64`, `macos_arm64`), and the two
-# resolve a code asset by different paths -- so one "apple" platform would put
-# two differing values behind a single `code_assets` entry, which is what making
-# platform an attribute exists to avoid. Naming it `apple` now would mean
-# splitting it later.
+# `dart_kernel`'s `target_os` names, not a second vocabulary. The list grows
+# with the platform table; macOS is absent until there is something to build for
+# it, and is named separately rather than folded into an `apple` -- flutter_tools
+# keys the native-assets manifest that way, and the two resolve a code asset by
+# different paths, so one entry covering both would have to be split later.
 PLATFORMS = ["android", "ios"]
 
 FlutterNativeInfo = provider(
     doc = "Native libraries a package contributes to one platform's bundle.",
     fields = {
         "platform": "str, one of PLATFORMS.",
-        # Keyed by *slice*, not by architecture. On Android a slice is an ABI.
-        # On Apple it is an .xcframework LibraryIdentifier -- `ios-arm64`,
-        # `ios-arm64_x86_64-simulator` -- reused verbatim, because a single
-        # Apple slice can hold several architectures and a device slice and a
-        # simulator slice differ by variant rather than by arch. Verified
-        # against Flutter's own Flutter.xcframework.
         "libraries": "dict[str, depset[File]] keyed by slice.",
     },
 )
@@ -81,11 +61,9 @@ def _flutter_native_contribution_impl(ctx):
         for slice_id, target in ctx.attr.libraries.items()
     }
 
-    # On every platform but Android the slice is an .xcframework
-    # LibraryIdentifier, which already begins with the platform name. Checking
-    # that turns the redundancy into a cross-check: a bare `arm64`, or a slice
-    # belonging to another Apple platform, is a copy-paste error and says so
-    # here rather than resolving to nothing later.
+    # An Apple slice identifier already begins with its platform name, so
+    # checking that turns the redundancy into a cross-check: a bare arch, or
+    # another platform's slice, is a copy-paste error and says so here.
     for slice_id in libraries:
         if ctx.attr.platform != "android" and not slice_id.startswith(ctx.attr.platform + "-"):
             fail("{}: slice '{}' does not belong to platform '{}'.".format(
@@ -127,11 +105,9 @@ def _flutter_native_contribution_impl(ctx):
     # file must be lib<name>.so; a code asset is named in the bundle's
     # NativeAssetsManifest.json by bare filename. Asserting here turns a silent
     # runtime miss into a build error.
-    # Matched as a basename *or* a trailing path, because the two platforms name
-    # an asset differently: the Android manifest says `libsqlite3.so`, a bare
-    # soname, while the Apple one says `sqlite3.framework/sqlite3` -- a path into
-    # a bundle, whose basename is only `sqlite3`. Comparing basenames alone
-    # rejected the correct Darwin artifact.
+    # A basename or a trailing path, because platforms name an asset
+    # differently: a bare soname on Android, a path into a bundle on Apple.
+    # Comparing basenames alone rejects the latter.
     names = [f.basename for f in libs]
     paths = [f.path for f in libs]
 
@@ -209,9 +185,8 @@ def _flutter_native_libs_impl(ctx):
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
 
     # A contribution for another platform reaching this aggregate is a recipe
-    # bug, and filtering it out silently would produce an APK missing a library
-    # -- the exact failure this whole file exists to prevent. Named here, at the
-    # mistake, rather than left to the bundle check downstream.
+    # bug. Filtering it out silently would yield a bundle missing a library --
+    # the failure this file exists to prevent -- so it is named here.
     for d in ctx.attr.deps:
         got = d[FlutterNativeInfo].platform
         if got != ctx.attr.platform:
@@ -227,8 +202,8 @@ def _flutter_native_libs_impl(ctx):
         for d in ctx.attr.deps
     ]).to_list()
 
-    # A recipe that contributes *something* but nothing for the slice being
-    # built is not the same as one that deliberately contributes nothing.
+    # Contributing something, but nothing for the slice being built, is not the
+    # same as deliberately contributing nothing.
     for d in ctx.attr.deps:
         have = d[FlutterNativeInfo].libraries
         if have and ctx.attr.slice not in have:
@@ -241,8 +216,8 @@ def _flutter_native_libs_impl(ctx):
 
     # Two packages shipping the same soname would silently clobber each other
     # inside the jar, and whichever won would be a coin flip across rebuilds.
-    # Scoped to one slice: the same package legitimately ships a libsqlite3.so
-    # per ABI, and comparing across slices would reject that.
+    # Scoped to one slice: a package legitimately ships the same soname per
+    # ABI, and comparing across slices would reject that.
     seen = {}
     for f in libs:
         if f.basename in seen:

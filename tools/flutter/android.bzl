@@ -218,7 +218,7 @@ def _strip_native_libs_impl(ctx):
     cc_toolchain = find_cpp_toolchain(ctx)
 
     # AGP does this automatically for release builds (`stripDebugSymbolsRelease`);
-    # android_binary has no equivalent, which is why the engine's 156 MB of DWARF
+    # android_binary has no equivalent, which is why the engine's DWARF
     # was reaching the APK.
     ctx.actions.run_shell(
         command = """set -euo pipefail
@@ -500,24 +500,18 @@ def flutter_android_libs(
     # Bazel does not re-export deps to a consumer's compile classpath, and the
     # registrant compiles against the embedding.
     #
-    # The asset tree is deliberately *not* carried here, even though
-    # android_library accepts `assets` and doing so would let android_binary
-    # drop its own assets attribute. Measured: it makes this a resource-producing
-    # target, which forces a package name and emits an R class -- 14 classes
-    # (R plus its nested R$attr, R$string, ...) that land in the dex and are
-    # never read. Every other one of the APK's 768 entries was byte-identical,
-    # so that was the whole cost, and it is still a cost with no benefit: the
-    # assets were never in `deps`, so routing them through here does not change
-    # what the consumer writes. The contribution is still declared below, so the
-    # bundle check sees the asset tree either way.
+    # The asset tree is deliberately not carried here. android_library accepts
+    # it, but that makes this a resource-producing target, which emits an R
+    # class nothing reads. Assets were never in `deps` anyway, so routing them
+    # through would not shorten what the consumer writes. The contribution is
+    # still declared, so the bundle check sees the tree either way.
     android_library(
         name = name,
-        # Order mirrors the deps list consumers wrote before this macro existed.
-        # It has no semantic effect -- exports is a set as far as the compile
-        # classpath is concerned -- but android_binary adds native libraries in
-        # walk order, so it decides their position in the zip and therefore the
-        # APK's alignment padding. Keeping it lets an APK hash comparison stay a
-        # meaningful check on this rule.
+        # Order mirrors the deps list consumers wrote before this macro
+        # existed. It means nothing to the compile classpath, but android_binary
+        # adds native libraries in walk order, so it decides their position in
+        # the zip and the alignment padding around them. Keeping it lets an APK
+        # hash comparison stay a meaningful check on this rule.
         exports = [
             registrant,
             name + "_libapp",

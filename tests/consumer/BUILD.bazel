@@ -123,10 +123,9 @@ flutter_native_contribution(
     libraries = {"arm64-v8a": "fixtures/libfake.so"},
 )
 
-# The iOS side of contract 2. It exists here mainly to hold the shape: the
-# slice key is an .xcframework LibraryIdentifier, the code asset resolves to a
-# path inside a bundle rather than a bare soname, and neither is subject to the
-# .so gate that applies to android.
+# The iOS side, here to hold the shape: the slice key is an .xcframework
+# LibraryIdentifier, the code asset resolves to a path inside a bundle rather
+# than a bare soname, and neither is subject to Android's .so gate.
 flutter_native_contribution(
     name = "recipe_contribution_ios",
     code_assets = {"package:fake/fake.dart": "fake.framework/fake"},
@@ -159,10 +158,9 @@ flutter_native_libs(
 
 # --- the packaging join ------------------------------------------------------
 #
-# The newest public entry point, and the one a consumer's android_binary depends
-# on. Its arguments are all supplied by the consuming project -- the embedding
-# and its Maven deps in particular cannot be resolved inside the rules -- so a
-# change to that signature is a consumer-visible break.
+# The entry point a consumer's android_binary depends on. Its arguments are all
+# supplied by the consuming project -- the embedding and its Maven deps cannot
+# be resolved inside the rules -- so a signature change is a consumer break.
 
 java_import(
     name = "fake_embedding",
@@ -184,10 +182,9 @@ java_import(
     jars = ["fixtures/fake_native_libs.jar"],
 )
 
-# Derives android_binary's assets_dir from the assets label. Asserted rather
-# than merely called: a silently wrong prefix is the failure it exists to
-# prevent, and this module's assets target sits in the root package, which is
-# the case that has no separator.
+# Asserted rather than merely called: a silently wrong prefix is the failure it
+# exists to prevent, and this module's assets target sits in the root package,
+# the case with no separator.
 expect_equal(
     flutter_assets_dir(assets = ":assets"),
     "assets",

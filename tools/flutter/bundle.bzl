@@ -2,38 +2,32 @@
 
 An app is assembled from a fixed set of contributions -- the AOT snapshot, the
 engine, the runtime classes, the assets, the plugins, the recipe libraries, the
-registrant. That set is the same on every platform; only *where each one lands*
-and *what shape it takes* differ. On Android the assets sit beside the code in
-`assets/flutter_assets/` and a native library rides inside a jar; on Apple the
-assets are inside `App.framework/` and the AOT snapshot *is* the framework
-binary.
+registrant. The set is the same on every platform; only where each one lands and
+what shape it takes differ.
 
-Naming the contributions is what lets the platform-specific half be rewritten
-without rediscovering the list. It follows rules_apple's `partials/`, where every
-partial returns the same struct shape and the bundling processor stays generic.
+Naming them is what lets the platform-specific half be rewritten without
+rediscovering the list. It follows rules_apple's partials, where every partial
+returns the same shape so the bundling processor stays generic.
 
-Two things this deliberately does **not** do:
+Two things this deliberately does not do:
 
-  * It does not package anything. On Android the packaging is `android_binary`,
-    which reads ordinary `deps`/`assets`, so the contributions are wired into it
+  * It does not package anything. Android packaging is `android_binary`, which
+    reads ordinary `deps` and `assets`, so contributions are wired into it
     natively rather than through a processor of our own.
 
   * It does not replace the real dependency edges. Each contribution carries
-    metadata *alongside* the target that does the work, so the packaging graph is
-    unchanged and a bundle checker has something to inspect. A macro cannot fail
-    at analysis, and a rule cannot instantiate `java_import` -- so the join is a
-    macro that assembles, plus a rule that checks.
+    metadata alongside the target doing the work, leaving the packaging graph
+    untouched and giving a checker something to inspect. A macro cannot fail at
+    analysis and a rule cannot instantiate `java_import`, so the join is a macro
+    that assembles plus a rule that checks.
 """
 
-# Where a contribution's files land. Named for the destination, not for the
-# partial, so a platform that puts two contributions in the same place says so.
+# Where a contribution's files land -- named for the destination, not for the
+# contribution, so a platform putting two in the same place says so.
 #
-# NATIVE_LIB  a shared library the loader must find: lib/<abi>/ on Android,
-#             the framework binary or Contents/Frameworks/ on Apple.
+# NATIVE_LIB  a shared library the loader must find.
 # ASSETS      the flutter_assets tree.
-# CLASSES     JVM classes reaching the dex. Android-only by construction --
-#             on Apple the runtime is inside Flutter.framework and the
-#             corresponding contribution is empty.
+# CLASSES     classes reaching the dex; empty on platforms with no JVM.
 NATIVE_LIB = "native_lib"
 
 ASSETS = "assets"
@@ -55,12 +49,10 @@ FlutterBundleContributionInfo = provider(
 def _flutter_bundle_contribution_impl(ctx):
     files = depset(ctx.files.srcs)
 
-    # The same rule recipe.bzl applies to native libraries, for the same reason:
-    # a contribution that silently resolves to nothing produces an app that
-    # builds, installs and launches, and is missing a piece. Declaring emptiness
-    # is allowed; arriving at it by accident is not. VI.2's row 3 -- runtime
-    # classes, a real contribution on Android and empty on Apple -- is what this
-    # exists for.
+    # Same rule recipe.bzl applies to native libraries, for the same reason: a
+    # contribution that silently resolves to nothing produces an app that
+    # builds, installs, launches and is missing a piece. Declaring emptiness is
+    # allowed; arriving at it by accident is not.
     if not files.to_list() and not ctx.attr.empty:
         fail(
             ("Bundle contribution {} ({}) resolved to no files.\n" +

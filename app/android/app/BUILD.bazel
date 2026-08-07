@@ -116,21 +116,18 @@ android_binary(
         "targetSdkVersion": "36",
     },
     resource_files = glob(["src/main/res/**"]),
-    # The host application, and one Flutter target. Every Flutter *dependency*
-    # arrives through :flutter; the asset tree stays an attribute above, because
-    # routing it through an android_library costs 14 unread R classes in the dex
-    # for nothing -- see flutter_android_libs.
+    # The host application, and one Flutter target. Every Flutter dependency
+    # arrives through :flutter; the asset tree stays an attribute above -- see
+    # flutter_android_libs for why.
     deps = [
-        # Order decides where native libraries land in the zip: android_binary
-        # adds them in runtime-classpath walk order, and a .so is stored
-        # uncompressed and page-aligned, so moving one shifts 16 KiB of padding.
-        # Host application first, matching what this file listed before the
-        # contributions were joined -- that is what keeps the APK byte-identical
-        # across the refactor. Nothing functional depends on it; Android
-        # resolves lib/<abi>/*.so by name.
+        # Order decides where native libraries land in the zip, and a .so is
+        # stored uncompressed and page-aligned, so moving one shifts padding.
+        # Host application first, as this file listed before the contributions
+        # were joined, so the APK stays comparable by hash. Nothing functional
+        # depends on it -- Android resolves lib/<abi>/*.so by name.
         #
-        # The comment is also what preserves the order: buildifier sorts a list
-        # only when it carries no comments.
+        # This comment also preserves the order: buildifier sorts a list only
+        # when it carries none.
         ":main_activity",
         ":flutter",
     ],
