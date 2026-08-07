@@ -318,9 +318,8 @@ java.lang.Record`.
 
 `ANDROID_NDK_HOME` is forwarded with `--repo_env` rather than hardcoded, since a
 path here would be machine-specific. It sits under `common:` rather than
-`build:` because repository rules are evaluated by `query` and `mod` too. Note
-that any target requiring *toolchain resolution* pulls in the NDK repo, even one
-with nothing to do with Android — see limitation #8.
+`build:` because repository rules are evaluated by `query` and `mod` too. Targets
+that resolve a toolchain no longer drag in the NDK — see limitation #8.
 
 ## Known limitations
 
@@ -405,16 +404,31 @@ is `flutter build bundle` itself (~3.6s), which no staging change can touch. See
 "Staging" below and
 [`docs_internal/staging-experiments.md`](docs_internal/staging-experiments.md).
 
-**8. The NDK is a prerequisite of every Bazel command, not just Android ones.**
-`MODULE.bazel` calls `register_toolchains("@androidndk//:all")`, and toolchain
-resolution has to load every registered toolchain repo to look for a match. So
-any target requesting *any* toolchain fetches `@androidndk`, and
-`android_ndk_repository` fails outright when `ANDROID_NDK_HOME` is unset. That
-is why `bazel run //tools/format:buildifier` — a formatter, with no Android
-content whatsoever — needs the NDK, while the same binary reached through a
-toolchain-free target builds with the variable unset. It is also why
-`.vscode/settings.json` points at a `buildifier` on `PATH` rather than at the
-Bazel target.
+**8. ~~The NDK is a prerequisite of every Bazel command~~ — fixed.**
+`register_toolchains` cannot be conditional, and toolchain resolution loads
+every registered toolchain repo looking for a match. `rules_android_ndk`'s
+`android_ndk_repository` fails during that *fetch* when `ANDROID_NDK_HOME` is
+unset — so any target resolving any toolchain used to need an NDK, including
+`bazel run //tools/format:buildifier`, a formatter with no Android content.
+
+`//tools/flutter:ndk.bzl` now wraps that extension: with the variable set it
+runs the same repository rule with the same inputs; without it, `@androidndk`
+becomes a stub declaring no toolchains, so `@androidndk//:all` registers nothing
+and resolution carries on. This is the shape `@androidsdk` already had — stub
+now, fail later at the target that needs it.
+
+What still needs an NDK, correctly:
+
+- the APK, and any Android cc work (the strip, a native plugin jar);
+- **`@flutter_plugins` generation in this project**, because one plugin
+  (`rive_common`) has a CMake build — so `//app:plugins_check` needs it too,
+  while `//app:path_deps_check` and the whole Dart half do not. That is this
+  project's plugin set, not a property of the rules.
+
+One cost, worth knowing before wrapping a third-party extension: a repo created
+by *your* extension resolves apparent repo names against *your* module, so
+`@androidndk`'s generated BUILD referencing `@platforms` made `platforms` a
+direct `bazel_dep` here.
 
 This compounds with limitation #3. Every platform added — iOS, desktop, web —
 and every host-only tool target pays the Android tax, on machines that have no

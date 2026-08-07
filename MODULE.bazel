@@ -103,11 +103,15 @@ bazel_dep(name = "rules_cc", version = "0.2.17")
 # NDK 28 is the enforced minimum -- see the version guard in plugins.bzl.
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 
-android_ndk_repository_extension = use_extension(
-    "@rules_android_ndk//:extension.bzl",
-    "android_ndk_repository_extension",
-)
-use_repo(android_ndk_repository_extension, "androidndk")
+# Wrapped rather than used directly, so an absent NDK yields a toolchain-less
+# stub instead of a failed fetch. See //tools/flutter:ndk.bzl.
+# A repo created by an extension resolves apparent names against the module
+# owning that extension, so wrapping the NDK moved its BUILD's references here.
+# `platforms` is declared for that alone.
+bazel_dep(name = "platforms", version = "1.0.0")
+
+android_ndk = use_extension("//tools/flutter:ndk.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk")
 
 register_toolchains("@androidndk//:all")
 
