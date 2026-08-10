@@ -193,9 +193,30 @@ the generator emits buildifier-canonical output, so formatting it does not put t
 committed file at odds with `//app:plugins_check`.
 
 In VS Code, `.vscode/` configures the `bazelbuild.vscode-bazel` extension to
-format Starlark on save. It needs `buildifier` on `PATH` (`brew install
-buildifier` — 8.5.1, the version pinned here); pointing it at the Bazel target
-instead would drag in toolchain resolution, and with it `ANDROID_NDK_HOME`.
+format Starlark on save, using the binary `buildifier_prebuilt` pins rather than
+one on `PATH` — so the version that formats is the version
+`//tools/format:buildifier_test` enforces.
+
+It is reached by path, not by label. An `@`-prefixed value makes the extension
+shell out to `bazel run` on the *main* server, so a save during a build blocks
+on the output-base lock.
+
+The path is a build output, so `bazel clean` removes it and formatting silently
+stops working until it is rebuilt. One command restores it and, measured, no
+other does:
+
+```sh
+bazel run @buildifier_prebuilt//:buildifier -- --version
+```
+
+Not `bazel build` of that target, not `bazel test //...`, not
+`//tools/format:buildifier` — those need the binary, not the launcher script
+beside it. Keep the `--version`: bare `buildifier` reads stdin and hangs.
+
+The raw binary would survive `bazel clean`, but its path spells the host
+(`…_buildifier_darwin_arm64/file/buildifier`) and this settings file is
+committed, so it would break a Linux contributor. The launcher picks the right
+binary itself.
 
 ### Package recipes
 

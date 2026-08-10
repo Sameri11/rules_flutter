@@ -1,8 +1,9 @@
 {
-  // Not "@buildifier_prebuilt//:buildifier": an @-prefixed value makes the
-  // extension run `bazel run`, whose toolchain resolution fetches @androidndk
-  // and so needs ANDROID_NDK_HOME, which a GUI launch of VS Code does not have.
-  "bazel.buildifierExecutable": "buildifier",
+  // It is a build output, so `bazel clean` removes it and formatting then fails
+  // silently. Restore with `bazel run @buildifier_prebuilt//:buildifier --
+  // --version` -- the flag matters, bare buildifier waits on stdin. Other
+  // commands build the binary but not this launcher. See README.
+  "bazel.buildifierExecutable": "./bazel-bin/external/buildifier_prebuilt+/buildifier/buildifier.bash",
   "bazel.buildifierFixOnFormat": true,
 
   "[starlark]": {
