@@ -41,7 +41,7 @@ flutter_embedding_library(name = "flutter_embedding")
 # project's pubspec.
 flutter_android_libs(
     name = "flutter",
-    aot = "//app:app",
+    aot = "//app:app_arm64-v8a",
     assets = ASSETS,
     embedding = ":flutter_embedding",
     embedding_deps = flutter_embedding_deps(),

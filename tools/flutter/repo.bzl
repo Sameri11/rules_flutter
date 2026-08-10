@@ -8,6 +8,7 @@ download rule is a separate concern. See README for that tradeoff.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
+load(":abis.bzl", "ABIS")
 
 _BUILD_TEMPLATE = """
 package(default_visibility = ["//visibility:public"])
@@ -18,9 +19,8 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "dartaotruntime",
     "frontend_server.snapshot",
-    "gen_snapshot_android_arm64",
     "flutter.version.json",
-])
+] + {gen_snapshots})
 
 # Patched SDK containing platform_strong.dill. `--sdk-root` wants the directory,
 # so the whole tree is exposed as one filegroup.
@@ -123,19 +123,20 @@ def _flutter_sdk_impl(ctx):
         "flutter_patched_sdk",
     )
 
-    gen_snapshot = "{}/android-arm64-release/{}/gen_snapshot".format(
-        engine,
-        _gen_snapshot_host_dir(ctx),
-    )
+    # One per ABI. Named by ABI rather than by engine directory, so the label a
+    # rule asks for is the same string a consumer wrote.
+    host = _gen_snapshot_host_dir(ctx)
+    for abi, info in ABIS.items():
+        gen_snapshot = "{}/{}/{}/gen_snapshot".format(engine, info.engine_dir, host)
 
-    # ctx.symlink creates dangling links silently, which would surface much
-    # later as a file-not-found inside the AOT action.
-    if not ctx.path(gen_snapshot).exists:
-        fail(
-            "Android gen_snapshot missing at {}.\n".format(gen_snapshot) +
-            "Run `flutter precache --android` on this host.",
-        )
-    ctx.symlink(gen_snapshot, "gen_snapshot_android_arm64")
+        # ctx.symlink creates dangling links silently, which would surface much
+        # later as a file-not-found inside the AOT action.
+        if not ctx.path(gen_snapshot).exists:
+            fail(
+                "gen_snapshot for {} missing at {}.\n".format(abi, gen_snapshot) +
+                "Run `flutter precache --android` on this host.",
+            )
+        ctx.symlink(gen_snapshot, "gen_snapshot_" + abi)
 
     # Identity of the *active* SDK: frameworkRevision is a git commit hash, so
     # it moves on framework-only commits that leave engine artifacts identical.
@@ -146,7 +147,9 @@ def _flutter_sdk_impl(ctx):
         "flutter.version.json",
     )
 
-    ctx.file("BUILD.bazel", _BUILD_TEMPLATE)
+    ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
+        gen_snapshots = repr(["gen_snapshot_" + abi for abi in ABIS]),
+    ))
 
     # The `flutter` CLI needs its whole SDK tree to run, so it is invoked by
     # absolute path rather than declared as a Bazel input. That is consistent

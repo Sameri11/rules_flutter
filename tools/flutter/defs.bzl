@@ -23,6 +23,7 @@ problem and is not attempted here.
 """
 
 load("@flutter_sdk//:sdk.bzl", "FLUTTER_BIN", "FLUTTER_ENV")
+load(":abis.bzl", "ABIS", "check_abis", "gen_snapshot_label")
 
 # Release actions may be shared through a remote cache.
 #
@@ -274,6 +275,7 @@ def _dart_aot_elf_impl(ctx):
     # therefore safe to cache. Verified: identical sha256 over repeat builds.
     args.add("--deterministic")
     args.add("--snapshot_kind=app-aot-elf")
+    args.add_all(ctx.attr.snapshot_flags)
 
     # gen_snapshot only accepts the --flag=value form here; a space-separated
     # pair makes it print usage and exit non-zero.
@@ -288,7 +290,7 @@ def _dart_aot_elf_impl(ctx):
     args.add(ctx.file.dill)
 
     ctx.actions.run(
-        executable = ctx.executable._gen_snapshot,
+        executable = ctx.executable.gen_snapshot,
         arguments = [args],
         inputs = [ctx.file.dill],
         outputs = [so],
@@ -310,16 +312,24 @@ dart_aot_elf = rule(
             default = True,
             doc = "Drop DWARF debug info from the ELF.",
         ),
-        "_gen_snapshot": attr.label(
-            default = "@flutter_sdk//:gen_snapshot_android_arm64",
+        "gen_snapshot": attr.label(
+            mandatory = True,
             executable = True,
             cfg = "exec",
             allow_single_file = True,
+            doc = "The ABI's gen_snapshot; see //tools/flutter:abis.bzl.",
+        ),
+        "snapshot_flags": attr.string_list(
+            doc = """Extra gen_snapshot flags for this ABI.
+
+Table-driven rather than derived here: armv7 is the only ABI that needs any,
+and omitting them yields a snapshot that installs and then executes an
+unsupported instruction.""",
         ),
     },
 )
 
-def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant_uri = "", target_os = "android", strip = True, **kwargs):
+def flutter_aot_library(name, srcs, abis, entrypoint_uri, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant_uri = "", target_os = "android", strip = True, **kwargs):
     """Convenience wrapper: Dart sources straight through to libapp.so.
 
     Release-only: debug builds ship kernel_blob.bin and never run gen_snapshot,
@@ -330,7 +340,27 @@ def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = 
     kwargs to both instead means an attribute that exists on only one of them
     cannot be passed at all, which stops being a footnote as soon as either rule
     grows a per-platform or per-ABI attribute.
+
+    `abis` is required and always a list. There is no default: one would mean a
+    consumer ships a single ABI, or three, without ever saying which.
+
+    Produces `<name>_<abi>` per entry, and no `<name>` -- an unsuffixed target
+    would have to pick an ABI silently.
+
+    Args:
+      name: prefix for the generated targets.
+      srcs: Dart sources, for change detection.
+      abis: Android ABIs to snapshot for. Required, always a list.
+      entrypoint_uri: entrypoint as a package URI.
+      package_config: the .dart_tool/package_config.json from `pub get`.
+      pub_stamp: extra .dart_tool metadata declared for invalidation.
+      path_deps: sources of `path:` dependencies.
+      dart_plugin_registrant_uri: package URI of the Dart plugin registrant.
+      target_os: OS the kernel is compiled for; see dart_kernel.
+      strip: drop DWARF from each ELF.
+      **kwargs: visibility, tags -- anything both rules should share.
     """
+    check_abis(abis, "flutter_aot_library " + name)
     dart_kernel(
         name = name + "_kernel",
         srcs = srcs,
@@ -343,12 +373,18 @@ def flutter_aot_library(name, srcs, entrypoint_uri, package_config, pub_stamp = 
         target_os = target_os,
         **kwargs
     )
-    dart_aot_elf(
-        name = name,
-        dill = ":" + name + "_kernel",
-        strip = strip,
-        **kwargs
-    )
+
+    # One kernel feeds every ABI: the kernel is architecture-independent, and
+    # only the platform axis fans it out (see dart_kernel's target_os).
+    for abi in abis:
+        dart_aot_elf(
+            name = "{}_{}".format(name, abi),
+            dill = ":" + name + "_kernel",
+            gen_snapshot = gen_snapshot_label(abi),
+            snapshot_flags = ABIS[abi].snapshot_flags,
+            strip = strip,
+            **kwargs
+        )
 
 def _flutter_assets_impl(ctx):
     # The directory must be named flutter_assets: android_binary derives the

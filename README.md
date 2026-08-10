@@ -24,7 +24,7 @@ Working and verified on Flutter 3.44.2 / Dart 3.12.2, Bazel 9.2.0, macOS arm64,
 target `android-arm64-release`.
 
 ```
-bazel build //app:app          ->  bazel-bin/app/app/libapp.so  (aarch64 ELF, stripped)
+bazel build //app:app_arm64-v8a ->  bazel-bin/app/app_arm64-v8a/libapp.so  (aarch64 ELF, stripped)
 bazel build //app:assets       ->  .../app/assets/flutter_assets/  (tree artifact)
 bazel build //app/android/app:demo_app -> …/demo_app.apk  (signed APK)
 ```
@@ -83,6 +83,7 @@ consumer-supplied recipes; see "Package recipes" below.
 | Path | Role |
 | --- | --- |
 | `tools/flutter/repo.bzl` | Repo rule locating the SDK, exposing its tools as targets |
+| `tools/flutter/abis.bzl` | One table per Android ABI: target-platform string, engine directory, Maven artifact, manifest key, and the gen_snapshot flags armv7 needs |
 | `tools/flutter/defs.bzl` | Platform-independent rules: `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
 | `tools/flutter/android.bzl` | Android-only rules: `flutter_android_libs` (the packaging join), `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `native_assets_check` |
 | `tools/flutter/bundle.bzl` | The named contributions an app makes to a platform bundle: `FlutterBundleContributionInfo`, `flutter_bundle_contribution`. Platform-independent, so a second platform reuses the vocabulary |
@@ -134,7 +135,7 @@ publish them.
 ## Targets
 
 ```sh
-bazel build //app:app               # release libapp.so
+bazel build //app:app_arm64-v8a     # release libapp.so, one target per ABI
 bazel build //app:assets            # release flutter_assets tree
 bazel build //app:app_debug_kernel  # debug kernel (.dill)
 bazel build //app:assets_debug      # debug bundle, ships kernel_blob.bin
@@ -276,7 +277,7 @@ The Dart-half targets need only the Flutter SDK — `FLUTTER_ROOT`, or `flutter`
 on PATH:
 
 ```sh
-FLUTTER_ROOT=/Users/samer/fvm/versions/3.44.2 bazel build //app:app
+FLUTTER_ROOT=/Users/samer/fvm/versions/3.44.2 bazel build //app:app_arm64-v8a
 ```
 
 Building the **APK** additionally needs the Android SDK and NDK:

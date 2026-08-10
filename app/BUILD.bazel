@@ -31,9 +31,17 @@ DART_PLUGIN_REGISTRANT_URI = "package:demo_app/dart_plugin_registrant.dart"
 
 # --- release: remote-cacheable ------------------------------------------------
 
+# Explicit and always a list -- see flutter_aot_library. Produces //app:app_<abi>.
+ABIS = [
+    "arm64-v8a",
+    "x86_64",
+    "armeabi-v7a",
+]
+
 flutter_aot_library(
     name = "app",
     srcs = SRCS,
+    abis = ABIS,
     dart_plugin_registrant_uri = DART_PLUGIN_REGISTRANT_URI,
     entrypoint_uri = "package:demo_app/main.dart",
     package_config = ".dart_tool/package_config.json",

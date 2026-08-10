@@ -3,6 +3,7 @@
 This is an API test, not a behaviour test.
 """
 
+load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "gen_snapshot_label")
 load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "native_assets_check", "strip_native_libs")
 load("@flutter_bazel//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
 load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
@@ -42,7 +43,28 @@ dart_kernel(
 dart_aot_elf(
     name = "aot",
     dill = ":kernel",
+    gen_snapshot = gen_snapshot_label("arm64-v8a"),
+    snapshot_flags = ABIS["arm64-v8a"].snapshot_flags,
     strip = True,
+)
+
+# The ABI carrying gen_snapshot flags. Named so a table entry losing them is an
+# analysis-visible change here rather than a silent one in a snapshot.
+dart_aot_elf(
+    name = "aot_armv7",
+    dill = ":kernel",
+    gen_snapshot = gen_snapshot_label("armeabi-v7a"),
+    snapshot_flags = ABIS["armeabi-v7a"].snapshot_flags,
+    strip = True,
+)
+
+expect_equal(
+    ABIS["armeabi-v7a"].snapshot_flags,
+    [
+        "--no-sim-use-hardfp",
+        "--no-use-integer-division",
+    ],
+    "armeabi-v7a snapshot_flags",
 )
 
 # The macro, with every named parameter supplied -- it is the public entry point
@@ -50,6 +72,12 @@ dart_aot_elf(
 flutter_aot_library(
     name = "aot_library",
     srcs = ["fixtures/main.dart"],
+    # Required and always a list; produces one target per entry.
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+        "armeabi-v7a",
+    ],
     dart_plugin_registrant_uri = "package:consumer_test/registrant.dart",
     entrypoint_uri = "package:consumer_test/main.dart",
     package_config = "fixtures/package_config.json",
