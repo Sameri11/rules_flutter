@@ -4,7 +4,14 @@ module(
 )
 
 flutter = use_extension("//tools/flutter:repo.bzl", "flutter")
-use_repo(flutter, "flutter_embedding", "flutter_engine_arm64", "flutter_sdk")
+use_repo(
+    flutter,
+    "flutter_embedding",
+    "flutter_engine_arm64_v8a",
+    "flutter_engine_armeabi_v7a",
+    "flutter_engine_x86_64",
+    "flutter_sdk",
+)
 
 # One target per native Android plugin, read from the same
 # .flutter-plugins-dependencies that Gradle's FlutterAppPluginLoaderPlugin uses.

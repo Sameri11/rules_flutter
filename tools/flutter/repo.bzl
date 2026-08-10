@@ -8,7 +8,7 @@ download rule is a separate concern. See README for that tradeoff.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
-load(":abis.bzl", "ABIS")
+load(":abis.bzl", "ABIS", "engine_repo")
 
 _BUILD_TEMPLATE = """
 package(default_visibility = ["//visibility:public"])
@@ -198,11 +198,10 @@ flutter_sdk = repository_rule(
 # engineContentHash, and the artifacts are .jar, not .aar.
 _ENGINE_BASE = "https://storage.googleapis.com/download.flutter.io/io/flutter"
 
-_ENGINE_ARTIFACTS = {
-    # repo name -> maven artifact id
-    "flutter_engine_arm64": "arm64_v8a_release",
-    "flutter_embedding": "flutter_embedding_release",
-}
+# The Java embedding, which is architecture-independent. The per-ABI engine
+# libraries are derived from the ABI table instead, so adding an ABI there is
+# the only edit.
+_EMBEDDING_ARTIFACT = "flutter_embedding_release"
 
 def _engine_url(artifact, revision, content_hash):
     return "{base}/{a}/1.0.0-{rev}/{a}-1.0.0-{hash}.jar".format(
@@ -222,13 +221,17 @@ def _flutter_impl(ctx):
     revision = version["engineRevision"]
     content_hash = version["engineContentHash"]
 
-    for repo_name, artifact in _ENGINE_ARTIFACTS.items():
+    # No sha256 on any of these: the URL already embeds engineContentHash, so it
+    # is content-addressed by construction, and pinning a digest would have to be
+    # re-edited on every SDK bump.
+    http_jar(
+        name = "flutter_embedding",
+        url = _engine_url(_EMBEDDING_ARTIFACT, revision, content_hash),
+    )
+    for abi, info in ABIS.items():
         http_jar(
-            name = repo_name,
-            url = _engine_url(artifact, revision, content_hash),
-            # No sha256: the URL already embeds engineContentHash, so it is
-            # content-addressed by construction, and pinning a digest here would
-            # have to be re-edited on every SDK bump.
+            name = engine_repo(abi),
+            url = _engine_url(info.maven_artifact, revision, content_hash),
         )
 
 flutter = module_extension(implementation = _flutter_impl)

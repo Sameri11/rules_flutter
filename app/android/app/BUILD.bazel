@@ -45,7 +45,7 @@ flutter_android_libs(
     assets = ASSETS,
     embedding = ":flutter_embedding",
     embedding_deps = flutter_embedding_deps(),
-    engine_jar = "@flutter_engine_arm64//jar:file",
+    engine_jar = "@flutter_engine_arm64_v8a//jar:file",
     native_libs = "@flutter_plugins//:native_libs",
     plugins = PLUGINS[0],
     registrant = ":generated_plugin_registrant",

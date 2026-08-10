@@ -15,7 +15,7 @@ there is no `gen_snapshot` to pair with an x86 library however many a package
 publishes.
 """
 
-def _abi(target_platform, engine_dir, maven_artifact, manifest_key, snapshot_flags = []):
+def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platform, snapshot_flags = []):
     return struct(
         # `flutter build bundle --target-platform`.
         target_platform = target_platform,
@@ -26,6 +26,9 @@ def _abi(target_platform, engine_dir, maven_artifact, manifest_key, snapshot_fla
         # The key the engine reads in NativeAssetsManifest.json. Baked in at
         # engine-compile time, so it is the engine that decides, not the build.
         manifest_key = manifest_key,
+        # rules_android's platform, which selects the NDK cc_toolchain that
+        # cross-strips this ABI's libraries.
+        bazel_platform = bazel_platform,
         # Extra gen_snapshot flags. Empty for everything but armv7.
         snapshot_flags = snapshot_flags,
     )
@@ -36,18 +39,21 @@ ABIS = {
         engine_dir = "android-arm64-release",
         maven_artifact = "arm64_v8a_release",
         manifest_key = "android_arm64",
+        bazel_platform = "@rules_android//:arm64-v8a",
     ),
     "x86_64": _abi(
         target_platform = "android-x64",
         engine_dir = "android-x64-release",
         maven_artifact = "x86_64_release",
         manifest_key = "android_x64",
+        bazel_platform = "@rules_android//:x86_64",
     ),
     "armeabi-v7a": _abi(
         target_platform = "android-arm",
         engine_dir = "android-arm-release",
         maven_artifact = "armeabi_v7a_release",
         manifest_key = "android_arm",
+        bazel_platform = "@rules_android//:armeabi-v7a",
         # The only ABI needing flags, and the reason they live in a table rather
         # than a rule body. flutter_tools passes both for armv7 (softfp, and no
         # integer division on 32-bit Pixels). Omitting them yields a snapshot
@@ -59,6 +65,17 @@ ABIS = {
         ],
     ),
 }
+
+def engine_repo(abi):
+    """Name of the repository holding this ABI's prebuilt engine jar.
+
+    Args:
+      abi: an Android ABI name, a key of ABIS.
+
+    Returns:
+      A repository name; `-` is not valid in one, so it becomes `_`.
+    """
+    return "flutter_engine_" + abi.replace("-", "_")
 
 def gen_snapshot_label(abi):
     """The @flutter_sdk target holding this ABI's gen_snapshot.
