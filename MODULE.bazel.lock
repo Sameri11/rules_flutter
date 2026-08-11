@@ -297,8 +297,8 @@
     },
     "//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "LLr9BwX4Dy9XNzSV1+qvMWelFRTV2HiN9pg6S89Yzt0=",
-        "usagesDigest": "HaYBtn+L2C5sA8zRmhvJ9nBDPvUooBnriO3uWp2kHJ0=",
+        "bzlTransitiveDigest": "06XSsT4BIhK+ahCeCLgjNCqlS2y1xCezwYyf+7nqmlc=",
+        "usagesDigest": "pW2wRBB2Nce+0qliy5HOE/vxcMhz+O5VN5pTJ8XBNhA=",
         "recordedInputs": [
           "REPO_MAPPING:,rules_java rules_java+",
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -323,6 +323,11 @@
           "flutter_plugins": {
             "repoRuleId": "@@//tools/flutter:plugins.bzl%flutter_plugins",
             "attributes": {
+              "abis": [
+                "arm64-v8a",
+                "x86_64",
+                "armeabi-v7a"
+              ],
               "metadata": "@@//app:.flutter-plugins-dependencies",
               "package_config": "@@//app:.dart_tool/package_config.json",
               "coursier_options": [],

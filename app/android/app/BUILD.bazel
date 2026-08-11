@@ -22,10 +22,14 @@ PLUGINS = ["@flutter_plugins//:all"]
 # the path prefix it sits under, and those must agree.
 ASSETS = "//app:assets"
 
-# The ABIs this APK ships -- deliberately fewer than //app snapshots: the
-# plugins' native chains are generated for arm64-v8a alone, so claiming more
-# would claim ABIs with no plugin libraries in them.
-ABIS = ["arm64-v8a"]
+# The ABIs this APK ships. It must be a subset of what //app snapshots and of
+# what MODULE.bazel's plugins.project builds -- :flutter_check fails on any ABI
+# missing a piece, whichever half is short.
+ABIS = [
+    "arm64-v8a",
+    "x86_64",
+    "armeabi-v7a",
+]
 
 # The engine jar with its AndroidX dependencies attached. Instantiated here, in
 # the app, rather than inside the rules: its deps come from @flutter_maven, which
@@ -52,10 +56,12 @@ flutter_android_libs(
     assets = ASSETS,
     embedding = ":flutter_embedding",
     embedding_deps = flutter_embedding_deps(),
-    # Written out rather than derived from ABIS: the generated repo has one
-    # jar, arm64-v8a's, so deriving would hand it to every ABI. Adding an ABI
-    # above fails here instead.
-    native_libs = {"arm64-v8a": "@flutter_plugins//:native_libs"},
+    # Both generated per ABI, so these are derived rather than written out --
+    # @flutter_plugins builds a jar per ABI for the recipes and one for the
+    # plugins' own CMake output, and an ABI missing from either fails the check
+    # rather than shipping empty.
+    native_libs = {abi: "@flutter_plugins//:native_libs_" + abi for abi in ABIS},
+    plugin_native_libs = {abi: "@flutter_plugins//:plugin_libs_" + abi for abi in ABIS},
     plugins = PLUGINS[0],
     registrant = ":generated_plugin_registrant",
 )

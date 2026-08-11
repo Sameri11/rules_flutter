@@ -42,6 +42,7 @@ Three properties are deliberate, because they are what makes the gate in
      `package_config.json` instead.
 """
 
+load(":abis.bzl", "ABIS", "check_abis")
 load(":embedding.bzl", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
@@ -169,15 +170,26 @@ _PLUGIN_TEMPLATE = """
 )
 """
 
-# The native half. Three targets rather than one because each boundary is a
-# different concern: cmake() compiles, android_native_lib_jar packages (and
-# pins the Android platform), java_import puts the jar on the classpath where
+# The native half, in two pieces: the sources once, then a chain per ABI.
+#
+# Three targets per ABI rather than one because each boundary is a different
+# concern: cmake() compiles, android_native_lib_jar packages (and pins the
+# Android platform), java_import puts the jar on the classpath where
 # android_binary looks for lib/<abi>/*.so.
 #
-# The .so is attached to the plugin's android_library as an ordinary dep, so it
-# reaches the APK through @flutter_plugins//:all like everything else -- the
-# label a consumer names is still just @flutter_plugins//<name>.
-_NATIVE_TEMPLATE = """
+# Every ABI's chain is emitted unconditionally. Analysing one costs nothing and
+# its cmake() never runs unless something demands the output, so a single-ABI
+# APK pays for a single cross-compile.
+#
+# The .so are *not* attached to the plugin's android_library. They reach the APK
+# through //:plugin_libs_<abi>, which the app names once per ABI it ships --
+# exactly the path a recipe's libraries take.
+#
+# Attaching them to the library instead is the obvious arrangement and is wrong:
+# `:all` is ABI-independent, so every ABI built here would ride into every APK,
+# and an app declaring one ABI would ship three without saying so. Which ABIs an
+# APK carries is the app's decision, and this keeps it there.
+_NATIVE_SRCS_TEMPLATE = """
 # {name}'s native half: {libs}, from the plugin's own CMakeLists.
 #
 # The plugin's CMakeLists is run as written, against the NDK's own
@@ -195,9 +207,11 @@ filegroup(
     name = "{name}_native_srcs",
     srcs = {native_srcs},
 )
+"""
 
+_NATIVE_ABI_TEMPLATE = """
 cmake(
-    name = "{name}_native",
+    name = "{name}_native_{abi}",
     lib_source = ":{name}_native_srcs",
     # CMakeLists.txt lives under android/, but its sources do not. Note
     # rules_foreign_cc's detect_root() picks the topmost *file* dirname, so this
@@ -231,14 +245,17 @@ cmake(
 )
 
 android_native_lib_jar(
-    name = "{name}_native_jar",
-    src = [":{name}_native"],
+    name = "{name}_native_jar_{abi}",
+    src = [":{name}_native_{abi}"],
     abi = "{abi}",
+    # The platform the .so is *built* for. Without it the jar says one ABI while
+    # the cross-compile resolves another's toolchain.
+    platform = "{bazel_platform}",
 )
 
 java_import(
-    name = "{name}_native_import",
-    jars = [":{name}_native_jar"],
+    name = "{name}_native_import_{abi}",
+    jars = [":{name}_native_jar_{abi}"],
 )
 """
 
@@ -338,8 +355,8 @@ _NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_libs")
 load("@rules_java//java:defs.bzl", "java_import")
 """
 
-# The second aggregate: every .so that a recipe contributed, in one jar, wrapped
-# so the app can name a single label.
+# The second aggregate: every .so a recipe contributed for one ABI, in one jar,
+# wrapped so the app can name a single label per ABI.
 #
 # A recipe *must* define `<name>_flutter_native` -- that is the contract, and
 # depending on it by convention is what makes a forgotten one fail at analysis
@@ -347,7 +364,7 @@ load("@rules_java//java:defs.bzl", "java_import")
 # this milestone exists to prevent.
 _NATIVE_LIBS_TEMPLATE = """
 flutter_native_libs(
-    name = "native_libs_jar",
+    name = "native_libs_jar_{abi}",
     abi = "{abi}",
     slice = "{abi}",
     deps = [{deps}
@@ -355,8 +372,23 @@ flutter_native_libs(
 )
 
 java_import(
-    name = "native_libs",
-    jars = [":native_libs_jar"],
+    name = "native_libs_{abi}",
+    jars = [":native_libs_jar_{abi}"],
+)
+"""
+
+# The third aggregate: every .so the native *plugins* built for one ABI.
+#
+# A java_import rather than a filegroup, because this is how they reach the APK
+# -- android_binary extracts lib/<abi>/*.so from jars on the classpath, and a
+# filegroup is not on it. Keeping them here rather than on each plugin's
+# android_library is what lets an app ship fewer ABIs than were built, and what
+# makes them visible to the bundle check as a per-ABI contribution.
+_PLUGIN_LIBS_TEMPLATE = """
+java_import(
+    name = "plugin_libs_{abi}",
+    jars = [{deps}
+    ],
 )
 """
 
@@ -1161,7 +1193,7 @@ def _flutter_plugins_impl(ctx):
                         for d in plugin.get("dependencies", [])
                     ]),
                     "reasons": repr(reasons),
-                    "abis": repr([ctx.attr.abi]),
+                    "abis": repr(ctx.attr.abis),
                     "api_level": ctx.attr.api_level,
                     "embedding": ctx.attr.embedding,
                 },
@@ -1280,17 +1312,27 @@ def _flutter_plugins_impl(ctx):
                     cmake_directory,
                 ))
 
-            native = _NATIVE_TEMPLATE.format(
+            native = _NATIVE_SRCS_TEMPLATE.format(
                 name = name,
                 libs = repr(libraries),
-                lib_copy = " ".join(libraries),
                 native_srcs = repr(_list_all_files(root, ["build"])),
-                cmake_dir = cmake_directory,
-                toolchain_file = toolchain_file,
-                abi = ctx.attr.abi,
-                api_level = ctx.attr.api_level,
-            )
-            native_deps = ["\n        \":{}_native_import\",".format(name)]
+            ) + "".join([
+                _NATIVE_ABI_TEMPLATE.format(
+                    name = name,
+                    libs = repr(libraries),
+                    lib_copy = " ".join(libraries),
+                    cmake_dir = cmake_directory,
+                    toolchain_file = toolchain_file,
+                    abi = abi,
+                    bazel_platform = ABIS[abi].bazel_platform,
+                    api_level = ctx.attr.api_level,
+                )
+                for abi in ctx.attr.abis
+            ])
+
+            # No dep on the plugin's own library: see the note on the
+            # templates. The jars are collected per ABI in //:plugin_libs_<abi>.
+            native_deps = []
 
         ctx.file(
             "{}/BUILD.bazel".format(name),
@@ -1368,7 +1410,7 @@ def _flutter_plugins_impl(ctx):
                 "coordinates": repr([]),
                 "plugin_deps": repr([]),
                 "reasons": repr([]),
-                "abis": repr([ctx.attr.abi]),
+                "abis": repr(ctx.attr.abis),
                 "api_level": ctx.attr.api_level,
                 "embedding": ctx.attr.embedding,
             })
@@ -1419,9 +1461,9 @@ def _flutter_plugins_impl(ctx):
     # The one place the chosen strategy per plugin is recorded.
     ctx.file("plugins.json", json.encode({"plugins": manifest}))
 
-    # Two aggregates, so the app depends on "every plugin" and "every native
-    # library a recipe contributed" rather than on hand-maintained lists that
-    # have to be edited in lockstep with pubspec.yaml.
+    # Three aggregates, so the app names "every plugin", "every library a recipe
+    # contributed" and "every library a plugin built" rather than keeping lists
+    # in lockstep with pubspec.yaml. The last two are per ABI.
     #
     # They are separate because their members differ: `:all` is an
     # android_library and can only export Java/Kotlin targets, while a recipe for
@@ -1439,14 +1481,24 @@ def _flutter_plugins_impl(ctx):
                 if p["is_plugin"]
             ]),
         ) +
-        _NATIVE_LIBS_TEMPLATE.format(
-            abi = ctx.attr.abi,
-            deps = "".join([
-                "\n        \"//{n}:{n}_flutter_native\",".format(n = p["name"])
-                for p in manifest
-                if p["strategy"].startswith("recipe:")
-            ]),
-        ),
+        "".join([
+            _NATIVE_LIBS_TEMPLATE.format(
+                abi = abi,
+                deps = "".join([
+                    "\n        \"//{n}:{n}_flutter_native\",".format(n = p["name"])
+                    for p in manifest
+                    if p["strategy"].startswith("recipe:")
+                ]),
+            ) + _PLUGIN_LIBS_TEMPLATE.format(
+                abi = abi,
+                deps = "".join([
+                    "\n        \"//{n}:{n}_native_jar_{a}\",".format(n = p["name"], a = abi)
+                    for p in manifest
+                    if p["strategy"] == "source+cmake"
+                ]),
+            )
+            for abi in ctx.attr.abis
+        ]),
     )
 
 flutter_plugins = repository_rule(
@@ -1488,9 +1540,9 @@ such recipe declares nothing extra.""",
         "recipes": attr.string_dict(
             doc = "Package name -> JSON {bzl, macro} naming the recipe to hand generation to.",
         ),
-        "abi": attr.string(
-            default = "arm64-v8a",
-            doc = "Android ABI native plugin code is built for.",
+        "abis": attr.string_list(
+            mandatory = True,
+            doc = "Android ABIs native plugin code is built for. Required, always a list.",
         ),
         "api_level": attr.int(
             default = 21,
@@ -1606,6 +1658,15 @@ one. See docs_internal/package-recipes.md. `gradle` and `maven` both require
         "maven_lock_file": attr.string(
             doc = "Label of the maven_install.json lock file, e.g. \"//:maven_install.json\".",
         ),
+        "abis": attr.string_list(
+            mandatory = True,
+            doc = """Android ABIs every native plugin is built for.
+
+Required and always a list, as `abis` is everywhere else: the set a project
+ships is not something these rules can infer. It must cover every ABI the app's
+`flutter_android_libs` declares -- a plugin built for fewer leaves an APK whose
+extra ABIs have no plugin libraries in them.""",
+        ),
         "embedding": attr.label(
             default = "@flutter_embedding//jar:file",
             doc = """The `flutter_embedding_library` target every plugin compiles against.
@@ -1716,8 +1777,10 @@ def _flutter_plugins_ext_impl(ctx):
         if not mod.is_root:
             continue
         for project in mod.tags.project:
+            check_abis(project.abis, "plugins.project")
             flutter_plugins(
                 name = "flutter_plugins",
+                abis = project.abis,
                 metadata = project.metadata,
                 package_config = project.package_config,
                 coursier_options = project.coursier_options,

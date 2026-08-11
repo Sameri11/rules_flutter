@@ -233,6 +233,12 @@ _ANDROID_CONTRIBUTIONS = [
     ("runtime_classes", CLASSES),
     ("assets", ASSETS),
     ("plugin_libraries", CLASSES),
+    # The plugins' *native* half, named apart from their classes because the two
+    # land in different places and only one of them varies by ABI. It packages
+    # nothing -- the libraries already ride into the APK inside `plugin_libraries`
+    # -- but under that kind they are jars of classes, where a per-ABI check
+    # cannot see them, and a plugin missing for one ABI was silent.
+    ("plugin_native_libraries", NATIVE_LIB),
     ("recipe_libraries", NATIVE_LIB),
     ("registrant", CLASSES),
 ]
@@ -421,6 +427,7 @@ def flutter_android_libs(
         plugins,
         native_libs,
         registrant,
+        plugin_native_libs,
         embedding_deps = [],
         engine_jars = {},
         **kwargs):
@@ -455,15 +462,26 @@ def flutter_android_libs(
       registrant: the native GeneratedPluginRegistrant library.
       embedding_deps: the embedding's Maven dependencies, from
         flutter_embedding_deps().
+      plugin_native_libs: ABI -> the jars the native plugins built for it,
+        `@flutter_plugins//:plugin_libs_<abi>`. Required, and `{}` is the way to
+        say no plugin in this app has a native half -- omitting it would let an
+        app arrive at that by accident, which is the failure this whole file is
+        arranged against.
       engine_jars: ABI -> an unstripped engine jar, overriding the one the ABI
         table names. For a locally built engine; normally omitted.
       **kwargs: visibility, tags.
     """
     check_abis(abis, "flutter_android_libs " + name)
 
-    for what, supplied in [("native_libs", native_libs), ("engine_jars", engine_jars)]:
-        # An override: none is the normal case, *some* is the drift.
-        if what == "engine_jars" and not supplied:
+    # `native_libs` is required per ABI; the other two are optional as a whole
+    # -- an app with no native plugins, an engine that is not overridden -- but
+    # supplying *some* of either is the drift worth naming.
+    for what, supplied, required in [
+        ("native_libs", native_libs, True),
+        ("plugin_native_libs", plugin_native_libs, False),
+        ("engine_jars", engine_jars, False),
+    ]:
+        if not required and not supplied:
             continue
         wrong = [abi for abi in abis if abi not in supplied] + [
             abi
@@ -482,25 +500,34 @@ def flutter_android_libs(
                 ),
             )
 
-        # One jar cannot serve two ABIs: its lib/<abi>/ prefix decides where
-        # the libraries land, so the second ABI ships nothing. Named here
-        # because `exports` below rejects it only as a duplicate label.
-        seen = {}
+    # One jar cannot serve two ABIs: its lib/<abi>/ prefix decides where the
+    # libraries land, so the second ABI ships nothing. Checked across the
+    # library dicts together rather than one at a time, because they share
+    # `exports` below -- where the same mistake surfaces only as a duplicate
+    # label, naming neither the ABI nor the reason.
+    seen = {}
+    for what, supplied in [
+        ("native_libs", native_libs),
+        ("plugin_native_libs", plugin_native_libs),
+        ("engine_jars", engine_jars),
+    ]:
         for abi in abis:
+            if abi not in supplied:
+                continue
             other = seen.get(str(supplied[abi]))
             if other:
                 fail(
-                    ("flutter_android_libs {}: `{}` gives {} and {} the same " +
+                    ("flutter_android_libs {}: `{}` for {} and {} are the same " +
                      "jar,\n  {}\nand a jar carries its ABI in the lib/<abi>/ " +
                      "prefix inside it. One of the two would ship nothing.").format(
                         name,
                         what,
-                        other,
                         abi,
+                        other,
                         supplied[abi],
                     ),
                 )
-            seen[str(supplied[abi])] = abi
+            seen[str(supplied[abi])] = "{} for {}".format(what, abi)
 
     # 1. AOT library. The snapshot rides as lib/<abi>/libapp.so inside a jar,
     #    because android_binary extracts native libraries from jars on the
@@ -548,6 +575,11 @@ def flutter_android_libs(
         "aot_library": libapp_jars,
         "engine": engine_stripped,
         "recipe_libraries": {abi: native_libs[abi] for abi in abis},
+        "plugin_native_libraries": {
+            abi: plugin_native_libs[abi]
+            for abi in abis
+            if abi in plugin_native_libs
+        },
     }
     sources = {
         "runtime_classes": [embedding],
@@ -564,6 +596,9 @@ def flutter_android_libs(
             location = location,
             srcs = sources.get(kind, []),
             libraries = slices.get(kind, {}),
+            # An app whose plugins are all pure Java has nothing here, and says
+            # so. Every other contribution is structural.
+            empty = kind == "plugin_native_libraries" and not plugin_native_libs,
             **kwargs
         )
         contributions.append(contribution)
@@ -595,6 +630,10 @@ def flutter_android_libs(
             registrant,
             name + "_libapp",
         ] + [native_libs[abi] for abi in abis] + [
+            plugin_native_libs[abi]
+            for abi in abis
+            if abi in plugin_native_libs
+        ] + [
             name + "_engine",
             embedding,
         ] + embedding_deps + [plugins],

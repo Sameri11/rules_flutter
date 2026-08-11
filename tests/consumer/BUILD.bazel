@@ -210,6 +210,19 @@ java_import(
     jars = ["fixtures/fake_native_libs_x86_64.jar"],
 )
 
+# The plugins' native half, which reaches the APK on its own per-ABI path since
+# 1.5 rather than riding the plugin library. java_import, not a file: it is on
+# android_binary's classpath, which is where native libraries are found.
+java_import(
+    name = "fake_plugin_libs",
+    jars = ["fixtures/fake_native_libs.jar"],
+)
+
+java_import(
+    name = "fake_plugin_libs_x86_64",
+    jars = ["fixtures/fake_native_libs_x86_64.jar"],
+)
+
 java_import(
     name = "fake_registrant",
     jars = ["fixtures/fake_native_libs.jar"],
@@ -247,6 +260,12 @@ flutter_android_libs(
     native_libs = {
         "arm64-v8a": ":fake_recipe_libs",
         "x86_64": ":fake_recipe_libs_x86_64",
+    },
+    # The 1.5 parameter, populated rather than `{}`: the empty form is what a
+    # consumer gets by accident, so it is the populated one worth pinning.
+    plugin_native_libs = {
+        "arm64-v8a": ":fake_plugin_libs",
+        "x86_64": ":fake_plugin_libs_x86_64",
     },
     plugins = ":fake_plugins",
     registrant = ":fake_registrant",

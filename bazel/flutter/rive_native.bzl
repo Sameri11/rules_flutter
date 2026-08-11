@@ -20,6 +20,14 @@ Kotlin half is built the same way the generator would have built it.
 load("@@//tools/flutter:recipe.bzl", "flutter_native_contribution")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
+# The ABIs the upstream archive ships, keyed the way Bazel and the APK spell
+# them. x86 is in the archive too and is left out: no engine to pair it with.
+_LIBRARIES = {
+    "arm64-v8a": "@rive_native_android//:arm64_v8a",
+    "x86_64": "@rive_native_android//:x86_64",
+    "armeabi-v7a": "@rive_native_android//:armeabi_v7a",
+}
+
 def rive_native_recipe(name, info):
     """Build rive_native: Kotlin from source, .so from the archive pinned in MODULE.bazel.
 
@@ -45,7 +53,18 @@ def rive_native_recipe(name, info):
     # init, so the file has to be exactly librive_native.so under lib/<abi>/.
     # That is what the archive already calls it, so no renaming is involved --
     # but it is the reason this is not interchangeable with any other .so.
+    # One entry per ABI the project asked for. The archive holds every ABI, so
+    # this is a filegroup lookup rather than a second download -- but an ABI the
+    # archive does not carry has to fail here, by name, rather than reach
+    # flutter_native_libs as a missing slice.
+    for abi in info.abis:
+        if abi not in _LIBRARIES:
+            fail("rive_native_recipe has no prebuilt for {}; the archive holds {}.".format(
+                abi,
+                sorted(_LIBRARIES),
+            ))
+
     flutter_native_contribution(
         name = name + "_flutter_native",
-        libraries = {"arm64-v8a": "@rive_native_android//:arm64_v8a"},
+        libraries = {abi: _LIBRARIES[abi] for abi in info.abis},
     )

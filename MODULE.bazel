@@ -19,6 +19,15 @@ use_repo(
 # changes this graph -- nothing here is edited per plugin.
 plugins = use_extension("//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
+    # Every ABI the plugins' native halves are cross-compiled for. Must cover
+    # what //app/android/app declares, or the APK ships an ABI with no plugin
+    # libraries in it. Unbuilt ABIs cost nothing: bzlmod fetches and CMake runs
+    # only for what something demands.
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+        "armeabi-v7a",
+    ],
     # The embedding target lives in the app, not in the rules -- see
     # //app/android/app:BUILD.bazel.
     embedding = "//app/android/app:flutter_embedding",
@@ -174,17 +183,42 @@ include("//:plugin_deps.MODULE.bazel")
 # resolved version (3.5.0), and verified against the downloaded bytes.
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
-http_file(
-    name = "libsqlite3_android_arm64",
-    # The bundle's NativeAssetsManifest.json already says
-    # ["absolute", "libsqlite3.so"], so the name has to be exactly this or dlopen
-    # misses. //bazel/flutter:sqlite3.bzl restates it as a code_assets entry,
-    # which makes the recipe fail rather than the app.
-    downloaded_file_path = "libsqlite3.so",
-    sha256 = "e99515af1d7119fb61843ae5e597344e7f258563de3a7e5a3869f627aab2887b",
-    urls = ["https://github.com/simolus3/sqlite3.dart/releases/download/" +
-            "sqlite3-3.5.0/libsqlite3.arm64.android.so"],
-)
+# One per ABI. The package names its architectures the way Dart does -- arm64,
+# arm, x64 -- so the mapping to an Android ABI happens here and nowhere else.
+# `ia32` is published too and is deliberately absent: there is no android-x86
+# engine to pair it with.
+#
+# Every hash is transcribed from asset_hashes.dart for the resolved version,
+# and each downloaded file is named libsqlite3.so because the bundle's
+# NativeAssetsManifest.json says ["absolute", "libsqlite3.so"] -- dlopen misses
+# on any other name. //bazel/flutter:sqlite3.bzl restates that as a code_assets
+# entry, so the recipe fails rather than the app.
+[
+    http_file(
+        name = "libsqlite3_android_" + abi.replace("-", "_"),
+        downloaded_file_path = "libsqlite3.so",
+        sha256 = sha256,
+        urls = ["https://github.com/simolus3/sqlite3.dart/releases/download/" +
+                "sqlite3-3.5.0/libsqlite3." + arch + ".android.so"],
+    )
+    for abi, arch, sha256 in [
+        (
+            "arm64-v8a",
+            "arm64",
+            "e99515af1d7119fb61843ae5e597344e7f258563de3a7e5a3869f627aab2887b",
+        ),
+        (
+            "x86_64",
+            "x64",
+            "e5a2d46ac5e11f471e1aaedfd364f54c7961a6900432d289ea3f5781bcaaf4cd",
+        ),
+        (
+            "armeabi-v7a",
+            "arm",
+            "6c1b8dffc1ddefaf02e771711491410bc3ab1db858d3d23d2925e0b2cd691b93",
+        ),
+    ]
+]
 
 # The recipes themselves. Each names a .bzl in this project and a macro in it;
 # //tools/flutter:plugins.bzl generates a BUILD that loads the macro by canonical
@@ -219,13 +253,17 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 http_archive(
     name = "rive_native_android",
     # The archive holds <abi>/librive_native.so for all four Android ABIs at its
-    # root. Only arm64-v8a is used; the APK is arm64-only.
+    # root, so an extra ABI is a filegroup, not a second download. x86 is left
+    # out for the same reason as sqlite3's ia32: no engine to pair it with.
     build_file_content = """
-filegroup(
-    name = "arm64_v8a",
-    srcs = ["arm64-v8a/librive_native.so"],
-    visibility = ["//visibility:public"],
-)
+[
+    filegroup(
+        name = abi.replace("-", "_"),
+        srcs = [abi + "/librive_native.so"],
+        visibility = ["//visibility:public"],
+    )
+    for abi in ["arm64-v8a", "x86_64", "armeabi-v7a"]
+]
 """,
     sha256 = "765a4e5e7e244eb849c76af105d5dc9a33fa02401cd37e6f24720d8c8941498b",
     urls = ["https://rive-flutter-artifacts.rive.app/rive_native_versions/" +

@@ -24,6 +24,16 @@ runtime; `code_assets` below is checked *against* that, not used to produce it.
 # buildifier: disable=canonical-repository
 load("@@//tools/flutter:recipe.bzl", "flutter_native_contribution")
 
+# One http_file per ABI, pinned in MODULE.bazel from the package's own
+# asset_hashes.dart. Repository rules cannot be called from a macro and pinning
+# a download is a module-time act, so the fetch lives there and the mapping
+# here.
+_LIBRARIES = {
+    "arm64-v8a": "@libsqlite3_android_arm64_v8a//file",
+    "x86_64": "@libsqlite3_android_x86_64//file",
+    "armeabi-v7a": "@libsqlite3_android_armeabi_v7a//file",
+}
+
 def sqlite3_recipe(name, info):
     """Attach the prebuilt libsqlite3.so the build hook would have downloaded.
 
@@ -34,9 +44,16 @@ def sqlite3_recipe(name, info):
     if info.is_plugin:
         fail("sqlite3 is not expected to be a Flutter plugin; the generator saw one")
 
+    for abi in info.abis:
+        if abi not in _LIBRARIES:
+            fail("sqlite3_recipe has no prebuilt for {}; MODULE.bazel pins {}.".format(
+                abi,
+                sorted(_LIBRARIES),
+            ))
+
     flutter_native_contribution(
         name = name + "_flutter_native",
-        libraries = {"arm64-v8a": "@libsqlite3_android_arm64//file"},
+        libraries = {abi: _LIBRARIES[abi] for abi in info.abis},
         # Declared so the filename is checked rather than assumed. The VM
         # resolves this id through the bundle's NativeAssetsManifest.json, which
         # names the library by bare filename -- so a rename here is a runtime
