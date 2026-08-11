@@ -52,6 +52,7 @@ flutter_aot_library(
 flutter_assets(
     name = "assets",
     srcs = SRCS,
+    abis = ABIS,
     assets = glob(["assets/**"]),
     package_config = ".dart_tool/package_config.json",
     path_deps = PATH_DEPS,
@@ -75,6 +76,7 @@ dart_kernel(
 flutter_assets(
     name = "assets_debug",
     srcs = SRCS,
+    abis = ABIS,
     assets = glob(["assets/**"]),
     mode = "debug",
     package_config = ".dart_tool/package_config.json",

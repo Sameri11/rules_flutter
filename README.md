@@ -89,6 +89,7 @@ consumer-supplied recipes; see "Package recipes" below.
 | `tools/flutter/bundle.bzl` | The named contributions an app makes to a platform bundle: `FlutterBundleContributionInfo`, `flutter_bundle_contribution`. Platform-independent, so a second platform reuses the vocabulary |
 | `tools/flutter/check_path_deps.py` | Script behind `pub_path_deps_check` |
 | `tools/flutter/check_native_assets.py` | Script behind `native_assets_check` |
+| `tools/flutter/merge_native_assets.py` | Merges the per-ABI `NativeAssetsManifest.json`, and refuses if the bundles differ anywhere else |
 | `tools/flutter/plugins.bzl` | Repo rule generating one target per native Android plugin, their Maven coordinates, the CMake targets for native ones, and the `plugins.package()` extension |
 | `tools/flutter/recipe.bzl` | The recipe contract: `FlutterNativeInfo`, `flutter_native_contribution`, `flutter_native_libs` |
 | `bazel/flutter/` | This project's *own* recipes, as a consuming project would write them |

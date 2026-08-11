@@ -90,6 +90,7 @@ flutter_aot_library(
 flutter_assets(
     name = "assets",
     srcs = ["fixtures/main.dart"],
+    abis = ["arm64-v8a"],
     assets = [],
     package_config = "fixtures/package_config.json",
     pub_stamp = ["fixtures/pubspec.lock"],

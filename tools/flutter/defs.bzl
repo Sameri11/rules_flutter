@@ -386,6 +386,33 @@ def flutter_aot_library(name, srcs, abis, entrypoint_uri, package_config, pub_st
             **kwargs
         )
 
+def _bundle_dir(ctx, out, abi, index):
+    """Where one ABI's bundle goes.
+
+    The first is the declared output itself, so the shared files are written
+    once rather than copied in afterwards; the rest go beside it and exist only
+    to be compared and to have their manifests read.
+    """
+    if index == 0:
+        return out.path
+    return "{}/{}.abi_{}".format(out.dirname, ctx.label.name, abi)
+
+def _bundle_command(ctx, out, abi, index):
+    return """"{flutter}" build bundle \\
+    --{mode} \\
+    --no-pub \\
+    --target-platform={platform} \\
+    --asset-dir="$EXECROOT/{dir}" \\
+    --suppress-analytics >/dev/null
+rm -f "$EXECROOT/{dir}/.last_build_id"
+rm -rf "$EXECROOT/{dir}/native_assets"
+""".format(
+        flutter = FLUTTER_BIN,
+        mode = ctx.attr.mode,
+        platform = ABIS[abi].target_platform,
+        dir = _bundle_dir(ctx, out, abi, index),
+    )
+
 def _flutter_assets_impl(ctx):
     # The directory must be named flutter_assets: android_binary derives the
     # in-APK path from the artifact path with assets_dir stripped, and Flutter
@@ -472,27 +499,23 @@ tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
 
 cd "$STAGE/{pkg}"
-"{flutter}" build bundle \
-    --{mode} \
-    --no-pub \
-    --target-platform={platform} \
-    --asset-dir="$EXECROOT/{out}" \
-    --suppress-analytics >/dev/null
-rm -f "$EXECROOT/{out}/.last_build_id"
-rm -rf "$EXECROOT/{out}/native_assets"
+{bundles}
+exec python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         pkg = ctx.label.package,
         manifest = manifest.path,
-        mode = ctx.attr.mode,
-        flutter = FLUTTER_BIN,
-        platform = ctx.attr.target_platform,
-        out = out.path,
+        merger = ctx.file._merger.path,
+        bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
+        merge_args = " ".join([
+            '--bundle "{}=$EXECROOT/{}"'.format(abi, _bundle_dir(ctx, out, abi, i))
+            for i, abi in enumerate(ctx.attr.abis)
+        ]),
     )
 
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = project_files + [manifest, ctx.file._sdk_version],
+            direct = project_files + [manifest, ctx.file._sdk_version, ctx.file._merger],
         ),
         outputs = [out],
         env = FLUTTER_ENV,
@@ -525,7 +548,19 @@ entry point for driving it from another build system.""",
             allow_files = True,
             doc = "See dart_kernel.path_deps.",
         ),
-        "target_platform": attr.string(default = "android-arm64"),
+        "abis": attr.string_list(
+            mandatory = True,
+            doc = """ABIs to bundle for. Required, always a list.
+
+`flutter build bundle` runs once per ABI inside this one action, because
+exactly one file it produces -- NativeAssetsManifest.json -- is keyed by
+architecture. The manifests are merged and everything else is compared, so a
+bundle that started varying by architecture fails here rather than shipping.""",
+        ),
+        "_merger": attr.label(
+            default = "//tools/flutter:merge_native_assets.py",
+            allow_single_file = True,
+        ),
         "mode": attr.string(
             default = "release",
             values = ["release", "debug"],
