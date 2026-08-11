@@ -15,63 +15,8 @@ load("@flutter_sdk//:sdk.bzl", "FLUTTER_ENV")
 load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_java//java:defs.bzl", "java_import")
+load(":abis.bzl", "ABIS", "check_abis", "engine_jar_label")
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
-
-def _native_assets_check_impl(ctx):
-    marker = ctx.actions.declare_file(ctx.label.name + ".checked")
-
-    # The manifest lives inside the asset tree artifact, so its path is derived
-    # rather than declared. flutter_tools writes it at the bundle root --
-    # `additionalContent: {'NativeAssetsManifest.json': ...}` in
-    # build_system/targets/common.dart.
-    manifest = ctx.file.assets.path + "/NativeAssetsManifest.json"
-
-    args = ctx.actions.args()
-    args.add(ctx.file._checker)
-    args.add("--manifest", manifest)
-    args.add("--jar", ctx.file.native_libs)
-    args.add("--out", marker)
-
-    ctx.actions.run_shell(
-        command = 'exec python3 "$@"',
-        arguments = [args],
-        inputs = [ctx.file.assets, ctx.file.native_libs, ctx.file._checker],
-        outputs = [marker],
-        env = FLUTTER_ENV,
-        mnemonic = "NativeAssetsCheck",
-        progress_message = "Checking Dart code assets %{label}",
-    )
-
-    return [DefaultInfo(files = depset([marker]))]
-
-native_assets_check = rule(
-    implementation = _native_assets_check_impl,
-    doc = """Fails the build if a Dart code asset has no library behind it.
-
-A package with a build hook declares an asset id; the Dart VM resolves it to a
-filename through the bundle's NativeAssetsManifest.json and dlopens that name
-from lib/<abi>/. Nothing else connects the two halves -- the manifest comes from
-flutter_tools, the library only from a package recipe -- so a package with no
-recipe builds green and dies on its first FFI call.
-
-Cheap enough to depend on from the app; see //app:native_assets_check.""",
-    attrs = {
-        "assets": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-            doc = "A flutter_assets tree artifact.",
-        ),
-        "native_libs": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-            doc = "The jar of recipe-contributed libraries, @flutter_plugins//:native_libs_jar.",
-        ),
-        "_checker": attr.label(
-            default = "//tools/flutter:check_native_assets.py",
-            allow_single_file = True,
-        ),
-    },
-)
 
 def _jni_lib_jar_impl(ctx):
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
@@ -109,7 +54,9 @@ jni_lib_jar = rule(
     doc = "Wraps a prebuilt .so as lib/<abi>/<name>.so inside a jar, for android_binary.",
     attrs = {
         "src": attr.label(allow_single_file = True, mandatory = True),
-        "abi": attr.string(default = "arm64-v8a"),
+        # Mandatory: it decides which lib/<abi>/ the library is loaded from, so
+        # a default packages one architecture's .so as another's, silently.
+        "abi": attr.string(mandatory = True),
         "soname": attr.string(doc = "Override the packaged filename."),
     },
 )
@@ -290,8 +237,14 @@ _ANDROID_CONTRIBUTIONS = [
     ("registrant", CLASSES),
 ]
 
+# Kinds no ABI can ship without. The rest may legitimately be empty for one: an
+# app with no package recipes contributes a jar with no libraries in it.
+_LIBRARIES_REQUIRED_PER_ABI = ["aot_library", "engine"]
+
 def _flutter_bundle_check_impl(ctx):
     marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+
+    check_abis(ctx.attr.abis, str(ctx.label))
 
     by_kind = {}
     for dep in ctx.attr.contributions:
@@ -300,15 +253,47 @@ def _flutter_bundle_check_impl(ctx):
             fail("Two contributions declare kind '{}'.".format(info.kind))
         by_kind[info.kind] = info
 
-    # The completeness half. Today this only catches a join that forgot a
-    # contribution; under multiple ABIs it is where "this ABI has no libapp.so"
-    # goes -- see multi-abi.md section 9, which proposes the same target.
-    for kind, _location in _ANDROID_CONTRIBUTIONS:
+    # The completeness half, in two parts: every contribution is present, and
+    # every native one covers every ABI -- an ABI with no libapp.so, or a
+    # library forgotten for one of them, fails here rather than on a device.
+    for kind, location in _ANDROID_CONTRIBUTIONS:
         if kind not in by_kind:
             fail(
                 ("Bundle is missing the '{}' contribution.\n" +
                  "Every entry in _ANDROID_CONTRIBUTIONS must be supplied, or " +
                  "declared empty.").format(kind),
+            )
+
+        info = by_kind[kind]
+        if location != NATIVE_LIB or info.empty:
+            continue
+
+        missing = [abi for abi in ctx.attr.abis if abi not in info.libraries]
+        if missing:
+            fail(
+                ("The '{}' contribution has nothing for {}.\n" +
+                 "This bundle declares abis = {}, and every native " +
+                 "contribution must supply a library for each of them. It has " +
+                 "{}.").format(
+                    kind,
+                    ", ".join(missing),
+                    ctx.attr.abis,
+                    sorted(info.libraries) if info.libraries else "(nothing)",
+                ),
+            )
+
+        # The converse: a contribution carrying an ABI nobody asked for is a
+        # fat APK arrived at by accident rather than declared.
+        extra = [s for s in sorted(info.libraries) if s not in ctx.attr.abis]
+        if extra:
+            fail(
+                ("The '{}' contribution supplies {}, which this bundle does " +
+                 "not declare.\nabis = {}; drop the extra slice or add the ABI " +
+                 "everywhere it belongs.").format(
+                    kind,
+                    ", ".join(extra),
+                    ctx.attr.abis,
+                ),
             )
 
     # The code-asset half, formerly //app:native_assets_check. It sits here
@@ -317,7 +302,6 @@ def _flutter_bundle_check_impl(ctx):
     # supplied. As a standalone target it was something the app had to remember
     # to depend on.
     assets = by_kind["assets"].files.to_list()
-    libs = by_kind["recipe_libraries"].files.to_list()
     if not assets:
         fail("The 'assets' contribution is empty; nothing to check code assets against.")
 
@@ -329,13 +313,32 @@ def _flutter_bundle_check_impl(ctx):
     # build_system/targets/common.dart. Derived rather than declared, because it
     # lives inside a tree artifact.
     args.add("--manifest", assets[0].path + "/NativeAssetsManifest.json")
-    args.add("--jar", libs[0])
     args.add("--out", marker)
+    args.add_all(_LIBRARIES_REQUIRED_PER_ABI, before_each = "--require")
+
+    inputs = list(assets) + [ctx.file._checker]
+
+    for abi in ctx.attr.abis:
+        # The key is the engine's, not ours -- each has the one it reads
+        # compiled in.
+        args.add("--abi", "{}={}".format(abi, ABIS[abi].manifest_key))
+
+        for kind, location in _ANDROID_CONTRIBUTIONS:
+            if location != NATIVE_LIB:
+                continue
+            jars = [
+                f
+                for f in by_kind[kind].libraries.get(abi, depset()).to_list()
+                if f.extension == "jar"
+            ]
+            for jar in jars:
+                args.add("--jar", "{}={}={}".format(abi, kind, jar.path))
+            inputs += jars
 
     ctx.actions.run_shell(
         command = 'exec python3 "$@"',
         arguments = [args],
-        inputs = assets + libs + [ctx.file._checker],
+        inputs = inputs,
         outputs = [marker],
         env = FLUTTER_ENV,
         mnemonic = "FlutterBundleCheck",
@@ -346,14 +349,22 @@ def _flutter_bundle_check_impl(ctx):
 
 flutter_bundle_check = rule(
     implementation = _flutter_bundle_check_impl,
-    doc = """Fails the build if the bundle is missing a contribution, or a code asset has no library.
+    doc = """Fails the build if the bundle is missing a piece for any ABI it declares.
 
-Instantiated by flutter_android_libs, not written by hand. Two checks: every
-contribution in the inventory is present, and every Dart code asset the bundle
-names resolves to a library some recipe supplied. The second was
-`native_assets_check`; it moved here because this is where both halves are
-visible at once.""",
+Instantiated by flutter_android_libs, not written by hand. Three checks, in
+increasing depth: every contribution in the inventory is present; every native
+contribution supplies a library for every declared ABI and no other; and, at
+action time, each of those libraries really sits under lib/<abi>/ and backs the
+code assets the manifest names for that ABI.
+
+The last two are one guard split across phases, because analysis sees only that
+a label was supplied. Handing the arm64 jar to the x86_64 slot resolves, builds,
+and ships an empty ABI.""",
     attrs = {
+        "abis": attr.string_list(
+            mandatory = True,
+            doc = "The ABIs the bundle claims to support. Every native contribution must cover each.",
+        ),
         "contributions": attr.label_list(
             providers = [FlutterBundleContributionInfo],
             mandatory = True,
@@ -403,15 +414,15 @@ def flutter_assets_dir(assets):
 
 def flutter_android_libs(
         name,
+        abis,
         aot,
         assets,
-        engine_jar,
         embedding,
         plugins,
         native_libs,
         registrant,
         embedding_deps = [],
-        abi = "arm64-v8a",
+        engine_jars = {},
         **kwargs):
     """Every Flutter contribution to an APK, joined into one android_binary dep.
 
@@ -426,56 +437,122 @@ def flutter_android_libs(
     this module would resolve against this module's own Maven graph. See
     embedding.bzl.
 
+    `abis` is required and always a list, as it is everywhere else. How each
+    per-ABI input arrives depends on who owns the name: the snapshot is derived
+    (`flutter_aot_library` promises `<aot>_<abi>`), the engine comes from the
+    ABI table, and only the recipe libraries are a dict -- that label is the
+    consuming project's.
+
     Args:
       name: the target android_binary depends on.
-      aot: the AOT library, a dart_aot_elf / flutter_aot_library target.
-      assets: a flutter_assets tree artifact.
-      engine_jar: the prebuilt engine jar, unstripped.
+      abis: the Android ABIs this APK ships. Required, always a list.
+      aot: the flutter_aot_library *prefix*; `<aot>_<abi>` is used per ABI.
+      assets: a flutter_assets tree artifact, built for at least these ABIs.
       embedding: the consumer's flutter_embedding_library target.
       plugins: the generated aggregate of native plugin libraries.
-      native_libs: the generated jar of recipe-contributed libraries.
+      native_libs: ABI -> the jar of recipe-contributed libraries for it,
+        `@flutter_plugins//:native_libs`.
       registrant: the native GeneratedPluginRegistrant library.
       embedding_deps: the embedding's Maven dependencies, from
         flutter_embedding_deps().
-      abi: the ABI the native contributions are packaged under.
+      engine_jars: ABI -> an unstripped engine jar, overriding the one the ABI
+        table names. For a locally built engine; normally omitted.
       **kwargs: visibility, tags.
     """
+    check_abis(abis, "flutter_android_libs " + name)
+
+    for what, supplied in [("native_libs", native_libs), ("engine_jars", engine_jars)]:
+        # An override: none is the normal case, *some* is the drift.
+        if what == "engine_jars" and not supplied:
+            continue
+        wrong = [abi for abi in abis if abi not in supplied] + [
+            abi
+            for abi in sorted(supplied)
+            if abi not in abis
+        ]
+        if wrong:
+            fail(
+                ("flutter_android_libs {}: `{}` must have exactly one entry " +
+                 "per declared ABI.\nabis = {}, but {} = {}.").format(
+                    name,
+                    what,
+                    abis,
+                    what,
+                    sorted(supplied),
+                ),
+            )
+
+        # One jar cannot serve two ABIs: its lib/<abi>/ prefix decides where
+        # the libraries land, so the second ABI ships nothing. Named here
+        # because `exports` below rejects it only as a duplicate label.
+        seen = {}
+        for abi in abis:
+            other = seen.get(str(supplied[abi]))
+            if other:
+                fail(
+                    ("flutter_android_libs {}: `{}` gives {} and {} the same " +
+                     "jar,\n  {}\nand a jar carries its ABI in the lib/<abi>/ " +
+                     "prefix inside it. One of the two would ship nothing.").format(
+                        name,
+                        what,
+                        other,
+                        abi,
+                        supplied[abi],
+                    ),
+                )
+            seen[str(supplied[abi])] = abi
 
     # 1. AOT library. The snapshot rides as lib/<abi>/libapp.so inside a jar,
     #    because android_binary extracts native libraries from jars on the
     #    classpath -- the same mechanism the prebuilt engine artifact uses.
-    jni_lib_jar(
-        name = name + "_libapp_jni",
-        src = aot,
-        abi = abi,
-        **kwargs
-    )
+    #
+    # 2. Engine. Ships from Maven with its DWARF intact, and android_binary has
+    #    no equivalent of AGP's stripDebugSymbolsRelease. The strip is a
+    #    cross-strip, so the ABI's own platform selects the NDK toolchain.
+    libapp_jars = {}
+    engine_stripped = {}
+    for abi in abis:
+        libapp_jars[abi] = "{}_libapp_{}_jni".format(name, abi)
+        jni_lib_jar(
+            name = libapp_jars[abi],
+            src = "{}_{}".format(aot, abi),
+            abi = abi,
+            **kwargs
+        )
+
+        engine_stripped[abi] = "{}_engine_{}_stripped".format(name, abi)
+        strip_native_libs(
+            name = engine_stripped[abi],
+            jar = engine_jars.get(abi, engine_jar_label(abi)),
+            platform = ABIS[abi].bazel_platform,
+            **kwargs
+        )
+
+    # One java_import per contribution, not per ABI: android_binary collects
+    # native libraries by walking the classpath, so the number of imports and
+    # their order decide where each .so lands in the zip.
     java_import(
         name = name + "_libapp",
-        jars = [name + "_libapp_jni"],
-        **kwargs
-    )
-
-    # 2. Engine. Ships from Maven with its DWARF intact, and android_binary has
-    #    no equivalent of AGP's stripDebugSymbolsRelease.
-    strip_native_libs(
-        name = name + "_engine_stripped",
-        jar = engine_jar,
+        jars = [libapp_jars[abi] for abi in abis],
         **kwargs
     )
     java_import(
         name = name + "_engine",
-        jars = [name + "_engine_stripped"],
+        jars = [engine_stripped[abi] for abi in abis],
         **kwargs
     )
 
+    # Which contributions vary by ABI is the location's property, not a second
+    # list to keep in step.
+    slices = {
+        "aot_library": libapp_jars,
+        "engine": engine_stripped,
+        "recipe_libraries": {abi: native_libs[abi] for abi in abis},
+    }
     sources = {
-        "aot_library": [name + "_libapp_jni"],
-        "engine": [name + "_engine_stripped"],
         "runtime_classes": [embedding],
         "assets": [assets],
         "plugin_libraries": [plugins],
-        "recipe_libraries": [native_libs],
         "registrant": [registrant],
     }
     contributions = []
@@ -485,13 +562,15 @@ def flutter_android_libs(
             name = contribution,
             kind = kind,
             location = location,
-            srcs = sources[kind],
+            srcs = sources.get(kind, []),
+            libraries = slices.get(kind, {}),
             **kwargs
         )
         contributions.append(contribution)
 
     flutter_bundle_check(
         name = name + "_check",
+        abis = abis,
         contributions = contributions,
         **kwargs
     )
@@ -515,7 +594,7 @@ def flutter_android_libs(
         exports = [
             registrant,
             name + "_libapp",
-            native_libs,
+        ] + [native_libs[abi] for abi in abis] + [
             name + "_engine",
             embedding,
         ] + embedding_deps + [plugins],

@@ -19,14 +19,20 @@ Loading and analysis — `--nobuild` — of every public symbol:
 | file | symbols |
 | --- | --- |
 | `defs.bzl` | `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
-| `android.bzl` | `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `native_assets_check` |
-| `bundle.bzl` | `flutter_bundle_contribution` (both forms), the location constants |
-| `android.bzl` (join) | `flutter_android_libs`, the newest consumer-facing entry point |
+| `android.bzl` | `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
+| `bundle.bzl` | `flutter_bundle_contribution` (all three forms: `srcs`, slice-keyed `libraries`, `empty`), the location constants |
+| `android.bzl` (join) | `flutter_android_libs`, the newest consumer-facing entry point, over **two** ABIs |
 | `recipe.bzl` | `flutter_native_contribution` (both the populated and `empty = True` forms), `flutter_native_libs` |
 
 That catches the two things a refactor of these rules actually breaks: a symbol
 moving between files (load phase) and an attribute renamed, removed or made
 mandatory (analysis phase). Both were verified by being made to fail.
+
+The join is instantiated over **two** ABIs, so its per-ABI shape is exercised
+rather than collapsing to the single-entry case. It passes `engine_jars`, which
+a real consumer never does: left to the ABI table the join names the real engine
+repositories, and analysing one downloads ~150 MB — into a test whose whole
+point is that it costs under two seconds and fetches nothing.
 
 Attributes are named explicitly rather than left to defaults — `target_os`,
 `strip`, `mode` — because a default that disappears is exactly the kind of

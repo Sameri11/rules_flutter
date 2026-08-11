@@ -347,7 +347,7 @@
     },
     "//tools/flutter:repo.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "j/MssG2ziQAQD2cih4vAUiCBXPlQOleaa4n8+CJYHpo=",
+        "bzlTransitiveDigest": "+It9ElSz9Wh/59LNmrOIHFlXoPUzxFWIBLPjjlgJzdY=",
         "usagesDigest": "iSRW/YVh8Z8pXohp4QYphLsyLZ7SwQkgUrwb+IhskNo=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools"

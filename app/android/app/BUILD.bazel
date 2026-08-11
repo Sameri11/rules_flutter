@@ -22,6 +22,11 @@ PLUGINS = ["@flutter_plugins//:all"]
 # the path prefix it sits under, and those must agree.
 ASSETS = "//app:assets"
 
+# The ABIs this APK ships -- deliberately fewer than //app snapshots: the
+# plugins' native chains are generated for arm64-v8a alone, so claiming more
+# would claim ABIs with no plugin libraries in them.
+ABIS = ["arm64-v8a"]
+
 # The engine jar with its AndroidX dependencies attached. Instantiated here, in
 # the app, rather than inside the rules: its deps come from @flutter_maven, which
 # this project's MODULE.bazel creates from this project's plugin coordinates. A
@@ -38,15 +43,19 @@ flutter_embedding_library(name = "flutter_embedding")
 # The pieces are supplied rather than resolved in the macro because they belong
 # to this project: :flutter_embedding and its Maven deps come from this
 # project's own resolution, and @flutter_plugins is generated from this
-# project's pubspec.
+# project's pubspec. The engine is the exception, named nowhere here: the ABI
+# table already knows which jar each ABI needs.
 flutter_android_libs(
     name = "flutter",
-    aot = "//app:app_arm64-v8a",
+    abis = ABIS,
+    aot = "//app:app",
     assets = ASSETS,
     embedding = ":flutter_embedding",
     embedding_deps = flutter_embedding_deps(),
-    engine_jar = "@flutter_engine_arm64_v8a//jar:file",
-    native_libs = "@flutter_plugins//:native_libs",
+    # Written out rather than derived from ABIS: the generated repo has one
+    # jar, arm64-v8a's, so deriving would hand it to every ABI. Adding an ABI
+    # above fails here instead.
+    native_libs = {"arm64-v8a": "@flutter_plugins//:native_libs"},
     plugins = PLUGINS[0],
     registrant = ":generated_plugin_registrant",
 )

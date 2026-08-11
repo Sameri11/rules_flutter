@@ -41,13 +41,33 @@ FlutterBundleContributionInfo = provider(
     fields = {
         "kind": "str, the contribution's name -- 'aot_library', 'engine', ...",
         "location": "str, one of LOCATIONS: where its files land.",
-        "files": "depset[File] it contributes. Empty is legal only when `empty`.",
+        "files": "depset[File] it contributes, across every slice.",
+        "libraries": "dict[str, depset[File]] keyed by slice; empty when the " +
+                     "contribution does not vary by slice.",
         "empty": "bool, set when this platform deliberately contributes nothing.",
     },
 )
 
 def _flutter_bundle_contribution_impl(ctx):
-    files = depset(ctx.files.srcs)
+    # Keyed by slice rather than flattened: a jar carrying the wrong
+    # architecture is invisible in a flat list, being a file that is present
+    # under a path nobody compared. Slice is recipe.bzl's vocabulary.
+    libraries = {
+        slice_id: depset(target[DefaultInfo].files.to_list())
+        for slice_id, target in ctx.attr.libraries.items()
+    }
+
+    if ctx.files.srcs and libraries:
+        fail(
+            ("Bundle contribution {} ({}) sets both `srcs` and `libraries`.\n" +
+             "A contribution either varies by slice or it does not; setting " +
+             "both leaves no answer to which slice `srcs` belongs to.").format(
+                ctx.label,
+                ctx.attr.kind,
+            ),
+        )
+
+    files = depset(ctx.files.srcs, transitive = libraries.values())
 
     # Same rule recipe.bzl applies to native libraries, for the same reason: a
     # contribution that silently resolves to nothing produces an app that
@@ -68,6 +88,7 @@ def _flutter_bundle_contribution_impl(ctx):
             kind = ctx.attr.kind,
             location = ctx.attr.location,
             files = files,
+            libraries = libraries,
             empty = ctx.attr.empty,
         ),
         DefaultInfo(files = files),
@@ -84,7 +105,17 @@ the artifact is built.""",
     attrs = {
         "kind": attr.string(mandatory = True),
         "location": attr.string(mandatory = True, values = LOCATIONS),
-        "srcs": attr.label_list(allow_files = True),
+        "srcs": attr.label_list(
+            allow_files = True,
+            doc = "Files contributed whatever slice is being built.",
+        ),
+        "libraries": attr.string_keyed_label_dict(
+            allow_files = True,
+            doc = """Slice -> what this contribution supplies for that slice.
+
+For contributions that exist once per buildable variant -- every native library
+on Android. Same slice identifier recipe.bzl uses.""",
+        ),
         "empty": attr.bool(
             default = False,
             doc = "Assert deliberately that this platform contributes nothing here.",

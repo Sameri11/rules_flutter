@@ -77,6 +77,22 @@ def engine_repo(abi):
     """
     return "flutter_engine_" + abi.replace("-", "_")
 
+def engine_jar_label(abi):
+    """The prebuilt engine jar for this ABI.
+
+    A `Label`, not a string: a string handed to an attribute from inside a macro
+    resolves in the *caller's* repo mapping, and these repositories are our
+    extension's. Resolving here is what keeps the engine out of consumer BUILD
+    files.
+
+    Args:
+      abi: an Android ABI name, a key of ABIS.
+
+    Returns:
+      A Label for the unstripped engine jar.
+    """
+    return Label("@{}//jar:file".format(engine_repo(abi)))
+
 def gen_snapshot_label(abi):
     """The @flutter_sdk target holding this ABI's gen_snapshot.
 
