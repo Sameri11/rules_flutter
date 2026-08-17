@@ -297,8 +297,8 @@
     },
     "//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "06XSsT4BIhK+ahCeCLgjNCqlS2y1xCezwYyf+7nqmlc=",
-        "usagesDigest": "pW2wRBB2Nce+0qliy5HOE/vxcMhz+O5VN5pTJ8XBNhA=",
+        "bzlTransitiveDigest": "4uotmxObMhbIzXGNjFMXbgYs2UhELOz205c+8xPUrkw=",
+        "usagesDigest": "QBEinUa9VBOTiLLoWcfFBOR3JC7azM/oMrU/sv/XgUI=",
         "recordedInputs": [
           "REPO_MAPPING:,rules_java rules_java+",
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -334,10 +334,7 @@
               "extra_artifacts": [],
               "maven_resolver": "coursier",
               "maven_lock_file": "",
-              "overrides": {
-                "audioplayers_android": "[\"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4\",\"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4\"]",
-                "camera_android_camerax": "[\"androidx.camera:camera-core:1.6.0\",\"androidx.camera:camera-camera2:1.6.0\",\"androidx.camera:camera-lifecycle:1.6.0\",\"androidx.camera:camera-video:1.6.0\"]"
-              },
+              "overrides": {},
               "recipes": {
                 "rive_native": "{\"bzl\":\"@@//bazel/flutter:rive_native.bzl\",\"macro\":\"rive_native_recipe\"}",
                 "sqlite3": "{\"bzl\":\"@@//bazel/flutter:sqlite3.bzl\",\"macro\":\"sqlite3_recipe\"}"

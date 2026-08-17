@@ -44,34 +44,7 @@ plugins.project(
 # and cannot be expressed by the same mechanism -- see the tag_class comment in
 # //tools/flutter:plugins.bzl.
 #
-# Coordinates the scraper refuses to guess at, supplied by hand. Each is a
-# version the plugin does hold in its own build.gradle, in a place the scraper
-# does not look -- see the note on each -- so these are transcriptions, not
-# choices, and they go stale silently when the plugin is upgraded. Fixing the
-# two gaps in the scraper would retire both entries.
-plugins.package(
-    name = "audioplayers_android",
-    # `ext.coroutines_version = '1.6.4'`, declared inside the `buildscript {}`
-    # block that _strip_buildscript drops before variables are collected.
-    # kotlin-stdlib is not listed: it is skipped deliberately, as the
-    # rules_kotlin toolchain supplies it.
-    artifacts = [
-        "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4",
-        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4",
-    ],
-)
-plugins.package(
-    name = "camera_android_camerax",
-    # `val cameraxVersion = "1.6.0"` -- this plugin is Kotlin DSL, and
-    # _collect_variables reads `def`, `ext.` and bare assignment but not `val`.
-    # Its guava coordinate is a literal and scrapes fine already.
-    artifacts = [
-        "androidx.camera:camera-core:1.6.0",
-        "androidx.camera:camera-camera2:1.6.0",
-        "androidx.camera:camera-lifecycle:1.6.0",
-        "androidx.camera:camera-video:1.6.0",
-    ],
-)
+
 use_repo(plugins, "flutter_plugins")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = True)

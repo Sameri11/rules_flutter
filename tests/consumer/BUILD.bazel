@@ -114,8 +114,7 @@ pub_plugins_check(
 jni_lib_jar(
     name = "jni_jar",
     src = "fixtures/libfake.so",
-    # Mandatory: left to a default it silently decided which lib/<abi>/ a
-    # library was loaded from.
+    # Mandatory: it decides which lib/<abi>/ a library loads from.
     abi = "arm64-v8a",
 )
 
@@ -210,9 +209,9 @@ java_import(
     jars = ["fixtures/fake_native_libs_x86_64.jar"],
 )
 
-# The plugins' native half, which reaches the APK on its own per-ABI path since
-# 1.5 rather than riding the plugin library. java_import, not a file: it is on
-# android_binary's classpath, which is where native libraries are found.
+# The plugins' native half, on its own per-ABI path rather than riding the
+# plugin library. java_import, not a file: native libraries are found on
+# android_binary's classpath.
 java_import(
     name = "fake_plugin_libs",
     jars = ["fixtures/fake_native_libs.jar"],
@@ -261,8 +260,8 @@ flutter_android_libs(
         "arm64-v8a": ":fake_recipe_libs",
         "x86_64": ":fake_recipe_libs_x86_64",
     },
-    # The 1.5 parameter, populated rather than `{}`: the empty form is what a
-    # consumer gets by accident, so it is the populated one worth pinning.
+    # Populated rather than `{}`: the empty form is what a consumer reaches by
+    # accident, so the populated one is what needs pinning.
     plugin_native_libs = {
         "arm64-v8a": ":fake_plugin_libs",
         "x86_64": ":fake_plugin_libs_x86_64",

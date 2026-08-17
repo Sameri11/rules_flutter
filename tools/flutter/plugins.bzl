@@ -518,25 +518,35 @@ def _quoted(line):
         return line[start + 1:end]
     return None
 
-def _collect_variables(body):
+def _collect_variables(text):
     """Gradle variables assigned a string literal in this file.
 
-    Covers `ext.foo = '1.2'`, `foo = '1.2'` inside an `ext {}` block, and
-    `def foo = '1.2'`. This is string scraping, not evaluation -- anything
-    computed, conditional, or defined in the root project stays unresolved and
-    becomes an `unresolved_dep` reason rather than a guess.
+    Covers Groovy's `ext.foo = '1.2'`, `foo = '1.2'` inside an `ext {}` block
+    and `def foo = '1.2'`, plus Kotlin DSL's `val foo = "1.2"`. This is string
+    scraping, not evaluation -- anything computed, conditional, or defined in
+    the root project stays unresolved and becomes an `unresolved_dep` reason
+    rather than a guess.
+
+    Takes the whole file, not the buildscript-stripped body: `ext` is
+    project-scoped in Gradle, so a version declared inside `buildscript {}` is
+    readable by the dependency block below it.
     """
     variables = {}
-    for line in body.split("\n"):
+    for line in text.split("\n"):
         stripped = line.strip()
         if stripped.startswith("//"):
             continue
         if "=" not in stripped:
             continue
         name = stripped.split("=")[0].strip()
-        for prefix in ["def ", "ext."]:
+
+        for prefix in ["def ", "ext.", "val ", "var "]:
             if name.startswith(prefix):
                 name = name[len(prefix):].strip()
+
+        # Kotlin allows an explicit type -- `val v: String = "1.6.0"`.
+        if ":" in name:
+            name = name.split(":")[0].strip()
         if not name or " " in name or "." in name:
             continue
         value = _quoted(stripped[stripped.find("=") + 1:])
@@ -583,7 +593,11 @@ def _extract_dependencies(build_gradle_text):
     are not fall into a small set that this reports rather than guesses at.
     """
     body = _strip_buildscript(build_gradle_text)
-    variables = _collect_variables(body)
+
+    # Variables from the whole file, dependencies from the stripped body. A
+    # `buildscript {}` block's classpath is the AGP the plugin builds itself
+    # with; the versions declared beside it are ordinary project properties.
+    variables = _collect_variables(build_gradle_text)
 
     # Markers are matched against the code alone, and `externalNativeBuild` only
     # where it opens a block. rive_native names it in a comment *and* in a task
@@ -1106,6 +1120,11 @@ def _flutter_plugins_impl(ctx):
     # all -- and one that does gets the version check before anything is
     # generated.
     toolchain_file = None
+
+    # An override goes stale two ways: the scraper learns to read what it
+    # supplies, or its package leaves the graph entirely.
+    used_overrides = []
+    stale_overrides = []
     for plugin in plugins:
         name = plugin["name"]
         package_root = plugin["path"].rstrip("/")
@@ -1142,6 +1161,14 @@ def _flutter_plugins_impl(ctx):
         # does not carry its dependencies.
         override = overrides.get(name)
         if override != None:
+            used_overrides.append(name)
+
+            # An override that clears nothing is dead weight, and dead weight
+            # drifts out of date unnoticed. Recorded, not failed: what it
+            # supplies is still correct, so the build is right either way.
+            if "unresolved_dep" not in reasons:
+                stale_overrides.append(name)
+
             coordinates = coordinates + [c for c in override if c not in coordinates]
             reasons = [r for r in reasons if r != "unresolved_dep"]
 
@@ -1459,7 +1486,27 @@ def _flutter_plugins_impl(ctx):
     )
 
     # The one place the chosen strategy per plugin is recorded.
-    ctx.file("plugins.json", json.encode({"plugins": manifest}))
+    unused_overrides = [n for n in sorted(overrides) if n not in used_overrides]
+    if stale_overrides or unused_overrides:
+        lines = ["plugins.package(artifacts = ...) entries that no longer do anything:"]
+        for n in stale_overrides:
+            lines.append("  {} -- its build.gradle now states every coordinate".format(n))
+        for n in unused_overrides:
+            lines.append("  {} -- not a dependency of this project".format(n))
+        lines.append("Delete them from MODULE.bazel; they cannot go out of date once gone.")
+
+        # buildifier: disable=print
+        # The only channel a repository rule has that does not stop the build,
+        # and a redundant line in someone else's MODULE.bazel is not worth
+        # stopping it for. Fires at fetch, which is when the answer changed.
+        print("\n".join(lines))
+
+    ctx.file("plugins.json", json.encode({
+        "plugins": manifest,
+        # A fetch prints once and then caches; this is where it survives.
+        "stale_overrides": stale_overrides,
+        "unused_overrides": unused_overrides,
+    }))
 
     # Three aggregates, so the app names "every plugin", "every library a recipe
     # contributed" and "every library a plugin built" rather than keeping lists
