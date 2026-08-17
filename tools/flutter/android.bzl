@@ -12,7 +12,7 @@ entirely on this side.
 """
 
 load("@flutter_sdk//:sdk.bzl", "FLUTTER_ENV")
-load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":abis.bzl", "ABIS", "check_abis", "engine_jar_label")
@@ -639,3 +639,95 @@ def flutter_android_libs(
         ] + embedding_deps + [plugins],
         **kwargs
     )
+
+def flutter_android_binary(
+        name,
+        abis,
+        aot,
+        assets,
+        embedding,
+        plugins,
+        native_libs,
+        registrant,
+        plugin_native_libs,
+        deps = [],
+        embedding_deps = [],
+        engine_jars = {},
+        **kwargs):
+    """A fat APK and one per ABI, from a single declaration.
+
+    Emits `<name>` carrying every ABI in `abis`, and `<name>_<abi>` carrying one
+    -- so a developer can build the ABI their device takes while CI builds the
+    APK that ships, out of the same targets:
+
+        bazel build //app/android/app:demo_app                # fat
+        bazel build //app/android/app:demo_app_arm64-v8a      # one ABI
+        bazel build //app/android/app:demo_app{,_x86_64}      # both, one command
+
+    Every variant shares its upstream actions: one kernel, one asset tree, one
+    cross-compile per ABI. A second APK costs a second packaging step, not a
+    second build of anything that goes into it.
+
+    **The per-ABI variants are emitted only when `abis` names more than one.**
+    For a single-ABI app `<name>` already is that ABI, and a `<name>_<abi>`
+    beside it would package identical bytes a second time.
+
+    `assets_dir` is derived rather than asked for: it has to agree with where
+    the asset tree sits, and getting it wrong puts the bundle at a path the app
+    only fails to find at runtime. See flutter_assets_dir.
+
+    Args:
+      name: the fat APK's target name.
+      abis: the Android ABIs this app supports. Required, always a list.
+      aot: the flutter_aot_library prefix; see flutter_android_libs.
+      assets: a flutter_assets tree artifact.
+      embedding: the consumer's flutter_embedding_library target.
+      plugins: the generated aggregate of native plugin libraries.
+      native_libs: ABI -> the recipe-contributed jar for it.
+      registrant: the native GeneratedPluginRegistrant library.
+      plugin_native_libs: ABI -> the jars the native plugins built for it.
+      deps: the app's own targets -- the activity, anything else it compiles.
+        The Flutter join is appended, so ordering matches what a hand-written
+        android_binary had.
+      embedding_deps: the embedding's Maven dependencies.
+      engine_jars: ABI -> an engine jar overriding the ABI table's.
+      **kwargs: passed to every android_binary -- manifest, manifest_values,
+        resource_files, visibility, tags.
+    """
+    check_abis(abis, "flutter_android_binary " + name)
+
+    variants = [(name, abis)]
+    if len(abis) > 1:
+        variants += [("{}_{}".format(name, abi), [abi]) for abi in abis]
+
+    for target, target_abis in variants:
+        join = target + "_flutter"
+        flutter_android_libs(
+            name = join,
+            abis = target_abis,
+            aot = aot,
+            assets = assets,
+            embedding = embedding,
+            embedding_deps = embedding_deps,
+            engine_jars = {
+                abi: jar
+                for abi, jar in engine_jars.items()
+                if abi in target_abis
+            },
+            native_libs = {abi: native_libs[abi] for abi in target_abis},
+            plugin_native_libs = {
+                abi: plugin_native_libs[abi]
+                for abi in target_abis
+                if abi in plugin_native_libs
+            },
+            plugins = plugins,
+            registrant = registrant,
+        )
+
+        android_binary(
+            name = target,
+            assets = [assets],
+            assets_dir = flutter_assets_dir(assets = assets),
+            deps = deps + [":" + join],
+            **kwargs
+        )

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal manifest so android_binary can be analysed. Nothing here is built. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="consumer_test" />
+</manifest>

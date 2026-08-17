@@ -6,9 +6,9 @@
 # `flutter migrate` rewrite files under app/android/. They do not delete unknown
 # files, so this BUILD survives, but keep that in mind when upgrading templates.
 
-load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
+load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
-load("//tools/flutter:android.bzl", "flutter_android_libs", "flutter_assets_dir")
+load("//tools/flutter:android.bzl", "flutter_android_binary")
 load("//tools/flutter:embedding.bzl", "flutter_embedding_deps", "flutter_embedding_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -39,23 +39,40 @@ ABIS = [
 # unusable as a bazel_dep. See //tools/flutter:embedding.bzl.
 flutter_embedding_library(name = "flutter_embedding")
 
-# Every Flutter contribution to the APK, joined into one target: the AOT
-# snapshot, the engine, the runtime classes, the assets, the plugin libraries,
-# the recipe libraries and the registrant. Each is named, and a bundle check
-# fails the build if one goes missing -- see //tools/flutter:bundle.bzl.
+# Every Flutter contribution to the APK, joined into one target -- the AOT
+# snapshot, the engine, the runtime classes, the assets, the plugin libraries
+# and their native halves, the recipe libraries, the registrant -- and then one
+# APK per shape: :demo_app carries every ABI, :demo_app_<abi> carries one. A
+# bundle check per shape fails the build if any of them is missing a piece; see
+# //tools/flutter:bundle.bzl.
 #
 # The pieces are supplied rather than resolved in the macro because they belong
 # to this project: :flutter_embedding and its Maven deps come from this
 # project's own resolution, and @flutter_plugins is generated from this
 # project's pubspec. The engine is the exception, named nowhere here: the ABI
 # table already knows which jar each ABI needs.
-flutter_android_libs(
-    name = "flutter",
+flutter_android_binary(
+    name = "demo_app",
     abis = ABIS,
     aot = "//app:app",
     assets = ASSETS,
     embedding = ":flutter_embedding",
     embedding_deps = flutter_embedding_deps(),
+    # The manifest and resources `flutter create` generated are used directly,
+    # rather than copied. A copy drifts, and drift is what produced the
+    # missing-theme and targetSdk defects.
+    manifest = "src/main/AndroidManifest.xml",
+    # Values AGP would supply from build.gradle.kts, which the manifest itself
+    # does not carry: ${applicationName} is a placeholder, and the package and
+    # SDK levels live in the gradle `namespace` / `minSdk` / `targetSdk`.
+    # targetSdk 36 matches flutter_tools (FlutterExtension.kt) and is what
+    # enables edge-to-edge on Android 15+.
+    manifest_values = {
+        "applicationId": "com.example.demo_app",
+        "applicationName": "io.flutter.app.FlutterApplication",
+        "minSdkVersion": "21",
+        "targetSdkVersion": "36",
+    },
     # Both generated per ABI, so these are derived rather than written out --
     # @flutter_plugins builds a jar per ABI for the recipes and one for the
     # plugins' own CMake output, and an ABI missing from either fails the check
@@ -64,6 +81,11 @@ flutter_android_libs(
     plugin_native_libs = {abi: "@flutter_plugins//:plugin_libs_" + abi for abi in ABIS},
     plugins = PLUGINS[0],
     registrant = ":generated_plugin_registrant",
+    resource_files = glob(["src/main/res/**"]),
+    # The host application. The Flutter join is appended by the macro, so
+    # native libraries enter the zip in the order this file always had -- a .so
+    # is stored uncompressed and page-aligned, so moving one shifts padding.
+    deps = [":main_activity"],
 )
 
 # Note: no debug-symbol artifact is produced. Stripping discards the engine's
@@ -106,45 +128,6 @@ android_library(
         # compile classpath. Same family as the window/window-java split noted
         # in MODULE.bazel.
         "@flutter_maven//:androidx_annotation_annotation_jvm",
-    ],
-)
-
-android_binary(
-    name = "demo_app",
-    assets = [ASSETS],
-    # Derived, not written out: the prefix has to match where the tree
-    # artifact sits, and a wrong one fails only at runtime.
-    assets_dir = flutter_assets_dir(assets = ASSETS),
-    # The manifest and resources `flutter create` generated are used directly,
-    # rather than copied. A copy drifts, and drift is what produced the
-    # missing-theme and targetSdk defects.
-    manifest = "src/main/AndroidManifest.xml",
-    # Values AGP would supply from build.gradle.kts, which the manifest itself
-    # does not carry: ${applicationName} is a placeholder, and the package and
-    # SDK levels live in the gradle `namespace` / `minSdk` / `targetSdk`.
-    # targetSdk 36 matches flutter_tools (FlutterExtension.kt) and is what
-    # enables edge-to-edge on Android 15+.
-    manifest_values = {
-        "applicationId": "com.example.demo_app",
-        "applicationName": "io.flutter.app.FlutterApplication",
-        "minSdkVersion": "21",
-        "targetSdkVersion": "36",
-    },
-    resource_files = glob(["src/main/res/**"]),
-    # The host application, and one Flutter target. Every Flutter dependency
-    # arrives through :flutter; the asset tree stays an attribute above -- see
-    # flutter_android_libs for why.
-    deps = [
-        # Order decides where native libraries land in the zip, and a .so is
-        # stored uncompressed and page-aligned, so moving one shifts padding.
-        # Host application first, as this file listed before the contributions
-        # were joined, so the APK stays comparable by hash. Nothing functional
-        # depends on it -- Android resolves lib/<abi>/*.so by name.
-        #
-        # This comment also preserves the order: buildifier sorts a list only
-        # when it carries none.
-        ":main_activity",
-        ":flutter",
     ],
 )
 

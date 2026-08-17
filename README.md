@@ -85,7 +85,7 @@ consumer-supplied recipes; see "Package recipes" below.
 | `tools/flutter/repo.bzl` | Repo rule locating the SDK, exposing its tools as targets |
 | `tools/flutter/abis.bzl` | One table per Android ABI: target-platform string, engine directory, Maven artifact, manifest key, and the gen_snapshot flags armv7 needs |
 | `tools/flutter/defs.bzl` | Platform-independent rules: `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
-| `tools/flutter/android.bzl` | Android-only rules: `flutter_android_libs` (the packaging join), `flutter_bundle_check` (the per-ABI guard), `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
+| `tools/flutter/android.bzl` | Android-only rules: `flutter_android_binary` (a fat APK and one per ABI), `flutter_android_libs` (the packaging join), `flutter_bundle_check` (the per-ABI guard), `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
 | `tools/flutter/bundle.bzl` | The named contributions an app makes to a platform bundle: `FlutterBundleContributionInfo`, `flutter_bundle_contribution`. Platform-independent, so a second platform reuses the vocabulary |
 | `tools/flutter/check_path_deps.py` | Script behind `pub_path_deps_check` |
 | `tools/flutter/check_native_assets.py` | Script behind `flutter_bundle_check`: reads each ABI's jars, and the manifest key its engine reads |

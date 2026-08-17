@@ -123,6 +123,6 @@ build_test(
         ":plugins_check",
         # The code-asset guard moved inside the packaging join, where it can see
         # both halves it compares -- see //tools/flutter:bundle.bzl.
-        "//app/android/app:flutter_check",
+        "//app/android/app:demo_app_flutter_check",
     ],
 )
