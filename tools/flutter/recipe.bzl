@@ -182,6 +182,18 @@ bundle already carries the authoritative mapping -- but checked against
 )
 
 def _flutter_native_libs_impl(ctx):
+    # Android's packaging shape, and only Android's: this stages `lib/<slice>/`
+    # and zips a jar, because that is how android_binary finds native libraries
+    # on the classpath. An Apple slice needs a framework inside a bundle, which
+    # is a different action, not a different attribute value -- so `ios` is
+    # refused here rather than silently producing an Android-shaped jar that
+    # nothing on Apple would read.
+    if ctx.attr.platform != "android":
+        fail(("{}: flutter_native_libs packages Android jars, but platform is " +
+              "'{}'. The Apple bundle step does not exist yet; contributions " +
+              "for it are declared (flutter_native_contribution) but cannot be " +
+              "aggregated.").format(ctx.label, ctx.attr.platform))
+
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
 
     # A contribution for another platform reaching this aggregate is a recipe
@@ -248,7 +260,11 @@ done
 chmod -R u+w "$STAGE"
 ( cd "$STAGE" && zip -q -X -r "$OLDPWD/{jar}" lib )
 """.format(
-            abi = ctx.attr.abi,
+            # `lib/<slice>/` is Android's layout, and on Android a slice *is* an
+            # ABI -- which is why this used to be a second attribute carrying
+            # the same string. An Apple bundle lays its slices out differently
+            # and will need its own packaging step, not another attribute here.
+            abi = ctx.attr.slice,
             sos = " ".join(['"{}"'.format(f.path) for f in libs]),
             jar = jar.path,
         ),
@@ -274,18 +290,18 @@ and wrapped there in a java_import the app can depend on directly.""",
             providers = [FlutterNativeInfo],
             doc = "flutter_native_contribution targets, one per recipe.",
         ),
-        "abi": attr.string(
-            default = "arm64-v8a",
-            doc = "The lib/<abi>/ directory libraries are packaged under.",
-        ),
         "platform": attr.string(
             default = "android",
             values = PLATFORMS,
             doc = "Platform being bundled; contributions must agree.",
         ),
         "slice": attr.string(
-            default = "arm64-v8a",
-            doc = "Which slice of each contribution to take. See FlutterNativeInfo.",
+            mandatory = True,
+            doc = """Which slice of each contribution to take, and on Android the
+lib/<abi>/ directory libraries are packaged under. See FlutterNativeInfo.
+
+Mandatory: a default here packages one architecture's libraries as another's,
+which nothing downstream can detect.""",
         ),
     },
 )

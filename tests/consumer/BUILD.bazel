@@ -3,16 +3,24 @@
 This is an API test, not a behaviour test.
 """
 
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "gen_snapshot_label")
 load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_binary", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "strip_native_libs")
 load("@flutter_bazel//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
 load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
+load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
 load("@flutter_bazel//tools/flutter:pubspec.bzl", "flutter_pubspec")
 load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":assertions.bzl", "expect_equal")
 
 package(default_visibility = ["//visibility:private"])
+
+# flutter_app is instantiated in //standard_layout, a package laid out the way
+# `flutter create` leaves one, so every default path it relies on is analysed.
+# It cannot be called *here*: this package's fixtures deliberately sit under
+# fixtures/ and its `:app`, `:assets` and `:pubspec` are hand-written below with
+# every attribute named, which is what catches a default disappearing.
 
 # --- defs.bzl: the platform-independent half ---------------------------------
 
@@ -103,6 +111,7 @@ flutter_assets(
     srcs = ["lib/main.dart"],
     abis = ["arm64-v8a"],
     assets = [],
+    entrypoint = "lib/main.dart",
     package_config = "fixtures/package_config.json",
     pub_stamp = ["fixtures/pubspec.lock"],
     pubspec = ":pubspec",
@@ -131,6 +140,9 @@ jni_lib_jar(
 
 strip_native_libs(
     name = "stripped",
+    # Mandatory: it selects the cross-strip that matches the jar's libraries,
+    # and the build platform is derived from it rather than restated.
+    abi = "arm64-v8a",
     jar = "fixtures/fake_native_libs.jar",
 )
 
@@ -145,6 +157,10 @@ filegroup(
 android_native_lib_jar(
     name = "native_lib_jar",
     src = [":fake_cmake_output"],
+    # Mandatory, and the platform the .so is built under comes from it: two
+    # strings kept in step by hand is how a jar comes to say one ABI while the
+    # cross-compile resolves another's toolchain.
+    abi = "arm64-v8a",
 )
 
 # --- recipe.bzl: the contract consumers implement ----------------------------
@@ -179,24 +195,30 @@ flutter_native_contribution(
 
 flutter_native_libs(
     name = "recipe_libs",
+    # Mandatory: it selects which slice of each contribution is taken *and*, on
+    # Android, the lib/<abi>/ the libraries are packaged under. It used to be
+    # two attributes carrying the same string.
+    slice = "arm64-v8a",
     deps = [
         ":recipe_contribution",
         ":recipe_contribution_empty",
     ],
 )
 
-flutter_native_libs(
-    name = "recipe_libs_ios",
-    platform = "ios",
-    slice = "ios-arm64_x86_64-simulator",
-    deps = [":recipe_contribution_ios"],
-)
+# No `flutter_native_libs(platform = "ios")` here: the rule now refuses it. Its
+# body stages lib/<slice>/ into a jar, which is Android's shape, so an Apple
+# aggregate needs a new action rather than this rule with a different attribute.
+# The *contribution* above is what holds the Apple shape until then.
 
 # --- the packaging join ------------------------------------------------------
 #
 # The entry point a consumer's android_binary depends on. Its arguments are all
 # supplied by the consuming project -- the embedding and its Maven deps cannot
 # be resolved inside the rules -- so a signature change is a consumer break.
+
+# Production embedding path for the no-plugin APK below. It derives the
+# AndroidX labels from this consumer's @flutter_maven repository.
+flutter_embedding_library(name = "flutter_embedding_no_plugins")
 
 java_import(
     name = "fake_embedding",
@@ -312,6 +334,10 @@ flutter_bundle_contribution(
 # The macro on top of the join: it emits `<name>` plus `<name>_<abi>`, so a
 # consumer's APK targets are named by it and a rename here is a rename in their
 # CI scripts. Two ABIs, because the per-ABI variants only exist above one.
+#
+# Everything is named explicitly here, defaults included, because a default that
+# disappears is exactly the kind of change this module exists to notice. The
+# derived spelling is covered by :apk_derived below.
 flutter_android_binary(
     name = "apk",
     abis = [
@@ -337,6 +363,152 @@ flutter_android_binary(
         "x86_64": ":fake_plugin_libs_x86_64",
     },
     plugins = ":fake_plugins",
+    # Required: an APK with no versionCode cannot be published, so "unset" is
+    # not a state the macro lets a consumer reach by omission.
+    pubspec = ":pubspec",
     registrant = ":fake_registrant",
+    resource_files = [],
+    tags = ["manual"],
     deps = [":fake_registrant"],
+)
+
+# The Dart half under its conventional name, so the `app` spelling below has the
+# three targets it derives to. flutter_app() produces exactly these names.
+flutter_aot_library(
+    name = "app",
+    srcs = ["lib/main.dart"],
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+    ],
+    entrypoint = "lib/main.dart",
+    package_config = "fixtures/package_config.json",
+    pub_stamp = ["fixtures/pubspec.lock"],
+    pubspec = ":pubspec",
+)
+
+# The short spelling a standard-layout consumer writes: one label for the Dart
+# half instead of three, and the manifest, resources and version derived from
+# it. This target supplies fake plugin targets to exercise the explicit
+# override path; :apk_no_plugin_graph below exercises the repository-free path.
+flutter_android_binary(
+    name = "apk_derived",
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+    ],
+    app = "//:app",
+    embedding = ":fake_embedding",
+    embedding_deps = [],
+    engine_jars = {
+        "arm64-v8a": "fixtures/fake_native_libs.jar",
+        "x86_64": "fixtures/fake_native_libs_x86_64.jar",
+    },
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.consumer_test"},
+    native_libs = {
+        "arm64-v8a": ":fake_recipe_libs",
+        "x86_64": ":fake_recipe_libs_x86_64",
+    },
+    plugin_native_libs = {
+        "arm64-v8a": ":fake_plugin_libs",
+        "x86_64": ":fake_plugin_libs_x86_64",
+    },
+    plugins = ":fake_plugins",
+    registrant = ":fake_registrant",
+    resource_files = [],
+    tags = ["manual"],
+    deps = [":fake_registrant"],
+)
+
+# `plugin_native_libs = {}` -- the declaration an app with no native plugin half
+# makes. It cannot be derived: the generated jars exist for every ABI whether or
+# not anything filled them, so emptiness has to be said, and saying it is what
+# satisfies the contribution's non-empty gate. Analysed here so the meaning of
+# `{}` cannot quietly change into "derive".
+flutter_android_binary(
+    name = "apk_no_plugin_natives",
+    abis = ["arm64-v8a"],
+    app = "//:app",
+    embedding = ":fake_embedding",
+    embedding_deps = [],
+    engine_jars = {"arm64-v8a": "fixtures/fake_native_libs.jar"},
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.consumer_test"},
+    native_libs = {"arm64-v8a": ":fake_recipe_libs"},
+    plugin_native_libs = {},
+    plugins = ":fake_plugins",
+    registrant = ":fake_registrant",
+    resource_files = [],
+    tags = ["manual"],
+    deps = [":fake_registrant"],
+)
+
+# The three stub APKs above are `manual`: their `<name>_check_test` would make
+# `bazel test` build fixtures that cannot build -- a fake engine jar with no ELF
+# inside it, and a stub package_config with no resolvable package. They are
+# analysis fixtures, and this filegroup is what keeps them in `//...` for
+# `--nobuild` while `--build_tests_only` leaves them alone. Every variant is
+# named: `manual` hides `:apk_x86_64` and friends too, and the per-ABI variants
+# are half of what the join is instantiated over two ABIs to exercise.
+filegroup(
+    name = "analysis_only",
+    srcs = [
+        ":apk",
+        ":apk_arm64-v8a",
+        ":apk_derived",
+        ":apk_derived_arm64-v8a",
+        ":apk_derived_x86_64",
+        ":apk_no_plugin_natives",
+        ":apk_x86_64",
+    ],
+)
+
+# The complete no-plugin-graph shape. The Dart package sets
+# `plugin_deps = None`; the Android half sets `plugins = None`. That one value
+# suppresses every derived @flutter_plugins label: Java/Kotlin plugin classes,
+# recipe libraries, native plugin libraries and the registrant are each emitted
+# as a deliberately empty contribution, while AOT, engine, embedding and assets
+# remain structural. The embedding still needs @flutter_maven's AndroidX graph.
+flutter_android_binary(
+    name = "apk_no_plugin_graph",
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+    ],
+    app = "//standard_layout",
+    embedding = ":flutter_embedding_no_plugins",
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.consumer_test"},
+    plugins = None,
+    resource_files = [],
+)
+
+# An external standard-layout app through the high-level API: app-derived
+# labels must preserve its repository through Dart compilation and APK assets.
+flutter_android_binary(
+    name = "apk_external_app",
+    abis = ["arm64-v8a"],
+    app = "@external_app//app",
+    embedding = ":flutter_embedding_no_plugins",
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.external_app"},
+    plugins = None,
+    resource_files = [],
+)
+
+genrule(
+    name = "apk_external_app_contents_check",
+    srcs = [":apk_external_app.apk"],
+    outs = ["apk_external_app_contents.checked"],
+    cmd = """set -euo pipefail
+value="$$(unzip -p $(location :apk_external_app.apk) assets/flutter_assets/assets/external-marker.txt)"
+test "$$value" = "external app marker"
+printf 'checked external app asset\n' > "$@"
+""",
+)
+
+build_test(
+    name = "apk_external_app_contents_test",
+    targets = [":apk_external_app_contents_check"],
 )

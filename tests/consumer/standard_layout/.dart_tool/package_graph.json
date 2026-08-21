@@ -1,0 +1,14 @@
+{
+  "roots": [
+    "standard_layout"
+  ],
+  "packages": [
+    {
+      "name": "standard_layout",
+      "version": "1.2.3+45",
+      "dependencies": [],
+      "devDependencies": []
+    }
+  ],
+  "configVersion": 1
+}

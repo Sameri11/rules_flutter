@@ -1,0 +1,6 @@
+module(
+    name = "external_app",
+    version = "0.0.1",
+)
+
+bazel_dep(name = "flutter_bazel", version = "0.1.0")

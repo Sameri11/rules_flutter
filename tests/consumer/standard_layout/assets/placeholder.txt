@@ -1,0 +1,1 @@
+an asset, so the default glob matches something

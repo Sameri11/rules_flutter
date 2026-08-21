@@ -22,9 +22,10 @@ unsandboxed. Making them hermetic means modelling pub packages as Bazel repos
 problem and is not attempted here.
 """
 
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@flutter_sdk//:sdk.bzl", "FLUTTER_BIN", "FLUTTER_ENV")
 load(":abis.bzl", "ABIS", "check_abis", "gen_snapshot_label")
-load(":pubspec.bzl", "FlutterPubspecInfo")
+load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
 # Release actions may be shared through a remote cache.
 #
@@ -52,6 +53,28 @@ _EXEC_DEBUG = dict(_EXEC_RELEASE, **{"local": "1"})
 def _exec_requirements(mode):
     return _EXEC_DEBUG if mode == "debug" else _EXEC_RELEASE
 
+def _repository_path(ctx, file, attribute):
+    """A source file's path within the repository owning this rule."""
+    short_path = file.short_path
+    if not ctx.label.repo_name:
+        if short_path.startswith("../"):
+            fail("{}: {} must be in the main repository, got {}.".format(
+                ctx.label,
+                attribute,
+                short_path,
+            ))
+        return short_path
+
+    prefix = "../{}/".format(ctx.label.repo_name)
+    if not short_path.startswith(prefix):
+        fail("{}: {} must be in repository {}, got {}.".format(
+            ctx.label,
+            attribute,
+            ctx.label.repo_name,
+            short_path,
+        ))
+    return short_path[len(prefix):]
+
 def _library_path(ctx, file, attribute):
     """A source file's path within its package, as a `package:` URI suffix.
 
@@ -60,15 +83,34 @@ def _library_path(ctx, file, attribute):
     for the URI is what keeps the package name out of BUILD files -- and a
     typo fails here instead of producing a URI that resolves to nothing.
     """
+    path = _repository_path(ctx, file, attribute)
     prefix = (ctx.label.package + "/" if ctx.label.package else "") + "lib/"
-    if not file.short_path.startswith(prefix):
+    if not path.startswith(prefix):
         fail("{}: {} must be a .dart file under {}, got {}.".format(
             ctx.label,
             attribute,
             prefix,
-            file.short_path,
+            path,
         ))
-    return file.short_path[len(prefix):]
+    return path[len(prefix):]
+
+def _project_path(ctx, file, attribute):
+    """A file's path relative to the calling package/project root.
+
+    Unlike `_library_path`, this keeps the leading `lib/`: flutter_tools'
+    `--target` accepts a project-relative filesystem path, not a `package:` URI
+    suffix.
+    """
+    path = _repository_path(ctx, file, attribute)
+    prefix = ctx.label.package + "/" if ctx.label.package else ""
+    if not path.startswith(prefix):
+        fail("{}: {} must be inside package {}, got {}.".format(
+            ctx.label,
+            attribute,
+            ctx.label.package,
+            path,
+        ))
+    return path[len(prefix):]
 
 def _dart_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
@@ -445,6 +487,245 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
             **kwargs
         )
 
+# What `flutter pub get` writes, at the paths pub fixes. Declared for
+# invalidation: identity stamps rather than the pub-cache contents themselves,
+# which nothing here models. See the invalidation section of README.md.
+_PUB_STAMP = [
+    ".dart_tool/version",
+    ".dart_tool/package_graph.json",
+    "pubspec.lock",
+]
+
+# Distinguishes the documented default from a caller deliberately opting out.
+# `None` remains an explicit no-registrant declaration.
+_DEFAULT_DART_PLUGIN_REGISTRANT = struct()
+
+# buildifier: disable=unnamed-macro
+# Deliberately unnamed: every target it declares is named by convention, because
+# the Android half derives those names (`//<pkg>:app`, `:assets`, `:pubspec`)
+# from the package alone. A `name` parameter would be a knob that cannot vary --
+# passing one produced `:myapp_arm64-v8a` while the APK still asked for
+# `:app_arm64-v8a`. One Flutter app per package, which is also one pubspec per
+# package.
+def flutter_app(
+        abis = None,
+        path_deps = [],
+        srcs = None,
+        assets = None,
+        entrypoint = "lib/main.dart",
+        dart_plugin_registrant = _DEFAULT_DART_PLUGIN_REGISTRANT,
+        pub_stamp = None,
+        plugin_deps = "//:plugin_deps.MODULE.bazel",
+        debug = False,
+        target_os = "android",
+        **kwargs):
+    """The Dart half of a Flutter app: one call, in the app's own package.
+
+    Everything a standard `flutter create` + `flutter pub get` layout fixes is a
+    default here -- the entrypoint, the package config, the pub stamp triple, the
+    source and asset globs, the committed Dart registrant, and pubspec.yaml.
+    What is left is what only the app knows:
+
+        flutter_app(
+            abis = ["arm64-v8a"],
+            path_deps = ["//packages/mylib:srcs"],
+        )
+
+    Produces, in the calling package:
+
+    | target | what |
+    | --- | --- |
+    | `:pubspec` | the package name and version, read once from pubspec.yaml |
+    | `:app_<abi>` | the AOT snapshot per ABI |
+    | `:assets` | the asset bundle, built for every ABI |
+    | `:path_deps_check` | fails if a `path:` dependency is undeclared |
+    | `:plugins_check` | fails if the committed Maven coordinates drifted |
+    | `:dart_registrant_check` | fails if the committed registrant drifted |
+    | `:guards_test` | the guards, under `bazel test` |
+
+    and with `debug = True` also `:app_debug_kernel` and `:assets_debug`.
+
+    The names are fixed rather than derived from a `name` parameter: the Android
+    half computes them from the package (`flutter_android_binary(app = "//app")`),
+    so a second spelling here would only be a way to break that agreement.
+
+    `abis` has no default, here as everywhere: it is the one fact about an app
+    that these rules cannot infer, and a default would mean shipping one ABI, or
+    three, without ever saying which. It is an Android ABI list today; a second
+    platform adds its own dimension rather than overloading this one.
+
+    With the default, an app with no plugin graph (`plugin_deps = None`) has no
+    Dart registrant; an app with one uses the conventional committed
+    `lib/dart_plugin_registrant.dart`. Pass `dart_plugin_registrant = None` to
+    opt out explicitly, including in a project that otherwise has a plugin
+    graph. An explicitly supplied label remains the committed registrant guard.
+
+    Args:
+      abis: Android ABIs to build for. Required, always a list.
+      path_deps: sources of `path:` dependencies -- the one input nothing else
+        observes, which is why `:path_deps_check` exists.
+      srcs: Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
+      assets: declared assets. Defaults to `glob(["assets/**"])`.
+      entrypoint: the app's entrypoint under lib/. It drives both kernel
+        compilation and `flutter build bundle --target`, so the snapshot and
+        asset/code bundle cannot select different programs.
+      dart_plugin_registrant: the committed Dart registrant, or None.
+      pub_stamp: invalidation stamps. Defaults to pub's own three files.
+      plugin_deps: the committed Maven segment MODULE.bazel includes, which
+        `:plugins_check` compares against the generated one. Repo-root by
+        convention because that is where `include()` reads it from; `None` for a
+        project with no plugin graph, which drops the two guards over it.
+      debug: also emit the local-only debug kernel and asset bundle.
+      target_os: OS the kernel is compiled for; see dart_kernel.
+      **kwargs: visibility, tags -- passed to every target declared here.
+    """
+    check_abis(abis, "flutter_app")
+
+    # `name` used to be a parameter that could not vary: the Android half derives
+    # `//<pkg>:app`, `:assets` and `:pubspec` from the package, so a different
+    # prefix here produced targets the APK never asked for. Refused by name
+    # rather than colliding downstream in flutter_aot_library's own `name`.
+    if "name" in kwargs:
+        fail(
+            "flutter_app: no `name` -- it declares `:app`, `:assets`, " +
+            "`:pubspec` and the guards by convention, because " +
+            "flutter_android_binary(app = ...) derives those names from the " +
+            "package. One Flutter app per package, as one pubspec per package.",
+        )
+
+    # This is deliberately a *standard-layout* macro. flutter_tools has no
+    # `--pubspec` or `--package-config-path` option for `build bundle`: it reads
+    # pubspec.yaml and .dart_tool/package_config.json from the staged project
+    # root. These used to look overridable here while only kernel compilation
+    # honoured the alternate paths, producing two halves from different project
+    # state. Name the unsupported knobs rather than forwarding them through
+    # **kwargs to an unrelated target and failing opaquely.
+    for unsupported in ("pubspec", "package_config"):
+        if unsupported in kwargs:
+            fail(
+                (
+                    "flutter_app: no `{}` override -- `flutter build bundle` " +
+                    "reads the standard-layout {} directly and exposes no " +
+                    "option to relocate it. Use the lower-level rules if the " +
+                    "Dart half alone has a nonstandard layout."
+                ).format(
+                    unsupported,
+                    "pubspec.yaml" if unsupported == "pubspec" else ".dart_tool/package_config.json",
+                ),
+            )
+
+    if dart_plugin_registrant == _DEFAULT_DART_PLUGIN_REGISTRANT:
+        dart_plugin_registrant = None if plugin_deps == None else "lib/dart_plugin_registrant.dart"
+
+    if srcs == None:
+        srcs = native.glob(["lib/**/*.dart"])
+    if assets == None:
+        assets = native.glob(["assets/**"])
+    if pub_stamp == None:
+        pub_stamp = _PUB_STAMP
+
+    flutter_pubspec(src = "pubspec.yaml", **kwargs)
+
+    flutter_aot_library(
+        name = "app",
+        srcs = srcs,
+        abis = abis,
+        pubspec = ":pubspec",
+        entrypoint = entrypoint,
+        package_config = ".dart_tool/package_config.json",
+        pub_stamp = pub_stamp,
+        path_deps = path_deps,
+        dart_plugin_registrant = dart_plugin_registrant,
+        target_os = target_os,
+        **kwargs
+    )
+
+    flutter_assets(
+        name = "assets",
+        srcs = srcs,
+        abis = abis,
+        assets = assets,
+        pubspec = ":pubspec",
+        entrypoint = entrypoint,
+        package_config = ".dart_tool/package_config.json",
+        pub_stamp = pub_stamp,
+        path_deps = path_deps,
+        **kwargs
+    )
+
+    if debug:
+        # Debug artifacts are pinned local and never shared: the kernel ships
+        # verbatim as kernel_blob.bin with this machine's paths in it.
+        dart_kernel(
+            name = "app_debug_kernel",
+            srcs = srcs,
+            pubspec = ":pubspec",
+            entrypoint = entrypoint,
+            package_config = ".dart_tool/package_config.json",
+            pub_stamp = pub_stamp,
+            path_deps = path_deps,
+            dart_plugin_registrant = dart_plugin_registrant,
+            mode = "debug",
+            **kwargs
+        )
+        flutter_assets(
+            name = "assets_debug",
+            srcs = srcs,
+            abis = abis,
+            assets = assets,
+            pubspec = ":pubspec",
+            entrypoint = entrypoint,
+            package_config = ".dart_tool/package_config.json",
+            pub_stamp = pub_stamp,
+            path_deps = path_deps,
+            mode = "debug",
+            **kwargs
+        )
+
+    # The guards. Emitted rather than asked for: each one exists because its
+    # absence was a silent failure once, and a guard a consumer has to remember
+    # to instantiate is a guard that eventually is not there.
+    pub_path_deps_check(
+        name = "path_deps_check",
+        path_deps = path_deps,
+        pubspec_lock = "pubspec.lock",
+        **kwargs
+    )
+
+    guards = [":path_deps_check"]
+
+    # Both halves of the generated repo that a project commits: the Maven
+    # coordinate segment MODULE.bazel includes, and the Dart registrant that
+    # needs a `package:` URI and so cannot be consumed from the repo itself.
+    # Both compare against @flutter_plugins, so both are skipped by a project
+    # that has no such repo -- rather than making the macro uninstantiable there.
+    if plugin_deps:
+        pub_plugins_check(
+            name = "plugins_check",
+            committed = plugin_deps,
+            expected = "@flutter_plugins//:plugin_deps.MODULE.bazel",
+            **kwargs
+        )
+        guards.append(":plugins_check")
+
+        if dart_plugin_registrant:
+            pub_plugins_check(
+                name = "dart_registrant_check",
+                committed = dart_plugin_registrant,
+                expected = "@flutter_plugins//:dart_plugin_registrant.dart",
+                **kwargs
+            )
+            guards.append(":dart_registrant_check")
+
+    # The guards fail as *actions*, which is stronger than a test: anything
+    # depending on one fails too, and the result is remote-cacheable. build_test
+    # does not change that -- it only gives `bazel test` a reason to build them.
+    build_test(
+        name = "guards_test",
+        targets = guards,
+        **kwargs
+    )
+
 def _bundle_dir(ctx, out, abi, index):
     """Where one ABI's bundle goes.
 
@@ -457,11 +738,12 @@ def _bundle_dir(ctx, out, abi, index):
     return "{}/{}.abi_{}".format(out.dirname, ctx.label.name, abi)
 
 def _bundle_command(ctx, out, abi, index):
-    return """"{flutter}" build bundle \\
-    --{mode} \\
-    --no-pub \\
-    --target-platform={platform} \\
-    --asset-dir="$EXECROOT/{dir}" \\
+    return """"{flutter}" build bundle \
+    --{mode} \
+    --no-pub \
+    --target="$ENTRYPOINT" \
+    --target-platform={platform} \
+    --asset-dir="$EXECROOT/{dir}" \
     --suppress-analytics >/dev/null
 rm -f "$EXECROOT/{dir}/.last_build_id"
 rm -rf "$EXECROOT/{dir}/native_assets"
@@ -478,8 +760,16 @@ def _flutter_assets_impl(ctx):
     # requires the bundle at assets/flutter_assets/ at runtime.
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
 
+    entrypoint = _project_path(ctx, ctx.file.entrypoint, "entrypoint")
+    args = ctx.actions.args()
+    args.add(entrypoint)
+
     project_files = (
-        [ctx.file.package_config, ctx.attr.pubspec[FlutterPubspecInfo].src] +
+        [
+            ctx.file.entrypoint,
+            ctx.file.package_config,
+            ctx.attr.pubspec[FlutterPubspecInfo].src,
+        ] +
         ctx.files.assets + ctx.files.srcs + ctx.files.pub_stamp +
         ctx.files.path_deps
     )
@@ -549,7 +839,14 @@ def _flutter_assets_impl(ctx):
     # NativeAssetsManifest.json is a *sibling* of this directory and is
     # deliberately kept: it is the id -> filename mapping the engine reads at
     # runtime, and it is correct as written. Only the misplaced library goes.
-    cmd = """set -euo pipefail
+    project_dir = "/".join([
+        component
+        for component in [ctx.label.workspace_root, ctx.label.package]
+        if component
+    ])
+
+    cmd = """ENTRYPOINT="$1"; shift
+set -euo pipefail
 EXECROOT="$PWD"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
@@ -557,11 +854,11 @@ trap 'rm -rf "$STAGE"' EXIT
 tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
 
-cd "$STAGE/{pkg}"
+cd "$STAGE/{project_dir}"
 {bundles}
 exec python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
-        pkg = ctx.label.package,
+        project_dir = project_dir,
         manifest = manifest.path,
         merger = ctx.file._merger.path,
         bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
@@ -573,6 +870,7 @@ exec python3 "$EXECROOT/{merger}" {merge_args}
 
     ctx.actions.run_shell(
         command = cmd,
+        arguments = [args],
         inputs = depset(
             direct = project_files + [manifest, ctx.file._sdk_version, ctx.file._merger],
         ),
@@ -592,10 +890,19 @@ NOTICES.Z, fonts, shaders, declared assets) for packaging into an APK.
 
 Unlike the Dart half, this shells out to `flutter build bundle`. There is no
 standalone asset-bundler binary: asset resolution, font manifests and license
-aggregation all live inside flutter_tools. `--asset-dir` is the documented
-entry point for driving it from another build system.""",
+aggregation all live inside flutter_tools. `--asset-dir` and `--target` are the
+documented entry points for driving it from another build system.""",
     attrs = {
         "srcs": attr.label_list(allow_files = [".dart"]),
+        "entrypoint": attr.label(
+            allow_single_file = [".dart"],
+            mandatory = True,
+            doc = """The Dart entrypoint `flutter build bundle --target` uses.
+
+Must be the same file dart_kernel compiles. Flutter defaults the command to
+lib/main.dart when omitted, which silently combines a snapshot for one program
+with an asset/code bundle for another when an app overrides its entrypoint.""",
+        ),
         "assets": attr.label_list(
             allow_files = True,
             doc = "Files declared under `assets:` in pubspec.yaml.",

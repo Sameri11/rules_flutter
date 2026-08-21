@@ -4,13 +4,49 @@ module(
 )
 
 bazel_dep(name = "flutter_bazel", version = "0.1.0")
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "external_app", version = "0.0.1")
 
 # For the java_import stubs flutter_android_libs is handed below.
 bazel_dep(name = "rules_java", version = "9.3.0")
 
+# The no-plugin fixture still packages Flutter's Android embedding, whose
+# AndroidX runtime graph must be resolved by the consuming project.
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "flutter_maven",
+    artifacts = [
+        "androidx.lifecycle:lifecycle-common:2.7.0",
+        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
+        "androidx.lifecycle:lifecycle-process:2.7.0",
+        "androidx.lifecycle:lifecycle-runtime:2.7.0",
+        "androidx.fragment:fragment:1.7.1",
+        "androidx.annotation:annotation:1.8.1",
+        "androidx.tracing:tracing:1.2.0",
+        "androidx.core:core:1.13.1",
+        "androidx.window:window-java:1.2.0",
+        "androidx.window:window:1.2.0",
+        "androidx.exifinterface:exifinterface:1.4.1",
+        "com.getkeepsafe.relinker:relinker:1.4.5",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+use_repo(maven, "flutter_maven")
+
 local_path_override(
     module_name = "flutter_bazel",
     path = "../..",
+)
+
+local_path_override(
+    module_name = "external_app",
+    path = "external_app",
 )
 
 flutter = use_extension("@flutter_bazel//tools/flutter:repo.bzl", "flutter")

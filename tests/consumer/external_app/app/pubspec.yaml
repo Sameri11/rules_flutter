@@ -1,0 +1,6 @@
+name: external_app
+version: 1.0.0+1
+
+flutter:
+  assets:
+    - assets/external-marker.txt

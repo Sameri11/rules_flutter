@@ -83,8 +83,8 @@ consumer-supplied recipes; see "Package recipes" below.
 | --- | --- |
 | `tools/flutter/repo.bzl` | Repo rule locating the SDK, exposing its tools as targets |
 | `tools/flutter/abis.bzl` | One table per Android ABI: target-platform string, engine directory, Maven artifact, manifest key, and the gen_snapshot flags armv7 needs |
-| `tools/flutter/defs.bzl` | Platform-independent rules: `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
-| `tools/flutter/android.bzl` | Android-only rules: `flutter_android_binary` (a fat APK and one per ABI), `flutter_android_libs` (the packaging join), `flutter_bundle_check` (the per-ABI guard), `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
+| `tools/flutter/defs.bzl` | Platform-independent rules, and `flutter_app` — the whole Dart half of an app in one call: `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
+| `tools/flutter/android.bzl` | Android-only rules: `flutter_android_binary` (a fat APK and one per ABI, from `abis` + the Dart half's package), `flutter_android_libs` (the packaging join), `flutter_bundle_check` (the per-ABI guard), `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
 | `tools/flutter/bundle.bzl` | The named contributions an app makes to a platform bundle: `FlutterBundleContributionInfo`, `flutter_bundle_contribution`. Platform-independent, so a second platform reuses the vocabulary |
 | `tools/flutter/check_path_deps.py` | Script behind `pub_path_deps_check` |
 | `tools/flutter/check_native_assets.py` | Script behind `flutter_bundle_check`: reads each ABI's jars, and the manifest key its engine reads |
@@ -132,6 +132,113 @@ publish them.
 - [`docs_internal/running-on-device.md`](docs_internal/running-on-device.md) — build, boot an
   emulator, install, launch, and verify.
 
+## Declaring an app
+
+Two calls, one per half. Everything a standard `flutter create` +
+`flutter pub get` layout fixes is a default; what is written is what only the
+app knows.
+
+`app/BUILD.bazel` — the Dart half:
+
+```python
+load("//tools/flutter:defs.bzl", "flutter_app")
+
+flutter_app(
+    abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
+    debug = True,
+    path_deps = ["//packages/mylib:srcs"],
+)
+```
+
+That emits `:pubspec`, `:app_<abi>` per ABI, `:assets`, the three guards
+(`:path_deps_check`, `:plugins_check`, `:dart_registrant_check`) and
+`:guards_test` over them. The source and asset globs, package config,
+pubspec.yaml, pub's three invalidation stamps and the committed Dart registrant
+are fixed standard-layout paths. `entrypoint`, `path_deps`, `debug`, assets and
+sources are the supported deviations; the selected entrypoint drives both
+kernel compilation and `flutter build bundle --target`.
+
+`app/android/app/BUILD.bazel` — the APK, beside the Gradle module it mirrors:
+
+```python
+load("//tools/flutter:android.bzl", "flutter_android_binary")
+load("//tools/flutter:embedding.bzl", "flutter_embedding_library")
+
+flutter_embedding_library(name = "flutter_embedding")
+
+flutter_android_binary(
+    name = "demo_app",
+    abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
+    app = "//app",
+    manifest_values = {"applicationId": "com.example.demo_app"},
+    deps = [":main_activity"],
+)
+```
+
+`app` names the package holding the Dart half; `//app:app`, `//app:assets` and
+`//app:pubspec` are derived from it. The per-ABI plugin and recipe jars are
+derived from `abis`. The manifest, resources, embedding label and registrant come
+from the created layout. `manifest_values` needs only `applicationId` — the
+other three keys are what flutter_tools pins.
+
+**`abis` never has a default**, in either call: a default would mean an app
+ships one ABI, or three, without ever saying which. Same for the one thing the
+rules cannot see — an app whose plugins have no native half writes
+`plugin_native_libs = {}` to say so.
+
+A project with **no plugin graph at all** — one that never calls
+`plugins.project()` — declares both BUILD phases:
+`flutter_app(plugin_deps = None)` drops the two Dart guards that compare against
+the generated plugin graph, and `flutter_android_binary(plugins = None)` emits
+deliberately empty plugin-class, plugin-native, recipe-library and registrant
+contributions without constructing any `@flutter_plugins` label. `plugin_deps`
+also relocates the committed Maven segment if it does not sit at the repo root.
+
+Those two values do **not** remove the AndroidX dependencies required by the
+Flutter engine embedding. The consumer must still create the embedding-only
+Maven graph in `MODULE.bazel`, then instantiate
+`flutter_embedding_library(name = "flutter_embedding")` in its Android package:
+
+```python
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "flutter_maven",
+    artifacts = [
+        "androidx.lifecycle:lifecycle-common:2.7.0",
+        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
+        "androidx.lifecycle:lifecycle-process:2.7.0",
+        "androidx.lifecycle:lifecycle-runtime:2.7.0",
+        "androidx.fragment:fragment:1.7.1",
+        "androidx.annotation:annotation:1.8.1",
+        "androidx.tracing:tracing:1.2.0",
+        "androidx.core:core:1.13.1",
+        "androidx.window:window-java:1.2.0",
+        "androidx.window:window:1.2.0",
+        "androidx.exifinterface:exifinterface:1.4.1",
+        "com.getkeepsafe.relinker:relinker:1.4.5",
+    ],
+    repositories = ["https://maven.google.com", "https://repo1.maven.org/maven2"],
+    version_conflict_policy = "pinned",
+)
+use_repo(maven, "flutter_maven")
+```
+
+`flutter_app` deliberately does not expose alternate `pubspec.yaml` or
+`.dart_tool/package_config.json` paths: `flutter build bundle` reads those two
+standard locations from the staged project root and exposes no relocation
+flags. Use the lower-level Dart rules if only kernel/AOT compilation follows a
+nonstandard layout; the asset half cannot honestly support it.
+
+`flutter_embedding_library` stays the consumer's to instantiate: its AndroidX
+deps come from the Maven repository *this project's* MODULE.bazel creates, and a
+label naming that from inside the rules would resolve against the rules' own
+graph. Everything else the rules generate — `@flutter_plugins`, the engine jars,
+the SDK — is named for you.
+
+Full per-attribute verdicts, with the measured before/after counts:
+[`docs_internal/api-surface.md`](docs_internal/api-surface.md).
+
 ## Targets
 
 ```sh
@@ -142,15 +249,16 @@ bazel build //app:assets_debug      # debug bundle, ships kernel_blob.bin
 bazel build //app:path_deps_check   # guard: fails on undeclared path: deps
 bazel build //app:plugins_check     # guard: fails on stale plugin_deps.MODULE.bazel
 bazel build //app:dart_registrant_check  # guard: fails on stale Dart plugin registrant
-bazel build //app/android/app:flutter_check  # guard: bundle completeness + code assets
+bazel build //app/android/app:demo_app_flutter_check  # guard: bundle completeness + code assets
 bazel build //app/android/app:demo_app   # signed APK
 ```
 
 ### Validating a change
 
 ```sh
-bazel test //...                                   # guards + buildifier
-(cd tests/consumer && bazel build --nobuild //...) # the public API, as a consumer sees it
+bazel test //...                                    # guards + buildifier
+(cd tests/consumer && bazel build --nobuild //...)          # the public API, as a consumer sees it
+(cd tests/consumer && bazel test --build_tests_only //...)  # the consumer module's behaviour checks
 ```
 
 The guards fail as **actions**, not as test assertions, which is deliberate and
@@ -248,7 +356,7 @@ A recipe is also the **per-package reversal of the gate**: `prebuilt_jni_libs`
 stays gated for every package that has not been given an answer, instead of
 being switched off globally the moment one plugin needs it.
 
-And `//app/android/app:flutter_check` makes the class-D failure loud. A package with a
+And `//app/android/app:demo_app_flutter_check` makes the class-D failure loud. A package with a
 build hook declares an asset id that the Dart VM resolves to a filename and
 `dlopen`s; nothing else in the build connects that to whether a library actually
 reached `lib/<abi>/`. The check compares the two and fails at build time, where

@@ -96,13 +96,56 @@ def engine_jar_label(abi):
 def gen_snapshot_label(abi):
     """The @flutter_sdk target holding this ABI's gen_snapshot.
 
+    A `Label`, for the same reason engine_jar_label returns one: a string handed
+    to an attribute from inside a macro resolves in the *caller's* repo mapping,
+    and @flutter_sdk is our extension's. Resolving here is what lets a consumer
+    import nothing from the `flutter` extension at all.
+
     Args:
       abi: an Android ABI name, a key of ABIS.
 
     Returns:
-      A label string.
+      A Label for that ABI's gen_snapshot.
     """
-    return "@flutter_sdk//:gen_snapshot_" + abi
+    return Label("@flutter_sdk//:gen_snapshot_" + abi)
+
+# The API level the whole Android build targets: the `minSdkVersion` an APK
+# declares, and the `ANDROID_PLATFORM` a plugin's CMake build compiles against.
+# One constant because the two have to agree, and they are read from two
+# different files -- android.bzl for the manifest, plugins.bzl for CMake.
+#
+# What an APK finally declares can be *higher*: rules_android applies its own
+# min-SDK floor during resource processing (`bump_min_sdk`, currently 23) and
+# clamps `manifest_values` against it, so this is the floor these rules ask for,
+# not the floor that ships. See docs_internal/api-surface.md.
+MIN_SDK = 21
+
+# The generated plugin repository's per-slice aggregates. plugins.bzl emits these
+# target names and android.bzl derives labels for them, so the contract lives
+# here rather than as a string that happens to match in two files.
+_PLUGIN_REPO_TARGETS = {
+    # Every .so a package *recipe* contributed for one ABI.
+    "recipe_libraries": "native_libs_{}",
+    # Every .so the native *plugins* built for one ABI.
+    "plugin_native_libraries": "plugin_libs_{}",
+}
+
+def plugin_repo_target(kind, abi):
+    """Target name in @flutter_plugins holding one ABI's libraries.
+
+    Args:
+      kind: a key of _PLUGIN_REPO_TARGETS -- the contribution kind it feeds.
+      abi: the ABI whose aggregate is wanted.
+
+    Returns:
+      A bare target name, without a repository or package.
+    """
+    if kind not in _PLUGIN_REPO_TARGETS:
+        fail("plugin_repo_target: unknown kind '{}'. Known: {}.".format(
+            kind,
+            sorted(_PLUGIN_REPO_TARGETS),
+        ))
+    return _PLUGIN_REPO_TARGETS[kind].format(abi)
 
 def check_abis(abis, where):
     """Fails with the supported set listed, rather than a KeyError.

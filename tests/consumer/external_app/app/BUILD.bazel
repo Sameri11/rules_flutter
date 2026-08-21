@@ -1,0 +1,9 @@
+load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_app(
+    abis = ["arm64-v8a"],
+    entrypoint = "lib/alternate$release.dart",
+    plugin_deps = None,
+)

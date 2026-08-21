@@ -1,0 +1,14 @@
+{
+  "roots": [
+    "external_app"
+  ],
+  "packages": [
+    {
+      "name": "external_app",
+      "version": "1.0.0+1",
+      "dependencies": [],
+      "devDependencies": []
+    }
+  ],
+  "configVersion": 1
+}

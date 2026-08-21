@@ -1,0 +1,29 @@
+# The standard `flutter create` layout, so `flutter_app()` can be called with
+# nothing but facts it refuses to guess. Everything here exists to *be* that
+# layout: pubspec.yaml, pubspec.lock,
+# .dart_tool/{version,package_graph.json,package_config.json}, lib/main.dart,
+# and one asset.
+#
+# It selects a nondefault entrypoint permanently: analysis then covers the
+# parameter on `flutter_assets`, while smooth_app executes the same shape
+# end-to-end. The asset action must pass it as `flutter build bundle --target`;
+# letting Flutter default to lib/main.dart would combine two programs.
+#
+# `plugin_deps = None` declares no plugin graph. The Android target in the root
+# package pairs that with `plugins = None`, proving the complete shape creates no
+# @flutter_plugins label and defaults to no federated Dart registrant.
+
+load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_app(
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+    ],
+    # Local-only artifacts, named so the debug shape is analysed too.
+    debug = True,
+    entrypoint = "lib/alternate$release.dart",
+    plugin_deps = None,
+)

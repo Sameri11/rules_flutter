@@ -9,22 +9,20 @@
 load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load("//tools/flutter:android.bzl", "flutter_android_binary")
-load("//tools/flutter:embedding.bzl", "flutter_embedding_deps", "flutter_embedding_library")
+load("//tools/flutter:embedding.bzl", "flutter_embedding_library")
 
 package(default_visibility = ["//visibility:public"])
 
 # Every plugin `pub get` reported as having an Android native build. The
 # aggregate is generated from .flutter-plugins-dependencies, so adding a plugin
-# to pubspec.yaml is the only step -- see //tools/flutter:plugins.bzl.
+# to pubspec.yaml is the only step -- see //tools/flutter:plugins.bzl. Named
+# here only because :generated_plugin_registrant and :main_activity need it;
+# the APK derives it.
 PLUGINS = ["@flutter_plugins//:all"]
 
-# The Flutter asset bundle. Named once: android_binary needs both the target and
-# the path prefix it sits under, and those must agree.
-ASSETS = "//app:assets"
-
 # The ABIs this APK ships. It must be a subset of what //app snapshots and of
-# what MODULE.bazel's plugins.project builds -- :flutter_check fails on any ABI
-# missing a piece, whichever half is short.
+# what MODULE.bazel's plugins.project builds -- :demo_app_flutter_check fails on
+# any ABI missing a piece, whichever half is short.
 ABIS = [
     "arm64-v8a",
     "x86_64",
@@ -46,43 +44,16 @@ flutter_embedding_library(name = "flutter_embedding")
 # bundle check per shape fails the build if any of them is missing a piece; see
 # //tools/flutter:bundle.bzl.
 #
-# The pieces are supplied rather than resolved in the macro because they belong
-# to this project: :flutter_embedding and its Maven deps come from this
-# project's own resolution, and @flutter_plugins is generated from this
-# project's pubspec. The engine is the exception, named nowhere here: the ABI
-# table already knows which jar each ABI needs.
+# Four things are stated: the ABIs, the Dart half's package, the applicationId
+# and this module's own targets. The rest is derived -- //app:app, //app:assets
+# and //app:pubspec from `app`; the per-ABI plugin and recipe jars from `abis`;
+# the manifest, resources, embedding and registrant from the layout
+# `flutter create` produced.
 flutter_android_binary(
     name = "demo_app",
     abis = ABIS,
-    aot = "//app:app",
-    assets = ASSETS,
-    embedding = ":flutter_embedding",
-    embedding_deps = flutter_embedding_deps(),
-    # The manifest and resources `flutter create` generated are used directly,
-    # rather than copied. A copy drifts, and drift is what produced the
-    # missing-theme and targetSdk defects.
-    manifest = "src/main/AndroidManifest.xml",
-    # Values AGP would supply from build.gradle.kts, which the manifest itself
-    # does not carry: ${applicationName} is a placeholder, and the package and
-    # SDK levels live in the gradle `namespace` / `minSdk` / `targetSdk`.
-    # targetSdk 36 matches flutter_tools (FlutterExtension.kt) and is what
-    # enables edge-to-edge on Android 15+.
-    manifest_values = {
-        "applicationId": "com.example.demo_app",
-        "applicationName": "io.flutter.app.FlutterApplication",
-        "minSdkVersion": "21",
-        "targetSdkVersion": "36",
-    },
-    # Both generated per ABI, so these are derived rather than written out --
-    # @flutter_plugins builds a jar per ABI for the recipes and one for the
-    # plugins' own CMake output, and an ABI missing from either fails the check
-    # rather than shipping empty.
-    native_libs = {abi: "@flutter_plugins//:native_libs_" + abi for abi in ABIS},
-    plugin_native_libs = {abi: "@flutter_plugins//:plugin_libs_" + abi for abi in ABIS},
-    plugins = PLUGINS[0],
-    pubspec = "//app:pubspec",
-    registrant = ":generated_plugin_registrant",
-    resource_files = glob(["src/main/res/**"]),
+    app = "//app",
+    manifest_values = {"applicationId": "com.example.demo_app"},
     # The host application. The Flutter join is appended by the macro, so
     # native libraries enter the zip in the order this file always had -- a .so
     # is stored uncompressed and page-aligned, so moving one shifts padding.

@@ -42,7 +42,7 @@ Three properties are deliberate, because they are what makes the gate in
      `package_config.json` instead.
 """
 
-load(":abis.bzl", "ABIS", "check_abis")
+load(":abis.bzl", "ABIS", "MIN_SDK", "check_abis", "plugin_repo_target")
 load(":embedding.bzl", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
@@ -247,10 +247,10 @@ cmake(
 android_native_lib_jar(
     name = "{name}_native_jar_{abi}",
     src = [":{name}_native_{abi}"],
+    # The platform the .so is *built* for is derived from this: the jar saying
+    # one ABI while the cross-compile resolves another's toolchain is exactly
+    # what two separate values allowed.
     abi = "{abi}",
-    # The platform the .so is *built* for. Without it the jar says one ABI while
-    # the cross-compile resolves another's toolchain.
-    platform = "{bazel_platform}",
 )
 
 java_import(
@@ -364,16 +364,15 @@ load("@rules_java//java:defs.bzl", "java_import")
 # this milestone exists to prevent.
 _NATIVE_LIBS_TEMPLATE = """
 flutter_native_libs(
-    name = "native_libs_jar_{abi}",
-    abi = "{abi}",
+    name = "{target}_jar",
     slice = "{abi}",
     deps = [{deps}
     ],
 )
 
 java_import(
-    name = "native_libs_{abi}",
-    jars = [":native_libs_jar_{abi}"],
+    name = "{target}",
+    jars = [":{target}_jar"],
 )
 """
 
@@ -386,7 +385,7 @@ java_import(
 # makes them visible to the bundle check as a per-ABI contribution.
 _PLUGIN_LIBS_TEMPLATE = """
 java_import(
-    name = "plugin_libs_{abi}",
+    name = "{target}",
     jars = [{deps}
     ],
 )
@@ -1063,9 +1062,6 @@ def _package_roots(ctx):
     reached through an external repository: Bazel cannot glob outside the
     workspace.
     """
-    if not ctx.attr.package_config:
-        return {}
-
     roots = {}
     config = json.decode(ctx.read(ctx.attr.package_config))
     for package in config.get("packages", []):
@@ -1221,7 +1217,7 @@ def _flutter_plugins_impl(ctx):
                     ]),
                     "reasons": repr(reasons),
                     "abis": repr(ctx.attr.abis),
-                    "api_level": ctx.attr.api_level,
+                    "api_level": MIN_SDK,
                     "embedding": ctx.attr.embedding,
                 },
                 gate_note = (
@@ -1352,7 +1348,7 @@ def _flutter_plugins_impl(ctx):
                     toolchain_file = toolchain_file,
                     abi = abi,
                     bazel_platform = ABIS[abi].bazel_platform,
-                    api_level = ctx.attr.api_level,
+                    api_level = MIN_SDK,
                 )
                 for abi in ctx.attr.abis
             ])
@@ -1418,7 +1414,7 @@ def _flutter_plugins_impl(ctx):
                      "Either the name is misspelled, or the package is not a " +
                      "dependency of this app.").format(
                         name,
-                        ctx.attr.package_config or "(no package_config given)",
+                        ctx.attr.package_config,
                     ),
                 )
             _stage_package(ctx, name, roots[name])
@@ -1438,7 +1434,7 @@ def _flutter_plugins_impl(ctx):
                 "plugin_deps": repr([]),
                 "reasons": repr([]),
                 "abis": repr(ctx.attr.abis),
-                "api_level": ctx.attr.api_level,
+                "api_level": MIN_SDK,
                 "embedding": ctx.attr.embedding,
             })
             manifest.append({
@@ -1531,13 +1527,17 @@ def _flutter_plugins_impl(ctx):
         "".join([
             _NATIVE_LIBS_TEMPLATE.format(
                 abi = abi,
+                # The target name the APK derives for this contribution. Both
+                # halves read it from plugin_repo_target, so neither file can
+                # rename it alone.
+                target = plugin_repo_target("recipe_libraries", abi),
                 deps = "".join([
                     "\n        \"//{n}:{n}_flutter_native\",".format(n = p["name"])
                     for p in manifest
                     if p["strategy"].startswith("recipe:")
                 ]),
             ) + _PLUGIN_LIBS_TEMPLATE.format(
-                abi = abi,
+                target = plugin_repo_target("plugin_native_libraries", abi),
                 deps = "".join([
                     "\n        \"//{n}:{n}_native_jar_{a}\",".format(n = p["name"], a = abi)
                     for p in manifest
@@ -1572,10 +1572,12 @@ flutter_plugins = repository_rule(
         "package_config": attr.label(
             doc = """The project's .dart_tool/package_config.json.
 
-Only needed to resolve a recipe for a package that is not a Flutter plugin --
-.flutter-plugins-dependencies does not list those. Optional so a project with no
-such recipe declares nothing extra.""",
+Mandatory: it is the only thing that resolves a recipe for a package that is not
+a Flutter plugin, since .flutter-plugins-dependencies does not list those. The
+extension derives it from `metadata`'s package, where `pub get` writes it, so a
+project states nothing extra for it.""",
             allow_single_file = True,
+            mandatory = True,
         ),
         "maven_resolver": attr.string(
             default = "coursier",
@@ -1590,10 +1592,6 @@ such recipe declares nothing extra.""",
         "abis": attr.string_list(
             mandatory = True,
             doc = "Android ABIs native plugin code is built for. Required, always a list.",
-        ),
-        "api_level": attr.int(
-            default = 21,
-            doc = "minSdkVersion CMake builds target; matches the app's manifest_values.",
         ),
         "overrides": attr.string_dict(
             doc = "Package name -> JSON list of Maven coordinates the scraper could not read.",
@@ -1615,9 +1613,9 @@ _project = tag_class(
         "package_config": attr.label(
             doc = """The project's .dart_tool/package_config.json.
 
-Required only if a plugins.package() recipe names a package that is not a Flutter
-plugin -- a package with a Dart build hook and no android/ module never appears
-in .flutter-plugins-dependencies, so there is nothing else to resolve it from.""",
+Derived from `metadata` when unset -- `pub get` writes both, and writes the
+second at `.dart_tool/package_config.json` beside the first. Name it only if
+this project keeps them apart.""",
             allow_single_file = True,
         ),
         "coursier_options": attr.string_list(
@@ -1770,7 +1768,11 @@ what the generated BUILD loads -- and the recipe's own load() statements then
 resolve in that module's repo mapping, not this one's.""",
         ),
         "macro": attr.string(
-            doc = "Name of the macro in bzl_file. Called as macro(name, info).",
+            doc = """Name of the macro in bzl_file. Called as macro(name, info).
+
+Defaults to `<name>_recipe`, which is what every recipe written against these
+rules is called -- one consuming project already computes the name that way
+rather than repeating it per package.""",
         ),
     },
 )
@@ -1792,10 +1794,6 @@ def _flutter_plugins_ext_impl(ctx):
         for package in mod.tags.package:
             if package.artifacts:
                 overrides[package.name] = json.encode(package.artifacts)
-            if package.bzl_file and not package.macro:
-                fail("plugins.package(name = \"{}\") gives bzl_file but no macro".format(
-                    package.name,
-                ))
             if package.macro and not package.bzl_file:
                 fail("plugins.package(name = \"{}\") gives macro but no bzl_file".format(
                     package.name,
@@ -1805,7 +1803,10 @@ def _flutter_plugins_ext_impl(ctx):
                     # Canonical, because the generated repo's repo mapping is
                     # this module's and cannot see the user's apparent names.
                     "bzl": str(package.bzl_file),
-                    "macro": package.macro,
+                    # The convention every recipe follows, so it is stated once
+                    # here rather than per package. A recipe named otherwise
+                    # still says so.
+                    "macro": package.macro or package.name + "_recipe",
                 })
 
     # `project` is honoured from the **root module only**, and deliberately.
@@ -1825,11 +1826,23 @@ def _flutter_plugins_ext_impl(ctx):
             continue
         for project in mod.tags.project:
             check_abis(project.abis, "plugins.project")
+
+            # `pub get` writes both files, and writes package_config beside the
+            # metadata it also wrote: <pkg>/.flutter-plugins-dependencies and
+            # <pkg>/.dart_tool/package_config.json. Deriving it means a recipe
+            # for a non-plugin package -- the only thing that needs it -- works
+            # without the project having declared anything extra.
+            package_config = project.package_config
+            if not package_config:
+                package_config = project.metadata.same_package_label(
+                    ".dart_tool/package_config.json",
+                )
+
             flutter_plugins(
                 name = "flutter_plugins",
                 abis = project.abis,
                 metadata = project.metadata,
-                package_config = project.package_config,
+                package_config = package_config,
                 coursier_options = project.coursier_options,
                 extra_artifacts = project.extra_artifacts,
                 maven_resolver = project.maven_resolver,

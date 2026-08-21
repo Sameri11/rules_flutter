@@ -1,136 +1,29 @@
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load(
-    "//tools/flutter:defs.bzl",
-    "dart_kernel",
-    "flutter_aot_library",
-    "flutter_assets",
-    "pub_path_deps_check",
-    "pub_plugins_check",
-)
-load("//tools/flutter:pubspec.bzl", "flutter_pubspec")
+# The Dart half of the demo app: one call, everything else derived from the
+# layout `flutter create` and `flutter pub get` produced.
+#
+# What used to be here -- the source glob, the entrypoint, the package config,
+# the pub stamp triple, the committed Dart registrant, the pubspec target, three
+# guards and their build_test -- is all default. Only the two facts about *this*
+# app are stated below.
+
+load("//tools/flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
-PUB_STAMP = [
-    ".dart_tool/version",
-    ".dart_tool/package_graph.json",
-    # sha256 per hosted package: makes content differences visible in the
-    # action key, not just version-string differences.
-    "pubspec.lock",
-]
-
-SRCS = glob(["lib/**/*.dart"])
-
-# path: dependencies -- invisible to pubspec.lock, so declared explicitly.
-PATH_DEPS = ["//packages/mylib:srcs"]
-
-# Every fact the build reads out of pubspec.yaml -- the package name that makes
-# a package: URI resolvable, and the version Android publishes -- reaches the
-# rules through this one target. Nothing below spells the package name.
-flutter_pubspec()
-
-# Registers the Dart half of federated plugins. Generated from the same
-# .flutter-plugins-dependencies as the native targets, then committed into lib/
-# so it is addressable by a package: URI.
-# //app:plugins_check fails if it drifts from what the plugin set implies.
-DART_PLUGIN_REGISTRANT = "lib/dart_plugin_registrant.dart"
-
-# --- release: remote-cacheable ------------------------------------------------
-
-# Explicit and always a list -- see flutter_aot_library. Produces //app:app_<abi>.
-ABIS = [
-    "arm64-v8a",
-    "x86_64",
-    "armeabi-v7a",
-]
-
-flutter_aot_library(
-    name = "app",
-    srcs = SRCS,
-    abis = ABIS,
-    dart_plugin_registrant = DART_PLUGIN_REGISTRANT,
-    entrypoint = "lib/main.dart",
-    package_config = ".dart_tool/package_config.json",
-    path_deps = PATH_DEPS,
-    pub_stamp = PUB_STAMP,
-    pubspec = ":pubspec",
-)
-
-flutter_assets(
-    name = "assets",
-    srcs = SRCS,
-    abis = ABIS,
-    assets = glob(["assets/**"]),
-    package_config = ".dart_tool/package_config.json",
-    path_deps = PATH_DEPS,
-    pub_stamp = PUB_STAMP,
-    pubspec = ":pubspec",
-)
-
-# --- debug: local only, never shared ------------------------------------------
-
-dart_kernel(
-    name = "app_debug_kernel",
-    srcs = SRCS,
-    dart_plugin_registrant = DART_PLUGIN_REGISTRANT,
-    entrypoint = "lib/main.dart",
-    mode = "debug",
-    package_config = ".dart_tool/package_config.json",
-    path_deps = PATH_DEPS,
-    pub_stamp = PUB_STAMP,
-    pubspec = ":pubspec",
-)
-
-flutter_assets(
-    name = "assets_debug",
-    srcs = SRCS,
-    abis = ABIS,
-    assets = glob(["assets/**"]),
-    mode = "debug",
-    package_config = ".dart_tool/package_config.json",
-    path_deps = PATH_DEPS,
-    pub_stamp = PUB_STAMP,
-    pubspec = ":pubspec",
-)
-
-# Guard: fails if the committed MODULE.bazel segment no longer matches the
-# Maven coordinates the plugins declare -- e.g. after adding or upgrading one.
-pub_plugins_check(
-    name = "plugins_check",
-    committed = "//:plugin_deps.MODULE.bazel",
-    expected = "@flutter_plugins//:plugin_deps.MODULE.bazel",
-)
-
-# Guard: the Dart registrant is committed into lib/ rather than consumed from
-# the generated repo, because only a file inside the package config has a
-# package: URI -- and the URI has to be machine-independent, since the engine
-# looks the library up by that exact string at runtime.
-pub_plugins_check(
-    name = "dart_registrant_check",
-    committed = "lib/dart_plugin_registrant.dart",
-    expected = "@flutter_plugins//:dart_plugin_registrant.dart",
-)
-
-# Guard: fails if a path: dependency is missing from PATH_DEPS.
-pub_path_deps_check(
-    name = "path_deps_check",
-    path_deps = PATH_DEPS,
-    pubspec_lock = "pubspec.lock",
-)
-
-# The guards above fail as *actions*, not as tests, which is the stronger
-# arrangement: anything depending on one fails too, and the result is
-# remote-cacheable. build_test does not change that -- it only gives
-# `bazel test` a reason to build them, so they stop being checks that run only
-# when someone remembers to name them.
-build_test(
-    name = "guards_test",
-    targets = [
-        ":dart_registrant_check",
-        ":path_deps_check",
-        ":plugins_check",
-        # The code-asset guard moved inside the packaging join, where it can see
-        # both halves it compares -- see //tools/flutter:bundle.bzl.
-        "//app/android/app:demo_app_flutter_check",
+flutter_app(
+    # Explicit and always a list -- there is no default, because one would mean
+    # shipping a single ABI, or three, without saying which. Produces
+    # //app:app_<abi>, and //app:assets carrying all three.
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+        "armeabi-v7a",
     ],
+    # Also emit //app:app_debug_kernel and //app:assets_debug. Local-only
+    # artifacts: a debug kernel ships verbatim with this machine's paths in it.
+    debug = True,
+    # path: dependencies are listed in pubspec.lock but carry no content hash,
+    # so their sources are declared -- and //app:path_deps_check fails the build
+    # if one is missing.
+    path_deps = ["//packages/mylib:srcs"],
 )

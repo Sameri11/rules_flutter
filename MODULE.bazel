@@ -32,10 +32,9 @@ plugins.project(
     # //app/android/app:BUILD.bazel.
     embedding = "//app/android/app:flutter_embedding",
     metadata = "//app:.flutter-plugins-dependencies",
-    # Needed only because a recipe below names `sqlite3`, which is not a Flutter
-    # plugin and so appears nowhere in the metadata file. Written by the same
-    # `pub get`, and the only thing that resolves such a package to a directory.
-    package_config = "//app:.dart_tool/package_config.json",
+    # package_config is not named: it is derived as the sibling `pub get` wrote,
+    # //app:.dart_tool/package_config.json. It is what resolves `sqlite3`, which
+    # is not a Flutter plugin and so appears nowhere in the metadata file.
 )
 
 # Per-package escape hatches. `plugins.package()` is the only one there is: it
@@ -52,9 +51,10 @@ bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = Tr
 # For build_test, which is what makes the guard rules runnable under
 # `bazel test`. The guards fail as *actions*, which is stronger than a test --
 # anything depending on them fails too -- so they are wrapped rather than
-# converted. Already in the graph via buildifier_prebuilt, so declaring it
-# direct fetches nothing new.
-bazel_dep(name = "bazel_skylib", version = "1.8.2", dev_dependency = True)
+# converted. Not a dev_dependency: //tools/flutter:defs.bzl loads it, so it has
+# to be visible to every consumer of the rules, which also means no consumer
+# declares it for this purpose themselves.
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
 
 # --- Android ---------------------------------------------------------------
 # http_jar generates a java_import, so rules_java must be visible to this
@@ -193,18 +193,17 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
     ]
 ]
 
-# The recipes themselves. Each names a .bzl in this project and a macro in it;
-# //tools/flutter:plugins.bzl generates a BUILD that loads the macro by canonical
-# label and hands it the facts the generator would have used.
+# The recipes themselves. Each names a .bzl in this project; the macro in it is
+# `<name>_recipe` by default, and //tools/flutter:plugins.bzl generates a BUILD
+# that loads it by canonical label and hands it the facts the generator would
+# have used.
 plugins.package(
     name = "rive_native",
     bzl_file = "//bazel/flutter:rive_native.bzl",
-    macro = "rive_native_recipe",
 )
 plugins.package(
     name = "sqlite3",
     bzl_file = "//bazel/flutter:sqlite3.bzl",
-    macro = "sqlite3_recipe",
 )
 
 # rive_native: an ordinary Kotlin Android module whose native half is never

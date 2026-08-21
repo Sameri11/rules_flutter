@@ -1,0 +1,8 @@
+common --enable_bzlmod
+
+# The no-plugin APK fixture is an actual android_binary build, not only an
+# analysis target. rules_android 0.7.3's dexer tools do not compile under JDK 25,
+# so this module needs the same JDK-17 pin as a real Android consumer.
+build --merge_android_manifest_permissions
+build --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
+build --java_language_version=17 --java_runtime_version=remotejdk_17
