@@ -66,8 +66,7 @@ Verified properties:
   string comes from the `//packages/mylib` path dependency, so the whole chain
   (kernel -> AOT -> APK) is demonstrably executing our Dart code.
 
-What is *not* done: `versionCode` / `versionName` (empty — Flutter derives them
-from `pubspec.yaml`), plugins using ndk-build, and plugins with dependency
+What is *not* done: plugins using ndk-build, and plugins with dependency
 coordinates the scraper cannot read — including, for now, any plugin declaring
 versions in a `build.gradle.kts` or inside a `buildscript { }` block, which need
 a `plugins.package(artifacts = ...)` until those two gaps are closed. Also
@@ -1014,7 +1013,8 @@ does. But the define is a const String *value* read at runtime, not a source URI
 so `gen_snapshot --strip` cannot discard it — it would put a machine-specific
 absolute path in a shipped release artifact. Only a file inside the package
 config has a stable `package:` URI, so the generated file is committed to `lib/`
-and addressed the same way `entrypoint_uri` already is.
+and addressed the same way the entrypoint already is — both are labels under
+`lib/`, and the package name comes from `flutter_pubspec`.
 
 Verified after the change: `image_picker: ok (no lost data)`, and
 `strings libapp.so | grep -c /Users/` still **0**.

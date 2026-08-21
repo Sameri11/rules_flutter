@@ -80,6 +80,7 @@ flutter_android_binary(
     native_libs = {abi: "@flutter_plugins//:native_libs_" + abi for abi in ABIS},
     plugin_native_libs = {abi: "@flutter_plugins//:plugin_libs_" + abi for abi in ABIS},
     plugins = PLUGINS[0],
+    pubspec = "//app:pubspec",
     registrant = ":generated_plugin_registrant",
     resource_files = glob(["src/main/res/**"]),
     # The host application. The Flutter join is appended by the macro, so

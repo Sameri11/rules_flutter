@@ -7,6 +7,7 @@ load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "gen_snapshot_label")
 load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_binary", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "strip_native_libs")
 load("@flutter_bazel//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
 load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
+load("@flutter_bazel//tools/flutter:pubspec.bzl", "flutter_pubspec")
 load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":assertions.bzl", "expect_equal")
@@ -15,28 +16,37 @@ package(default_visibility = ["//visibility:private"])
 
 # --- defs.bzl: the platform-independent half ---------------------------------
 
+# The single entry point for every pubspec fact.
+flutter_pubspec(
+    name = "pubspec",
+    src = "fixtures/pubspec.yaml",
+)
+
 dart_kernel(
     name = "kernel",
-    srcs = ["fixtures/main.dart"],
-    entrypoint_uri = "package:consumer_test/main.dart",
+    srcs = ["lib/main.dart"],
+    entrypoint = "lib/main.dart",
     package_config = "fixtures/package_config.json",
+    pubspec = ":pubspec",
 )
 
 dart_kernel(
     name = "kernel_debug",
-    srcs = ["fixtures/main.dart"],
-    entrypoint_uri = "package:consumer_test/main.dart",
+    srcs = ["lib/main.dart"],
+    entrypoint = "lib/main.dart",
     mode = "debug",
     package_config = "fixtures/package_config.json",
+    pubspec = ":pubspec",
 )
 
 # target_os is the 0.3 attribute. Named explicitly rather than left default, so
 # renaming or removing it fails here.
 dart_kernel(
     name = "kernel_ios",
-    srcs = ["fixtures/main.dart"],
-    entrypoint_uri = "package:consumer_test/main.dart",
+    srcs = ["lib/main.dart"],
+    entrypoint = "lib/main.dart",
     package_config = "fixtures/package_config.json",
+    pubspec = ":pubspec",
     target_os = "ios",
 )
 
@@ -71,30 +81,31 @@ expect_equal(
 # most consumers use, and its signature is the thing most likely to drift.
 flutter_aot_library(
     name = "aot_library",
-    srcs = ["fixtures/main.dart"],
+    srcs = ["lib/main.dart"],
     # Required and always a list; produces one target per entry.
     abis = [
         "arm64-v8a",
         "x86_64",
         "armeabi-v7a",
     ],
-    dart_plugin_registrant_uri = "package:consumer_test/registrant.dart",
-    entrypoint_uri = "package:consumer_test/main.dart",
+    dart_plugin_registrant = "lib/registrant.dart",
+    entrypoint = "lib/main.dart",
     package_config = "fixtures/package_config.json",
     path_deps = [],
     pub_stamp = ["fixtures/pubspec.lock"],
+    pubspec = ":pubspec",
     strip = True,
     target_os = "android",
 )
 
 flutter_assets(
     name = "assets",
-    srcs = ["fixtures/main.dart"],
+    srcs = ["lib/main.dart"],
     abis = ["arm64-v8a"],
     assets = [],
     package_config = "fixtures/package_config.json",
     pub_stamp = ["fixtures/pubspec.lock"],
-    pubspec = "fixtures/pubspec.yaml",
+    pubspec = ":pubspec",
 )
 
 pub_path_deps_check(

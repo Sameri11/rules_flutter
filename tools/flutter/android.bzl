@@ -17,6 +17,7 @@ load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolch
 load("@rules_java//java:defs.bzl", "java_import")
 load(":abis.bzl", "ABIS", "check_abis", "engine_jar_label")
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
+load(":pubspec.bzl", "FlutterPubspecInfo")
 
 def _jni_lib_jar_impl(ctx):
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
@@ -219,6 +220,66 @@ android_binary's classpath where the original jar was.""",
         ),
     },
     toolchains = use_cc_toolchain(),
+)
+
+def _flutter_android_manifest_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name + "/AndroidManifest.xml")
+
+    args = ctx.actions.args()
+
+    pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
+
+    args.add(ctx.file._injector)
+    args.add("--version-name", pubspec.version_name)
+    args.add("--version-code", pubspec.version_code)
+    args.add("--manifest", ctx.file.manifest)
+    args.add("--out", out)
+
+    ctx.actions.run_shell(
+        command = 'exec python3 "$@"',
+        arguments = [args],
+        inputs = [
+            # The two version facts, not pubspec.yaml: an edit elsewhere in the
+            # pubspec must not repackage the APK's resources.
+            pubspec.version_name,
+            pubspec.version_code,
+            ctx.file.manifest,
+            ctx.file._injector,
+        ],
+        outputs = [out],
+        mnemonic = "FlutterAndroidManifest",
+        progress_message = "Injecting pubspec version into AndroidManifest %{label}",
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+flutter_android_manifest = rule(
+    implementation = _flutter_android_manifest_impl,
+    doc = """An AndroidManifest carrying pubspec.yaml's version.
+
+`versionCode` and `versionName` are the one pair of manifest values Bazel
+cannot pass through `manifest_values`: that attribute is a load-time dict and
+the version is in a file. An APK without a versionCode cannot be published, so
+the value has to reach the manifest through an action.
+
+The source manifest is otherwise copied verbatim -- one line differs -- so it
+stays readable against the template `flutter create` generated.""",
+    attrs = {
+        "manifest": attr.label(
+            allow_single_file = [".xml"],
+            mandatory = True,
+            doc = "The app's AndroidManifest.xml.",
+        ),
+        "pubspec": attr.label(
+            mandatory = True,
+            providers = [FlutterPubspecInfo],
+            doc = "A flutter_pubspec target; supplies both version facts.",
+        ),
+        "_injector": attr.label(
+            default = "//tools/flutter:inject_version.py",
+            allow_single_file = True,
+        ),
+    },
 )
 
 # --- The join: seven named contributions, one target for android_binary -------
@@ -653,6 +714,7 @@ def flutter_android_binary(
         deps = [],
         embedding_deps = [],
         engine_jars = {},
+        pubspec = None,
         **kwargs):
     """A fat APK and one per ABI, from a single declaration.
 
@@ -691,10 +753,34 @@ def flutter_android_binary(
         android_binary had.
       embedding_deps: the embedding's Maven dependencies.
       engine_jars: ABI -> an engine jar overriding the ABI table's.
+      pubspec: the app's pubspec.yaml. Supplying it writes `version:` into the
+        manifest as versionCode and versionName; omitting it leaves both unset.
       **kwargs: passed to every android_binary -- manifest, manifest_values,
         resource_files, visibility, tags.
     """
     check_abis(abis, "flutter_android_binary " + name)
+
+    if pubspec:
+        # aapt takes these two from `manifest_values` in preference to the
+        # manifest, silently. Two sources for one value is the failure this
+        # whole file is arranged against, so the collision is refused here
+        # rather than resolved.
+        for key in ("versionCode", "versionName"):
+            if key in kwargs.get("manifest_values", {}):
+                fail(
+                    "flutter_android_binary {}: manifest_values['{}'] and ".format(name, key) +
+                    "`pubspec` both set the version, and manifest_values wins " +
+                    "Drop one.",
+                )
+
+        # One manifest for every variant: the version does not vary by ABI.
+        manifest = name + "_manifest"
+        flutter_android_manifest(
+            name = manifest,
+            manifest = kwargs.pop("manifest"),
+            pubspec = pubspec,
+        )
+        kwargs["manifest"] = ":" + manifest
 
     variants = [(name, abis)]
     if len(abis) > 1:

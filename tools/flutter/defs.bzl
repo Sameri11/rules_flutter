@@ -24,6 +24,7 @@ problem and is not attempted here.
 
 load("@flutter_sdk//:sdk.bzl", "FLUTTER_BIN", "FLUTTER_ENV")
 load(":abis.bzl", "ABIS", "check_abis", "gen_snapshot_label")
+load(":pubspec.bzl", "FlutterPubspecInfo")
 
 # Release actions may be shared through a remote cache.
 #
@@ -51,6 +52,24 @@ _EXEC_DEBUG = dict(_EXEC_RELEASE, **{"local": "1"})
 def _exec_requirements(mode):
     return _EXEC_DEBUG if mode == "debug" else _EXEC_RELEASE
 
+def _library_path(ctx, file, attribute):
+    """A source file's path within its package, as a `package:` URI suffix.
+
+    `package:<name>/x.dart` resolves to `lib/x.dart`, so the URI carries the
+    path under lib/ and nothing else. Taking it from a label rather than asking
+    for the URI is what keeps the package name out of BUILD files -- and a
+    typo fails here instead of producing a URI that resolves to nothing.
+    """
+    prefix = (ctx.label.package + "/" if ctx.label.package else "") + "lib/"
+    if not file.short_path.startswith(prefix):
+        fail("{}: {} must be a .dart file under {}, got {}.".format(
+            ctx.label,
+            attribute,
+            prefix,
+            file.short_path,
+        ))
+    return file.short_path[len(prefix):]
+
 def _dart_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
     release = ctx.attr.mode != "debug"
@@ -71,6 +90,8 @@ def _dart_kernel_impl(ctx):
         fail("platform_strong.dill not found for mode '{}'".format(ctx.attr.mode))
 
     args = ctx.actions.args()
+
+    args.add(ctx.executable._dartaotruntime)
     args.add(ctx.file._frontend_server)
     args.add("--sdk-root", sdk_root + "/")
     args.add("--target", "flutter")
@@ -107,20 +128,38 @@ def _dart_kernel_impl(ctx):
     # reads at runtime, so gen_snapshot --strip cannot discard it the way it
     # discards source URIs. That would put a machine-specific absolute path in a
     # shipped release artifact -- see "Path embedding" -- so the registrant is
-    # addressed through the package config instead, exactly like entrypoint_uri.
-    if ctx.attr.dart_plugin_registrant_uri:
-        args.add("--source", ctx.attr.dart_plugin_registrant_uri)
-        args.add("--source", "package:flutter/src/dart_plugin_registrant.dart")
-        args.add("-Dflutter.dart_plugin_registrant={}".format(
-            ctx.attr.dart_plugin_registrant_uri,
-        ))
+    # addressed through the package config instead, exactly like the entrypoint.
+    pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
 
-    args.add("--output-dill", dill)
-    args.add(ctx.attr.entrypoint_uri)
+    # The package name is file content, so the URIs cannot be built here -- an
+    # attribute is read at analysis and a file is read at execution. The two
+    # library paths are assembled against it by the wrapper below.
+    scalars = ctx.actions.args()
+    scalars.add(pubspec.package_name)
+    scalars.add(_library_path(ctx, ctx.file.entrypoint, "entrypoint"))
+    scalars.add(
+        _library_path(ctx, ctx.file.dart_plugin_registrant, "dart_plugin_registrant") if ctx.file.dart_plugin_registrant else "",
+    )
+    scalars.add(dill)
 
-    ctx.actions.run(
-        executable = ctx.executable._dartaotruntime,
-        arguments = [args],
+    ctx.actions.run_shell(
+        command = """set -euo pipefail
+PKG="$(cat "$1")"; shift
+ENTRYPOINT="$1"; shift
+REGISTRANT="$1"; shift
+DILL="$1"; shift
+
+if [ -n "$REGISTRANT" ]; then
+    set -- "$@" \
+        --source "package:$PKG/$REGISTRANT" \
+        --source "package:flutter/src/dart_plugin_registrant.dart" \
+        "-Dflutter.dart_plugin_registrant=package:$PKG/$REGISTRANT"
+fi
+
+exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
+""",
+        arguments = [scalars, args],
+        tools = [ctx.attr._dartaotruntime[DefaultInfo].files_to_run],
         # package_config.json is passed as --packages but deliberately NOT
         # declared. Its rootUri entries are absolute paths into ~/.pub-cache, so
         # declaring it would put machine-specific bytes in the action key and
@@ -140,9 +179,17 @@ def _dart_kernel_impl(ctx):
         # `srcs` or a shared cache can serve the wrong artifact.
         inputs = depset(
             direct = [
-                ctx.file._frontend_server,
-                ctx.file._sdk_version,
-            ] + ctx.files.pub_stamp + ctx.files.path_deps,
+                         ctx.file._frontend_server,
+                         ctx.file._sdk_version,
+                         # The name alone, not pubspec.yaml: a version bump or an edit
+                         # to the asset list must not invalidate the kernel.
+                         pubspec.package_name,
+                         # Declared as well as globbed into srcs. These two are labels,
+                         # so an app whose srcs miss the entrypoint still rebuilds when
+                         # it changes rather than serving a stale kernel.
+                         ctx.file.entrypoint,
+                     ] + ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
+                     ctx.files.pub_stamp + ctx.files.path_deps,
             transitive = [platform.files, depset(ctx.files.srcs)],
         ),
         outputs = [dill],
@@ -161,17 +208,27 @@ dart_kernel = rule(
             allow_files = [".dart"],
             doc = "Dart sources. Used for change detection, not passed directly.",
         ),
-        "entrypoint_uri": attr.string(
+        "pubspec": attr.label(
             mandatory = True,
-            doc = "Entrypoint as a package URI, e.g. package:demo_app/main.dart.",
+            providers = [FlutterPubspecInfo],
+            doc = "A flutter_pubspec target; supplies the package name.",
         ),
-        "dart_plugin_registrant_uri": attr.string(
-            doc = """Package URI of the generated Dart plugin registrant.
+        "entrypoint": attr.label(
+            allow_single_file = [".dart"],
+            mandatory = True,
+            doc = """The app's entrypoint, e.g. `lib/main.dart`.
 
-e.g. package:demo_app/dart_plugin_registrant.dart. Registers the Dart half of
-federated plugins. Like entrypoint_uri this is a URI, not a label -- the file
-itself arrives through srcs. Must be a package: URI so the value the engine
-looks up is machine-independent. Omit for an app with no federated plugins.""",
+Reached as `package:<pubspec name>/<path under lib/>`, which is why it has to
+live under lib/: nothing outside a package's lib/ has a package: URI.""",
+        ),
+        "dart_plugin_registrant": attr.label(
+            allow_single_file = [".dart"],
+            doc = """The generated Dart plugin registrant, e.g.
+`lib/dart_plugin_registrant.dart`.
+
+Registers the Dart half of federated plugins. Addressed by package: URI like
+the entrypoint, so the value the engine looks up is machine-independent. Omit
+for an app with no federated plugins.""",
         ),
         "package_config": attr.label(
             allow_single_file = True,
@@ -329,7 +386,7 @@ unsupported instruction.""",
     },
 )
 
-def flutter_aot_library(name, srcs, abis, entrypoint_uri, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant_uri = "", target_os = "android", strip = True, **kwargs):
+def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, **kwargs):
     """Convenience wrapper: Dart sources straight through to libapp.so.
 
     Release-only: debug builds ship kernel_blob.bin and never run gen_snapshot,
@@ -351,11 +408,12 @@ def flutter_aot_library(name, srcs, abis, entrypoint_uri, package_config, pub_st
       name: prefix for the generated targets.
       srcs: Dart sources, for change detection.
       abis: Android ABIs to snapshot for. Required, always a list.
-      entrypoint_uri: entrypoint as a package URI.
+      pubspec: a flutter_pubspec target; supplies the package name.
+      entrypoint: the app's entrypoint under lib/, as a label.
       package_config: the .dart_tool/package_config.json from `pub get`.
       pub_stamp: extra .dart_tool metadata declared for invalidation.
       path_deps: sources of `path:` dependencies.
-      dart_plugin_registrant_uri: package URI of the Dart plugin registrant.
+      dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
       target_os: OS the kernel is compiled for; see dart_kernel.
       strip: drop DWARF from each ELF.
       **kwargs: visibility, tags -- anything both rules should share.
@@ -364,11 +422,12 @@ def flutter_aot_library(name, srcs, abis, entrypoint_uri, package_config, pub_st
     dart_kernel(
         name = name + "_kernel",
         srcs = srcs,
-        entrypoint_uri = entrypoint_uri,
+        pubspec = pubspec,
+        entrypoint = entrypoint,
         package_config = package_config,
         pub_stamp = pub_stamp,
         path_deps = path_deps,
-        dart_plugin_registrant_uri = dart_plugin_registrant_uri,
+        dart_plugin_registrant = dart_plugin_registrant,
         mode = "release",
         target_os = target_os,
         **kwargs
@@ -420,7 +479,7 @@ def _flutter_assets_impl(ctx):
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
 
     project_files = (
-        [ctx.file.package_config, ctx.file.pubspec] +
+        [ctx.file.package_config, ctx.attr.pubspec[FlutterPubspecInfo].src] +
         ctx.files.assets + ctx.files.srcs + ctx.files.pub_stamp +
         ctx.files.path_deps
     )
@@ -541,7 +600,15 @@ entry point for driving it from another build system.""",
             allow_files = True,
             doc = "Files declared under `assets:` in pubspec.yaml.",
         ),
-        "pubspec": attr.label(allow_single_file = True, mandatory = True),
+        "pubspec": attr.label(
+            mandatory = True,
+            providers = [FlutterPubspecInfo],
+            doc = """A flutter_pubspec target.
+
+`flutter build bundle` parses the pubspec itself -- assets, fonts and
+uses-material-design all come from it -- so this rule stages the file rather
+than a fact read out of it.""",
+        ),
         "package_config": attr.label(allow_single_file = True, mandatory = True),
         "pub_stamp": attr.label_list(allow_files = True),
         "path_deps": attr.label_list(

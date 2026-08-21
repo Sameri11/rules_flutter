@@ -3,5 +3,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "check_path_deps.py",
     "check_native_assets.py",
+    "inject_version.py",
     "merge_native_assets.py",
+    "read_pubspec.py",
 ])
