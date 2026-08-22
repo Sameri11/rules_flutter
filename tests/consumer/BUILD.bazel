@@ -512,3 +512,18 @@ build_test(
     name = "apk_external_app_contents_test",
     targets = [":apk_external_app_contents_check"],
 )
+
+# --- external-plugin regression ----------------------------------------------
+#
+# Proves absent dependency recipes are ignored and generated Maven labels use
+# this project's `plugin_maven` mapping.
+pub_plugins_check(
+    name = "fake_plugin_deps_check",
+    committed = "fixtures/plugin_deps.MODULE.bazel",
+    expected = "@flutter_plugins//:plugin_deps.MODULE.bazel",
+)
+
+build_test(
+    name = "fake_plugin_test",
+    targets = ["@flutter_plugins//fake_plugin:fake_plugin"],
+)

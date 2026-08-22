@@ -93,7 +93,7 @@ def mobile_scanner_recipe(name, info):
         exports_manifest = 1,
         resource_files = info.resource_files,
         deps = [info.embedding] + info.plugin_deps + info.coordinates + [
-            "@flutter_maven//:com_google_guava_guava",
+            info.maven_repo + "//:com_google_guava_guava",
         ],
     )
     _no_native(name)
@@ -116,7 +116,7 @@ def sqflite_android_recipe(name, info):
         exports_manifest = True,
         resource_files = info.resource_files,
         deps = [info.embedding] + info.plugin_deps + info.coordinates + [
-            "@flutter_maven//:org_jetbrains_annotations",
+            info.maven_repo + "//:org_jetbrains_annotations",
         ],
     )
     _no_native(name)

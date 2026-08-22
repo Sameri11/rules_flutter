@@ -1,0 +1,11 @@
+group 'com.example.fake_plugin'
+version '1.0'
+
+android {
+    namespace 'com.example.fake_plugin'
+}
+
+// Exists only in @plugin_maven, so hardcoded @flutter_maven labels fail.
+dependencies {
+    implementation 'androidx.annotation:annotation-experimental:1.4.1'
+}

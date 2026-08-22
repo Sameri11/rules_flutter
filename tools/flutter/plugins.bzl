@@ -339,6 +339,9 @@ PACKAGE_INFO = struct(
     # Maven coordinates scraped from the plugin's build.gradle, already merged
     # into the single maven.install. Labels here are resolvable.
     coordinates = {coordinates},
+    # Canonical Maven repository for labels a recipe adds beyond `coordinates`.
+    # Apparent names would resolve in the extension's module instead.
+    maven_repo = "{maven_repo}",
     plugin_deps = {plugin_deps},
     # Reason codes the generator raised. A recipe exists to answer these, so it
     # is given them rather than having to rediscover them.
@@ -1210,7 +1213,11 @@ def _flutter_plugins_impl(ctx):
                     "android_manifest": repr("android/src/main/AndroidManifest.xml"),
                     "resource_files": repr(_list_files(root, "android/src/main/res", [])),
                     "namespace": repr(package),
-                    "coordinates": repr([maven_label(c) for c in coordinates]),
+                    "coordinates": repr([
+                        maven_label(c, repo = ctx.attr.maven_repo)
+                        for c in coordinates
+                    ]),
+                    "maven_repo": ctx.attr.maven_repo,
                     "plugin_deps": repr([
                         "//{n}:{n}".format(n = d)
                         for d in plugin.get("dependencies", [])
@@ -1381,7 +1388,9 @@ def _flutter_plugins_impl(ctx):
                         "\n        \"//{n}:{n}\",".format(n = d)
                         for d in plugin.get("dependencies", [])
                     ] + [
-                        "\n        \"{}\",".format(maven_label(c))
+                        "\n        \"{}\",".format(
+                            maven_label(c, repo = ctx.attr.maven_repo),
+                        )
                         for c in coordinates
                     ] + native_deps,
                 ),
@@ -1402,11 +1411,17 @@ def _flutter_plugins_impl(ctx):
     # ships a Dart build hook and no android/ module, so it appears nowhere in
     # .flutter-plugins-dependencies and a plugin-keyed registry could never name
     # it. package_config.json, written by the same `pub get`, resolves it.
+    # Ignore dependency recipes for packages absent from the root app.
+    foreign_recipes = []
+
     if unmatched_recipes:
         roots = _package_roots(ctx)
         for name in sorted(unmatched_recipes.keys()):
             recipe = unmatched_recipes[name]
             if name not in roots:
+                if not recipe["root"]:
+                    foreign_recipes.append(name)
+                    continue
                 fail(
                     ("plugins.package() registered a recipe for `{}`, but no such " +
                      "package is in the resolution.\n" +
@@ -1431,6 +1446,7 @@ def _flutter_plugins_impl(ctx):
                 "resource_files": repr([]),
                 "namespace": repr(None),
                 "coordinates": repr([]),
+                "maven_repo": ctx.attr.maven_repo,
                 "plugin_deps": repr([]),
                 "reasons": repr([]),
                 "abis": repr(ctx.attr.abis),
@@ -1497,11 +1513,22 @@ def _flutter_plugins_impl(ctx):
         # stopping it for. Fires at fetch, which is when the answer changed.
         print("\n".join(lines))
 
+    if foreign_recipes:
+        # buildifier: disable=print
+        # Report without blocking unrelated plugins.
+        print("\n".join(
+            ["plugins.package() recipes registered by a dependency, for packages " +
+             "this project does not have:"] +
+            ["  {}".format(n) for n in foreign_recipes] +
+            ["Ignored. They apply to the module that registered them."],
+        ))
+
     ctx.file("plugins.json", json.encode({
         "plugins": manifest,
         # A fetch prints once and then caches; this is where it survives.
         "stale_overrides": stale_overrides,
         "unused_overrides": unused_overrides,
+        "foreign_recipes": foreign_recipes,
     }))
 
     # Three aggregates, so the app names "every plugin", "every library a recipe
@@ -1584,10 +1611,15 @@ project states nothing extra for it.""",
             values = ["coursier", "gradle", "maven"],
         ),
         "maven_lock_file": attr.string(),
+        # buildifier: disable=canonical-repository
+        "maven_repo": attr.string(
+            mandatory = True,
+            doc = "Canonical repository the plugins' Maven coordinates resolve in, e.g. `@@rules_jvm_external++maven+flutter_maven`.",
+        ),
         "coursier_options": attr.string_list(),
         "extra_artifacts": attr.string_list(),
         "recipes": attr.string_dict(
-            doc = "Package name -> JSON {bzl, macro} naming the recipe to hand generation to.",
+            doc = "Package name -> JSON {bzl, macro, root} naming the recipe to hand generation to.",
         ),
         "abis": attr.string_list(
             mandatory = True,
@@ -1703,6 +1735,14 @@ one. See docs_internal/package-recipes.md. `gradle` and `maven` both require
         "maven_lock_file": attr.string(
             doc = "Label of the maven_install.json lock file, e.g. \"//:maven_install.json\".",
         ),
+        "maven_repo": attr.label(
+            mandatory = True,
+            doc = """Any label in the Maven repository containing plugin coordinates.
+
+Conventionally `@flutter_maven//:pin`; the target need not exist. The label lets
+the extension retain the caller-resolved canonical repository name because
+apparent names in generated BUILD files resolve in the extension's mapping.""",
+        ),
         "abis": attr.string_list(
             mandatory = True,
             doc = """Android ABIs every native plugin is built for.
@@ -1807,6 +1847,9 @@ def _flutter_plugins_ext_impl(ctx):
                     # here rather than per package. A recipe named otherwise
                     # still says so.
                     "macro": package.macro or package.name + "_recipe",
+                    # Root recipes describe this app and must match its packages;
+                    # dependency recipes may describe packages it does not use.
+                    "root": mod.is_root,
                 })
 
     # `project` is honoured from the **root module only**, and deliberately.
@@ -1838,6 +1881,11 @@ def _flutter_plugins_ext_impl(ctx):
                     ".dart_tool/package_config.json",
                 )
 
+            # buildifier: disable=canonical-repository
+            # Generated repos do not inherit the caller's mapping, so retain the
+            # caller-resolved canonical `@@` name.
+            maven_repo = "@@" + project.maven_repo.repo_name
+
             flutter_plugins(
                 name = "flutter_plugins",
                 abis = project.abis,
@@ -1847,6 +1895,7 @@ def _flutter_plugins_ext_impl(ctx):
                 extra_artifacts = project.extra_artifacts,
                 maven_resolver = project.maven_resolver,
                 maven_lock_file = project.maven_lock_file,
+                maven_repo = maven_repo,
                 overrides = overrides,
                 recipes = recipes,
                 # The embedding label comes from the root module; android_bzl

@@ -37,7 +37,20 @@ maven.install(
     ],
     version_conflict_policy = "pinned",
 )
-use_repo(maven, "flutter_maven")
+
+# Keep this coordinate out of @flutter_maven so a hardcoded repo label fails.
+maven.install(
+    name = "plugin_maven",
+    artifacts = [
+        "androidx.annotation:annotation-experimental:1.4.1",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+use_repo(maven, "flutter_maven", "plugin_maven")
 
 local_path_override(
     module_name = "flutter_bazel",
@@ -48,6 +61,26 @@ local_path_override(
     module_name = "external_app",
     path = "external_app",
 )
+
+# As a real bzlmod consumer, this fixture inherits flutter_bazel's recipes for
+# absent rive_native/sqlite3 packages. Its separate Maven repo catches labels
+# resolved through flutter_bazel instead of this module.
+fake_plugin_metadata = use_repo_rule("//:fixtures/plugin_fixture.bzl", "fake_plugin_metadata")
+
+fake_plugin_metadata(
+    name = "fake_plugin_metadata",
+    marker = "//:fixtures/fake_plugin/pubspec.yaml",
+)
+
+plugins = use_extension("@flutter_bazel//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins.project(
+    abis = ["arm64-v8a"],
+    embedding = "//:flutter_embedding_no_plugins",
+    maven_repo = "@plugin_maven//:pin",
+    metadata = "@fake_plugin_metadata//:.flutter-plugins-dependencies",
+    package_config = "@fake_plugin_metadata//:package_config.json",
+)
+use_repo(plugins, "flutter_plugins")
 
 flutter = use_extension("@flutter_bazel//tools/flutter:repo.bzl", "flutter")
 use_repo(flutter, "flutter_sdk")

@@ -297,9 +297,10 @@
     },
     "//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "he+u71hfeAFemQAUU33gBu4bH06UC5fvx5oOPU2br2c=",
-        "usagesDigest": "oAIN+qftlebkHhwyRjM/iZ0yilK9jLofphD3X8zRPfw=",
+        "bzlTransitiveDigest": "gDcvI9zmKQZ+xFonAbEzkUyqz/5w/9B5h07QsdzbLoo=",
+        "usagesDigest": "IOvk42tjBj8SLR3g53bKUBfl0JQCnQ5qqr5MHddPCh0=",
         "recordedInputs": [
+          "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
           "REPO_MAPPING:,rules_java rules_java+",
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
           "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
@@ -334,10 +335,11 @@
               "extra_artifacts": [],
               "maven_resolver": "coursier",
               "maven_lock_file": "",
+              "maven_repo": "'@@rules_jvm_external++maven+flutter_maven'",
               "overrides": {},
               "recipes": {
-                "rive_native": "{\"bzl\":\"@@//bazel/flutter:rive_native.bzl\",\"macro\":\"rive_native_recipe\"}",
-                "sqlite3": "{\"bzl\":\"@@//bazel/flutter:sqlite3.bzl\",\"macro\":\"sqlite3_recipe\"}"
+                "rive_native": "{\"bzl\":\"@@//bazel/flutter:rive_native.bzl\",\"macro\":\"rive_native_recipe\",\"root\":true}",
+                "sqlite3": "{\"bzl\":\"@@//bazel/flutter:sqlite3.bzl\",\"macro\":\"sqlite3_recipe\",\"root\":true}"
               },
               "embedding": "'@@//app/android/app:flutter_embedding'",
               "android_bzl": "'@@//tools/flutter:android.bzl'",

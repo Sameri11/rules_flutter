@@ -294,11 +294,14 @@
     },
     "@@flutter_bazel+//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "KEeuDJTKmC6vlLafdyD+K9+rTDnqybVClMQTnuQVGZs=",
-        "usagesDigest": "PHlyHjRiphj7SDwKpRz7UX3fRx/hiTIFzxrRFk9bHKQ=",
+        "bzlTransitiveDigest": "COfDh1WwZ1xTUl2ROdDkf8Mztek6dBikeUvkjeN6ZSQ=",
+        "usagesDigest": "3880+XpqeRLp9RrBAzpcWlLg+jH3PDBrlRLBnXCnScs=",
         "recordedInputs": [
+          "REPO_MAPPING:,fake_plugin_metadata +fake_plugin_metadata+fake_plugin_metadata",
+          "REPO_MAPPING:,plugin_maven rules_jvm_external++maven+plugin_maven",
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
           "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
+          "REPO_MAPPING:flutter_bazel+,flutter_maven rules_jvm_external++maven+flutter_maven",
           "REPO_MAPPING:flutter_bazel+,rules_java rules_java+",
           "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
           "REPO_MAPPING:protobuf+,rules_java rules_java+",
@@ -316,7 +319,31 @@
           "REPO_MAPPING:rules_java+,rules_cc rules_cc+",
           "REPO_MAPPING:rules_java++compatibility_proxy+compatibility_proxy,rules_java rules_java+"
         ],
-        "generatedRepoSpecs": {}
+        "generatedRepoSpecs": {
+          "flutter_plugins": {
+            "repoRuleId": "@@flutter_bazel+//tools/flutter:plugins.bzl%flutter_plugins",
+            "attributes": {
+              "abis": [
+                "arm64-v8a"
+              ],
+              "metadata": "@@+fake_plugin_metadata+fake_plugin_metadata//:.flutter-plugins-dependencies",
+              "package_config": "@@+fake_plugin_metadata+fake_plugin_metadata//:package_config.json",
+              "coursier_options": [],
+              "extra_artifacts": [],
+              "maven_resolver": "coursier",
+              "maven_lock_file": "",
+              "maven_repo": "'@@rules_jvm_external++maven+plugin_maven'",
+              "overrides": {},
+              "recipes": {
+                "rive_native": "{\"bzl\":\"@@flutter_bazel+//bazel/flutter:rive_native.bzl\",\"macro\":\"rive_native_recipe\",\"root\":false}",
+                "sqlite3": "{\"bzl\":\"@@flutter_bazel+//bazel/flutter:sqlite3.bzl\",\"macro\":\"sqlite3_recipe\",\"root\":false}"
+              },
+              "embedding": "'@@//:flutter_embedding_no_plugins'",
+              "android_bzl": "'@@flutter_bazel+//tools/flutter:android.bzl'",
+              "recipe_bzl": "'@@flutter_bazel+//tools/flutter:recipe.bzl'"
+            }
+          }
+        }
       }
     },
     "@@flutter_bazel+//tools/flutter:repo.bzl%flutter": {

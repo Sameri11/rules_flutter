@@ -5,6 +5,9 @@
 # The consumer module is its own workspace, so it grows its own set.
 /tests/consumer/bazel-*
 
+# Keep checked-in `.dart_tool` fixtures; ignore generated editor metadata.
+/tests/consumer/**/.dart_tool/extension_discovery/
+
 # Working notes: design reasoning, measurements and dead ends. Kept out of the
 # published repo for now -- see README "Further reading". Rename back to docs/
 # to publish.

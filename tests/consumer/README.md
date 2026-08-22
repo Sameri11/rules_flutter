@@ -27,6 +27,7 @@ behavior checks:
 | `bundle.bzl` | `flutter_bundle_contribution` (all three forms: `srcs`, slice-keyed `libraries`, `empty`), the location constants |
 | `android.bzl` (join) | `flutter_android_libs` over **two** ABIs, and `flutter_android_binary` on top of it — the entry point that names a consumer's APK targets; `:apk_external_app` drives that high-level API from an external module through a real bundle and signed APK |
 | `recipe.bzl` | `flutter_native_contribution` (both the populated and `empty = True` forms), `flutter_native_libs` |
+| `plugins.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`) over a real, checked-in external plugin graph — `:fake_plugin_deps_check`, `:fake_plugin_test` |
 
 That catches the two things a refactor of these rules actually breaks: a symbol
 moving between files (load phase) and an attribute renamed, removed or made
@@ -78,6 +79,35 @@ embedding's Maven dependencies: `MODULE.bazel` declares
 with the complete embedding coordinate list, and imports it with
 `use_repo(maven, "flutter_maven")`.
 
+`fixtures/fake_plugin` is a third package layout: a minimal external Flutter
+plugin, wired up via `plugins.project()` in `MODULE.bazel`. Unlike the
+fixtures above, its two pub-written inputs
+(`.flutter-plugins-dependencies`/`package_config.json`) cannot be checked in
+verbatim — both carry **absolute** `file://` paths into `~/.pub-cache`, unique
+to whichever machine ran `pub get`. `fixtures/plugin_fixture.bzl` is a small
+repository rule that synthesizes both at fetch time from `fake_plugin`'s real
+on-disk location, so the pair stays correct on any checkout. This proves two
+things nothing else here can, because this module reaches `flutter_bazel` the
+same way `hello_bazel` and `smooth-app` do and those two are external to this
+repository:
+
+- A `plugins.package()` recipe a *dependency* registers for a package this
+  project does not have is ignored, not `fail()`-ed on. This module inherits
+  `flutter_bazel`'s own root `MODULE.bazel` `rive_native`/`sqlite3` recipes
+  as dependency-registered tags the moment it calls `plugins.project()` at
+  all — `:fake_plugin_deps_check` builds clean and prints the notice naming
+  both.
+- A generated plugin's Maven coordinate resolves through the **canonical**
+  repository `plugins.project(maven_repo = ...)` named, not through whichever
+  repository happens to be named `@flutter_maven` in `flutter_bazel`'s own
+  mapping. `MODULE.bazel` declares a second, distinctly-named install,
+  `plugin_maven`, containing a coordinate absent from every `flutter_maven`
+  install in the graph; `fake_plugin`'s `build.gradle` depends on it, and
+  `plugins.project(maven_repo = "@plugin_maven//:pin")` names it.
+  `:fake_plugin_test` builds the generated `@flutter_plugins//fake_plugin`
+  target, which only resolves that dependency if `maven_repo` was actually
+  threaded through to `maven_label()` rather than a hardcoded apparent name.
+
 ## What it does not cover
 
 - **General runtime behaviour.** Most fixtures remain stubs and are analysed
@@ -86,11 +116,8 @@ with the complete embedding coordinate list, and imports it with
   and real embedding Maven dependency graph, and `:apk_external_app`, whose
   content test reads its external module's marker from the signed APK. Root
   `app/` and smooth_app cover pluginful behaviour.
-- **The generated `@flutter_plugins` repo.** `plugins.bzl` passes the label of
-  `android.bzl` and `recipe.bzl` into that repo, and those labels have already
-  been broken once by a rename. Reaching that path needs a real plugin graph:
-  `.flutter-plugins-dependencies` carries **absolute** paths into `~/.pub-cache`
-  and package_config's `rootUri` is a `file://` URI, so a checked-in fixture
-  cannot be portable — it would need a repository rule that synthesises both at
-  fetch time, plus a fake plugin tree with an `android/build.gradle` and a
-  `CMakeLists.txt`. `smooth_app` exercises this for real today.
+- **The generated `@flutter_plugins` repo's CMake path.** `fixtures/fake_plugin`
+  (below) reaches the repository-free, non-native half of that path — a plain
+  `android_library` plugin with one Maven coordinate. It declares no
+  `externalNativeBuild`, so `_ndk_root`'s toolchain check and the CMake
+  cross-compile chain stay unreached. `app/` and smooth_app cover that.

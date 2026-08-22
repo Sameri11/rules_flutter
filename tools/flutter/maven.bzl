@@ -5,7 +5,7 @@ generates for it, and both feed the same artifact list, so the mangling and the
 version comparison live in one place rather than being reimplemented per caller.
 """
 
-def maven_label(coordinate, repo = "@flutter_maven"):
+def maven_label(coordinate, repo):
     """`group:artifact[:version]` -> the target rules_jvm_external generates."""
     parts = coordinate.split(":")
     mangled = (parts[0] + "_" + parts[1]).replace(".", "_").replace("-", "_")

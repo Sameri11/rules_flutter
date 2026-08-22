@@ -31,6 +31,7 @@ plugins.project(
     # The embedding target lives in the app, not in the rules -- see
     # //app/android/app:BUILD.bazel.
     embedding = "//app/android/app:flutter_embedding",
+    maven_repo = "@flutter_maven//:pin",
     metadata = "//app:.flutter-plugins-dependencies",
     # package_config is not named: it is derived as the sibling `pub get` wrote,
     # //app:.dart_tool/package_config.json. It is what resolves `sqlite3`, which
