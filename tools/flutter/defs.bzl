@@ -137,6 +137,20 @@ def _dart_kernel_impl(ctx):
     args.add(ctx.file._frontend_server)
     args.add("--sdk-root", sdk_root + "/")
     args.add("--target", "flutter")
+
+    # frontend_server speaks its compiler-daemon protocol on every completion,
+    # success included: one `+file:///...` line per source it read, absolute
+    # ~/.pub-cache and execroot paths included. That is 7340 lines for this
+    # repo's two apps, and it drowns anything real. The flag defaults to on;
+    # turning it off leaves only the three-line `result <uuid>` handshake,
+    # which is the protocol itself and has no flag.
+    #
+    # Deliberately not done by capturing stdout in the wrapper instead: the
+    # kernel is byte-identical either way, but a wrapper has to re-raise the
+    # exit code by hand (frontend_server exits 254 on a compile error) and it
+    # discards whatever the CFE prints on a *successful* compile, where
+    # --verbosity defaults to `all`.
+    args.add("--no-print-incremental-dependencies")
     if release:
         args.add("--aot")
         args.add("--tfa")
