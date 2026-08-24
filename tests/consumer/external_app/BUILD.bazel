@@ -1,0 +1,4 @@
+# Holds the recipe label for an unmatched dependency package.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["absent_package.bzl"])

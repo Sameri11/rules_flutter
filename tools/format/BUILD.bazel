@@ -1,20 +1,22 @@
 load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
 
-# Not the root package: @buildifier_prebuilt is a dev_dependency, and a load()
-# of a repo missing from a consumer's mapping fails when the package is loaded.
+# Keep the dev dependency out of consumer-loaded packages.
 
-# Passed to `find -path`, so anchored at the workspace root.
+# `find -path` lets `*` span `/`, so these patterns cover both flat and
+# monorepo example layouts. buildifier_prebuilt's ungrouped `-o` expression
+# attaches `-prune` only to the final pattern; earlier patterns exclude matches
+# but do not stop descent. Keep the largest generated tree last. The exclusions
+# only save traversal because these trees contain no checked Starlark files.
 _EXCLUDE_PATTERNS = [
-    "./third_party/*",  # gitignored smooth-app clone
+    "./third_party/*",
     "./bazel-*",
-    # The consumer module's own convenience symlinks, which point into its
-    # output base. Its *sources* are still linted -- only these are skipped.
     "./tests/consumer/bazel-*",
-    "./app/build/*",  # ~1.8 GB of Flutter output
-    "./app/.dart_tool/*",
-    "./app/android/build/*",
-    "./app/android/.gradle/*",
+    "./examples/*/bazel-*",
+    "./examples/*/.dart_tool/*",
+    "./examples/*/.gradle/*",
     "./.git/*",
+    # Last on purpose -- see above. Do not sort this list.
+    "./examples/*/build/*",
 ]
 
 buildifier(
@@ -31,19 +33,14 @@ buildifier(
     mode = "check",
 )
 
-# The same check under `bazel test`. It earns its place there rather than in an
-# editor hook: it is the only check in the suite that inspects files the build
-# graph never reaches, and `.vscode/` formats on save via a buildifier on PATH,
-# so an edit made outside the editor is otherwise unchecked until review.
+# Run buildifier under `bazel test` to check files outside the build graph.
 buildifier_test(
     name = "buildifier_test",
     size = "small",
     exclude_patterns = _EXCLUDE_PATTERNS,
     lint_mode = "warn",
     mode = "check",
-    # Both are required to check the whole tree rather than a srcs list: the
-    # workspace label locates the root, and the check has to read files that are
-    # not declared inputs, which a sandbox would hide.
+    # A whole-tree scan needs the workspace root and no sandbox.
     no_sandbox = True,
     workspace = "//:MODULE.bazel",
 )

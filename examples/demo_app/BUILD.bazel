@@ -1,0 +1,19 @@
+# Dart targets for the flat demo app. Standard flutter_app paths are derived
+# from the flutter create layout.
+
+load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_app(
+    # Keep this list aligned with the Android target.
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+        "armeabi-v7a",
+    ],
+    # Also produce local-only debug artifacts.
+    debug = True,
+    # Declare sources of the local path dependency.
+    path_deps = ["//packages/mylib:srcs"],
+)

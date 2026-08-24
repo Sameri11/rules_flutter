@@ -1,0 +1,15 @@
+package(default_visibility = ["//visibility:public"])
+
+# The Dart half of the local plugin, exposed so the app can declare it as a
+# build input. A path dependency's content is invisible to pubspec.lock, so
+# without this the compile has an undeclared input -- and //packages/host_app's
+# :path_deps_check fails the build if it is missing.
+#
+# Its *Android* half is not declared here at all. The generator stages that from
+# the absolute path .flutter-plugins-dependencies records and builds it inside
+# @flutter_plugins, exactly as it does for a plugin from pub. That a local plugin
+# needs no Bazel wiring for its native side is the point of this module.
+filegroup(
+    name = "srcs",
+    srcs = glob(["lib/**/*.dart"]) + ["pubspec.yaml"],
+)

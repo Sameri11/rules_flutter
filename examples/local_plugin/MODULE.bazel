@@ -1,0 +1,29 @@
+module(
+    name = "local_plugin",
+    version = "0.0.1",
+)
+
+# Monorepo app with a local path plugin. It exercises non-root metadata and
+# plugin paths outside the pub cache.
+bazel_dep(name = "flutter_bazel", version = "0.1.0")
+local_path_override(
+    module_name = "flutter_bazel",
+    path = "../..",
+)
+
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+plugins = use_extension("@flutter_bazel//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins.project(
+    abis = ["arm64-v8a"],
+    # Both labels name packages beneath the module root.
+    embedding = "//packages/host_app/android/app:flutter_embedding",
+    maven_repo = "@flutter_maven//:pin",
+    metadata = "//packages/host_app:.flutter-plugins-dependencies",
+)
+use_repo(plugins, "flutter_plugins")
+
+# Generated Maven coordinates.
+include("//:plugin_deps.MODULE.bazel")

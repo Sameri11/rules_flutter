@@ -1,0 +1,41 @@
+# Android targets for the plugin-free app.
+
+load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
+load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The embedding resolves AndroidX through this module's Maven repository.
+flutter_embedding_library(name = "flutter_embedding")
+
+flutter_android_binary(
+    name = "no_plugins",
+    abis = ["arm64-v8a"],
+    # Root packages require an explicit target name.
+    app = "//:app",
+    manifest_values = {"applicationId": "com.example.no_plugins"},
+    # Do not construct labels in the absent @flutter_plugins repository.
+    plugins = None,
+    # Stock Flutter compiles an empty GeneratedPluginRegistrant even without
+    # plugins. Keep it to avoid the engine's misleading missing-registrant log.
+    registrant = ":generated_plugin_registrant",
+    deps = [":main_activity"],
+)
+
+# The empty Flutter-generated registrant needs embedding and annotation classes.
+android_library(
+    name = "generated_plugin_registrant",
+    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
+    deps = [
+        ":flutter_embedding",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+    ],
+)
+
+kt_android_library(
+    name = "main_activity",
+    srcs = ["src/main/kotlin/com/example/no_plugins/MainActivity.kt"],
+    deps = [":flutter_embedding"],
+)

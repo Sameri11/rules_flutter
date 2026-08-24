@@ -1,0 +1,13 @@
+# Dart targets for a plugin-free app.
+
+load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_app(
+    # Keep this fixture single-ABI.
+    abis = ["arm64-v8a"],
+    # flutter create declares no assets.
+    assets = [],
+    plugin_deps = None,
+)

@@ -1,0 +1,118 @@
+# Bazel target for the Android module that `flutter create` generated, placed
+# beside the Gradle module it mirrors so both read the same manifest, resources
+# and sources. Nothing here is a copy.
+#
+# Note this directory is template-managed: `flutter create --platforms` and
+# `flutter migrate` rewrite files under app/android/. They do not delete unknown
+# files, so this BUILD survives, but keep that in mind when upgrading templates.
+
+load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
+load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Every plugin `pub get` reported as having an Android native build. The
+# aggregate is generated from .flutter-plugins-dependencies, so adding a plugin
+# to pubspec.yaml is the only step -- see @flutter_bazel//tools/flutter:plugins.bzl. Named
+# here only because :generated_plugin_registrant and :main_activity need it;
+# the APK derives it.
+PLUGINS = ["@flutter_plugins//:all"]
+
+# The ABIs this APK ships. It must be a subset of what //:app snapshots and of
+# what MODULE.bazel's plugins.project builds -- :demo_app_flutter_check fails on
+# any ABI missing a piece, whichever half is short.
+ABIS = [
+    "arm64-v8a",
+    "x86_64",
+    "armeabi-v7a",
+]
+
+# The engine jar with its AndroidX dependencies attached. Instantiated here, in
+# the app, rather than inside the rules: its deps come from @flutter_maven, which
+# this project's MODULE.bazel creates from this project's plugin coordinates. A
+# label naming it from inside the rules would resolve against the *rules'*
+# dependencies instead -- which is exactly the bug that made these rules
+# unusable as a bazel_dep. See @flutter_bazel//tools/flutter:embedding.bzl.
+flutter_embedding_library(name = "flutter_embedding")
+
+# Every Flutter contribution to the APK, joined into one target -- the AOT
+# snapshot, the engine, the runtime classes, the assets, the plugin libraries
+# and their native halves, the recipe libraries, the registrant -- and then one
+# APK per shape: :demo_app carries every ABI, :demo_app_<abi> carries one. A
+# bundle check per shape fails the build if any of them is missing a piece; see
+# @flutter_bazel//tools/flutter:bundle.bzl.
+#
+# Four things are stated: the ABIs, the Dart half's package, the applicationId
+# and this module's own targets. The rest is derived -- //:app, //:assets and
+# //:pubspec from `app`; the per-ABI plugin and recipe jars from `abis`;
+# the manifest, resources, embedding and registrant from the layout
+# `flutter create` produced.
+flutter_android_binary(
+    name = "demo_app",
+    abis = ABIS,
+    # "//:app", NOT "//" -- the root package has no shorthand.
+    # native.package_relative_label("//") is a hard error ("invalid target
+    # name '': empty target name"). //app and //app:app are interchangeable for
+    # a *named* package; // and //:app are not, for the root one.
+    app = "//:app",
+    manifest_values = {"applicationId": "com.example.demo_app"},
+    # The host application. The Flutter join is appended by the macro, so
+    # native libraries enter the zip in the order this file always had -- a .so
+    # is stored uncompressed and page-aligned, so moving one shifts padding.
+    deps = [":main_activity"],
+)
+
+# Note: no debug-symbol artifact is produced. Stripping discards the engine's
+# DWARF rather than saving it, so there is nothing here to upload to a
+# crash-reporting service yet. See docs/android-packaging.md.
+
+# The plugin registrant flutter_tools regenerates on every `pub get`, consumed
+# in place from the Gradle module like the manifest and resources rather than
+# copied.
+#
+# This is its own target rather than another src on :main_activity because its
+# deps *are* the plugin list: registerWith() instantiates each plugin class, so
+# every //plugins:* target will attach here as coverage grows. Keeping it apart
+# also keeps MainActivity as what `flutter create` generated.
+#
+# Nothing calls this class. FlutterEngine locates it reflectively --
+# GeneratedPluginRegister does Class.forName("io.flutter.plugins.Generated\
+# PluginRegistrant") then getDeclaredMethod("registerWith") -- so it needs no
+# call site, only presence in the dex, and @Keep becomes load bearing the moment
+# shrinking is turned on. A missing registrant is logged at error level and the
+# app carries on with dead plugins:
+#   E GeneratedPluginsRegister: java.lang.ClassNotFoundException: io.flutter.
+#   plugins.GeneratedPluginRegistrant
+# so absence is invisible to any launch-succeeded check. Verify by class
+# definition in the dex, not by `strings` -- the reflection literal and the log
+# message both match the name in an APK that does not contain the class.
+android_library(
+    name = "generated_plugin_registrant",
+    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
+    deps = PLUGINS + [
+        ":flutter_embedding",
+        # @Keep / @NonNull. java_import deps are not re-exported to a consumer's
+        # compile classpath, so this is declared here rather than inherited
+        # through :flutter_embedding.
+        #
+        # ...and it is the _jvm artifact, not the bare one. androidx.annotation
+        # became a KMP module at 1.7: `androidx.annotation:annotation` is now
+        # metadata-only and carries no class files, so it satisfies runtime
+        # resolution (which follows the pom to annotation-jvm) but not a strict
+        # compile classpath. Same family as the window/window-java split noted
+        # in MODULE.bazel.
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+    ],
+)
+
+# The generated manifest names ".MainActivity".
+# The Kotlin MainActivity that `flutter create` generated, compiled directly.
+# kt_android_library rather than kt_jvm_library: the class extends Activity, so
+# it needs android.jar on the compile classpath.
+kt_android_library(
+    name = "main_activity",
+    srcs = ["src/main/kotlin/com/example/demo_app/MainActivity.kt"],
+    deps = [":flutter_embedding"],
+)

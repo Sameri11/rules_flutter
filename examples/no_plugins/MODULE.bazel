@@ -1,0 +1,44 @@
+module(
+    name = "no_plugins",
+    version = "0.0.1",
+)
+
+# Minimal plugin-free module: no plugins.project(), generated segment, or
+# @flutter_plugins repository.
+bazel_dep(name = "flutter_bazel", version = "0.1.0")
+local_path_override(
+    module_name = "flutter_bazel",
+    path = "../..",
+)
+
+# Dependencies named directly by this module.
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+# The embedding still needs AndroidX. Without plugins this module declares its
+# Maven graph directly; the generated segment normally supplies it.
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "flutter_maven",
+    artifacts = [
+        "androidx.annotation:annotation:1.8.1",
+        "androidx.core:core:1.13.1",
+        "androidx.exifinterface:exifinterface:1.4.1",
+        "androidx.fragment:fragment:1.7.1",
+        "androidx.lifecycle:lifecycle-common:2.7.0",
+        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
+        "androidx.lifecycle:lifecycle-process:2.7.0",
+        "androidx.lifecycle:lifecycle-runtime:2.7.0",
+        "androidx.tracing:tracing:1.2.0",
+        "androidx.window:window:1.2.0",
+        "androidx.window:window-java:1.2.0",
+        "com.getkeepsafe.relinker:relinker:1.4.5",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+use_repo(maven, "flutter_maven")

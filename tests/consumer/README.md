@@ -5,9 +5,32 @@ combining API coverage with focused behavior checks.
 
 ```sh
 cd tests/consumer
-bazel build --nobuild //...            # load + analysis of every public symbol
-bazel test --build_tests_only //...    # the focused behaviour checks
+bazel build --nobuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...
+bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...
 ```
+
+The real prerequisite is an **installed NDK named by `ANDROID_NDK_HOME`**, not the
+flag. `//...` here includes `:apk_derived_flutter_engine_<abi>_stripped`, and
+stripping resolves `@@bazel_tools//tools/cpp:toolchain_type`; with no NDK,
+`@flutter_bazel//tools/flutter:ndk.bzl` substitutes its toolchain-less stub and
+analysis fails:
+
+    No matching toolchains found for types:
+      @@bazel_tools//tools/cpp:toolchain_type
+
+`--repo_env` **explicitly forwards** that variable, and is recommended for
+reproducibility rather than required. `ndk.bzl` declares `environ =
+["ANDROID_NDK_HOME"]` on its extension, so `module_ctx.getenv` reads the client
+environment and an exported variable works on its own — measured: the plain
+`bazel build --nobuild //...` succeeds with it exported. Naming it on the command
+line makes the input explicit and deterministic instead of depending on whatever
+the invoking shell holds, which matters most in CI.
+
+It cannot substitute for the NDK. With `ANDROID_NDK_HOME` unset the flag forwards
+an empty value, the stub is still selected and the same toolchain error appears —
+also measured. It is passed here rather than added to this module's `.bazelrc`,
+which deliberately carries only the three flags an APK build needs and not the
+ruleset's whole Android group.
 
 It is **not** part of the root workspace's `//...`. It cannot be: a nested
 `MODULE.bazel` is not a repo boundary, so without the root `.bazelignore` entry
@@ -92,11 +115,25 @@ same way `hello_bazel` and `smooth-app` do and those two are external to this
 repository:
 
 - A `plugins.package()` recipe a *dependency* registers for a package this
-  project does not have is ignored, not `fail()`-ed on. This module inherits
-  `flutter_bazel`'s own root `MODULE.bazel` `rive_native`/`sqlite3` recipes
-  as dependency-registered tags the moment it calls `plugins.project()` at
-  all — `:fake_plugin_deps_check` builds clean and prints the notice naming
-  both.
+  project does not have is ignored, not `fail()`-ed on.
+  `external_app/MODULE.bazel` registers one — `absent_package` — and
+  `:fake_plugin_deps_check` builds clean while printing the notice naming it.
+  `external_app/absent_package.bzl` **cannot be loaded**: its `load()` asks
+  `recipe.bzl` for a symbol that does not exist, so if the attribution ever
+  regresses and a dependency's unmatched recipe gets loaded rather than dropped,
+  that load is the failure. Without that, "builds clean" would be consistent
+  with the recipe having been loaded and simply working, which asserts nothing.
+  Verified in both directions: registering the same kind of recipe from the
+  **root** module still fails with `plugins.package() registered a recipe for
+  ..., but no such package is in the resolution`.
+
+  This case used to arrive for free: every consumer inherited
+  `flutter_bazel`'s own root `rive_native`/`sqlite3` recipes the moment it
+  called `plugins.project()`, because the ruleset shipped a demo app inside its
+  own module. That app is now `//examples/demo_app`, a separate module absent
+  from this graph, so nothing is inherited and the case is declared on purpose.
+  Better coverage, not merely restored coverage — it no longer depends on the
+  ruleset having an app inside it.
 - A generated plugin's Maven coordinate resolves through the **canonical**
   repository `plugins.project(maven_repo = ...)` named, not through whichever
   repository happens to be named `@flutter_maven` in `flutter_bazel`'s own
@@ -114,10 +151,11 @@ repository:
   only. The exceptions are `:apk_no_plugin_graph`, which builds a real signed
   APK and runs its bundle check to prove the repository-free contribution shape
   and real embedding Maven dependency graph, and `:apk_external_app`, whose
-  content test reads its external module's marker from the signed APK. Root
-  `app/` and smooth_app cover pluginful behaviour.
+  content test reads its external module's marker from the signed APK.
+  `//examples/demo_app` and smooth_app cover pluginful behaviour.
 - **The generated `@flutter_plugins` repo's CMake path.** `fixtures/fake_plugin`
   (below) reaches the repository-free, non-native half of that path — a plain
   `android_library` plugin with one Maven coordinate. It declares no
   `externalNativeBuild`, so `_ndk_root`'s toolchain check and the CMake
-  cross-compile chain stay unreached. `app/` and smooth_app cover that.
+  cross-compile chain stay unreached. `//examples/demo_app` and smooth_app
+  cover that.

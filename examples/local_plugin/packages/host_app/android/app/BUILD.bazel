@@ -1,0 +1,35 @@
+load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
+load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_embedding_library(name = "flutter_embedding")
+
+flutter_android_binary(
+    name = "host_app",
+    abis = ["arm64-v8a"],
+    # A named package this time, so the plain spelling works -- unlike the flat
+    # examples, which must write "//:app" because the root package has no
+    # shorthand.
+    app = "//packages/host_app",
+    manifest_values = {"applicationId": "com.example.host_app"},
+    deps = [":main_activity"],
+)
+
+android_library(
+    name = "generated_plugin_registrant",
+    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
+    deps = [
+        ":flutter_embedding",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_plugins//:all",
+    ],
+)
+
+kt_android_library(
+    name = "main_activity",
+    srcs = ["src/main/kotlin/com/example/host_app/MainActivity.kt"],
+    deps = [":flutter_embedding"],
+)

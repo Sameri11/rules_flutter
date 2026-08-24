@@ -23,11 +23,21 @@ consuming `libapp.so` as a plain prebuilt `.so`.
 Working and verified on Flutter 3.44.2 / Dart 3.12.2, Bazel 9.2.0, macOS arm64,
 target `android-arm64-release`.
 
+Every label below is inside `examples/demo_app`, which is a **separate Bazel
+module** — it consumes these rules through `bazel_dep`, exactly as your project
+will. So run them from there, not from the repository root:
+
 ```
-bazel build //app:app_arm64-v8a ->  bazel-bin/app/app_arm64-v8a/libapp.so  (aarch64 ELF, stripped)
-bazel build //app:assets       ->  .../app/assets/flutter_assets/  (tree artifact)
-bazel build //app/android/app:demo_app -> …/demo_app.apk  (signed APK)
+cd examples/demo_app
+bazel build //:app_arm64-v8a       ->  bazel-bin/app_arm64-v8a/libapp.so  (aarch64 ELF, stripped)
+bazel build //:assets              ->  .../assets/flutter_assets/  (tree artifact)
+bazel build //android/app:demo_app ->  …/demo_app.apk  (signed APK)
 ```
+
+Three more modules sit beside it, each covering a shape this one cannot:
+`examples/no_plugins` (no plugin graph at all), `examples/pub_plugins` (the
+common case, one ABI), `examples/local_plugin` (monorepo layout, local `path:`
+plugin). The repository root builds only the ruleset and its linter.
 
 **Note:** two packages that fall outside the standard build — `rive_native`
 (native half downloaded, not compiled) and `sqlite3` (a Dart build hook) — are
@@ -45,7 +55,7 @@ Verified properties:
 - **Release/debug split.** Release actions are remote-cacheable; debug actions
   are pinned local. Debug uses the non-product SDK and ships `kernel_blob.bin`.
 - **Undeclared `path:` deps are caught**, not merely documented — see
-  `//app:path_deps_check`.
+  `//:path_deps_check`.
 - **Plugins build from source**, including their Maven dependencies, resolved by
   `rules_jvm_external` with no Gradle involved. Plugins whose coordinates cannot
   be read statically are refused by a reason-coded gate rather than mis-built.
@@ -60,7 +70,7 @@ Verified properties:
 - **The APK is stripped**, the way AGP's `stripDebugSymbolsRelease` does it for
   a Gradle build: 183 MB to 22 MB, almost all of it the engine's DWARF.
 
-- **The APK runs.** `//app/android/app:demo_app` was installed on an arm64 API 35
+- **The APK runs.** `//android/app:demo_app` was installed on an arm64 API 35
   emulator and launched: `Fully drawn +1s243ms`, no fatal exceptions, and the
   counter increments on tap. The app bar reads "hello from mylib v3" — the
   string comes from the `//packages/mylib` path dependency, so the whole chain
@@ -91,16 +101,19 @@ consumer-supplied recipes; see "Package recipes" below.
 | `tools/flutter/merge_native_assets.py` | Merges the per-ABI `NativeAssetsManifest.json`, and refuses if the bundles differ anywhere else |
 | `tools/flutter/plugins.bzl` | Repo rule generating one target per native Android plugin, their Maven coordinates, the CMake targets for native ones, and the `plugins.package()` extension |
 | `tools/flutter/recipe.bzl` | The recipe contract: `FlutterNativeInfo`, `flutter_native_contribution`, `flutter_native_libs` |
-| `bazel/flutter/` | This project's *own* recipes, as a consuming project would write them |
-| `plugin_deps.MODULE.bazel` | Generated, committed, `include()`d — the build's only `maven.install` |
+| `examples/demo_app/bazel/flutter/` | The demo's *own* recipes, as a consuming project would write them — consumer code, not part of the ruleset |
+| `examples/*/plugin_deps.MODULE.bazel` | Generated, committed, `include()`d — each app module's only `maven.install` |
 | `tools/flutter/embedding.bzl` | Flutter embedding's Maven coordinates, and `flutter_embedding_library()` — the macro a consuming project instantiates |
 | `tools/flutter/maven.bzl` | Coordinate → label mangling and highest-wins version reconciliation |
-| `app/` | Minimal Flutter app used as the test subject |
-| `packages/mylib/` | A `path:` dependency, used to test input declaration |
+| `examples/demo_app/` | The full-fat example: three ABIs, pub plugins with a CMake half, two package recipes, a `path:` dependency. A separate Bazel module reaching the rules by `bazel_dep`, exactly as an outside project does |
+| `examples/no_plugins/` | An app with **no plugins at all** — never calls `plugins.project()`. The `plugin_deps = None` / `plugins = None` shape, as a module rather than a paragraph |
+| `examples/pub_plugins/` | The shape most projects have: pub plugins, one with a real CMake half, one ABI, no recipes. The one to copy |
+| `examples/local_plugin/` | Monorepo layout — the app is a *subdirectory* — with a local `path:` plugin rather than a pub one |
+| `examples/demo_app/packages/mylib/` | A `path:` dependency, used to test input declaration |
 | `sandbox_demo/` | Probe demonstrating sandboxed vs local execution |
 | `tools/format/` | buildifier targets: workspace-wide Starlark formatting and lint |
 | `tests/consumer/` | A separate module consuming these rules through `bazel_dep`, so an API break is caught here rather than in someone else's workspace |
-| `app/android/app/` | `BUILD.bazel` beside the Gradle module: `android_binary`, Kotlin `MainActivity`, AndroidX deps |
+| `examples/demo_app/android/app/` | `BUILD.bazel` beside the Gradle module: `android_binary`, Kotlin `MainActivity`, AndroidX deps |
 | `docs_internal/` | Background notes — not published yet, see below |
 
 Further reading — **note these are not in the repository yet.** `docs_internal/`
@@ -138,10 +151,12 @@ Two calls, one per half. Everything a standard `flutter create` +
 `flutter pub get` layout fixes is a default; what is written is what only the
 app knows.
 
-`app/BUILD.bazel` — the Dart half:
+`BUILD.bazel` at the project root — the Dart half. (In a `flutter create`
+layout the project root *is* the module root, so this file sits beside
+`pubspec.yaml` and `MODULE.bazel`. `examples/demo_app` is exactly this.)
 
 ```python
-load("//tools/flutter:defs.bzl", "flutter_app")
+load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
 
 flutter_app(
     abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
@@ -158,28 +173,34 @@ are fixed standard-layout paths. `entrypoint`, `path_deps`, `debug`, assets and
 sources are the supported deviations; the selected entrypoint drives both
 kernel compilation and `flutter build bundle --target`.
 
-`app/android/app/BUILD.bazel` — the APK, beside the Gradle module it mirrors:
+`android/app/BUILD.bazel` — the APK, beside the Gradle module it mirrors:
 
 ```python
-load("//tools/flutter:android.bzl", "flutter_android_binary")
-load("//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
+load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
 
 flutter_embedding_library(name = "flutter_embedding")
 
 flutter_android_binary(
     name = "demo_app",
     abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
-    app = "//app",
+    app = "//:app",
     manifest_values = {"applicationId": "com.example.demo_app"},
     deps = [":main_activity"],
 )
 ```
 
-`app` names the package holding the Dart half; `//app:app`, `//app:assets` and
-`//app:pubspec` are derived from it. The per-ABI plugin and recipe jars are
-derived from `abis`. The manifest, resources, embedding label and registrant come
-from the created layout. `manifest_values` needs only `applicationId` — the
-other three keys are what flutter_tools pins.
+Both `load()`s name `@flutter_bazel`, because in your project these rules are a
+dependency. Writing `//tools/flutter:...` would name a package in *your* repo.
+
+`app` names the Dart half, and `//:assets` and `//:pubspec` are derived from its
+package. Write it as `"//:app"`, not `"//"`: the root package has no shorthand
+spelling, and `native.package_relative_label("//")` is a hard error. In a
+monorepo whose app is a subdirectory the plain package form works — `app =
+"//packages/host_app"`, as `examples/local_plugin` does. The per-ABI plugin and
+recipe jars are derived from `abis`. The manifest, resources, embedding label and
+registrant come from the created layout. `manifest_values` needs only
+`applicationId` — the other three keys are what flutter_tools pins.
 
 **`abis` never has a default**, in either call: a default would mean an app
 ships one ABI, or three, without ever saying which. Same for the one thing the
@@ -242,23 +263,35 @@ Full per-attribute verdicts, with the measured before/after counts:
 ## Targets
 
 ```sh
-bazel build //app:app_arm64-v8a     # release libapp.so, one target per ABI
-bazel build //app:assets            # release flutter_assets tree
-bazel build //app:app_debug_kernel  # debug kernel (.dill)
-bazel build //app:assets_debug      # debug bundle, ships kernel_blob.bin
-bazel build //app:path_deps_check   # guard: fails on undeclared path: deps
-bazel build //app:plugins_check     # guard: fails on stale plugin_deps.MODULE.bazel
-bazel build //app:dart_registrant_check  # guard: fails on stale Dart plugin registrant
-bazel build //app/android/app:demo_app_flutter_check  # guard: bundle completeness + code assets
-bazel build //app/android/app:demo_app   # signed APK
+bazel build //:app_arm64-v8a     # release libapp.so, one target per ABI
+bazel build //:assets            # release flutter_assets tree
+bazel build //:app_debug_kernel  # debug kernel (.dill)
+bazel build //:assets_debug      # debug bundle, ships kernel_blob.bin
+bazel build //:path_deps_check   # guard: fails on undeclared path: deps
+bazel build //:plugins_check     # guard: fails on stale plugin_deps.MODULE.bazel
+bazel build //:dart_registrant_check  # guard: fails on stale Dart plugin registrant
+bazel build //android/app:demo_app_flutter_check  # guard: bundle completeness + code assets
+bazel build //android/app:demo_app   # signed APK
 ```
 
 ### Validating a change
 
 ```sh
-bazel test //...                                    # guards + buildifier
-(cd tests/consumer && bazel build --nobuild //...)          # the public API, as a consumer sees it
-(cd tests/consumer && bazel test --build_tests_only //...)  # the consumer module's behaviour checks
+# The ruleset itself. Root //... is the linter and //sandbox_demo:demo -- the
+# apps all live in separate modules under examples/, so this is a small gate.
+bazel test //...
+
+# The public API, as a consumer sees it, plus that module's behaviour checks.
+# Requires a real NDK. --repo_env explicitly forwards ANDROID_NDK_HOME instead
+# of relying on the invoking shell; it cannot provide an unset NDK path.
+(cd tests/consumer && bazel build --nobuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...)
+(cd tests/consumer && bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...)
+
+# Each example module, which is where the apps and their guards now live. Each is
+# a separate module, so each needs its own invocation.
+for d in examples/demo_app examples/no_plugins examples/pub_plugins examples/local_plugin; do
+  (cd "$d" && bazel test //...)
+done
 ```
 
 The guards fail as **actions**, not as test assertions, which is deliberate and
@@ -298,7 +331,7 @@ bazel run //tools/format:buildifier.check  # report only, non-zero on drift
 covers every `BUILD.bazel`, `*.bzl` and `MODULE.bazel` in the workspace, minus the
 exclusions in `//tools/format:BUILD.bazel`. `plugin_deps.MODULE.bazel` is included:
 the generator emits buildifier-canonical output, so formatting it does not put the
-committed file at odds with `//app:plugins_check`.
+committed file at odds with `//:plugins_check`.
 
 In VS Code, `.vscode/` configures the `bazelbuild.vscode-bazel` extension to
 format Starlark on save, using the binary `buildifier_prebuilt` pins rather than
@@ -356,7 +389,7 @@ A recipe is also the **per-package reversal of the gate**: `prebuilt_jni_libs`
 stays gated for every package that has not been given an answer, instead of
 being switched off globally the moment one plugin needs it.
 
-And `//app/android/app:demo_app_flutter_check` makes the class-D failure loud. A package with a
+And `//android/app:demo_app_flutter_check` makes the class-D failure loud. A package with a
 build hook declares an asset id that the Dart VM resolves to a filename and
 `dlopen`s; nothing else in the build connects that to whether a library actually
 reached `lib/<abi>/`. The check compares the two and fails at build time, where
@@ -381,24 +414,33 @@ the design, the Bazel constraints that forced it, and what was measured.
 
 ### Fresh clone
 
-Run `flutter pub get` in `app/` **before** the first `bazel build`. It is not
-optional convenience: the build reads three pub-generated files that are not in
-version control, and a missing one fails as a bare "no such file" without
+Run `flutter pub get` in each app module **before** the first `bazel build`. It
+is not optional convenience: the build reads three pub-generated files that are
+not in version control, and a missing one fails as a bare "no such file" without
 naming the cause.
 
+Each example is its own Flutter project, so each needs its own run. Three are
+project roots; `local_plugin` is the monorepo shape, so its app is a
+subdirectory:
+
 ```sh
-cd app && flutter pub get && cd ..
+for d in examples/demo_app examples/no_plugins examples/pub_plugins \
+         examples/local_plugin/packages/host_app; do
+  (cd "$d" && flutter pub get)
+done
 ```
+
+Paths below are relative to whichever module you are in.
 
 | Generated file | Used as |
 | --- | --- |
-| `app/.dart_tool/package_config.json` | passed to `frontend_server` (41 MB, machine-specific paths — must never be committed) |
-| `app/.flutter-plugins-dependencies` | a declared Bazel input, `//app:.flutter-plugins-dependencies` |
-| `…/GeneratedPluginRegistrant.java` | an `android_library` src |
+| `.dart_tool/package_config.json` | passed to `frontend_server` (41 MB, machine-specific paths — must never be committed) |
+| `.flutter-plugins-dependencies` | a declared Bazel input, `//:.flutter-plugins-dependencies` |
+| `android/…/GeneratedPluginRegistrant.java` | an `android_library` src |
 
 Two files that *are* committed are also generated, deliberately, and guarded
-against drift: `plugin_deps.MODULE.bazel` and `app/lib/dart_plugin_registrant.dart`
-— see `//app:plugins_check` and `//app:dart_registrant_check`.
+against drift: `plugin_deps.MODULE.bazel` and `lib/dart_plugin_registrant.dart`
+— see `//:plugins_check` and `//:dart_registrant_check`.
 
 ### Environment
 
@@ -406,7 +448,8 @@ The Dart-half targets need only the Flutter SDK — `FLUTTER_ROOT`, or `flutter`
 on PATH:
 
 ```sh
-FLUTTER_ROOT=/Users/samer/fvm/versions/3.44.2 bazel build //app:app_arm64-v8a
+cd examples/demo_app
+FLUTTER_ROOT=/Users/samer/fvm/versions/3.44.2 bazel build //:app_arm64-v8a
 ```
 
 Building the **APK** additionally needs the Android SDK and NDK:
@@ -441,7 +484,7 @@ common --config=android
 
 A consumer building only the Dart half, or another platform, deletes that one
 line and keeps the group. Verified: with it removed and both `ANDROID_HOME` and
-`ANDROID_NDK_HOME` unset, `//app:app` and `//app:assets` build and `libapp.so`
+`ANDROID_NDK_HOME` unset, `//:app` and `//:assets` build and `libapp.so`
 is byte-identical — while the APK fails exactly as the JDK-17 comment predicts,
 `turbine_direct_graal` reporting `could not locate class file for
 java.lang.Record`.
@@ -551,8 +594,8 @@ What still needs an NDK, correctly:
 
 - the APK, and any Android cc work (the strip, a native plugin jar);
 - **`@flutter_plugins` generation in this project**, because one plugin
-  (`rive_common`) has a CMake build — so `//app:plugins_check` needs it too,
-  while `//app:path_deps_check` and the whole Dart half do not. That is this
+  (`rive_common`) has a CMake build — so `//:plugins_check` needs it too,
+  while `//:path_deps_check` and the whole Dart half do not. That is this
   project's plugin set, not a property of the rules.
 
 One cost, worth knowing before wrapping a third-party extension: a repo created
@@ -682,7 +725,7 @@ the filegroup to add. Depend on it from CI before enabling a shared cache — a
 manual grep is exactly the step people skip.
 
 ```
-bazel build //app:path_deps_check
+bazel build //:path_deps_check
 ```
 
 **What this trades.** Declaring `package_config.json` was an accidental safety
@@ -757,7 +800,7 @@ remaining gap is the `android_binary` wiring that consumes `libapp.so`,
 ## Assets
 
 ```
-bazel build //app:assets   ->   bazel-bin/app/assets/   (tree artifact, 2.0 MB)
+bazel build //:assets   ->   bazel-bin/assets/   (tree artifact, 2.0 MB)
 ```
 
 Contents: `AssetManifest.bin`, `FontManifest.json`, `NativeAssetsManifest.json`,
@@ -796,8 +839,8 @@ Measured after a source change (macOS arm64, this demo app):
 
 | Build | Wall clock |
 | --- | --- |
-| `//app:app` (kernel + AOT) | 8.79 s |
-| `//app:assets` | 1.84 s |
+| `//:app` (kernel + AOT) | 8.79 s |
+| `//:assets` | 1.84 s |
 | both, in parallel | **8.82 s** |
 
 The two halves are independent, so Bazel runs them concurrently and the asset
@@ -820,7 +863,7 @@ inside a Bazel action. Resolution is the caller's job.
 **Previously a known side effect, now fixed by staging (below).** Because the
 action used to `cd` into the package, and the execroot entry for that package is
 a symlink to the source tree, flutter_tools wrote its incremental cache to
-`app/.dart_tool/flutter_build/<hash>/` in **your sources** — an undeclared
+`.dart_tool/flutter_build/<hash>/` in **your sources** — an undeclared
 output. What that caused:
 
 - It survives `bazel clean`, so a "clean build" silently reuses previous state.
@@ -920,13 +963,13 @@ smaller and more stable surface. Since the SDK is version-pinned anyway,
 
 ## Android packaging
 
-`//app/android/app:demo_app` is an `android_binary` from `rules_android` 0.7.3, which
+`//android/app:demo_app` is an `android_binary` from `rules_android` 0.7.3, which
 does work on Bazel 9.2.0 despite the native Android rules having been removed.
 
 ```
-lib/arm64-v8a/libapp.so       <- //app:app
+lib/arm64-v8a/libapp.so       <- //:app
 lib/arm64-v8a/libflutter.so   <- engine jar, fetched from Maven
-assets/flutter_assets/**      <- //app:assets
+assets/flutter_assets/**      <- //:assets
 classes.dex                   <- embedding + AndroidX
 ```
 
@@ -1030,7 +1073,7 @@ direct coordinates, and those are literal often enough to scrape.
 `MODULE.bazel` cannot `load()`, and one module extension cannot add tags to
 another, so the coordinates cannot be fed to `maven.install()` directly. They are
 generated into `plugin_deps.MODULE.bazel`, committed, and `include()`d — and
-`//app:plugins_check` diffs the committed file against the generated one,
+`//:plugins_check` diffs the committed file against the generated one,
 printing what to write. Same shape as `pub_path_deps_check`, for the same
 reason: the manual step is the one people skip.
 
@@ -1094,8 +1137,8 @@ why this surfaces as a missing *method* rather than a missing plugin.
 
 The registrant is generated by the same repository rule (from each plugin's
 pubspec, since `.flutter-plugins-dependencies` does not carry `dartPluginClass`),
-committed to `app/lib/dart_plugin_registrant.dart`, and guarded by
-`//app:dart_registrant_check`. `dart_kernel` passes:
+committed to `lib/dart_plugin_registrant.dart`, and guarded by
+`//:dart_registrant_check`. `dart_kernel` passes:
 
 ```
 --source package:demo_app/dart_plugin_registrant.dart
@@ -1154,7 +1197,7 @@ The fix is structural rather than a policy flag: coordinates live in
 `//tools/flutter:embedding.bzl`, the generator merges them with every plugin's
 and applies highest-wins — Gradle's rule — across the whole set, then emits one
 list. A cross-source conflict is no longer possible to express. Both artifacts
-above now resolve to the higher version, and `//app:plugins_check` fails if
+above now resolve to the higher version, and `//:plugins_check` fails if
 `embedding.bzl` is edited without regenerating.
 
 `version_conflict_policy = "pinned"` remains on that single install: every

@@ -4,7 +4,7 @@ This is an API test, not a behaviour test.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "gen_snapshot_label")
+load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "gen_snapshot_label", "plugin_repo_target")
 load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_binary", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "strip_native_libs")
 load("@flutter_bazel//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
 load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
@@ -16,11 +16,8 @@ load(":assertions.bzl", "expect_equal")
 
 package(default_visibility = ["//visibility:private"])
 
-# flutter_app is instantiated in //standard_layout, a package laid out the way
-# `flutter create` leaves one, so every default path it relies on is analysed.
-# It cannot be called *here*: this package's fixtures deliberately sit under
-# fixtures/ and its `:app`, `:assets` and `:pubspec` are hand-written below with
-# every attribute named, which is what catches a default disappearing.
+# `//standard_layout` exercises `flutter_app` defaults. This fixture names every
+# attribute explicitly to catch removed defaults.
 
 # --- defs.bzl: the platform-independent half ---------------------------------
 
@@ -513,10 +510,8 @@ build_test(
     targets = [":apk_external_app_contents_check"],
 )
 
-# --- external-plugin regression ----------------------------------------------
-#
-# Proves absent dependency recipes are ignored and generated Maven labels use
-# this project's `plugin_maven` mapping.
+# External-plugin regression: dependency recipes are ignored, and generated
+# Maven labels use this project's mapping.
 pub_plugins_check(
     name = "fake_plugin_deps_check",
     committed = "fixtures/plugin_deps.MODULE.bazel",
@@ -525,5 +520,13 @@ pub_plugins_check(
 
 build_test(
     name = "fake_plugin_test",
-    targets = ["@flutter_plugins//fake_plugin:fake_plugin"],
+    targets = [
+        # Unlike every other fixture, this module names the repository
+        # `plugin_maven`. Building the plugin verifies that `maven_repo` reaches
+        # `maven_label()` through the caller's repository mapping.
+        "@flutter_plugins//fake_plugin:fake_plugin",
+        # A Kotlin-only plugin leaves this per-ABI native aggregate empty. It
+        # must still provide JavaInfo through an empty `java_library`.
+        "@flutter_plugins//:" + plugin_repo_target("plugin_native_libraries", "arm64-v8a"),
+    ],
 )

@@ -1,0 +1,50 @@
+# The Android half, beside the Gradle module it mirrors so both read the same
+# manifest, resources and sources.
+
+load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
+load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The engine jar with its AndroidX dependencies attached. Instantiated here
+# rather than inside the rules: its deps come from @flutter_maven, which this
+# module's MODULE.bazel creates from this module's plugin coordinates.
+flutter_embedding_library(name = "flutter_embedding")
+
+flutter_android_binary(
+    name = "pub_plugins",
+    abis = ["arm64-v8a"],
+    # "//:app", not "//" -- the root package has no shorthand spelling.
+    app = "//:app",
+    manifest_values = {"applicationId": "com.example.pub_plugins"},
+    deps = [":main_activity"],
+)
+
+# The registrant `pub get` regenerates on every plugin change, consumed in place
+# from the Gradle module rather than copied. Its deps *are* the plugin list:
+# registerWith() instantiates each plugin class.
+#
+# `flutter_android_binary` derives `registrant = ":generated_plugin_registrant"`
+# whenever there is a plugin graph, so the name is a convention rather than an
+# argument -- but the target still has to exist here, because its sources and its
+# Maven dep belong to this project.
+android_library(
+    name = "generated_plugin_registrant",
+    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
+    deps = [
+        ":flutter_embedding",
+        "@flutter_plugins//:all",
+        # @Keep / @NonNull. java_import deps are not re-exported to a compile
+        # classpath, and it is the _jvm artifact: androidx.annotation became a KMP
+        # module at 1.7, so the bare coordinate carries no class files.
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+    ],
+)
+
+kt_android_library(
+    name = "main_activity",
+    srcs = ["src/main/kotlin/com/example/pub_plugins/MainActivity.kt"],
+    deps = [":flutter_embedding"],
+)

@@ -1,0 +1,7 @@
+# The module root is a package only so MODULE.bazel can include() the generated
+# segment beside it. The app itself lives in //packages/host_app -- this module
+# is the monorepo shape, where the module root is the *workspace* root rather
+# than the Flutter project root.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["plugin_deps.MODULE.bazel"])

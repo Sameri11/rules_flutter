@@ -1,0 +1,7 @@
+common --enable_bzlmod
+
+# Shared Android configuration.
+import %workspace%/../../.bazelrc.android
+
+# Enable Android targets.
+common --config=android

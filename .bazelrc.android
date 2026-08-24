@@ -1,0 +1,11 @@
+# Shared Android configuration; workspaces opt in with `--config=android`.
+
+# Preserve Flutter plugin manifest permissions.
+build:android --merge_android_manifest_permissions
+
+# rules_android requires JDK 17.
+build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
+build:android --java_language_version=17 --java_runtime_version=remotejdk_17
+
+# Forward the NDK to repository rules. NDK 28+ supports 16 KB pages.
+common:android --repo_env=ANDROID_NDK_HOME

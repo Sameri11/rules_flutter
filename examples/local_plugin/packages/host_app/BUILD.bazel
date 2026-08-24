@@ -1,0 +1,16 @@
+load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_app(
+    abis = ["arm64-v8a"],
+    assets = [],
+    # The local plugin's Dart sources. `greeter` is a path: dependency, so
+    # pubspec.lock carries no hash for it and its content is otherwise an
+    # undeclared input.
+    path_deps = ["//packages/greeter:srcs"],
+    # The committed segment lives at the *module* root, not beside this package,
+    # because MODULE.bazel include()s it and MODULE.bazel is up there. This is
+    # the one attribute the flat examples can leave to its default.
+    plugin_deps = "//:plugin_deps.MODULE.bazel",
+)

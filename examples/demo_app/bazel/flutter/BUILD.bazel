@@ -1,0 +1,13 @@
+# Recipes for pub packages that fall outside the standard build, supplied by
+# this project to //tools/flutter:plugins.bzl through plugins.package().
+#
+# These are consumer-side files: they are loaded by BUILD files the rules
+# generate, by canonical label, and their own load() statements resolve in this
+# module's repo mapping rather than the rules'. Nothing here is part of the
+# ruleset.
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "rive_native.bzl",
+    "sqlite3.bzl",
+])

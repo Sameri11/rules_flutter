@@ -62,9 +62,9 @@ local_path_override(
     path = "external_app",
 )
 
-# As a real bzlmod consumer, this fixture inherits flutter_bazel's recipes for
-# absent rive_native/sqlite3 packages. Its separate Maven repo catches labels
-# resolved through flutter_bazel instead of this module.
+# `external_app` supplies the unmatched dependency recipe now that the demo is
+# a separate module outside this graph. The distinct `plugin_maven` repository
+# also verifies that generated labels resolve through this module's mapping.
 fake_plugin_metadata = use_repo_rule("//:fixtures/plugin_fixture.bzl", "fake_plugin_metadata")
 
 fake_plugin_metadata(

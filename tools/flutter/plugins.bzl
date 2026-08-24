@@ -1,108 +1,46 @@
-"""Bazel targets for the Android half of Flutter plugins.
+"""Bazel targets for Android Flutter plugins.
 
-A Flutter plugin is a pub package that also ships a complete AGP library module
-under `<package>/android/` -- its own manifest, sources, resources and Maven
-dependencies. Gradle picks these up in `FlutterAppPluginLoaderPlugin`, which
-reads `.flutter-plugins-dependencies` and `include`s each plugin's `android/`
-directory as a subproject, then attaches it to the app as a `<buildType>Api`
-dependency.
+Reads `.flutter-plugins-dependencies`, stages plugin packages in an external
+repository, and generates one target per plugin. CMake-based plugins are built
+with the NDK and their shared libraries are attached to the same target.
 
-This does the same from the same input file: read the metadata, stage each
-plugin's package root into an external repository, and generate one target per
-plugin. A plugin whose `build.gradle` drives CMake also gets its `CMakeLists`
-built with the NDK, and the resulting `.so` attached to the same label.
-
-Three properties are deliberate, because they are what makes the gate in
-`_GATED_REASONS` reversible rather than permanent:
-
-  1. **The strategy is not in the label.** `@flutter_plugins//<name>` is the
-     label whether the plugin was built from source alone, from source plus
-     CMake, or by a recipe the consuming project supplied. Moving a plugin
-     between them is a change here or in a recipe, never in a consumer.
-
-  2. **Plugins are classified by *reason*, not by decision.** A plugin carries
-     reason codes like `ndk_build`; routing is a single lookup against
-     `_GATED_REASONS`. When a reason becomes supported, deleting its entry from
-     that list re-routes every plugin carrying it at once -- which is exactly
-     how `external_native_build` stopped being gated.
-
-  3. **A package the generator cannot describe can be described by its user.**
-     `plugins.package(bzl_file =, macro =)` names a macro in the consuming
-     project; the BUILD generated for that package does nothing but load it by
-     canonical label and hand over the facts. Because the load is canonical, the
-     recipe's own `load()` statements resolve in *that project's* repo mapping,
-     so a recipe may use rulesets this module has never heard of. This is also
-     the per-package reversal of the gate: a reason stays gated for every package
-     that has not been given an answer. See docs_internal/package-recipes.md.
-
-     The registry is keyed on **pub package, not plugin**, because the packages
-     that need it most are not always plugins -- `sqlite3` ships a Dart build
-     hook and no `android/` module, so it appears nowhere in
-     `.flutter-plugins-dependencies` and is resolved through
-     `package_config.json` instead.
+Plugin labels stay stable across build strategies. Unsupported reason codes are
+gated centrally in `_GATED_REASONS`. Consumers can provide
+`plugins.package(bzl_file =, macro =)` recipes for packages the generator
+cannot describe. Recipes are keyed by pub package so they also support packages
+without an `android/` module.
 """
 
 load(":abis.bzl", "ABIS", "MIN_SDK", "check_abis", "plugin_repo_target")
 load(":embedding.bzl", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
-# Reason codes a plugin can carry. A plugin with none is built from source.
+# Plugin reason codes. Ungated plugins build from source.
 #
-#   external_native_build  build.gradle drives CMake/ndk-build. CMake is now
-#                          built (see _NATIVE_TEMPLATE); ndk-build is not, and
-#                          is reported as `ndk_build` instead.
-#   ndk_build              build.gradle drives ndk-build (Android.mk), which
-#                          nothing here runs.
-#   unresolved_dep         a dependency coordinate could not be read statically:
-#                          a variable defined outside the file, or a version
-#                          supplied by a BOM. Resolving it would mean executing
-#                          Groovy.
-#   prebuilt_jni_libs      the module ships no buildable native source and
-#                          expects prebuilt .so files under src/main/jniLibs,
-#                          which a Gradle task downloads on demand. Building
-#                          from source is not an option, so the answer is a
-#                          recipe -- see plugins.package() below.
+#   external_native_build  CMake/ndk-build configuration.
+#   ndk_build              Android.mk configuration.
+#   unresolved_dep         Gradle dependency coordinate is not statically known.
+#   prebuilt_jni_libs      Requires downloaded prebuilt native libraries.
 #
-# Removing an entry here is the *global* mechanism for widening support: no
-# consumer, and no other part of this file, encodes the distinction.
-# `external_native_build` left this list when the CMake path landed.
-#
-# There is now a second, per-package mechanism, and the two compose. A reason is
-# gated unless the package has a recipe -- `plugins.package(bzl_file =, macro =)`
-# -- in which case generation is handed over wholesale and the gate does not
-# apply, because the recipe is by definition an answer to it. That is what keeps
-# this list honest: `prebuilt_jni_libs` stays gated for every package that has
-# not been given an answer, instead of being deleted globally the moment one
-# plugin needs it.
+# Recipes override gates per package; removing a reason enables it globally.
 _GATED_REASONS = [
     "ndk_build",
     "unresolved_dep",
     "prebuilt_jni_libs",
 ]
 
-# Two things a module can say that mean "I compile native code", matched in
-# _native_build_reasons. `ndkVersion` is deliberately not one of them: it pins
-# *which* NDK AGP uses if something needs one, and the current Flutter plugin
-# template sets it unconditionally (`ndkVersion = flutter.ndkVersion`), so it
-# says nothing about whether the module compiles anything. Treating it as a
-# marker classified integration_test -- which ships no native code at all -- as
-# a CMake plugin, and the build then died looking for a CMakeLists that was
-# never going to exist.
+# Gradle native-build markers. `ndkVersion` selects an NDK; it does not indicate
+# a native build.
 _NATIVE_BLOCK = "externalNativeBuild"
 _CMAKELISTS = "CMakeLists"
 
-# ndk-build is the other externalNativeBuild backend. It is driven by an
-# Android.mk rather than a CMakeLists, so the CMake path cannot build it.
+# ndk-build uses Android.mk and is not supported by the CMake path.
 _NDK_BUILD_MARKERS = [
     "ndkBuild",
     "Android.mk",
 ]
 
-# NDK 28 is the floor because it is the first release that defaults to 16 KB
-# page alignment. NDK 27 *supports* 16 KB but still emits 4 KB-aligned LOAD
-# segments by default, and a 4 KB-aligned .so does not merely fail to load on
-# an API 35 device -- it segfaults the loader, with no dlerror() and no message.
-# Measured across 26.3 / 27.2 / 28.2; see docs/plugins.md.
+# NDK 28 is the first release with 16 KB page alignment by default.
 _MIN_NDK_MAJOR = 28
 
 # Dependency configurations that put classes on the compile/runtime classpath.
@@ -352,19 +290,13 @@ PACKAGE_INFO = struct(
 )
 '''
 
-# Loaded into the aggregate BUILD only, which is why it is separate from
-# _BUILD_LOADS: a plugin's own BUILD has no use for these.
+# Loads used only by the aggregate BUILD.
 _NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_libs")
-load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_java//java:defs.bzl", "java_import", "java_library")
 """
 
-# The second aggregate: every .so a recipe contributed for one ABI, in one jar,
-# wrapped so the app can name a single label per ABI.
-#
-# A recipe *must* define `<name>_flutter_native` -- that is the contract, and
-# depending on it by convention is what makes a forgotten one fail at analysis
-# instead of producing a target nothing references. Which was the original defect
-# this milestone exists to prevent.
+# Recipe native libraries for one ABI. Recipes must define
+# `<name>_flutter_native` so omissions fail during analysis.
 _NATIVE_LIBS_TEMPLATE = """
 flutter_native_libs(
     name = "{target}_jar",
@@ -379,13 +311,7 @@ java_import(
 )
 """
 
-# The third aggregate: every .so the native *plugins* built for one ABI.
-#
-# A java_import rather than a filegroup, because this is how they reach the APK
-# -- android_binary extracts lib/<abi>/*.so from jars on the classpath, and a
-# filegroup is not on it. Keeping them here rather than on each plugin's
-# android_library is what lets an app ship fewer ABIs than were built, and what
-# makes them visible to the bundle check as a per-ABI contribution.
+# Source-built plugin native libraries for one ABI.
 _PLUGIN_LIBS_TEMPLATE = """
 java_import(
     name = "{target}",
@@ -394,13 +320,21 @@ java_import(
 )
 """
 
-_MODULE_SEGMENT_HEADER = """# Generated by //tools/flutter:plugins.bzl -- do not edit by hand.
+# Plain Java/Kotlin plugins still need this derived JavaInfo target. An empty
+# java_library is valid; java_import(jars = []) is not.
+_PLUGIN_LIBS_EMPTY_TEMPLATE = """
+java_library(
+    name = "{target}",
+)
+"""
+
+_MODULE_SEGMENT_HEADER = """# Generated by @flutter_bazel//tools/flutter:plugins.bzl -- do not edit by hand.
 #
 # The complete Maven artifact list: the Flutter embedding's own dependencies
-# (from //tools/flutter:embedding.bzl) merged with the coordinates extracted
-# from every plugin's android/build.gradle. Regenerate with:
+# (from @flutter_bazel//tools/flutter:embedding.bzl) merged with the coordinates
+# extracted from every plugin's android/build.gradle. Regenerate with:
 #
-#     bazel build //app:plugins_check
+#     bazel build {plugins_check}
 #
 # which prints this file's expected contents when it drifts.
 #
@@ -454,8 +388,9 @@ _PINNED_RESOLUTION = """    resolver = "{resolver}",
     # broken under bzlmod.
     lock_file = "{lock_file}","""
 
-def _module_segment(coordinates, resolver, lock_file, coursier_options):
+def _module_segment(coordinates, resolver, lock_file, coursier_options, plugins_check):
     return _MODULE_SEGMENT_HEADER.format(
+        plugins_check = plugins_check,
         artifacts = "".join([
             "\n        \"{}\",".format(c)
             for c in highest_versions(coordinates)
@@ -1100,6 +1035,20 @@ def _write_recipe(ctx, name, recipe, info, gate_note = ""):
     )
     ctx.file("{}/package_info.bzl".format(name), _PACKAGE_INFO_TEMPLATE.format(**info))
 
+def _plugin_native_libs_target(manifest, abi):
+    """Return this ABI's aggregate of source-built plugin libraries."""
+    jars = "".join([
+        "\n        \"//{n}:{n}_native_jar_{a}\",".format(n = p["name"], a = abi)
+        for p in manifest
+        if p["strategy"] == "source+cmake"
+    ])
+
+    # Keep this derived name aligned with flutter_android_binary.
+    target = plugin_repo_target("plugin_native_libraries", abi)
+    if not jars:
+        return _PLUGIN_LIBS_EMPTY_TEMPLATE.format(target = target)
+    return _PLUGIN_LIBS_TEMPLATE.format(target = target, deps = jars)
+
 def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
     plugins = metadata.get("plugins", {}).get("android", [])
@@ -1466,8 +1415,9 @@ def _flutter_plugins_impl(ctx):
     # These cannot be injected into maven.install() from here: MODULE.bazel is
     # not allowed to load() and an extension cannot add tags to another
     # extension. So the segment is generated, committed, and include()d, and
-    # //app:plugins_check diffs the two -- the same shape as pub_path_deps_check,
-    # for the same reason: the manual step is exactly the one people skip.
+    # the project's own `:plugins_check` diffs the two -- the same shape as
+    # pub_path_deps_check, for the same reason: the manual step is exactly the
+    # one people skip.
     #
     # It joins the *existing* @flutter_maven install rather than a repo of its
     # own. Multiple install tags with one name merge into a single resolution,
@@ -1480,6 +1430,12 @@ def _flutter_plugins_impl(ctx):
             ctx.attr.maven_resolver,
             ctx.attr.maven_lock_file,
             ctx.attr.coursier_options,
+            # The guard `flutter_app` emits sits in the package that holds the
+            # metadata file, so the hint names the caller's own target rather
+            # than this repository's demo. Hardcoded, it read `//app:plugins_check`
+            # in every consumer's committed segment -- a package most of them do
+            # not have.
+            "//{}:plugins_check".format(ctx.attr.metadata.package),
         ),
     )
 
@@ -1563,14 +1519,7 @@ def _flutter_plugins_impl(ctx):
                     for p in manifest
                     if p["strategy"].startswith("recipe:")
                 ]),
-            ) + _PLUGIN_LIBS_TEMPLATE.format(
-                target = plugin_repo_target("plugin_native_libraries", abi),
-                deps = "".join([
-                    "\n        \"//{n}:{n}_native_jar_{a}\",".format(n = p["name"], a = abi)
-                    for p in manifest
-                    if p["strategy"] == "source+cmake"
-                ]),
-            )
+            ) + _plugin_native_libs_target(manifest, abi)
             for abi in ctx.attr.abis
         ]),
     )

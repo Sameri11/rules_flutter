@@ -1,11 +1,10 @@
-# The root package exists so MODULE.bazel can include() the generated plugin
-# dependency segment, which requires it to be a label.
+# The root package exists so //tools/format:buildifier_test has a label in it to
+# locate the tree it should check. Nothing reads MODULE.bazel's contents through
+# this export.
+#
+# `plugin_deps.MODULE.bazel` used to be exported here too, for the include() in
+# this module's own MODULE.bazel. Both moved to //examples/demo_app: the segment
+# describes one app's Maven graph, not the ruleset's.
 package(default_visibility = ["//visibility:public"])
 
-# MODULE.bazel is exported purely as a workspace-root marker for
-# //tools/format:buildifier_test, which needs a label in the root package to
-# locate the tree it should check. Nothing reads its contents through this.
-exports_files([
-    "MODULE.bazel",
-    "plugin_deps.MODULE.bazel",
-])
+exports_files(["MODULE.bazel"])
