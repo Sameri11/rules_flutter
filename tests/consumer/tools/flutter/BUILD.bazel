@@ -1,0 +1,27 @@
+# A colliding package -- this module has no reason to own `tools/flutter`,
+# and that is the point. `select()` keys written as bare strings inside a
+# macro resolve in the *caller's* repo mapping, not the defining module's
+# (docs_internal/build-modes-plan.md P2). Every real select() in
+# `@flutter_bazel`'s macros uses `Label("//tools/flutter:mode_debug")`
+# precisely so this package is never consulted; its only job is to make a
+# regression to a bare `":mode_debug"` observable instead of silent.
+#
+# The trap: `mode_debug` here matches under this module's *default* test
+# invocation (`--compilation_mode=fastbuild`, unset by every target below),
+# while the real `//tools/flutter:mode` defaults to "release". A bare-string
+# select() would therefore flip to the debug branch under an ordinary
+# release build -- dropping the `aot_library` contribution while
+# `flutter_bundle_check`'s own `_mode` (a rule attribute, resolved against
+# `@flutter_bazel` regardless of this decoy) still expects it, and every
+# `:apk*`/`:bundle` target's bundle check in this module fails loudly.
+package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "mode_debug",
+    values = {"compilation_mode": "fastbuild"},
+)
+
+config_setting(
+    name = "mode_release",
+    values = {"compilation_mode": "opt"},
+)

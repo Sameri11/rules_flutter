@@ -8,7 +8,7 @@ download rule is a separate concern. See README for that tradeoff.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
-load(":abis.bzl", "ABIS", "engine_repo")
+load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "embedding_repo", "engine_repo")
 
 _BUILD_TEMPLATE = """
 package(default_visibility = ["//visibility:public"])
@@ -123,20 +123,18 @@ def _flutter_sdk_impl(ctx):
         "flutter_patched_sdk",
     )
 
-    # One per ABI. Named by ABI rather than by engine directory, so the label a
-    # rule asks for is the same string a consumer wrote.
+    # Create a snapshot symlink for each ABI and AOT mode.
     host = _gen_snapshot_host_dir(ctx)
     for abi, info in ABIS.items():
-        gen_snapshot = "{}/{}/{}/gen_snapshot".format(engine, info.engine_dir, host)
+        for mode in AOT_MODES:
+            gen_snapshot = "{}/{}/{}/gen_snapshot".format(engine, info.engine_dir[mode], host)
 
-        # ctx.symlink creates dangling links silently, which would surface much
-        # later as a file-not-found inside the AOT action.
-        if not ctx.path(gen_snapshot).exists:
-            fail(
-                "gen_snapshot for {} missing at {}.\n".format(abi, gen_snapshot) +
-                "Run `flutter precache --android` on this host.",
-            )
-        ctx.symlink(gen_snapshot, "gen_snapshot_" + abi)
+            if not ctx.path(gen_snapshot).exists:
+                fail(
+                    "gen_snapshot for {} missing at {}.\n".format(abi, gen_snapshot) +
+                    "Run `flutter precache --android` on this host.",
+                )
+            ctx.symlink(gen_snapshot, "gen_snapshot_{}_{}".format(abi, mode))
 
     # Identity of the *active* SDK: frameworkRevision is a git commit hash, so
     # it moves on framework-only commits that leave engine artifacts identical.
@@ -148,7 +146,11 @@ def _flutter_sdk_impl(ctx):
     )
 
     ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
-        gen_snapshots = repr(["gen_snapshot_" + abi for abi in ABIS]),
+        gen_snapshots = repr([
+            "gen_snapshot_{}_{}".format(abi, mode)
+            for abi in ABIS
+            for mode in AOT_MODES
+        ]),
     ))
 
     # The `flutter` CLI needs its whole SDK tree to run, so it is invoked by
@@ -198,10 +200,7 @@ flutter_sdk = repository_rule(
 # engineContentHash, and the artifacts are .jar, not .aar.
 _ENGINE_BASE = "https://storage.googleapis.com/download.flutter.io/io/flutter"
 
-# The Java embedding, which is architecture-independent. The per-ABI engine
-# libraries are derived from the ABI table instead, so adding an ABI there is
-# the only edit.
-_EMBEDDING_ARTIFACT = "flutter_embedding_release"
+# Builds mode-specific embedding artifact URLs.
 
 def _engine_url(artifact, revision, content_hash):
     return "{base}/{a}/1.0.0-{rev}/{a}-1.0.0-{hash}.jar".format(
@@ -224,14 +223,16 @@ def _flutter_impl(ctx):
     # No sha256 on any of these: the URL already embeds engineContentHash, so it
     # is content-addressed by construction, and pinning a digest would have to be
     # re-edited on every SDK bump.
-    http_jar(
-        name = "flutter_embedding",
-        url = _engine_url(_EMBEDDING_ARTIFACT, revision, content_hash),
-    )
-    for abi, info in ABIS.items():
+    for mode in MODES:
         http_jar(
-            name = engine_repo(abi),
-            url = _engine_url(info.maven_artifact, revision, content_hash),
+            name = embedding_repo(mode),
+            url = _engine_url("flutter_embedding_" + mode, revision, content_hash),
         )
+    for abi, info in ABIS.items():
+        for mode in MODES:
+            http_jar(
+                name = engine_repo(abi, mode),
+                url = _engine_url(info.maven_artifact[mode], revision, content_hash),
+            )
 
 flutter = module_extension(implementation = _flutter_impl)

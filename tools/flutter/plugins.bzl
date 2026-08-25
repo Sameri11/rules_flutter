@@ -1702,7 +1702,7 @@ ships is not something these rules can infer. It must cover every ABI the app's
 extra ABIs have no plugin libraries in them.""",
         ),
         "embedding": attr.label(
-            default = "@flutter_embedding//jar:file",
+            default = "@flutter_embedding_release//jar:file",
             doc = """The `flutter_embedding_library` target every plugin compiles against.
 
 Supplied by the consuming project because the target must live there: its deps
@@ -1710,8 +1710,11 @@ are Maven artifacts resolved from that project's own coordinate list, and a
 label naming them from inside these rules would resolve against these rules'
 dependencies instead. Instantiate it with
 `//tools/flutter:embedding.bzl%flutter_embedding_library` and pass the result
-here. The default is the bare engine jar, which compiles but leaves plugins
-without androidx.annotation -- enough to fail loudly rather than silently.""",
+here. The default is the bare release engine jar, which compiles but leaves
+plugins without androidx.annotation -- enough to fail loudly rather than
+silently. Module extension tags cannot read `//tools/flutter:mode`, so this
+default cannot itself vary by mode; a debug build supplies its own
+`flutter_embedding_library()` result here regardless.""",
         ),
     },
 )

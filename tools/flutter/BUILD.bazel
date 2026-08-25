@@ -1,3 +1,6 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load(":abis.bzl", "MODES")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
@@ -7,3 +10,20 @@ exports_files([
     "merge_native_assets.py",
     "read_pubspec.py",
 ])
+
+# Flutter runtime mode, independent of --compilation_mode.
+string_flag(
+    name = "mode",
+    build_setting_default = "release",
+    values = MODES,
+)
+
+config_setting(
+    name = "mode_debug",
+    flag_values = {":mode": "debug"},
+)
+
+config_setting(
+    name = "mode_release",
+    flag_values = {":mode": "release"},
+)

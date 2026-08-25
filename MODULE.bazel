@@ -6,10 +6,14 @@ module(
 flutter = use_extension("//tools/flutter:repo.bzl", "flutter")
 use_repo(
     flutter,
-    "flutter_embedding",
-    "flutter_engine_arm64_v8a",
-    "flutter_engine_armeabi_v7a",
-    "flutter_engine_x86_64",
+    "flutter_embedding_debug",
+    "flutter_embedding_release",
+    "flutter_engine_arm64_v8a_debug",
+    "flutter_engine_arm64_v8a_release",
+    "flutter_engine_armeabi_v7a_debug",
+    "flutter_engine_armeabi_v7a_release",
+    "flutter_engine_x86_64_debug",
+    "flutter_engine_x86_64_release",
     "flutter_sdk",
 )
 

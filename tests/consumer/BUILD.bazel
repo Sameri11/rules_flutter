@@ -4,7 +4,7 @@ This is an API test, not a behaviour test.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "gen_snapshot_label", "plugin_repo_target")
+load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "plugin_repo_target")
 load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_binary", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "strip_native_libs")
 load("@flutter_bazel//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
 load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
@@ -35,14 +35,6 @@ dart_kernel(
     pubspec = ":pubspec",
 )
 
-dart_kernel(
-    name = "kernel_debug",
-    srcs = ["lib/main.dart"],
-    entrypoint = "lib/main.dart",
-    mode = "debug",
-    package_config = "fixtures/package_config.json",
-    pubspec = ":pubspec",
-)
 
 # target_os is the 0.3 attribute. Named explicitly rather than left default, so
 # renaming or removing it fails here.
@@ -58,9 +50,10 @@ dart_kernel(
 dart_aot_elf(
     name = "aot",
     dill = ":kernel",
-    gen_snapshot = gen_snapshot_label("arm64-v8a"),
+    gen_snapshot = aot_gen_snapshot("arm64-v8a"),
     snapshot_flags = ABIS["arm64-v8a"].snapshot_flags,
     strip = True,
+    target_compatible_with = aot_target_compatible_with(),
 )
 
 # The ABI carrying gen_snapshot flags. Named so a table entry losing them is an
@@ -68,9 +61,10 @@ dart_aot_elf(
 dart_aot_elf(
     name = "aot_armv7",
     dill = ":kernel",
-    gen_snapshot = gen_snapshot_label("armeabi-v7a"),
+    gen_snapshot = aot_gen_snapshot("armeabi-v7a"),
     snapshot_flags = ABIS["armeabi-v7a"].snapshot_flags,
     strip = True,
+    target_compatible_with = aot_target_compatible_with(),
 )
 
 expect_equal(
@@ -529,4 +523,37 @@ build_test(
         # must still provide JavaInfo through an empty `java_library`.
         "@flutter_plugins//:" + plugin_repo_target("plugin_native_libraries", "arm64-v8a"),
     ],
+)
+
+# Decoy package verifies macro select keys resolve in this repository.
+alias(
+    name = "embedding_mode_hazard_expected",
+    actual = select({
+        "@flutter_bazel//tools/flutter:mode_debug": "@flutter_embedding_debug//jar:file",
+        "@flutter_bazel//tools/flutter:mode_release": "@flutter_embedding_release//jar:file",
+    }),
+)
+
+genrule(
+    name = "embedding_mode_hazard_check",
+    srcs = [
+        ":flutter_embedding_no_plugins",
+        ":embedding_mode_hazard_expected",
+    ],
+    outs = ["embedding_mode_hazard.checked"],
+    cmd = """set -euo pipefail
+if ! cmp -s "$(location :flutter_embedding_no_plugins)" "$(location :embedding_mode_hazard_expected)"; then
+    echo "flutter_embedding_no_plugins is not this configuration's embedding" >&2
+    echo "jar. embedding.bzl's jars select() resolved a select() key against" >&2
+    echo "the decoy //tools/flutter package instead of @flutter_bazel's --" >&2
+    echo "see the comment above." >&2
+    exit 1
+fi
+printf 'embedding.bzl select() resolved against @flutter_bazel, not the decoy\n' > "$@"
+""",
+)
+
+build_test(
+    name = "embedding_mode_hazard_test",
+    targets = [":embedding_mode_hazard_check"],
 )

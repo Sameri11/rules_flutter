@@ -83,4 +83,4 @@ plugins.project(
 use_repo(plugins, "flutter_plugins")
 
 flutter = use_extension("@flutter_bazel//tools/flutter:repo.bzl", "flutter")
-use_repo(flutter, "flutter_sdk")
+use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release", "flutter_sdk")

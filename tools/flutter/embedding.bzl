@@ -20,7 +20,11 @@ here.
 """
 
 load("@rules_java//java:defs.bzl", "java_import")
+load(":abis.bzl", "embedding_repo")
 load(":maven.bzl", "maven_label")
+
+_MODE_DEBUG = Label("//tools/flutter:mode_debug")
+_MODE_RELEASE = Label("//tools/flutter:mode_release")
 
 FLUTTER_EMBEDDING_ARTIFACTS = [
     "androidx.lifecycle:lifecycle-common:2.7.0",
@@ -88,12 +92,11 @@ def flutter_embedding_library(name = "flutter_embedding", maven_repo = "@flutter
     deps = flutter_embedding_deps(maven_repo)
     java_import(
         name = name,
-        # A `Label`, not a string: @flutter_embedding is our extension's repo, and
-        # a string here would resolve in the consumer's mapping and make them
-        # import it. Its *deps* are the opposite case -- they belong to the
-        # consumer's Maven resolution, which is why this is a macro and not a
-        # target in these rules.
-        jars = [Label("@flutter_embedding//jar:file")],
+        # Engine jars resolve here; Maven dependencies resolve in the consumer.
+        jars = select({
+            _MODE_DEBUG: [Label("@{}//jar:file".format(embedding_repo("debug")))],
+            _MODE_RELEASE: [Label("@{}//jar:file".format(embedding_repo("release")))],
+        }),
         deps = deps,
         exports = deps,
         visibility = ["//visibility:public"],

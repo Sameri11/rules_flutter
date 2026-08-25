@@ -12,6 +12,7 @@ entirely on this side.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@flutter_sdk//:sdk.bzl", "FLUTTER_ENV")
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
@@ -20,6 +21,9 @@ load(":abis.bzl", "ABIS", "MIN_SDK", "check_abis", "engine_jar_label", "plugin_r
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
 load(":embedding.bzl", "flutter_embedding_deps")
 load(":pubspec.bzl", "FlutterPubspecInfo")
+
+_MODE_DEBUG = Label("//tools/flutter:mode_debug")
+_MODE_RELEASE = Label("//tools/flutter:mode_release")
 
 def _jni_lib_jar_impl(ctx):
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
@@ -352,14 +356,31 @@ _ANDROID_CONTRIBUTIONS = [
     ("registrant", CLASSES),
 ]
 
-# Kinds no ABI can ship without. The rest may legitimately be empty for one: an
-# app with no package recipes contributes a jar with no libraries in it.
-_LIBRARIES_REQUIRED_PER_ABI = ["aot_library", "engine"]
+def _contributions_for(mode):
+    """The contribution inventory for one mode.
+
+    A macro cannot compute this itself -- mode is a configuration value,
+    invisible until a rule reads it -- so flutter_android_libs always declares
+    the aot_library contribution and `select()`s it out of what it *wires in*
+    for debug. This is what the checker expects to see once that selection has
+    resolved, and the only place the two have to agree.
+
+    `aot_library` is release-only: debug ships no AOT snapshot -- JIT compiles
+    from kernel_blob.bin instead.
+    """
+    if mode == "debug":
+        return [(kind, location) for kind, location in _ANDROID_CONTRIBUTIONS if kind != "aot_library"]
+    return _ANDROID_CONTRIBUTIONS
+
+def _libraries_required(mode):
+    return ["engine"] if mode == "debug" else ["aot_library", "engine"]
 
 def _flutter_bundle_check_impl(ctx):
     marker = ctx.actions.declare_file(ctx.label.name + ".checked")
 
     check_abis(ctx.attr.abis, str(ctx.label))
+    mode = ctx.attr._mode[BuildSettingInfo].value
+    expected = _contributions_for(mode)
 
     by_kind = {}
     for dep in ctx.attr.contributions:
@@ -371,12 +392,12 @@ def _flutter_bundle_check_impl(ctx):
     # The completeness half, in two parts: every contribution is present, and
     # every native one covers every ABI -- an ABI with no libapp.so, or a
     # library forgotten for one of them, fails here rather than on a device.
-    for kind, location in _ANDROID_CONTRIBUTIONS:
+    for kind, location in expected:
         if kind not in by_kind:
             fail(
-                ("Bundle is missing the '{}' contribution.\n" +
-                 "Every entry in _ANDROID_CONTRIBUTIONS must be supplied, or " +
-                 "declared empty.").format(kind),
+                ("Bundle is missing the '{}' contribution for mode '{}'.\n" +
+                 "Every entry _contributions_for(mode) names must be supplied, " +
+                 "or declared empty.").format(kind, mode),
             )
 
         info = by_kind[kind]
@@ -429,7 +450,7 @@ def _flutter_bundle_check_impl(ctx):
     # lives inside a tree artifact.
     args.add("--manifest", assets[0].path + "/NativeAssetsManifest.json")
     args.add("--out", marker)
-    args.add_all(_LIBRARIES_REQUIRED_PER_ABI, before_each = "--require")
+    args.add_all(_libraries_required(mode), before_each = "--require")
 
     inputs = list(assets) + [ctx.file._checker]
 
@@ -438,7 +459,7 @@ def _flutter_bundle_check_impl(ctx):
         # compiled in.
         args.add("--abi", "{}={}".format(abi, ABIS[abi].manifest_key))
 
-        for kind, location in _ANDROID_CONTRIBUTIONS:
+        for kind, location in expected:
             if location != NATIVE_LIB:
                 continue
             jars = [
@@ -487,6 +508,10 @@ and ships an empty ABI.""",
         "_checker": attr.label(
             default = "//tools/flutter:check_native_assets.py",
             allow_single_file = True,
+        ),
+        "_mode": attr.label(
+            default = "//tools/flutter:mode",
+            providers = [BuildSettingInfo],
         ),
     },
 )
@@ -635,6 +660,9 @@ def flutter_android_libs(
         classpath.
       engine_jars: ABI -> an unstripped engine jar, overriding the one the ABI
         table names. For a locally built engine; normally omitted.
+      Under `mode=debug` the `aot_library` contribution and its `_libapp`
+        export are dropped: debug ships no AOT snapshot, so nothing supplies
+        one and android_binary must not expect it.
       **kwargs: visibility, tags.
     """
     no_plugin_graph = plugins == None
@@ -726,7 +754,10 @@ def flutter_android_libs(
         engine_stripped[abi] = "{}_engine_{}_stripped".format(name, abi)
         strip_native_libs(
             name = engine_stripped[abi],
-            jar = engine_jars.get(abi, engine_jar_label(abi)),
+            jar = engine_jars.get(abi, select({
+                _MODE_DEBUG: engine_jar_label(abi, "debug"),
+                _MODE_RELEASE: engine_jar_label(abi, "release"),
+            })),
             abi = abi,
             **kwargs
         )
@@ -774,6 +805,7 @@ def flutter_android_libs(
         "registrant",
     ]
     contributions = []
+    aot_contribution = None
     for kind, location in _ANDROID_CONTRIBUTIONS:
         contribution = "{}_{}_contribution".format(name, kind)
         srcs = sources.get(kind, [])
@@ -790,12 +822,19 @@ def flutter_android_libs(
             empty = kind in empty_kinds and not srcs and not libraries,
             **kwargs
         )
-        contributions.append(contribution)
+        if kind == "aot_library":
+            # Declare AOT for all modes; debug excludes it before inputs are needed.
+            aot_contribution = contribution
+        else:
+            contributions.append(contribution)
 
     flutter_bundle_check(
         name = name + "_check",
         abis = abis,
-        contributions = contributions,
+        contributions = contributions + select({
+            _MODE_DEBUG: [],
+            _MODE_RELEASE: [aot_contribution],
+        }),
         **kwargs
     )
 
@@ -833,9 +872,10 @@ def flutter_android_libs(
         # being rebaselined anyway. Full measurement, and a dex-size residual
         # this account doesn't explain, in
         # docs_internal/embedding-deps-findings.md -- open, flagged for round 5.
-        exports = ([registrant] if registrant else []) + [
-            name + "_libapp",
-        ] + [native_libs[abi] for abi in abis if abi in native_libs] + [
+        exports = ([registrant] if registrant else []) + select({
+            _MODE_DEBUG: [],
+            _MODE_RELEASE: [name + "_libapp"],
+        }) + [native_libs[abi] for abi in abis if abi in native_libs] + [
             plugin_native_libs[abi]
             for abi in abis
             if abi in plugin_native_libs
@@ -876,6 +916,7 @@ def flutter_android_binary(
         assets = None,
         pubspec = None,
         manifest = "src/main/AndroidManifest.xml",
+        debug_manifest = "src/debug/AndroidManifest.xml",
         resource_files = None,
         embedding = ":flutter_embedding",
         plugins = _PLUGIN_REPO + "//:all",
@@ -945,6 +986,10 @@ def flutter_android_binary(
         versionCode and versionName. Required -- an APK with neither cannot be
         published, and a default of "unset" is how one gets shipped by accident.
       manifest: the app's AndroidManifest.xml.
+      debug_manifest: a debug-only manifest merged in under `mode=debug` --
+        `flutter create` generates one declaring INTERNET, for the tooling to
+        reach a running debug app. Globbed rather than required, so a project
+        (or test fixture) without one still loads; pass `None` to opt out.
       resource_files: the app's resources. Omit it only for a standard layout
         with a nonempty `src/main/res/**`; pass `[]` to declare a resource-free
         app explicitly.
@@ -1024,6 +1069,25 @@ def flutter_android_binary(
     if resource_files == None:
         resource_files = native.glob(["src/main/res/**"], allow_empty = False)
 
+    # Merge an optional debug manifest only in debug mode.
+    debug_manifest_deps = []
+    if debug_manifest:
+        debug_manifest_files = native.glob([debug_manifest], allow_empty = True)
+        if debug_manifest_files:
+            debug_manifest_lib = name + "_debug_manifest"
+            android_library(
+                name = debug_manifest_lib,
+                manifest = debug_manifest,
+                exports_manifest = True,
+                # Android manifest merging requires a package.
+                custom_package = values["applicationId"],
+                resource_files = [],
+            )
+            debug_manifest_deps = select({
+                _MODE_DEBUG: [":" + debug_manifest_lib],
+                _MODE_RELEASE: [],
+            })
+
     # `plugins = None` is the complete no-plugin-graph declaration. Normalize
     # every default before per-ABI slicing so no helper constructs even one
     # @flutter_plugins label. A caller may still supply recipe libraries or a
@@ -1098,7 +1162,7 @@ def flutter_android_binary(
             manifest = ":" + versioned_manifest,
             manifest_values = values,
             resource_files = resource_files,
-            deps = deps + [":" + join],
+            deps = deps + [":" + join] + debug_manifest_deps,
             **kwargs
         )
 

@@ -12,8 +12,6 @@ flutter_app(
         "x86_64",
         "armeabi-v7a",
     ],
-    # Also produce local-only debug artifacts.
-    debug = True,
     # Declare sources of the local path dependency.
     path_deps = ["//packages/mylib:srcs"],
 )

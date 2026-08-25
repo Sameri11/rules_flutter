@@ -83,7 +83,7 @@ point is that it costs under two seconds and fetches nothing.
   external module's declared asset at its runtime path.
 
 Attributes are named explicitly rather than left to defaults — `target_os`,
-`strip`, `mode`, `abi`, `slice` — for the same reason.
+`strip`, `abi`, `slice` — for the same reason.
 
 `flutter_app` is instantiated in **`//standard_layout`**, a second package whose
 contents are the layout `flutter create` and `flutter pub get` leave behind:

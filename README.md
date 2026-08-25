@@ -160,7 +160,6 @@ load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
 
 flutter_app(
     abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
-    debug = True,
     path_deps = ["//packages/mylib:srcs"],
 )
 ```
@@ -169,9 +168,12 @@ That emits `:pubspec`, `:app_<abi>` per ABI, `:assets`, the three guards
 (`:path_deps_check`, `:plugins_check`, `:dart_registrant_check`) and
 `:guards_test` over them. The source and asset globs, package config,
 pubspec.yaml, pub's three invalidation stamps and the committed Dart registrant
-are fixed standard-layout paths. `entrypoint`, `path_deps`, `debug`, assets and
-sources are the supported deviations; the selected entrypoint drives both
-kernel compilation and `flutter build bundle --target`.
+are fixed standard-layout paths. `entrypoint`, `path_deps`, assets and sources
+are the supported deviations; the selected entrypoint drives both kernel
+compilation and `flutter build bundle --target`. Debug is not a per-target
+attribute: every emitted target is mode-selected by
+`--@flutter_bazel//tools/flutter:mode=debug` on the command line, not written
+here -- see [Targets](#targets).
 
 `android/app/BUILD.bazel` — the APK, beside the Gradle module it mirrors:
 
@@ -265,14 +267,25 @@ Full per-attribute verdicts, with the measured before/after counts:
 ```sh
 bazel build //:app_arm64-v8a     # release libapp.so, one target per ABI
 bazel build //:assets            # release flutter_assets tree
-bazel build //:app_debug_kernel  # debug kernel (.dill)
-bazel build //:assets_debug      # debug bundle, ships kernel_blob.bin
+bazel build //:app_arm64-v8a --@flutter_bazel//tools/flutter:mode=debug  # incompatible at analysis; see below
+bazel build //:assets --@flutter_bazel//tools/flutter:mode=debug         # debug bundle, ships kernel_blob.bin
 bazel build //:path_deps_check   # guard: fails on undeclared path: deps
 bazel build //:plugins_check     # guard: fails on stale plugin_deps.MODULE.bazel
 bazel build //:dart_registrant_check  # guard: fails on stale Dart plugin registrant
 bazel build //android/app:demo_app_flutter_check  # guard: bundle completeness + code assets
 bazel build //android/app:demo_app   # signed APK
+bazel build //android/app:demo_app --@flutter_bazel//tools/flutter:mode=debug  # the same APK label, debug-shaped
 ```
+
+`mode` is a build setting, not a target-name axis: one APK label, selected by
+`--@flutter_bazel//tools/flutter:mode={release,debug}` (release is the
+default). `//:app_<abi>` is release-only -- it feeds `gen_snapshot`, which
+debug never runs -- so it is `target_compatible_with` release alone: an
+explicit debug build of it, or a `//...` sweep under debug, reports
+incompatibility during analysis instead of reaching gen_snapshot with a kernel
+it rejects. `flutter_android_binary` never depends on it in that
+configuration either, dropping the `aot_library` contribution instead. See
+[`docs_internal/build-modes-plan.md`](docs_internal/build-modes-plan.md).
 
 ### Validating a change
 

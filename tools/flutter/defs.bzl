@@ -23,8 +23,9 @@ problem and is not attempted here.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@flutter_sdk//:sdk.bzl", "FLUTTER_BIN", "FLUTTER_ENV")
-load(":abis.bzl", "ABIS", "check_abis", "gen_snapshot_label")
+load(":abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
 # Release actions may be shared through a remote cache.
@@ -114,7 +115,8 @@ def _project_path(ctx, file, attribute):
 
 def _dart_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
-    release = ctx.attr.mode != "debug"
+    mode = ctx.attr._mode[BuildSettingInfo].value
+    release = mode != "debug"
 
     # Release compiles against the product SDK; debug keeps asserts and the
     # service protocol, so it uses the non-product one.
@@ -129,7 +131,7 @@ def _dart_kernel_impl(ctx):
             sdk_root = f.dirname
             break
     if sdk_root == None:
-        fail("platform_strong.dill not found for mode '{}'".format(ctx.attr.mode))
+        fail("platform_strong.dill not found for mode '{}'".format(mode))
 
     args = ctx.actions.args()
 
@@ -158,6 +160,12 @@ def _dart_kernel_impl(ctx):
 
         if ctx.attr.target_os:
             args.add("--target-os", ctx.attr.target_os)
+    else:
+        args.add("-Ddart.vm.profile=false")
+        args.add("-Ddart.vm.product=false")
+        args.add("--enable-asserts")
+        args.add("--track-widget-creation")
+        args.add("--no-link-platform")
     args.add("--packages", ctx.file.package_config)
 
     # The Dart half of plugin registration. GeneratedPluginRegistrant.java
@@ -250,8 +258,8 @@ exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
         ),
         outputs = [dill],
         mnemonic = "DartKernel",
-        progress_message = "Compiling Dart kernel (%s) %%{label}" % ctx.attr.mode,
-        execution_requirements = _exec_requirements(ctx.attr.mode),
+        progress_message = "Compiling Dart kernel (%s) %%{label}" % mode,
+        execution_requirements = _exec_requirements(mode),
     )
 
     return [DefaultInfo(files = depset([dill]))]
@@ -352,14 +360,18 @@ half of the input set that is not declared file-by-file.""",
             default = "@flutter_sdk//:platform_debug",
             allow_files = True,
         ),
-        "mode": attr.string(
-            default = "release",
-            values = ["release", "debug"],
-            doc = """Build mode. Governs both compiler flags and cache policy.
+        "_mode": attr.label(
+            default = "//tools/flutter:mode",
+            providers = [BuildSettingInfo],
+            doc = """Build mode, read from //tools/flutter:mode. Governs both
+compiler flags and cache policy.
 
 Release output is stripped of absolute paths by gen_snapshot, so it is safe to
 share through a remote cache. Debug kernels embed source URIs and ship verbatim,
-so debug actions are tagged `local` and never cached remotely.""",
+so debug actions are tagged `local` and never cached remotely.
+
+Implicit rather than a public attribute: mode is one build-wide selection, not
+a per-target knob -- see docs_internal/build-modes-plan.md.""",
         ),
         "target_os": attr.string(
             default = "android",
@@ -445,14 +457,23 @@ unsupported instruction.""",
 def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, **kwargs):
     """Convenience wrapper: Dart sources straight through to libapp.so.
 
-    Release-only: debug builds ship kernel_blob.bin and never run gen_snapshot,
-    so there is no AOT ELF to produce.
+    Produces an AOT-shaped `.dill` and its `libapp.so` per ABI. `dart_kernel`'s
+    `--aot`/`--tfa` branch is what gen_snapshot needs; it is selected by the
+    ambient `//tools/flutter:mode`, not pinned here. Under `mode=debug` this
+    target's kernel compiles without them, so each `dart_aot_elf` here is
+    `target_compatible_with` only the modes `AOT_MODES` lists -- an explicit
+    debug build, or a `//...` sweep under debug, reports incompatibility
+    rather than reaching gen_snapshot with a kernel it rejects (see
+    docs_internal/build-modes-plan.md).
 
     Every rule-specific attribute is a named parameter here, and **kwargs
-    carries only what both targets should share -- visibility, tags. Forwarding
-    kwargs to both instead means an attribute that exists on only one of them
-    cannot be passed at all, which stops being a footnote as soon as either rule
-    grows a per-platform or per-ABI attribute.
+    carries only what both targets should share -- visibility, tags,
+    `target_compatible_with`. Forwarding kwargs to both instead means an
+    attribute that exists on only one of them cannot be passed at all, which
+    stops being a footnote as soon as either rule grows a per-platform or
+    per-ABI attribute. `target_compatible_with` is the one exception: each
+    `dart_aot_elf` already sets it (see below), so a caller-supplied value is
+    pulled out of kwargs once and concatenated in rather than passed twice.
 
     `abis` is required and always a list. There is no default: one would mean a
     consumer ships a single ABI, or three, without ever saying which.
@@ -472,9 +493,13 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
       dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
       target_os: OS the kernel is compiled for; see dart_kernel.
       strip: drop DWARF from each ELF.
-      **kwargs: visibility, tags -- anything both rules should share.
+      **kwargs: shared rule attributes.
     """
     check_abis(abis, "flutter_aot_library " + name)
+
+    # Avoid passing target_compatible_with twice.
+    caller_compatible_with = kwargs.pop("target_compatible_with", [])
+
     dart_kernel(
         name = name + "_kernel",
         srcs = srcs,
@@ -484,8 +509,8 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
         pub_stamp = pub_stamp,
         path_deps = path_deps,
         dart_plugin_registrant = dart_plugin_registrant,
-        mode = "release",
         target_os = target_os,
+        target_compatible_with = caller_compatible_with,
         **kwargs
     )
 
@@ -495,9 +520,11 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
         dart_aot_elf(
             name = "{}_{}".format(name, abi),
             dill = ":" + name + "_kernel",
-            gen_snapshot = gen_snapshot_label(abi),
+            gen_snapshot = aot_gen_snapshot(abi),
             snapshot_flags = ABIS[abi].snapshot_flags,
             strip = strip,
+            # AOT targets are incompatible with debug; retain caller constraints.
+            target_compatible_with = caller_compatible_with + aot_target_compatible_with(),
             **kwargs
         )
 
@@ -530,7 +557,6 @@ def flutter_app(
         dart_plugin_registrant = _DEFAULT_DART_PLUGIN_REGISTRANT,
         pub_stamp = None,
         plugin_deps = "//:plugin_deps.MODULE.bazel",
-        debug = False,
         target_os = "android",
         **kwargs):
     """The Dart half of a Flutter app: one call, in the app's own package.
@@ -557,7 +583,9 @@ def flutter_app(
     | `:dart_registrant_check` | fails if the committed registrant drifted |
     | `:guards_test` | the guards, under `bazel test` |
 
-    and with `debug = True` also `:app_debug_kernel` and `:assets_debug`.
+    `:app_<abi>` and `:assets` compile to their debug shape under
+    `--@flutter_bazel//tools/flutter:mode=debug`; see
+    docs_internal/build-modes-plan.md.
 
     The names are fixed rather than derived from a `name` parameter: the Android
     half computes them from the package (`flutter_android_binary(app = "//app")`),
@@ -589,7 +617,6 @@ def flutter_app(
         `:plugins_check` compares against the generated one. Repo-root by
         convention because that is where `include()` reads it from; `None` for a
         project with no plugin graph, which drops the two guards over it.
-      debug: also emit the local-only debug kernel and asset bundle.
       target_os: OS the kernel is compiled for; see dart_kernel.
       **kwargs: visibility, tags -- passed to every target declared here.
     """
@@ -667,35 +694,6 @@ def flutter_app(
         **kwargs
     )
 
-    if debug:
-        # Debug artifacts are pinned local and never shared: the kernel ships
-        # verbatim as kernel_blob.bin with this machine's paths in it.
-        dart_kernel(
-            name = "app_debug_kernel",
-            srcs = srcs,
-            pubspec = ":pubspec",
-            entrypoint = entrypoint,
-            package_config = ".dart_tool/package_config.json",
-            pub_stamp = pub_stamp,
-            path_deps = path_deps,
-            dart_plugin_registrant = dart_plugin_registrant,
-            mode = "debug",
-            **kwargs
-        )
-        flutter_assets(
-            name = "assets_debug",
-            srcs = srcs,
-            abis = abis,
-            assets = assets,
-            pubspec = ":pubspec",
-            entrypoint = entrypoint,
-            package_config = ".dart_tool/package_config.json",
-            pub_stamp = pub_stamp,
-            path_deps = path_deps,
-            mode = "debug",
-            **kwargs
-        )
-
     # The guards. Emitted rather than asked for: each one exists because its
     # absence was a silent failure once, and a guard a consumer has to remember
     # to instantiate is a guard that eventually is not there.
@@ -763,7 +761,7 @@ rm -f "$EXECROOT/{dir}/.last_build_id"
 rm -rf "$EXECROOT/{dir}/native_assets"
 """.format(
         flutter = FLUTTER_BIN,
-        mode = ctx.attr.mode,
+        mode = ctx.attr._mode[BuildSettingInfo].value,
         platform = ABIS[abi].target_platform,
         dir = _bundle_dir(ctx, out, abi, index),
     )
@@ -882,6 +880,7 @@ exec python3 "$EXECROOT/{merger}" {merge_args}
         ]),
     )
 
+    mode = ctx.attr._mode[BuildSettingInfo].value
     ctx.actions.run_shell(
         command = cmd,
         arguments = [args],
@@ -891,8 +890,8 @@ exec python3 "$EXECROOT/{merger}" {merge_args}
         outputs = [out],
         env = FLUTTER_ENV,
         mnemonic = "FlutterAssets",
-        progress_message = "Bundling Flutter assets (%s) %%{label}" % ctx.attr.mode,
-        execution_requirements = _exec_requirements(ctx.attr.mode),
+        progress_message = "Bundling Flutter assets (%s) %%{label}" % mode,
+        execution_requirements = _exec_requirements(mode),
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -949,10 +948,10 @@ bundle that started varying by architecture fails here rather than shipping.""",
             default = "//tools/flutter:merge_native_assets.py",
             allow_single_file = True,
         ),
-        "mode": attr.string(
-            default = "release",
-            values = ["release", "debug"],
-            doc = "See dart_kernel.mode. Debug bundles ship kernel_blob.bin.",
+        "_mode": attr.label(
+            default = "//tools/flutter:mode",
+            providers = [BuildSettingInfo],
+            doc = "See dart_kernel._mode. Debug bundles ship kernel_blob.bin.",
         ),
         "_sdk_version": attr.label(
             default = "@flutter_sdk//:flutter.version.json",

@@ -22,8 +22,6 @@ flutter_app(
         "arm64-v8a",
         "x86_64",
     ],
-    # Local-only artifacts, named so the debug shape is analysed too.
-    debug = True,
     entrypoint = "lib/alternate$release.dart",
     plugin_deps = None,
 )

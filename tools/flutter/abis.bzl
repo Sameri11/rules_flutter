@@ -15,13 +15,16 @@ there is no `gen_snapshot` to pair with an x86 library however many a package
 publishes.
 """
 
+MODES = ["release", "debug"]
+
+# Modes that require gen_snapshot.
+AOT_MODES = ["release"]
+
 def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platform, snapshot_flags = []):
     return struct(
         # `flutter build bundle --target-platform`.
         target_platform = target_platform,
-        # Engine cache directory holding this ABI's gen_snapshot.
         engine_dir = engine_dir,
-        # Maven artifact id on download.flutter.io.
         maven_artifact = maven_artifact,
         # The key the engine reads in NativeAssetsManifest.json. Baked in at
         # engine-compile time, so it is the engine that decides, not the build.
@@ -36,22 +39,31 @@ def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platfo
 ABIS = {
     "arm64-v8a": _abi(
         target_platform = "android-arm64",
-        engine_dir = "android-arm64-release",
-        maven_artifact = "arm64_v8a_release",
+        engine_dir = {"release": "android-arm64-release"},
+        maven_artifact = {
+            "release": "arm64_v8a_release",
+            "debug": "arm64_v8a_debug",
+        },
         manifest_key = "android_arm64",
         bazel_platform = "@rules_android//:arm64-v8a",
     ),
     "x86_64": _abi(
         target_platform = "android-x64",
-        engine_dir = "android-x64-release",
-        maven_artifact = "x86_64_release",
+        engine_dir = {"release": "android-x64-release"},
+        maven_artifact = {
+            "release": "x86_64_release",
+            "debug": "x86_64_debug",
+        },
         manifest_key = "android_x64",
         bazel_platform = "@rules_android//:x86_64",
     ),
     "armeabi-v7a": _abi(
         target_platform = "android-arm",
-        engine_dir = "android-arm-release",
-        maven_artifact = "armeabi_v7a_release",
+        engine_dir = {"release": "android-arm-release"},
+        maven_artifact = {
+            "release": "armeabi_v7a_release",
+            "debug": "armeabi_v7a_debug",
+        },
         manifest_key = "android_arm",
         bazel_platform = "@rules_android//:armeabi-v7a",
         # The only ABI needing flags, and the reason they live in a table rather
@@ -66,19 +78,20 @@ ABIS = {
     ),
 }
 
-def engine_repo(abi):
-    """Name of the repository holding this ABI's prebuilt engine jar.
+def engine_repo(abi, mode):
+    """Name of the repository holding one ABI's prebuilt engine jar in one mode.
 
     Args:
       abi: an Android ABI name, a key of ABIS.
+      mode: "release" or "debug".
 
     Returns:
       A repository name; `-` is not valid in one, so it becomes `_`.
     """
-    return "flutter_engine_" + abi.replace("-", "_")
+    return "flutter_engine_{}_{}".format(abi.replace("-", "_"), mode)
 
-def engine_jar_label(abi):
-    """The prebuilt engine jar for this ABI.
+def engine_jar_label(abi, mode):
+    """The prebuilt engine jar for one ABI in one mode.
 
     A `Label`, not a string: a string handed to an attribute from inside a macro
     resolves in the *caller's* repo mapping, and these repositories are our
@@ -87,14 +100,31 @@ def engine_jar_label(abi):
 
     Args:
       abi: an Android ABI name, a key of ABIS.
+      mode: "release" or "debug".
 
     Returns:
       A Label for the unstripped engine jar.
     """
-    return Label("@{}//jar:file".format(engine_repo(abi)))
+    return Label("@{}//jar:file".format(engine_repo(abi, mode)))
 
-def gen_snapshot_label(abi):
-    """The @flutter_sdk target holding this ABI's gen_snapshot.
+def embedding_repo(mode):
+    """Name of the repository holding the Java embedding jar for one mode.
+
+    Architecture-independent -- unlike engine_repo, there is no ABI axis --
+    but mode-keyed for the same reason: `BuildConfig.DEBUG` is a
+    `static final boolean`, so the jar a `MainActivity` compiles against fixes
+    the mode, and only the debug jar's carries service-protocol/JIT support.
+
+    Args:
+      mode: "release" or "debug".
+
+    Returns:
+      A repository name.
+    """
+    return "flutter_embedding_" + mode
+
+def gen_snapshot_label(abi, mode):
+    """The @flutter_sdk target holding this ABI's gen_snapshot for one AOT mode.
 
     A `Label`, for the same reason engine_jar_label returns one: a string handed
     to an attribute from inside a macro resolves in the *caller's* repo mapping,
@@ -103,11 +133,51 @@ def gen_snapshot_label(abi):
 
     Args:
       abi: an Android ABI name, a key of ABIS.
+      mode: an AOT_MODES entry.
 
     Returns:
-      A Label for that ABI's gen_snapshot.
+      A Label for that ABI's gen_snapshot in that mode.
     """
-    return Label("@flutter_sdk//:gen_snapshot_" + abi)
+    return Label("@flutter_sdk//:gen_snapshot_{}_{}".format(abi, mode))
+
+def aot_target_compatible_with():
+    """target_compatible_with for a rule that only runs under an AOT-capable mode.
+
+    Built from AOT_MODES rather than naming "debug" directly, so adding
+    "profile" to that one list is the whole edit needed to make an AOT rule
+    compatible with it too -- see docs_internal/build-modes-plan.md. Every
+    mode this omits reports "target incompatible with the current
+    configuration" during analysis instead of reaching gen_snapshot with a
+    kernel it rejects.
+
+    Returns:
+      A select() value for a `target_compatible_with` attribute.
+    """
+    conditions = {"//conditions:default": [Label("@platforms//:incompatible")]}
+    for mode in AOT_MODES:
+        conditions[Label("//tools/flutter:mode_" + mode)] = []
+    return select(conditions)
+
+def aot_gen_snapshot(abi):
+    """select() choosing one ABI's gen_snapshot for whichever AOT mode is active.
+
+    Built from AOT_MODES for the same reason as aot_target_compatible_with.
+    The default branch is only a placeholder for configurations where the
+    depending rule is itself target-incompatible (every mode outside
+    AOT_MODES), so it is never actually consumed.
+
+    Args:
+      abi: an Android ABI name, a key of ABIS.
+
+    Returns:
+      A select() value for a `gen_snapshot` attribute.
+    """
+    conditions = {
+        Label("//tools/flutter:mode_" + mode): gen_snapshot_label(abi, mode)
+        for mode in AOT_MODES
+    }
+    conditions["//conditions:default"] = gen_snapshot_label(abi, AOT_MODES[0])
+    return select(conditions)
 
 # The API level the whole Android build targets: the `minSdkVersion` an APK
 # declares, and the `ANDROID_PLATFORM` a plugin's CMake build compiles against.
