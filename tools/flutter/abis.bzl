@@ -20,7 +20,7 @@ MODES = ["release", "debug"]
 # Modes that require gen_snapshot.
 AOT_MODES = ["release"]
 
-def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platform, snapshot_flags = []):
+def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platform, cpu_constraint, snapshot_flags = []):
     return struct(
         # `flutter build bundle --target-platform`.
         target_platform = target_platform,
@@ -32,6 +32,8 @@ def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platfo
         # rules_android's platform, which selects the NDK cc_toolchain that
         # cross-strips this ABI's libraries.
         bazel_platform = bazel_platform,
+        # CPU constraint used to identify the ABI after a platform transition.
+        cpu_constraint = cpu_constraint,
         # Extra gen_snapshot flags. Empty for everything but armv7.
         snapshot_flags = snapshot_flags,
     )
@@ -46,6 +48,7 @@ ABIS = {
         },
         manifest_key = "android_arm64",
         bazel_platform = "@rules_android//:arm64-v8a",
+        cpu_constraint = Label("@platforms//cpu:arm64"),
     ),
     "x86_64": _abi(
         target_platform = "android-x64",
@@ -56,6 +59,7 @@ ABIS = {
         },
         manifest_key = "android_x64",
         bazel_platform = "@rules_android//:x86_64",
+        cpu_constraint = Label("@platforms//cpu:x86_64"),
     ),
     "armeabi-v7a": _abi(
         target_platform = "android-arm",
@@ -66,6 +70,7 @@ ABIS = {
         },
         manifest_key = "android_arm",
         bazel_platform = "@rules_android//:armeabi-v7a",
+        cpu_constraint = Label("@platforms//cpu:armv7"),
         # The only ABI needing flags, and the reason they live in a table rather
         # than a rule body. flutter_tools passes both for armv7 (softfp, and no
         # integer division on 32-bit Pixels). Omitting them yields a snapshot
@@ -77,6 +82,98 @@ ABIS = {
         ],
     ),
 }
+
+# Android CPU constraints recognized as unsupported, so diagnostics distinguish
+# unsupported Android CPUs from non-Android platforms.
+_UNSUPPORTED_ANDROID_CPU_CONSTRAINTS = {
+    Label("@platforms//cpu:x86_32"): "x86",
+    Label("@platforms//cpu:riscv64"): "riscv64",
+}
+
+def abi_cpu_constraints():
+    """Build and validate the CPU-constraint-to-ABI mapping.
+
+    Checks platform target names against ABI keys and rejects overlap with
+    unsupported CPU constraints. Duplicate ABI constraints are checked after the
+    platform transition.
+    """
+    constraints = {}
+    for abi, entry in ABIS.items():
+        platform_name = Label(entry.bazel_platform).name
+        if platform_name != abi:
+            fail((
+                "abis.bzl: ABIS['{}'].bazel_platform names platform '{}', not " +
+                "'{}'. rules_android packages native libraries under " +
+                "lib/<platform name>/ (native_deps.bzl:49-51), so a mismatched " +
+                "name would place this ABI's libraries under another ABI's " +
+                "directory."
+            ).format(abi, platform_name, abi))
+        constraints[entry.cpu_constraint] = abi
+    for constraint, name in _UNSUPPORTED_ANDROID_CPU_CONSTRAINTS.items():
+        if constraint in constraints:
+            fail("abis.bzl: ABIS and _UNSUPPORTED_ANDROID_CPU_CONSTRAINTS both name {}.".format(
+                constraint,
+            ))
+        constraints[constraint] = name
+    return constraints
+
+# Implicit attrs used to identify the ABI from the target platform.
+ABI_PLATFORM_ATTRS = {
+    "_cpu_constraints": attr.label_keyed_string_dict(default = abi_cpu_constraints()),
+    # CPU constraints are shared with non-Android platforms; gate matching on OS.
+    "_android_os": attr.label(default = Label("@platforms//os:android")),
+}
+
+def abi_from_platform(ctx):
+    """Return the matching Android ABI or unsupported CPU name, or None.
+
+    CPU constraints are shared with non-Android platforms, so require Android
+    before matching the CPU.
+    """
+    android = ctx.attr._android_os[platform_common.ConstraintValueInfo]
+    if not ctx.target_platform_has_constraint(android):
+        return None
+    for target, name in ctx.attr._cpu_constraints.items():
+        constraint = target[platform_common.ConstraintValueInfo]
+        if ctx.target_platform_has_constraint(constraint):
+            return name
+    return None
+
+def check_platform_abi(ctx):
+    """Verify that a platform transition selected the platform for `ctx.attr.abi`.
+
+    Only valid on rules that transition `--platforms` from `abi`; returns
+    `ctx.attr.abi`.
+    """
+    found = abi_from_platform(ctx)
+    if found == None:
+        fail((
+            "{}: target platform '{}' is not Android, or names no CPU " +
+            "constraint this ruleset recognizes, so it cannot be checked " +
+            "against abi = '{}'. This rule transitions --platforms from its " +
+            "own `abi` attribute; if that transition is ever removed, this " +
+            "check should go with it."
+        ).format(ctx.label, ctx.attr.platform, ctx.attr.abi))
+    if found not in ABIS:
+        fail((
+            "{}: target platform '{}' is Android/{}, which this ruleset does " +
+            "not support (abi = '{}'). Supported: {}."
+        ).format(ctx.label, ctx.attr.platform, found, ctx.attr.abi, sorted(ABIS)))
+    if found != ctx.attr.abi:
+        fail((
+            "{}: abi = '{}' but target platform '{}' carries the CPU " +
+            "constraint for '{}'. ABIS['{}'].bazel_platform = '{}' and " +
+            ".cpu_constraint = {} -- one of the two names the wrong ABI."
+        ).format(
+            ctx.label,
+            ctx.attr.abi,
+            ctx.attr.platform,
+            found,
+            ctx.attr.abi,
+            ABIS[ctx.attr.abi].bazel_platform,
+            ABIS[ctx.attr.abi].cpu_constraint,
+        ))
+    return found
 
 def engine_repo(abi, mode):
     """Name of the repository holding one ABI's prebuilt engine jar in one mode.

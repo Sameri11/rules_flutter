@@ -294,10 +294,12 @@
     },
     "@@flutter_bazel+//tools/flutter:repo.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "Oop1UNynQF9QBYAGxsL5jtGFHTvvxDO2joCELpjUy8k=",
+        "bzlTransitiveDigest": "d+QOYBXZDgSMalXxWrcYdXIwHj6vtRA+gYozWrRtp+Y=",
         "usagesDigest": "mQknFwd976ijLU1HtIkhRWPjTRHeznfdUdGB65LCnw0=",
         "recordedInputs": [
-          "REPO_MAPPING:flutter_bazel+,bazel_tools bazel_tools"
+          "REPO_MAPPING:flutter_bazel+,bazel_tools bazel_tools",
+          "REPO_MAPPING:flutter_bazel+,platforms platforms",
+          "REPO_MAPPING:flutter_bazel+,rules_android rules_android+"
         ],
         "generatedRepoSpecs": {
           "flutter_sdk": {

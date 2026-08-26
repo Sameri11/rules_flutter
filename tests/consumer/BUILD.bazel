@@ -12,7 +12,7 @@ load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
 load("@flutter_bazel//tools/flutter:pubspec.bzl", "flutter_pubspec")
 load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
 load("@rules_java//java:defs.bzl", "java_import")
-load(":assertions.bzl", "expect_equal")
+load(":assertions.bzl", "expect_equal", "expect_label_equal")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -74,6 +74,25 @@ expect_equal(
         "--no-use-integer-division",
     ],
     "armeabi-v7a snapshot_flags",
+)
+
+# Keep each ABI's explicit CPU constraint aligned with the table.
+expect_label_equal(
+    ABIS["arm64-v8a"].cpu_constraint,
+    "@platforms//cpu:arm64",
+    "arm64-v8a cpu_constraint",
+)
+
+expect_label_equal(
+    ABIS["x86_64"].cpu_constraint,
+    "@platforms//cpu:x86_64",
+    "x86_64 cpu_constraint",
+)
+
+expect_label_equal(
+    ABIS["armeabi-v7a"].cpu_constraint,
+    "@platforms//cpu:armv7",
+    "armeabi-v7a cpu_constraint",
 )
 
 # The macro, with every named parameter supplied -- it is the public entry point

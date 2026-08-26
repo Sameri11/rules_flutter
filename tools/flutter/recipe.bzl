@@ -301,7 +301,10 @@ and wrapped there in a java_import the app can depend on directly.""",
 lib/<abi>/ directory libraries are packaged under. See FlutterNativeInfo.
 
 Mandatory: a default here packages one architecture's libraries as another's,
-which nothing downstream can detect.""",
+which nothing downstream can detect.
+
+Not checked against abi_from_platform: this rule does not transition --platforms,
+so its ambient configuration is the caller's, not this slice's.""",
         ),
     },
 )

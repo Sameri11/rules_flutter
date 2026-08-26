@@ -11,7 +11,7 @@ cannot describe. Recipes are keyed by pub package so they also support packages
 without an `android/` module.
 """
 
-load(":abis.bzl", "ABIS", "MIN_SDK", "check_abis", "plugin_repo_target")
+load(":abis.bzl", "MIN_SDK", "check_abis", "plugin_repo_target")
 load(":embedding.bzl", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
@@ -1303,7 +1303,6 @@ def _flutter_plugins_impl(ctx):
                     cmake_dir = cmake_directory,
                     toolchain_file = toolchain_file,
                     abi = abi,
-                    bazel_platform = ABIS[abi].bazel_platform,
                     api_level = MIN_SDK,
                 )
                 for abi in ctx.attr.abis

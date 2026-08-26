@@ -8,3 +8,12 @@ def expect_equal(actual, expected, what):
     """Fails the load if `actual` differs from `expected`."""
     if actual != expected:
         fail("{}: got {}, expected {}".format(what, actual, expected))
+
+def expect_label_equal(actual, expected, what):
+    """Fails the load if `actual` differs from `Label(expected)`.
+
+    Builds the expected label here because BUILD files cannot call `Label()`.
+    """
+    want = Label(expected)
+    if actual != want:
+        fail("{}: got {}, expected {}".format(what, actual, want))

@@ -17,7 +17,7 @@ load("@flutter_sdk//:sdk.bzl", "FLUTTER_ENV")
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_java//java:defs.bzl", "java_import")
-load(":abis.bzl", "ABIS", "MIN_SDK", "check_abis", "engine_jar_label", "plugin_repo_target")
+load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MIN_SDK", "check_abis", "check_platform_abi", "engine_jar_label", "plugin_repo_target")
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
 load(":embedding.bzl", "flutter_embedding_deps")
 load(":pubspec.bzl", "FlutterPubspecInfo")
@@ -63,6 +63,8 @@ jni_lib_jar = rule(
         "src": attr.label(allow_single_file = True, mandatory = True),
         # Mandatory: it decides which lib/<abi>/ the library is loaded from, so
         # a default packages one architecture's .so as another's, silently.
+        # This rule does not transition --platforms; its ambient platform is the
+        # caller's, so check_platform_abi is not applicable.
         "abi": attr.string(mandatory = True),
         "soname": attr.string(doc = "Override the packaged filename."),
     },
@@ -87,6 +89,8 @@ _android_platform_transition = transition(
 )
 
 def _android_native_lib_jar_impl(ctx):
+    abi = check_platform_abi(ctx)
+
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
 
     # cmake() reports its whole install tree (headers included); only the
@@ -123,7 +127,7 @@ for so in {sos}; do
 done
 ( cd "$STAGE" && zip -q -X -r "$OLDPWD/{jar}" lib )
 """.format(
-            abi = ctx.attr.abi,
+            abi = abi,
             sos = " ".join(['"{}"'.format(f.path) for f in sos]),
             jar = jar.path,
             strip = cc_toolchain.strip_executable,
@@ -143,17 +147,18 @@ _android_native_lib_jar = rule(
 `src` is built under `platform` regardless of the configuration this target is
 reached from -- see _android_platform_transition.""",
     cfg = _android_platform_transition,
-    attrs = {
-        "src": attr.label_list(
+    attrs = dict(
+        ABI_PLATFORM_ATTRS,
+        src = attr.label_list(
             mandatory = True,
             doc = "Target producing .so files, typically a rules_foreign_cc cmake().",
         ),
-        "abi": attr.string(mandatory = True),
-        "platform": attr.string(
+        abi = attr.string(mandatory = True),
+        platform = attr.string(
             mandatory = True,
             doc = "Platform the native library is built for. Derived from `abi`.",
         ),
-    },
+    ),
     toolchains = use_cc_toolchain(),
 )
 
@@ -182,6 +187,8 @@ def android_native_lib_jar(name, src, abi, **kwargs):
     )
 
 def _strip_native_libs_impl(ctx):
+    check_platform_abi(ctx)
+
     stripped = ctx.actions.declare_file(ctx.label.name + ".jar")
 
     # The NDK's llvm-strip, resolved through the Android cc_toolchain rather
@@ -238,17 +245,20 @@ _strip_native_libs = rule(
 The stripped jar is the default output, so it drops straight into an
 android_binary's classpath where the original jar was.""",
     cfg = _android_platform_transition,
-    attrs = {
-        "jar": attr.label(
+    attrs = dict(
+        ABI_PLATFORM_ATTRS,
+        jar = attr.label(
             allow_single_file = [".jar"],
             mandatory = True,
             doc = "Jar carrying lib/<abi>/*.so -- e.g. the Flutter engine artifact.",
         ),
-        "platform": attr.string(
+        # check_platform_abi validates the transitioned platform against `abi`.
+        abi = attr.string(mandatory = True),
+        platform = attr.string(
             mandatory = True,
             doc = "Platform whose cc_toolchain supplies strip. Derived from `abi`.",
         ),
-    },
+    ),
     toolchains = use_cc_toolchain(),
 )
 
@@ -270,6 +280,7 @@ def strip_native_libs(name, jar, abi, **kwargs):
     _strip_native_libs(
         name = name,
         jar = jar,
+        abi = abi,
         platform = ABIS[abi].bazel_platform,
         **kwargs
     )
