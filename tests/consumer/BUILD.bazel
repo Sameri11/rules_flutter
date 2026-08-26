@@ -35,7 +35,6 @@ dart_kernel(
     pubspec = ":pubspec",
 )
 
-
 # target_os is the 0.3 attribute. Named explicitly rather than left default, so
 # renaming or removing it fails here.
 dart_kernel(

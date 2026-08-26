@@ -96,6 +96,9 @@ def abi_cpu_constraints():
     Checks platform target names against ABI keys and rejects overlap with
     unsupported CPU constraints. Duplicate ABI constraints are checked after the
     platform transition.
+
+    Returns:
+      A dict from CPU constraint Label to ABI or unsupported-CPU name.
     """
     constraints = {}
     for abi, entry in ABIS.items():
@@ -129,6 +132,12 @@ def abi_from_platform(ctx):
 
     CPU constraints are shared with non-Android platforms, so require Android
     before matching the CPU.
+
+    Args:
+      ctx: the rule or aspect context; must carry ABI_PLATFORM_ATTRS.
+
+    Returns:
+      An ABI name, an unsupported-CPU name, or None if not Android.
     """
     android = ctx.attr._android_os[platform_common.ConstraintValueInfo]
     if not ctx.target_platform_has_constraint(android):
@@ -144,6 +153,12 @@ def check_platform_abi(ctx):
 
     Only valid on rules that transition `--platforms` from `abi`; returns
     `ctx.attr.abi`.
+
+    Args:
+      ctx: the rule context; must carry ABI_PLATFORM_ATTRS and an `abi` attribute.
+
+    Returns:
+      `ctx.attr.abi`, after verifying it against the target platform.
     """
     found = abi_from_platform(ctx)
     if found == None:
