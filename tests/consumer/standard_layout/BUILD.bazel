@@ -13,7 +13,7 @@
 # package pairs that with `plugins = None`, proving the complete shape creates no
 # @flutter_plugins label and defaults to no federated Dart registrant.
 
-load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+load("@rules_flutter//tools/flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 

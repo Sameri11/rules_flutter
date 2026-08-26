@@ -1,7 +1,7 @@
 """Recipe for rive_native's Kotlin plugin and prebuilt Android libraries."""
 
 # Load from the defining module; @@// is root-module-relative.
-load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution")
+load("@rules_flutter//tools/flutter:recipe.bzl", "flutter_native_contribution")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 # The archive's supported ABIs. Label() resolves repositories in this module.

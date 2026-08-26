@@ -1,4 +1,4 @@
-load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+load("@rules_flutter//tools/flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 

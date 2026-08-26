@@ -5,9 +5,9 @@ module(
 
 # Minimal plugin-free module: no plugins.project(), generated segment, or
 # @flutter_plugins repository.
-bazel_dep(name = "flutter_bazel", version = "0.1.0")
+bazel_dep(name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "flutter_bazel",
+    module_name = "rules_flutter",
     path = "../..",
 )
 

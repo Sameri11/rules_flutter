@@ -12,7 +12,7 @@ bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //
 The real prerequisite is an **installed NDK named by `ANDROID_NDK_HOME`**, not the
 flag. `//...` here includes `:apk_derived_flutter_engine_<abi>_stripped`, and
 stripping resolves `@@bazel_tools//tools/cpp:toolchain_type`; with no NDK,
-`@flutter_bazel//tools/flutter:ndk.bzl` substitutes its toolchain-less stub and
+`@rules_flutter//tools/flutter:ndk.bzl` substitutes its toolchain-less stub and
 analysis fails:
 
     No matching toolchains found for types:
@@ -110,7 +110,7 @@ verbatim — both carry **absolute** `file://` paths into `~/.pub-cache`, unique
 to whichever machine ran `pub get`. `fixtures/plugin_fixture.bzl` is a small
 repository rule that synthesizes both at fetch time from `fake_plugin`'s real
 on-disk location, so the pair stays correct on any checkout. This proves two
-things nothing else here can, because this module reaches `flutter_bazel` the
+things nothing else here can, because this module reaches `rules_flutter` the
 same way `hello_bazel` and `smooth-app` do and those two are external to this
 repository:
 
@@ -128,7 +128,7 @@ repository:
   ..., but no such package is in the resolution`.
 
   This case used to arrive for free: every consumer inherited
-  `flutter_bazel`'s own root `rive_native`/`sqlite3` recipes the moment it
+  `rules_flutter`'s own root `rive_native`/`sqlite3` recipes the moment it
   called `plugins.project()`, because the ruleset shipped a demo app inside its
   own module. That app is now `//examples/demo_app`, a separate module absent
   from this graph, so nothing is inherited and the case is declared on purpose.
@@ -136,7 +136,7 @@ repository:
   ruleset having an app inside it.
 - A generated plugin's Maven coordinate resolves through the **canonical**
   repository `plugins.project(maven_repo = ...)` named, not through whichever
-  repository happens to be named `@flutter_maven` in `flutter_bazel`'s own
+  repository happens to be named `@flutter_maven` in `rules_flutter`'s own
   mapping. `MODULE.bazel` declares a second, distinctly-named install,
   `plugin_maven`, containing a coordinate absent from every `flutter_maven`
   install in the graph; `fake_plugin`'s `build.gradle` depends on it, and

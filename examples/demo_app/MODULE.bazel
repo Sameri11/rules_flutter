@@ -3,22 +3,22 @@ module(
     version = "0.0.1",
 )
 
-# Uses the local checkout because flutter_bazel is not published.
-bazel_dep(name = "flutter_bazel", version = "0.1.0")
+# Uses the local checkout because rules_flutter is not published.
+bazel_dep(name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "flutter_bazel",
+    module_name = "rules_flutter",
     path = "../..",
 )
 
-# flutter_bazel provides the SDK/engine repositories and Android toolchains.
+# rules_flutter provides the SDK/engine repositories and Android toolchains.
 
-# Dependencies named directly by this module; flutter_bazel declares the rest.
+# Dependencies named directly by this module; rules_flutter declares the rest.
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
 # Generate one plugin target per native Android plugin from pub metadata.
-plugins = use_extension("@flutter_bazel//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
     # Keep this list aligned with //android/app.
     abis = [

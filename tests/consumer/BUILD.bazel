@@ -4,13 +4,13 @@ This is an API test, not a behaviour test.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@flutter_bazel//tools/flutter:abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "plugin_repo_target")
-load("@flutter_bazel//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_binary", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "strip_native_libs")
-load("@flutter_bazel//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
-load("@flutter_bazel//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
-load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
-load("@flutter_bazel//tools/flutter:pubspec.bzl", "flutter_pubspec")
-load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
+load("@rules_flutter//tools/flutter:abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "plugin_repo_target")
+load("@rules_flutter//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_binary", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "strip_native_libs")
+load("@rules_flutter//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
+load("@rules_flutter//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
+load("@rules_flutter//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_flutter//tools/flutter:pubspec.bzl", "flutter_pubspec")
+load("@rules_flutter//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":assertions.bzl", "expect_equal", "expect_label_equal")
 
@@ -548,8 +548,8 @@ build_test(
 alias(
     name = "embedding_mode_hazard_expected",
     actual = select({
-        "@flutter_bazel//tools/flutter:mode_debug": "@flutter_embedding_debug//jar:file",
-        "@flutter_bazel//tools/flutter:mode_release": "@flutter_embedding_release//jar:file",
+        "@rules_flutter//tools/flutter:mode_debug": "@flutter_embedding_debug//jar:file",
+        "@rules_flutter//tools/flutter:mode_release": "@flutter_embedding_release//jar:file",
     }),
 )
 
@@ -564,11 +564,11 @@ genrule(
 if ! cmp -s "$(location :flutter_embedding_no_plugins)" "$(location :embedding_mode_hazard_expected)"; then
     echo "flutter_embedding_no_plugins is not this configuration's embedding" >&2
     echo "jar. embedding.bzl's jars select() resolved a select() key against" >&2
-    echo "the decoy //tools/flutter package instead of @flutter_bazel's --" >&2
+    echo "the decoy //tools/flutter package instead of @rules_flutter's --" >&2
     echo "see the comment above." >&2
     exit 1
 fi
-printf 'embedding.bzl select() resolved against @flutter_bazel, not the decoy\n' > "$@"
+printf 'embedding.bzl select() resolved against @rules_flutter, not the decoy\n' > "$@"
 """,
 )
 

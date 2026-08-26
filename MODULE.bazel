@@ -1,5 +1,5 @@
 module(
-    name = "flutter_bazel",
+    name = "rules_flutter",
     version = "0.1.0",
 )
 

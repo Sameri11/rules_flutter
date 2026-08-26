@@ -3,7 +3,7 @@ module(
     version = "0.0.1",
 )
 
-bazel_dep(name = "flutter_bazel", version = "0.1.0")
+bazel_dep(name = "rules_flutter", version = "0.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "external_app", version = "0.0.1")
 
@@ -56,7 +56,7 @@ maven.install(
 use_repo(maven, "flutter_maven", "plugin_maven")
 
 local_path_override(
-    module_name = "flutter_bazel",
+    module_name = "rules_flutter",
     path = "../..",
 )
 
@@ -75,7 +75,7 @@ fake_plugin_metadata(
     marker = "//:fixtures/fake_plugin/pubspec.yaml",
 )
 
-plugins = use_extension("@flutter_bazel//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//:flutter_embedding_no_plugins",
@@ -85,5 +85,5 @@ plugins.project(
 )
 use_repo(plugins, "flutter_plugins")
 
-flutter = use_extension("@flutter_bazel//tools/flutter:repo.bzl", "flutter")
+flutter = use_extension("@rules_flutter//tools/flutter:repo.bzl", "flutter")
 use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release", "flutter_sdk")

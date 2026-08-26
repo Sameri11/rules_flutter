@@ -1,9 +1,9 @@
 # The Android half, beside the Gradle module it mirrors so both read the same
 # manifest, resources and sources.
 
-load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
-load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
 load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_flutter//tools/flutter:android.bzl", "flutter_android_binary")
+load("@rules_flutter//tools/flutter:embedding.bzl", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])

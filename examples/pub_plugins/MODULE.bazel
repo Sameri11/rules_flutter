@@ -4,9 +4,9 @@ module(
 )
 
 # Copyable flat app: pub plugins, one ABI, no recipes or path dependencies.
-bazel_dep(name = "flutter_bazel", version = "0.1.0")
+bazel_dep(name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "flutter_bazel",
+    module_name = "rules_flutter",
     path = "../..",
 )
 
@@ -15,7 +15,7 @@ bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
 # Generate plugin targets from pub metadata.
-plugins = use_extension("@flutter_bazel//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
     # One native ABI is enough to exercise the CMake path.
     abis = ["arm64-v8a"],

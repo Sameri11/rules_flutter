@@ -6,16 +6,16 @@
 # `flutter migrate` rewrite files under app/android/. They do not delete unknown
 # files, so this BUILD survives, but keep that in mind when upgrading templates.
 
-load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
-load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
 load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_flutter//tools/flutter:android.bzl", "flutter_android_binary")
+load("@rules_flutter//tools/flutter:embedding.bzl", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
 # Every plugin `pub get` reported as having an Android native build. The
 # aggregate is generated from .flutter-plugins-dependencies, so adding a plugin
-# to pubspec.yaml is the only step -- see @flutter_bazel//tools/flutter:plugins.bzl. Named
+# to pubspec.yaml is the only step -- see @rules_flutter//tools/flutter:plugins.bzl. Named
 # here only because :generated_plugin_registrant and :main_activity need it;
 # the APK derives it.
 PLUGINS = ["@flutter_plugins//:all"]
@@ -34,7 +34,7 @@ ABIS = [
 # this project's MODULE.bazel creates from this project's plugin coordinates. A
 # label naming it from inside the rules would resolve against the *rules'*
 # dependencies instead -- which is exactly the bug that made these rules
-# unusable as a bazel_dep. See @flutter_bazel//tools/flutter:embedding.bzl.
+# unusable as a bazel_dep. See @rules_flutter//tools/flutter:embedding.bzl.
 flutter_embedding_library(name = "flutter_embedding")
 
 # Every Flutter contribution to the APK, joined into one target -- the AOT
@@ -42,7 +42,7 @@ flutter_embedding_library(name = "flutter_embedding")
 # and their native halves, the recipe libraries, the registrant -- and then one
 # APK per shape: :demo_app carries every ABI, :demo_app_<abi> carries one. A
 # bundle check per shape fails the build if any of them is missing a piece; see
-# @flutter_bazel//tools/flutter:bundle.bzl.
+# @rules_flutter//tools/flutter:bundle.bzl.
 #
 # Four things are stated: the ABIs, the Dart half's package, the applicationId
 # and this module's own targets. The rest is derived -- //:app, //:assets and

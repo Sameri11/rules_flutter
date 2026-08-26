@@ -3,10 +3,10 @@ module(
     version = "0.0.1",
 )
 
-bazel_dep(name = "flutter_bazel", version = "0.1.0")
+bazel_dep(name = "rules_flutter", version = "0.1.0")
 
 # Report and ignore unmatched dependency recipes.
-plugins = use_extension("@flutter_bazel//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.package(
     name = "absent_package",
     bzl_file = "//:absent_package.bzl",

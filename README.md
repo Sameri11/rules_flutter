@@ -1,4 +1,4 @@
-# flutter_bazel
+# rules_flutter
 
 Bazel rules that build the **Dart half** of a Flutter app directly — driving
 `frontend_server` and `gen_snapshot` rather than shelling out to `flutter build`.
@@ -156,7 +156,7 @@ layout the project root *is* the module root, so this file sits beside
 `pubspec.yaml` and `MODULE.bazel`. `examples/demo_app` is exactly this.)
 
 ```python
-load("@flutter_bazel//tools/flutter:defs.bzl", "flutter_app")
+load("@rules_flutter//tools/flutter:defs.bzl", "flutter_app")
 
 flutter_app(
     abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
@@ -172,14 +172,14 @@ are fixed standard-layout paths. `entrypoint`, `path_deps`, assets and sources
 are the supported deviations; the selected entrypoint drives both kernel
 compilation and `flutter build bundle --target`. Debug is not a per-target
 attribute: every emitted target is mode-selected by
-`--@flutter_bazel//tools/flutter:mode=debug` on the command line, not written
+`--@rules_flutter//tools/flutter:mode=debug` on the command line, not written
 here -- see [Targets](#targets).
 
 `android/app/BUILD.bazel` — the APK, beside the Gradle module it mirrors:
 
 ```python
-load("@flutter_bazel//tools/flutter:android.bzl", "flutter_android_binary")
-load("@flutter_bazel//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_flutter//tools/flutter:android.bzl", "flutter_android_binary")
+load("@rules_flutter//tools/flutter:embedding.bzl", "flutter_embedding_library")
 
 flutter_embedding_library(name = "flutter_embedding")
 
@@ -192,7 +192,7 @@ flutter_android_binary(
 )
 ```
 
-Both `load()`s name `@flutter_bazel`, because in your project these rules are a
+Both `load()`s name `@rules_flutter`, because in your project these rules are a
 dependency. Writing `//tools/flutter:...` would name a package in *your* repo.
 
 `app` names the Dart half, and `//:assets` and `//:pubspec` are derived from its
@@ -267,18 +267,18 @@ Full per-attribute verdicts, with the measured before/after counts:
 ```sh
 bazel build //:app_arm64-v8a     # release libapp.so, one target per ABI
 bazel build //:assets            # release flutter_assets tree
-bazel build //:app_arm64-v8a --@flutter_bazel//tools/flutter:mode=debug  # incompatible at analysis; see below
-bazel build //:assets --@flutter_bazel//tools/flutter:mode=debug         # debug bundle, ships kernel_blob.bin
+bazel build //:app_arm64-v8a --@rules_flutter//tools/flutter:mode=debug  # incompatible at analysis; see below
+bazel build //:assets --@rules_flutter//tools/flutter:mode=debug         # debug bundle, ships kernel_blob.bin
 bazel build //:path_deps_check   # guard: fails on undeclared path: deps
 bazel build //:plugins_check     # guard: fails on stale plugin_deps.MODULE.bazel
 bazel build //:dart_registrant_check  # guard: fails on stale Dart plugin registrant
 bazel build //android/app:demo_app_flutter_check  # guard: bundle completeness + code assets
 bazel build //android/app:demo_app   # signed APK
-bazel build //android/app:demo_app --@flutter_bazel//tools/flutter:mode=debug  # the same APK label, debug-shaped
+bazel build //android/app:demo_app --@rules_flutter//tools/flutter:mode=debug  # the same APK label, debug-shaped
 ```
 
 `mode` is a build setting, not a target-name axis: one APK label, selected by
-`--@flutter_bazel//tools/flutter:mode={release,debug}` (release is the
+`--@rules_flutter//tools/flutter:mode={release,debug}` (release is the
 default). `//:app_<abi>` is release-only -- it feeds `gen_snapshot`, which
 debug never runs -- so it is `target_compatible_with` release alone: an
 explicit debug build of it, or a `//...` sweep under debug, reports

@@ -7,7 +7,7 @@ code asset below.
 
 # Resolve these repositories in this module, where MODULE.bazel declares them.
 # Bare apparent names would resolve in the generated repository's mapping.
-load("@flutter_bazel//tools/flutter:recipe.bzl", "flutter_native_contribution")
+load("@rules_flutter//tools/flutter:recipe.bzl", "flutter_native_contribution")
 
 _LIBRARIES = {
     "arm64-v8a": Label("@libsqlite3_android_arm64_v8a//file"),

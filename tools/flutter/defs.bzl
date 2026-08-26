@@ -584,7 +584,7 @@ def flutter_app(
     | `:guards_test` | the guards, under `bazel test` |
 
     `:app_<abi>` and `:assets` compile to their debug shape under
-    `--@flutter_bazel//tools/flutter:mode=debug`; see
+    `--@rules_flutter//tools/flutter:mode=debug`; see
     docs_internal/build-modes-plan.md.
 
     The names are fixed rather than derived from a `name` parameter: the Android
