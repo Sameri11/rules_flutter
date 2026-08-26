@@ -1,27 +1,27 @@
 # rules_flutter
 
-Bazel rules that build the **Dart half** of a Flutter app directly — driving
-`frontend_server` and `gen_snapshot` rather than shelling out to `flutter build`.
+Bazel rules that build a Flutter app directly: the Dart compilation driven by
+`frontend_server` and `gen_snapshot`, and the Android packaging driven by
+`rules_android`, rather than shelling out to `flutter build`.
 
-The premise: a Flutter build is not one monolithic step. It decomposes at a
-natural seam.
+The build decomposes at a natural seam.
 
 ```
 lib/**.dart ──frontend_server──> app.dill ──gen_snapshot──> libapp.so ─┐
-                                                                       ├─> APK/IPA
+                                                                       ├─> Android APK
 libflutter.so (prebuilt engine) ───────────────────────────────────────┤
 flutter_assets ────────────────────────────────────────────────────────┘
-       \_____ Dart half (this repo) _____/    \__ platform half (not yet) __/
+       \________ Dart compilation ________/    \__ Android packaging __/
 ```
 
-Everything left of `libapp.so` is what these rules cover. The right-hand side is
-ordinary Android/iOS packaging that `rules_android` / `rules_apple` already do,
-consuming `libapp.so` as a plain prebuilt `.so`.
+These rules build both halves of the Android APK. iOS packaging remains
+unimplemented.
 
 ## Status
 
-Working and verified on Flutter 3.44.2 / Dart 3.12.2, Bazel 9.2.0, macOS arm64,
-target `android-arm64-release`.
+Working on Flutter 3.44.2 / Dart 3.12.2, Bazel 9.2.0, and macOS arm64. Release
+and debug builds support `arm64-v8a`, `x86_64`, and `armeabi-v7a`; the arm64
+release APK has been run on an API 35 emulator.
 
 Every label below is inside `examples/demo_app`, which is a **separate Bazel
 module** — it consumes these rules through `bazel_dep`, exactly as your project
@@ -77,11 +77,12 @@ Verified properties:
   (kernel -> AOT -> APK) is demonstrably executing our Dart code.
 
 What is *not* done: plugins using ndk-build, and plugins with dependency
-coordinates the scraper cannot read — including, for now, any plugin declaring
-versions in a `build.gradle.kts` or inside a `buildscript { }` block, which need
-a `plugins.package(artifacts = ...)` until those two gaps are closed. Also
-release signing, hermetic SDK download, ABIs other than arm64, and iOS. See
-"Known limitations" and [`docs_internal/overview.md`](docs_internal/overview.md).
+coordinates the scraper cannot read statically — for example, a version defined
+outside the plugin's build file or supplied by a BOM — need
+`plugins.package(artifacts = ...)`. Also custom release signing, hermetic SDK
+download, and iOS. A first plugin graph needs manual bootstrap before its first
+Bazel build; see "Plugins" below. See "Known limitations" and
+[`docs_internal/overview.md`](docs_internal/overview.md).
 
 Two things once on that list — plugins shipping prebuilt `jniLibs`, and **native
 assets** (a `.so` produced by a Dart build hook) — now work through
@@ -323,14 +324,15 @@ a green build is not evidence.
 The second command is a separate Bazel module that reaches the rules through
 `bazel_dep` + `local_path_override`, exactly as a consumer does. It is not part
 of `//...` and cannot be — see
-[`tests/consumer/README.md`](tests/consumer/README.md) for why, and for the one
-consumer path it still does not reach. It exists because moving a symbol between
-`defs.bzl` and `android.bzl` breaks a consumer's `load()` while every check in
-this workspace stays green; that has already happened once.
+[`tests/consumer/README.md`](tests/consumer/README.md) for why. It exists
+because moving a symbol between `defs.bzl` and `android.bzl` breaks a consumer's
+`load()` while every check in this workspace stays green; that has already
+happened once.
 
 Still **not** covered by either command:
 
-- **Behaviour in a consumer** — the API test analyses, it does not build.
+- **Runtime behaviour in a consumer** — the consumer module builds a signed APK
+  and inspects its contents, but does not launch it.
 - **Non-macOS hosts**, until CI runs on one.
 
 ### Starlark formatting
@@ -505,7 +507,8 @@ java.lang.Record`.
 `ANDROID_NDK_HOME` is forwarded with `--repo_env` rather than hardcoded, since a
 path here would be machine-specific. It sits under `common:` rather than
 `build:` because repository rules are evaluated by `query` and `mod` too. Targets
-that resolve a toolchain no longer drag in the NDK — see limitation #8.
+that need an Android toolchain still require an NDK; unrelated targets proceed
+without one.
 
 ## Known limitations
 
@@ -527,9 +530,10 @@ on the machine and relies on `flutter precache` having populated the engine
 artifacts. A hermetic version would download a pinned SDK plus artifacts by
 hash.
 
-**3. Single target platform.** Only `android-arm64-release` is wired up. Other
-ABIs and the iOS path (`app-aot-macho-dylib` instead of `app-aot-elf`) are the
-same shape but need their own toolchain plumbing.
+**3. Android is the only supported platform.** Release and debug builds support
+`arm64-v8a`, `x86_64`, and `armeabi-v7a`, including a fat APK and one APK per
+ABI. The fat APK has run on an arm64 emulator; the other slices have only
+artifact-level validation. iOS needs its own toolchain and packaging plumbing.
 
 **4. Source tracking is wrong in both directions.** `srcs` is a `glob` used only
 for invalidation; the compiler discovers the real import graph itself.
@@ -551,18 +555,12 @@ though not closed, by version stamping; see below. `unused_inputs_list` cannot
 help here — it only prunes inputs, never adds them. Fully closing it requires
 declaring pub packages as real inputs, i.e. limitation #1.
 
-**5. Native assets are packaged as assets, not libraries.** A package can ship a
-`.so` that Dart opens over FFI through Dart's native-assets mechanism rather than
-as a Flutter plugin — a third class of native library beside `libapp.so` and a
-CMake plugin's output. `flutter build bundle`, which `flutter_assets` shells out
-to, writes it *inside* the asset tree, so it reaches the APK under `assets/`;
-only `lib/<abi>/` entries are installed as libraries, and `DynamicLibrary.open`
-then fails at runtime. Nothing fails at build time, and `AssetManifest.bin` stays
-byte-identical to the reference, a native asset not being a declared `assets:`
-entry. Fixing it means splitting the `.so` out of the tree artifact and sending
-it down the `jni_lib_jar` path that already carries `libapp.so`. See
-[`docs_internal/android-packaging.md`](docs_internal/android-packaging.md) →
-"Native assets".
+**5. Native-asset packages need recipes.** `flutter build bundle` writes the
+authoritative `NativeAssetsManifest.json`, but a package whose native output
+comes from a Dart build hook cannot be described as a normal Android plugin.
+A consumer recipe contributes the matching `.so` under `lib/<abi>/`; the bundle
+check compares every manifest entry with those packaged libraries and fails the
+build if one is absent. Supplying that recipe remains manual.
 
 **6. No incremental Dart compilation — the inner loop only ties vanilla
 Flutter.** Measured on a real app (811 sources), editing a single `.dart` file
@@ -580,55 +578,9 @@ dropping `--tfa` is *slower*, because the dill grows from 5.2 MB to 174 MB.
 drives), and `flutter build --release` cannot use it. Driving it from a Bazel
 persistent worker is the one change that would make this build faster than the
 tool it wraps rather than merely equal to it — plausibly ~7s against 17s, now
-that limitation #7 is fixed and the asset action's floor is known. See
+that staging is fixed and the asset action's floor is known. See
 [`docs_internal/build-performance.md`](docs_internal/build-performance.md).
 
-**7. ~~The asset action spends ~90% of its time staging.~~** **Fixed.** Inputs
-were copied one process at a time; a single tar pipe stages them in one pass and
-the action went 13.2s → 4.8s on a real app, byte-identical output. What is left
-is `flutter build bundle` itself (~3.6s), which no staging change can touch. See
-"Staging" below and
-[`docs_internal/staging-experiments.md`](docs_internal/staging-experiments.md).
-
-**8. ~~The NDK is a prerequisite of every Bazel command~~ — fixed.**
-`register_toolchains` cannot be conditional, and toolchain resolution loads
-every registered toolchain repo looking for a match. `rules_android_ndk`'s
-`android_ndk_repository` fails during that *fetch* when `ANDROID_NDK_HOME` is
-unset — so any target resolving any toolchain used to need an NDK, including
-`bazel run //tools/format:buildifier`, a formatter with no Android content.
-
-`//tools/flutter:ndk.bzl` now wraps that extension: with the variable set it
-runs the same repository rule with the same inputs; without it, `@androidndk`
-becomes a stub declaring no toolchains, so `@androidndk//:all` registers nothing
-and resolution carries on. This is the shape `@androidsdk` already had — stub
-now, fail later at the target that needs it.
-
-What still needs an NDK, correctly:
-
-- the APK, and any Android cc work (the strip, a native plugin jar);
-- **`@flutter_plugins` generation in this project**, because one plugin
-  (`rive_common`) has a CMake build — so `//:plugins_check` needs it too,
-  while `//:path_deps_check` and the whole Dart half do not. That is this
-  project's plugin set, not a property of the rules.
-
-One cost, worth knowing before wrapping a third-party extension: a repo created
-by *your* extension resolves apparent repo names against *your* module, so
-`@androidndk`'s generated BUILD referencing `@platforms` made `platforms` a
-direct `bazel_dep` here.
-
-This compounds with limitation #3. Every platform added — iOS, desktop, web —
-and every host-only tool target pays the Android tax, on machines that have no
-other reason to hold an NDK. `@androidsdk` does not have the problem in the same
-form: with `ANDROID_HOME` unset it generates a stub and fails later, at a target
-that actually wants `aapt2`.
-
-The fix belongs upstream in `rules_android_ndk`: the repository rule should
-fetch successfully without a path and fail only when something in it is built,
-moving the error from fetch time to use time. Until then the workaround is to
-make the variable unconditionally visible to Bazel — a
-`try-import %workspace%/user.bazelrc` carrying
-`common --repo_env=ANDROID_NDK_HOME=...` — rather than relying on whichever
-shell, or GUI, launched the build having exported it.
 
 ## Invalidation strategy
 
@@ -980,12 +932,14 @@ smaller and more stable surface. Since the SDK is version-pinned anyway,
 does work on Bazel 9.2.0 despite the native Android rules having been removed.
 
 ```
-lib/arm64-v8a/libapp.so       <- //:app
-lib/arm64-v8a/libflutter.so   <- engine jar, fetched from Maven
-assets/flutter_assets/**      <- //:assets
-classes.dex                   <- embedding + AndroidX
+lib/<abi>/libapp.so       <- //:app
+lib/<abi>/libflutter.so   <- engine jar, fetched from Maven
+assets/flutter_assets/**  <- //:assets
+classes.dex               <- embedding + AndroidX
 ```
 
+The fat `:demo_app` target contains those library entries for `arm64-v8a`,
+`x86_64`, and `armeabi-v7a`; each `:demo_app_<abi>` target contains one slice.
 The BUILD file sits inside the Gradle module `flutter create` generated, so
 Bazel and Gradle read the same manifest, resources and sources — nothing is
 copied.
@@ -995,7 +949,7 @@ exceptions, counter increments on tap, and the app bar renders a string from the
 `//packages/mylib` path dependency — so the whole chain is demonstrably
 executing our Dart code.
 
-Four things this required, none of them obvious:
+Five things this required, none of them obvious:
 
 1. The engine artifacts are **not** in `bin/cache`; their Maven URLs are derived
    from `flutter.version.json`, and the directory and filename use *different*
@@ -1020,8 +974,7 @@ there is no symbol artifact to upload to a crash reporter yet. Release stack
 traces are readable regardless: Dart keeps its name table in the snapshot unless
 `--split-debug-info` is used, which this build does not.
 
-Known gaps: empty `versionCode` / `versionName`, debug signing only, and
-arm64-v8a only.
+Known gap: debug signing only.
 
 ### The plugin registrant
 
@@ -1064,8 +1017,18 @@ external repository — Bazel cannot glob outside the workspace — and its sour
 are enumerated by the repo rule rather than globbed, since the tree is reached
 through a directory symlink.
 
-Adding a plugin to `pubspec.yaml` and running `pub get` is the whole workflow;
-nothing in `tools/` is edited per plugin.
+**First plugin graph.** After `flutter pub get`, a new project needs one manual
+bootstrap before its first Bazel build: seed and `include()` a
+`plugin_deps.MODULE.bazel` containing a `maven.install(name = "flutter_maven",
+...)` plus `use_repo(maven, "flutter_maven")`, then name
+`plugins.project(maven_repo = "@flutter_maven//:pin", ...)`. The embedding-only
+install above is a valid seed. Build `//:plugins_check`, replace the seed with
+its generated segment, and copy
+`@flutter_plugins//:dart_plugin_registrant.dart` into `lib/`.
+
+After bootstrap, add the plugin and run `flutter pub get`, then build
+`//:plugins_check` and `//:dart_registrant_check` and replace each committed file
+when the guard prints an update; nothing in `tools/` is edited per plugin.
 
 Plugin-to-plugin dependencies are wired from the `dependencies` field of the
 same metadata — `image_picker_android` needs `FlutterLifecycleAdapter` from
@@ -1122,10 +1085,9 @@ coordinates resolve.
 The gate is granular: an unsupported plugin gets a target that *fails when
 built*, not a `fail()` in the repository rule, so one unsupported plugin no
 longer makes every other plugin unfetchable. `unresolved_dep` has an escape hatch
-(the `override` tag); `external_native_build` does not yet — the CMake route is
-decided but unbuilt. The full plugin story, the fallbacks, and the open
-shell-vs-`rules_foreign_cc` decision live in
-[`docs_internal/plugins.md`](docs_internal/plugins.md).
+(`plugins.package(artifacts = ...)`); `ndk_build` needs an implementation. CMake
+plugins already use the NDK build path. The full plugin story and the fallbacks
+live in [`docs_internal/plugins.md`](docs_internal/plugins.md).
 
 Note: editing the repository rule can make the *next* build surface results
 computed against the previous repository state. Building a second time clears it.
