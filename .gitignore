@@ -19,9 +19,10 @@
 # Gradle caches in nested projects.
 .gradle/
 
-# Android Gradle build output.
-/examples/*/android/build/
-/examples/*/packages/*/android/build/
+# Android Gradle build output. Any depth: examples keep their own project-root
+# `/build/` rules, and `tests/consumer/fixtures/*/android/` is a bare Gradle
+# module that VS Code's Java extension syncs.
+**/android/build/
 
 # Machine-local Flutter tool state.
 /examples/*/.config/
