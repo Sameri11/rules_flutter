@@ -30,3 +30,6 @@
 
 # Each generated Flutter project ignores its own build output and `.dart_tool`.
 # Run `flutter pub get` before Bazel; it creates the generated Bazel inputs.
+
+# Local output of tools/ci/example_hashes.py.
+/_ci_hashes/
