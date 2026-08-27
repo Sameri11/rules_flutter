@@ -1,5 +1,7 @@
 # rules_flutter
 
+[![CI](https://github.com/Sameri11/rules_flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/Sameri11/rules_flutter/actions/workflows/ci.yml)
+
 Bazel rules that build Flutter's Dart and Android halves directly: `frontend_server` and `gen_snapshot` compile the Dart application, while `rules_android` packages the result. Android-only today.
 
 ## Why rules_flutter?
@@ -19,6 +21,7 @@ flutter_assets ─────────────────────�
 - Flutter 3.44.2 / Dart 3.12.2 with Bazel 9.2.0.
 - Android release and debug builds for `arm64-v8a`, `x86_64`, and `armeabi-v7a`, including fat and per-ABI APKs.
 - Java and Kotlin plugins, CMake-backed native plugins, and native assets have worked; a real arm64 APK has been built, installed, and launched on an API 35 emulator.
+- Every example module builds on CI, and all seven APK shapes they declare are compared byte-for-byte against a recorded table (`tools/ci/example_hashes.py`) that a developer machine reproduces.
 
 ## Quickstart
 
@@ -34,6 +37,8 @@ monorepos, and consumer recipes/native assets, see the
 ### Prerequisites
 
 Install Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 (Bazelisk recommended), a recent Android SDK, and an Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME`. The rules pin their own JDK 17 toolchain.
+
+With no `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed.
 
 ### Create the project
 
