@@ -1,0 +1,18 @@
+# Recorded APK hashes for every example, one line per APK shape:
+#
+#   <example> <target> apk=<sha256 of _unsigned.apk> entries=<sha256 of listing>
+#
+# Regenerate with `tools/ci/example_hashes.py --record` and commit the result in
+# the same change that moved the bytes. A diff here with no intended packaging
+# change is the gate doing its job.
+#
+# Recorded on a GitHub Actions runner: absolute paths reach some actions (see
+# docs_internal/key-portability-measurement.md), so a local run may legitimately
+# disagree. CI is the reference.
+demo_app //android/app:demo_app apk=1c4ed677195bf04686db3eecc1de356f4c12b64eb1475c783f23608252794403 entries=9622663813a3ddebe940c4abd4d611f4af9db3992206e5a640954605b2c8a212
+demo_app //android/app:demo_app_arm64-v8a apk=17c6d1372405911494717a4dbf63b7a76c2e4535ac29d72f70b12218b4c4ea5d entries=6d07b6bc457a9558093fb767bf615b9d6be943a0e254f29ea3bf388ce9e803bb
+demo_app //android/app:demo_app_x86_64 apk=9918055666b39bc999fded1f1d9d90a2e8d19401b34e694fed04761c6e030da4 entries=eaabff973a811a6ce0e65e894bfcb8ccdbc0ce39bc58912bc29b7a63c62e8ce2
+demo_app //android/app:demo_app_armeabi-v7a apk=ed6e0f26c618870fd02c79143afea04495292faedef4842f8e8c7d6beb9ad220 entries=f9436790a5059bde3a7f5230caf7a454fa78e4986b9a66ac5ffbb386736a82c5
+no_plugins //android/app:no_plugins apk=939df15b5650588cb32ea94ef56d17d87c641da9403e2ad96179a2f6a4aa8ba8 entries=17dbb377c1347721be8862ef83ef650874d521703835c6fbdd78ccf533783a75
+pub_plugins //android/app:pub_plugins apk=66c447ba6448ff89fbbea77734aed0b89a32034b5b30ae5a08335161210ba276 entries=48d77077e44bbe4895265b53e04f980d68e9f5735ddabc095e572cca346a8a40
+local_plugin //packages/host_app/android/app:host_app apk=9ee40346bad39794bb49fd7b6ad2982d872623554dccf73e7d42491b1aad23af entries=320bb6383d5f38c739d3c99cde0420431e1dd47345557fe1dfb8b61d784e2663
