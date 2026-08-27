@@ -69,9 +69,11 @@ HEADER = """\
 # the same change that moved the bytes. A diff here with no intended packaging
 # change is the gate doing its job.
 #
-# Recorded on a GitHub Actions runner: absolute paths reach some actions (see
-# docs_internal/key-portability-measurement.md), so a local run may legitimately
-# disagree. CI is the reference.
+# These are machine-independent: every line was produced both on a developer's
+# macOS arm64 machine and on a GitHub Actions macos-15 runner. That holds only
+# because each example pins its compile SDK -- an unpinned
+# android_sdk_repository takes the highest *installed* platform, and aapt2
+# writes the chosen level into AndroidManifest.xml.
 """
 
 
