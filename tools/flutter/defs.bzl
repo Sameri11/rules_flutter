@@ -980,7 +980,6 @@ def _pub_path_deps_check_impl(ctx):
         arguments = [args],
         inputs = [ctx.file.pubspec_lock, ctx.file._checker] + ctx.files.path_deps,
         outputs = [marker],
-        env = FLUTTER_ENV,
         mnemonic = "PubPathDepsCheck",
         progress_message = "Checking path: dependencies %{label}",
     )

@@ -13,7 +13,6 @@ entirely on this side.
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("@flutter_sdk//:sdk.bzl", "FLUTTER_ENV")
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_java//java:defs.bzl", "java_import")
@@ -487,7 +486,6 @@ def _flutter_bundle_check_impl(ctx):
         arguments = [args],
         inputs = inputs,
         outputs = [marker],
-        env = FLUTTER_ENV,
         mnemonic = "FlutterBundleCheck",
         progress_message = "Checking bundle contributions %{label}",
     )
