@@ -25,7 +25,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: subosito/flutter-action@v2
+    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
       with:
         flutter-version: ${{ inputs.flutter-version }}
         channel: stable
@@ -70,7 +70,7 @@ runs:
     # immutable, so parallel saves would be three wasted 2.4 GiB uploads and a
     # warning. One job owns the save.
     - name: Restore repository cache
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/bazel-repo
         key: bazel-repo-macos-15-${{ inputs.flutter-version }}-${{ hashFiles('**/MODULE.bazel', '**/MODULE.bazel.lock') }}

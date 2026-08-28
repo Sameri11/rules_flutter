@@ -48,7 +48,7 @@ jobs:
     name: Starlark format and lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install bazelisk
         run: |
@@ -72,7 +72,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/flutter-bazel
         with:
@@ -109,7 +109,7 @@ jobs:
       - name: Save repository cache
         if: always()
         continue-on-error: true
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/bazel-repo
           key: bazel-repo-macos-15-${{ env.FLUTTER_VERSION }}-${{ hashFiles('**/MODULE.bazel', '**/MODULE.bazel.lock') }}
@@ -137,7 +137,7 @@ jobs:
             directory: examples/local_plugin
             description: monorepo layout with a local path plugin
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/flutter-bazel
         with:
@@ -168,7 +168,7 @@ jobs:
       # exactly when the run is red.
       - name: Upload APK entry listings
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: example-apk-entries-${{ matrix.name }}
           path: _ci_hashes/
@@ -184,7 +184,7 @@ jobs:
     needs: example
     if: always()
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Every recorded row belongs to a matrix job
         run: |
