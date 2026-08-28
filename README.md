@@ -211,7 +211,7 @@ Do not apply debug mode to `//:app_arm64-v8a`; AOT is release-only.
 
 ### Adding plugins
 
-The first plugin setup generates and commits the Maven/plugin registrant state required by the plugin graph. Follow [Phase G — a real plugin graph (`path_provider`)](docs_internal/new-project-walkthrough.md#phase-g--a-real-plugin-graph-path_provider); its generated files and configuration are intentionally not inlined here.
+The first plugin setup generates and commits the Maven/plugin registrant state required by the plugin graph; its generated files and configuration are intentionally not inlined here.
 
 ## Scope, limitations, and direction
 
@@ -230,6 +230,4 @@ Android release and debug packaging across the supported ABIs, including fat and
 
 ### Possible future direction
 
-Hermetic dependency and SDK modelling, incremental workers, more plugin systems, and other platforms are possible directions, not scheduled commitments. The current roadmap prioritizes architecture: see [`docs_internal/roadmap.md`](docs_internal/roadmap.md).
-
-Removed contributor, reference, and architecture detail is temporarily retained in [`docs_internal/readme-archive.md`](docs_internal/readme-archive.md).
+Hermetic dependency and SDK modelling, incremental workers, more plugin systems, and other platforms are possible directions, not scheduled commitments.
