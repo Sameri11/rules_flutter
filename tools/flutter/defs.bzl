@@ -24,7 +24,7 @@ problem and is not attempted here.
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("@flutter_sdk//:sdk.bzl", "FLUTTER_BIN", "FLUTTER_ENV")
+load("@flutter_sdk//:sdk.bzl", "FLUTTER_ENV")
 load(":abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
@@ -750,7 +750,7 @@ def _bundle_dir(ctx, out, abi, index):
     return "{}/{}.abi_{}".format(out.dirname, ctx.label.name, abi)
 
 def _bundle_command(ctx, out, abi, index):
-    return """"{flutter}" build bundle \
+    return """"$EXECROOT/{flutter}" build bundle \
     --{mode} \
     --no-pub \
     --target="$ENTRYPOINT" \
@@ -760,7 +760,7 @@ def _bundle_command(ctx, out, abi, index):
 rm -f "$EXECROOT/{dir}/.last_build_id"
 rm -rf "$EXECROOT/{dir}/native_assets"
 """.format(
-        flutter = FLUTTER_BIN,
+        flutter = ctx.file._flutter.path,
         mode = ctx.attr._mode[BuildSettingInfo].value,
         platform = ABIS[abi].target_platform,
         dir = _bundle_dir(ctx, out, abi, index),
@@ -849,7 +849,7 @@ exec python3 "$EXECROOT/{merger}" {merge_args}
         command = cmd,
         arguments = [args],
         inputs = depset(
-            direct = project_files + [manifest, ctx.file._sdk_version, ctx.file._merger],
+            direct = project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter],
         ),
         outputs = [out],
         env = FLUTTER_ENV,
@@ -907,6 +907,10 @@ than a fact read out of it.""",
 exactly one file it produces -- NativeAssetsManifest.json -- is keyed by
 architecture. The manifests are merged and everything else is compared, so a
 bundle that started varying by architecture fails here rather than shipping.""",
+        ),
+        "_flutter": attr.label(
+            default = "@flutter_sdk//:flutter",
+            allow_single_file = True,
         ),
         "_merger": attr.label(
             default = "//tools/flutter:merge_native_assets.py",
