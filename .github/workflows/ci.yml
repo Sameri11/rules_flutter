@@ -99,13 +99,27 @@ jobs:
 
       # Bazel reads $HOME/.bazelrc after each workspace's own, so this is the
       # one place that applies to all six invocations below without editing any
-      # checked-in rc. Repository cache only: the engine jars and Maven
-      # artifacts are pinned downloads, so caching them is bounded and safe. An
-      # action cache is not, and eviction policy is not worth inventing here.
+      # checked-in rc.
+      #
+      # The disk cache is shared across all six modules on purpose. Each is its
+      # own module with its own output base, so today every one of them redoes
+      # the actions they have in common -- dexing the Flutter embedding and the
+      # AndroidX jars, stripping the engine, the Dart SDK's own tooling -- and
+      # the cheapest example, which has no plugins and one ABI, still costs 396
+      # seconds. Those actions have identical keys in every module, so the
+      # second module onward should hit. This is measured intra-run only: the
+      # cache is not restored from or saved to GitHub, so it costs nothing
+      # against the 10 GiB repository-wide quota, which is already 68% spent.
+      #
+      # The GC bound is set even though nothing persists yet, so the reported
+      # size is the size a persisted entry would have.
       - name: Bazel CI flags
         run: |
           cat >> "$HOME/.bazelrc" <<'RC'
           common --repository_cache=~/.cache/bazel-repo
+          build --disk_cache=~/.cache/bazel-disk
+          build --experimental_disk_cache_gc_max_size=3G
+          build --experimental_disk_cache_gc_idle_delay=15s
           build --verbose_failures
           test --test_output=errors
           RC
@@ -190,3 +204,22 @@ jobs:
           name: example-apk-entries
           path: _ci_hashes/
           if-no-files-found: warn
+
+      # The measurement this run exists for. Two questions: how large a
+      # persisted entry would be, and whether the GC bound holds it. Bazel
+      # collects when its server goes idle, so the sleep is what gives the idle
+      # timer above a chance to fire -- without it the size reported is the
+      # ungoverned one.
+      #
+      # The hit rate needs no step: every `bazel test` above ends with a
+      # process summary that counts `disk cache hit`.
+      - name: Disk cache report
+        if: always()
+        run: |
+          echo "--- immediately after the last build ---"
+          du -sm ~/.cache/bazel-disk ~/.cache/bazel-repo 2>/dev/null || true
+          find ~/.cache/bazel-disk -type f | wc -l
+          sleep 45
+          echo "--- after the idle GC ---"
+          du -sm ~/.cache/bazel-disk 2>/dev/null || true
+          find ~/.cache/bazel-disk -type f | wc -l
