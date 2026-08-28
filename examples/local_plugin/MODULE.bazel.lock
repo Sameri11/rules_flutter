@@ -343,12 +343,16 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "m/+JR0TUG9wMiTsPNbmrtDEZZDkrDDvVFj667iISoRI=",
+        "usagesDigest": "cICSw5FcSDU8WYVx86yPYAZ/DVql5qa68faWpcWO8m0=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
             "repoRuleId": "@@rules_android+//rules/android_sdk_repository:rule.bzl%_android_sdk_repository",
-            "attributes": {}
+            "attributes": {
+              "api_level": 36,
+              "build_tools_version": "36.0.0",
+              "path": ""
+            }
           }
         }
       }
