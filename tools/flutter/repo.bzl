@@ -153,28 +153,18 @@ def _flutter_sdk_impl(ctx):
         ]),
     ))
 
-    # The `flutter` CLI needs its whole SDK tree to run, so it is invoked by
-    # absolute path rather than declared as a Bazel input. That is consistent
-    # with these actions already being unsandboxed; invalidation is covered by
-    # the version stamps in :flutter.version.json.
-    # flutter_tools needs a real environment: it locates the Android SDK by
-    # probing $HOME, and resolves packages through $PUB_CACHE. Capturing the
-    # specific variables here keeps the action env explicit and recorded, rather
-    # than inheriting the whole ambient environment via use_default_shell_env.
+    # FlutterAssets includes this environment in its action key. Keep portable
+    # values fixed; --no-pub does not need PUB_CACHE, and the action sets HOME.
     env = {
-        "HOME": ctx.os.environ.get("HOME", ""),
-        "PATH": ctx.os.environ.get("PATH", ""),
-        # The flutter CLI flocks $FLUTTER_ROOT/bin/cache/lockfile on startup, so
-        # concurrent invocations serialize regardless of working directory --
-        # the lock is SDK-scoped, not project-scoped. flutter_tools sets this
-        # same variable for its own sub-invocations (base/process.dart).
-        #
-        # Safe here because the lock protects the SDK cache from concurrent
-        # mutation, and these actions only read it: --no-pub prevents dependency
-        # resolution, and the SDK must already be precached.
+        # Required command locations for the action and Flutter's shell wrapper.
+        "PATH": "/usr/bin:/bin",
+        # Flutter's SDK-scoped lock protects its pre-cached artifacts. The
+        # action only reads them and runs with --no-pub.
         "FLUTTER_ALREADY_LOCKED": "true",
     }
-    for optional in ["ANDROID_HOME", "ANDROID_SDK_ROOT", "PUB_CACHE"]:
+
+    # Dart build hooks require an Android SDK; accept either conventional name.
+    for optional in ["ANDROID_HOME", "ANDROID_SDK_ROOT"]:
         value = ctx.os.environ.get(optional, "")
         if value:
             env[optional] = value
@@ -191,7 +181,8 @@ flutter_sdk = repository_rule(
     implementation = _flutter_sdk_impl,
     doc = "Exposes the pinned Flutter SDK's compiler + snapshotter to Bazel.",
     local = True,
-    environ = ["FLUTTER_ROOT", "PATH", "HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "PUB_CACHE"],
+    # PATH is needed when FLUTTER_ROOT is unset. HOME and PUB_CACHE are not read.
+    environ = ["FLUTTER_ROOT", "PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT"],
 )
 
 # The Android embedding is not in bin/cache -- Flutter fetches it from Maven at
