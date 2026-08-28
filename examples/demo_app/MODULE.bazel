@@ -17,6 +17,24 @@ bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
+# The compile SDK, pinned. Left unpinned, rules_android selects the *highest
+# installed* platform, which is a machine-dependent input: every APK this
+# example builds was byte-identical between a developer machine and a CI runner
+# except for four bytes of aapt2-injected platform metadata in
+# AndroidManifest.xml -- compileSdkVersion, its codename and the two
+# platformBuildVersion attributes -- because the runner happened to have one
+# API level more installed. Only the *root* module can configure this
+# extension; a dependency's tags are ignored, so rules_flutter cannot pin it
+# on an example's behalf. This is what a Gradle project states as `compileSdk`.
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+
 # Generate one plugin target per native Android plugin from pub metadata.
 plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(

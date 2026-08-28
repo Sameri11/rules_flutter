@@ -1,0 +1,24 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+
+# The APK hash gate's hermetic logic, checked in-process. It runs no Bazel and
+# hashes no APK. It verifies both `merge`, which must preserve unrelated rows
+# during `--record --only`, and the exact configured-vs-declared APK-target
+# comparison that stops a Flutter macro's new shape escaping the hash gate.
+#
+# A genrule rather than a py_test because this repository does not depend on
+# rules_python and Bazel 9 has no native py_binary (tools/flutter/defs.bzl).
+# `python3` is taken from the environment, which is the same assumption the
+# packaging genrules in tests/consumer make of `unzip` and `cmp`.
+genrule(
+    name = "example_hashes_selftest",
+    srcs = ["example_hashes.py"],
+    outs = ["example_hashes_selftest.checked"],
+    cmd = """set -euo pipefail
+python3 $(location example_hashes.py) --selftest > "$@"
+""",
+)
+
+build_test(
+    name = "example_hashes_selftest_test",
+    targets = [":example_hashes_selftest"],
+)

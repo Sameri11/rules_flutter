@@ -1,0 +1,83 @@
+name: Flutter and Bazel environment
+description: >
+  Installs a checksum-verified Flutter SDK and Bazelisk, prefetches Android
+  engine artifacts, resolves requested pub packages, and configures Bazel and
+  the NDK.
+
+inputs:
+  flutter-version:
+    description: Flutter SDK version; engine artifact URLs derive from it.
+    required: true
+  flutter-sha256:
+    description: SHA-256 of the Flutter macOS arm64 archive.
+    required: true
+  bazelisk-version:
+    required: false
+    default: v1.29.0
+  bazelisk-sha256:
+    description: SHA-256 of bazelisk-darwin-arm64. Release assets are mutable, so verify before execution.
+    required: true
+  pub-get:
+    description: Space-separated directories for `flutter pub get`; empty skips it.
+    required: false
+    default: >-
+      examples/demo_app examples/no_plugins examples/pub_plugins
+      examples/local_plugin/packages/host_app
+
+runs:
+  using: composite
+  steps:
+    - name: Install the Flutter SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        archive="flutter_macos_arm64_${{ inputs.flutter-version }}-stable.zip"
+        curl -fsSL -o "$RUNNER_TEMP/$archive" \
+          "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
+        echo "${{ inputs.flutter-sha256 }}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+        unzip -q "$RUNNER_TEMP/$archive" -d "$HOME"
+        rm "$RUNNER_TEMP/$archive"
+        echo "FLUTTER_ROOT=$HOME/flutter" >> "$GITHUB_ENV"
+        echo "FLUTTER_SUPPRESS_ANALYTICS=true" >> "$GITHUB_ENV"
+        echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+    # Rules require a pre-existing SDK with Android engine artifacts.
+    - name: Precache engine artifacts
+      shell: bash
+      run: |
+        flutter --version
+        flutter precache --android
+
+    - name: pub get
+      if: inputs.pub-get != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        for d in ${{ inputs.pub-get }}; do
+          (cd "$d" && flutter pub get)
+        done
+
+    - name: Install bazelisk
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL -o "$RUNNER_TEMP/bazel" \
+          "https://github.com/bazelbuild/bazelisk/releases/download/${{ inputs.bazelisk-version }}/bazelisk-darwin-arm64"
+        echo "${{ inputs.bazelisk-sha256 }}  $RUNNER_TEMP/bazel" | shasum -a 256 -c -
+        chmod +x "$RUNNER_TEMP/bazel"
+        echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+    - name: Bazel CI flags
+      shell: bash
+      run: |
+        cat >> "$HOME/.bazelrc" <<'RC'
+        build --verbose_failures
+        test --test_output=errors
+        RC
+
+    # NDK 28+ avoids 4 KB-aligned .so segments that fail on 16 KB-page devices.
+    - name: Select the NDK
+      shell: bash
+      run: |
+        echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+        echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
