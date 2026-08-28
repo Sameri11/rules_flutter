@@ -41,6 +41,11 @@ env:
   # URLs are derived from its flutter.version.json, and the recorded example
   # APK hashes are its output.
   FLUTTER_VERSION: 3.44.2
+  # sha256 of flutter_macos_arm64_3.44.2-stable.zip, from
+  # releases_macos.json. The environment installs the SDK itself and checks
+  # this, because subosito/flutter-action calls actions/cache@v5 unpinned and
+  # this repository requires every action in the graph to be SHA-pinned.
+  FLUTTER_SHA256: 57fbfdc7032678ab30ad577872bbfc4114a25d3cba94fbfa14a050ec61381a23
   BAZELISK_VERSION: v1.29.0
 
 jobs:
@@ -77,6 +82,7 @@ jobs:
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           # tests/consumer's fixtures carry their own state, and this job builds
           # no example.
@@ -142,6 +148,7 @@ jobs:
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           # Only this example's app module. local_plugin's is a subdirectory --
           # it is the monorepo shape -- so the directory is not derivable from

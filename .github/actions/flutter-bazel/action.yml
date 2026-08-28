@@ -6,9 +6,20 @@ description: >
   repository cache. Factored out because four jobs need it identically and a
   drifted copy is worse than a shared one.
 
+  The SDK is installed here rather than by subosito/flutter-action, which cannot
+  run in this repository: it calls actions/cache@v5 unpinned, and every action
+  in the graph -- nested ones included -- must be pinned to a full-length commit
+  SHA. Doing it by hand costs about twenty lines and buys a checksum on the SDK
+  bytes, which a repo that gates on artifact hashes should want anyway.
+
 inputs:
   flutter-version:
     description: Flutter SDK to install; the engine artifact URLs derive from it.
+    required: true
+  flutter-sha256:
+    description: >
+      sha256 of the macOS arm64 SDK archive, from
+      https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json.
     required: true
   bazelisk-version:
     required: false
@@ -16,7 +27,7 @@ inputs:
   pub-get:
     description: >
       Space-separated project directories to run `flutter pub get` in. Empty
-      skips it -- tests/consumer's fixtures carry their own checked-in state.
+      skips it -- tests/consumer's fixtures carry checked-in .dart_tool state.
     required: false
     default: >-
       examples/demo_app examples/no_plugins examples/pub_plugins
@@ -25,17 +36,32 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-      with:
-        flutter-version: ${{ inputs.flutter-version }}
-        channel: stable
-        cache: true
+    # Not cached. The unpacked SDK plus its precached artifacts is ~2 GiB, and
+    # the repository-wide GitHub cache quota is 10 GiB that the Bazel repository
+    # cache already wants half of; a download that takes well under a minute is
+    # not worth evicting that for.
+    - name: Install the Flutter SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        archive="flutter_macos_arm64_${{ inputs.flutter-version }}-stable.zip"
+        curl -fsSL -o "$RUNNER_TEMP/$archive" \
+          "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
+        echo "${{ inputs.flutter-sha256 }}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+        unzip -q "$RUNNER_TEMP/$archive" -d "$HOME"
+        rm "$RUNNER_TEMP/$archive"
+        echo "FLUTTER_ROOT=$HOME/flutter" >> "$GITHUB_ENV"
+        echo "FLUTTER_SUPPRESS_ANALYTICS=true" >> "$GITHUB_ENV"
+        echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
 
     # The rules read an *existing* SDK rather than downloading one, so the
-    # engine artifacts have to be present before the first build.
+    # engine artifacts have to be present before the first build. This is also
+    # what builds the flutter_tools snapshot, so it absorbs that cost once.
     - name: Precache engine artifacts
       shell: bash
-      run: flutter precache --android
+      run: |
+        flutter --version
+        flutter precache --android
 
     # Bazel does not run pub. package_config.json and pubspec.lock are inputs
     # to the kernel and asset actions, and neither exists in a fresh clone.
@@ -43,6 +69,7 @@ runs:
       if: inputs.pub-get != ''
       shell: bash
       run: |
+        set -euo pipefail
         for d in ${{ inputs.pub-get }}; do
           (cd "$d" && flutter pub get)
         done
@@ -50,6 +77,7 @@ runs:
     - name: Install bazelisk
       shell: bash
       run: |
+        set -euo pipefail
         curl -fsSL -o "$RUNNER_TEMP/bazel" \
           "https://github.com/bazelbuild/bazelisk/releases/download/${{ inputs.bazelisk-version }}/bazelisk-darwin-arm64"
         chmod +x "$RUNNER_TEMP/bazel"
