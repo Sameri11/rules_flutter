@@ -18,6 +18,7 @@ package(default_visibility = ["//visibility:public"])
 # with the file it wraps produces a self-edge in the dependency graph.
 exports_files([
     "dartaotruntime",
+    "flutter",
     "frontend_server.snapshot",
     "flutter.version.json",
 ] + {gen_snapshots})
@@ -107,6 +108,13 @@ def _flutter_sdk_impl(ctx):
         "{}/dart-sdk/bin/dartaotruntime".format(cache),
         "dartaotruntime",
     )
+
+    # Declared as an input so the action key hashes the launcher's content,
+    # not this machine's SDK path.
+    ctx.symlink(
+        "{}/bin/flutter".format(root),
+        "flutter",
+    )
     ctx.symlink(
         "{}/dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot".format(cache),
         "frontend_server.snapshot",
@@ -173,10 +181,7 @@ def _flutter_sdk_impl(ctx):
 
     ctx.file(
         "sdk.bzl",
-        "FLUTTER_ROOT = \"{root}\"\nFLUTTER_BIN = \"{root}/bin/flutter\"\nFLUTTER_ENV = {env}\n".format(
-            root = root,
-            env = repr(env),
-        ),
+        "FLUTTER_ENV = {env}\n".format(env = repr(env)),
     )
 
 flutter_sdk = repository_rule(
