@@ -795,62 +795,22 @@ def _flutter_assets_impl(ctx):
         "".join([f.path + "\n" for f in project_files]),
     )
 
-    # Staging, rather than running in the package directory.
+    # Stage project inputs so flutter_tools writes transient state outside the
+    # source tree. Preserve execroot-relative paths: package_config.json uses
+    # them to resolve relative path dependencies.
     #
-    # The execroot entry for a package is a symlink to the source tree, so `cd
-    # {pkg}` would put flutter_tools inside the user's sources, where it writes
-    # .dart_tool/flutter_build/<hash>/ -- an undeclared output that survives
-    # `bazel clean` and races between concurrent asset targets.
+    # Stream the manifest through tar to avoid an argument-size limit and
+    # per-file process overhead. Sources may be read-only, hence chmod.
     #
-    # Each input is copied to its *execroot-relative* path inside the stage,
-    # which preserves the workspace layout. That matters: package_config.json
-    # resolves path dependencies relatively (mylib is ../../packages/mylib), so
-    # staging only the app directory would break them. Hosted packages are
-    # unaffected, their rootUris being absolute into ~/.pub-cache.
+    # --no-pub keeps dependency resolution and network access outside this
+    # Bazel action.
     #
-    # One tar reads the manifest, another extracts, and the archive crosses a
-    # memory pipe without touching disk. This replaced a per-file `mkdir -p` +
-    # `cp` loop that spawned two processes per input: 1546 files took ~9s, and
-    # the tar pipe takes ~0.95s. `-T` is supported by both bsdtar and GNU tar,
-    # which is why this rather than `pax` (marginally faster, but not installed
-    # everywhere) or `rsync` (slower, and macOS 15 swapped it for openrsync).
+    # flutter_tools bookkeeping is nondeterministic, so remove it from the tree
+    # artifact.
     #
-    # Deliberately uncompressed. The archive only ever crosses a pipe, so a
-    # filter can shrink the one part of the transfer that was already free while
-    # charging CPU on both ends -- measured, gzip costs +0.7s and xz +6.6s. Two
-    # filters are worse than slow: bsdtar pads its output to the 10240-byte
-    # block size when writing to a pipe, and zstd and lz4 are external programs
-    # here rather than linked-in, so their decompressor hits that padding, fails
-    # with ERROR_frameType_unknown, and drops the tail of the archive. The
-    # `pipefail` above is what turns that into a failed build rather than a
-    # stage silently missing files. See docs_internal/staging-experiments.md.
-    #
-    # Sources may be read-only, hence chmod.
-    #
-    # --no-pub matters: `flutter build` runs pub get by default, which would put
-    # implicit dependency resolution -- and a possible network call -- inside a
-    # Bazel action. Resolution is the caller's job.
-    #
-    # .last_build_id is flutter_tools bookkeeping and is the only file in the
-    # bundle that varies between otherwise identical runs. Removing it makes the
-    # tree artifact reproducible.
-    #
-    # native_assets/ is dropped for a different reason: it does not belong in a
-    # bundle at all. When a package produces a code asset through a Dart build
-    # hook, `flutter build bundle` runs the hook and writes the resulting library
-    # to native_assets/jniLibs/lib/<abi>/, *inside* the asset tree -- where the
-    # dynamic loader cannot reach it, because APK assets are read through
-    # AssetManager rather than mapped. `flutter assemble` puts that same tree
-    # *beside* the bundle, for Gradle to package as a JNI library.
-    #
-    # Here the library reaches lib/<abi>/ through a package recipe instead (see
-    # docs/package-recipes.md), so leaving this copy would ship the same bytes
-    # twice -- 1.8 MB for sqlite3 alone -- and would also keep the bundle one
-    # file larger than the reference `flutter assemble` produces.
-    #
-    # NativeAssetsManifest.json is a *sibling* of this directory and is
-    # deliberately kept: it is the id -> filename mapping the engine reads at
-    # runtime, and it is correct as written. Only the misplaced library goes.
+    # Code assets belong in APK JNI libraries, not the asset tree. Packaging
+    # recipes install them under lib/<abi>/; discard flutter_tools' duplicate.
+    # NativeAssetsManifest.json is retained beside the bundle for runtime lookup.
     project_dir = "/".join([
         component
         for component in [ctx.label.workspace_root, ctx.label.package]
@@ -862,6 +822,10 @@ set -euo pipefail
 EXECROOT="$PWD"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
+# flutter_tools needs writable state; use a stage-local HOME so the host HOME
+# does not affect the action key.
+export HOME="$STAGE/home"
+mkdir -p "$HOME"
 
 tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
