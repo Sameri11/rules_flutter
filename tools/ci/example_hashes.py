@@ -162,7 +162,8 @@ def main() -> int:
     parser.add_argument("--bazel", default="bazel")
     parser.add_argument(
         "--only",
-        help="restrict to one example by name, for local iteration",
+        help="restrict to one example by name; --check then compares that "
+        "example's rows, which is how a per-example CI job checks its own",
     )
     parser.add_argument(
         "--no-build",
@@ -180,13 +181,10 @@ def main() -> int:
         return 0
 
     print("\n".join(rows))
-    if args.only:
-        print(
-            "\nnot checked: --only builds a subset, which cannot be compared "
-            "against a whole-table record."
-        )
-        return 0
 
+    # The recorded table is whole-repo, so --only compares against the subset
+    # belonging to that example. An empty subset fails rather than passes: it
+    # means the name is wrong, or the example was never recorded.
     if not args.golden.is_file():
         print(
             "\nFAIL: no recorded table at {}. Record the block above with "
@@ -200,6 +198,17 @@ def main() -> int:
         for line in args.golden.read_text().splitlines()
         if line and not line.startswith("#")
     ]
+    if args.only:
+        expected = [line for line in expected if line.split(" ", 1)[0] == args.only]
+        if not expected:
+            print(
+                "\nFAIL: {} records nothing for example {!r}.".format(
+                    args.golden, args.only
+                ),
+                file=sys.stderr,
+            )
+            return 1
+
     if expected == rows:
         print("\nOK: {} APK shapes match {}".format(len(rows), args.golden))
         return 0

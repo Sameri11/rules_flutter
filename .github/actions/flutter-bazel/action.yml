@@ -1,0 +1,90 @@
+name: Flutter and Bazel environment
+description: >
+  Everything a macOS job needs before it can run bazel against this repo: a
+  pinned Flutter SDK with its engine artifacts precached, `pub get` where Bazel
+  expects package_config.json, bazelisk, an NDK selection, and a restored
+  repository cache. Factored out because four jobs need it identically and a
+  drifted copy is worse than a shared one.
+
+inputs:
+  flutter-version:
+    description: Flutter SDK to install; the engine artifact URLs derive from it.
+    required: true
+  bazelisk-version:
+    required: false
+    default: v1.29.0
+  pub-get:
+    description: >
+      Space-separated project directories to run `flutter pub get` in. Empty
+      skips it -- tests/consumer's fixtures carry their own checked-in state.
+    required: false
+    default: >-
+      examples/demo_app examples/no_plugins examples/pub_plugins
+      examples/local_plugin/packages/host_app
+
+runs:
+  using: composite
+  steps:
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: ${{ inputs.flutter-version }}
+        channel: stable
+        cache: true
+
+    # The rules read an *existing* SDK rather than downloading one, so the
+    # engine artifacts have to be present before the first build.
+    - name: Precache engine artifacts
+      shell: bash
+      run: flutter precache --android
+
+    # Bazel does not run pub. package_config.json and pubspec.lock are inputs
+    # to the kernel and asset actions, and neither exists in a fresh clone.
+    - name: pub get
+      if: inputs.pub-get != ''
+      shell: bash
+      run: |
+        for d in ${{ inputs.pub-get }}; do
+          (cd "$d" && flutter pub get)
+        done
+
+    - name: Install bazelisk
+      shell: bash
+      run: |
+        curl -fsSL -o "$RUNNER_TEMP/bazel" \
+          "https://github.com/bazelbuild/bazelisk/releases/download/${{ inputs.bazelisk-version }}/bazelisk-darwin-arm64"
+        chmod +x "$RUNNER_TEMP/bazel"
+        echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+    # Bazel reads $HOME/.bazelrc after each workspace's own, so this is the one
+    # place that applies to every invocation without editing a checked-in rc.
+    - name: Bazel CI flags
+      shell: bash
+      run: |
+        cat >> "$HOME/.bazelrc" <<'RC'
+        common --repository_cache=~/.cache/bazel-repo
+        build --verbose_failures
+        test --test_output=errors
+        RC
+
+    # Restore, never save: four jobs share this key, and a GitHub cache entry is
+    # immutable, so parallel saves would be three wasted 2.4 GiB uploads and a
+    # warning. One job owns the save.
+    - name: Restore repository cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/bazel-repo
+        key: bazel-repo-macos-15-${{ inputs.flutter-version }}-${{ hashFiles('**/MODULE.bazel', '**/MODULE.bazel.lock') }}
+        restore-keys: |
+          bazel-repo-macos-15-${{ inputs.flutter-version }}-
+          bazel-repo-macos-15-
+
+    # NDK 28+ is enforced by //tools/flutter:plugins.bzl -- below that the
+    # linker emits 4 KB-aligned segments and the .so segfaults the loader on a
+    # 16 KB-page device instead of failing cleanly. The runner image ships
+    # 28.2.13676358 beside the 27.x default, so this selects rather than
+    # installs.
+    - name: Select the NDK
+      shell: bash
+      run: |
+        echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+        echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"

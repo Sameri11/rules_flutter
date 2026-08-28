@@ -1,20 +1,27 @@
 name: CI
 
-# Two jobs, deliberately unequal.
+# Four kinds of job, deliberately unequal.
 #
 # `lint` needs nothing but Bazel -- no Flutter SDK, no Android SDK, no NDK --
 # which is only true since //tools/flutter:ndk.bzl stopped making the NDK a
 # prerequisite of every target that resolves a toolchain. It is the cheap,
-# always-on signal.
+# always-on signal, and it is the only job that is not macOS.
 #
-# `build` needs a precached Flutter SDK, `pub get`, an Android SDK and an NDK,
-# because this project has a plugin with a CMake build: generating
-# @flutter_plugins resolves the NDK, so even analysis of //... requires one.
-# There is no cheap middle ground between the two.
+# `core` is the root module and tests/consumer: the API a real consumer sees.
+# It also owns the repository cache's *save*, because four jobs share one key
+# and a GitHub cache entry is immutable.
 #
-# Every module is its own Bazel module -- the root, tests/consumer and each
-# example -- so each gets its own invocation. Root //... does not cover them;
-# .bazelignore says so explicitly.
+# `example` is a matrix, one job per example module. Sequentially these four
+# were 2159 s of a 2681 s job -- 80% -- and they share nothing except a cache,
+# because every module has its own Bazel server and output base. Run in
+# parallel the job is as long as demo_app, the widest of them (3 ABIs, a CMake
+# plugin, recipes). Four macOS jobs plus `core` is five, which is exactly the
+# concurrent-macOS ceiling on a free public repository; adding a sixth would
+# queue rather than run.
+#
+# `gate` is the promise that the matrix actually covered everything: the
+# recorded hash table is whole-repo, each matrix job checks only its own rows,
+# so something has to assert that every row was claimed by somebody.
 
 on:
   push:
@@ -56,86 +63,31 @@ jobs:
       - name: buildifier
         run: bazel test //tools/format:buildifier_test
 
-  build:
-    name: Build, test and hash
+  core:
+    name: Root and consumer
     # macOS because that is the only host this has ever been built on, and
     # because `gen_snapshot` is a darwin-x64 binary the rules resolve for any
     # darwin host (tools/flutter/repo.bzl). Moving to ubuntu is the first real
     # test of that host resolution -- worth doing, but its own change.
     runs-on: macos-15
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
-      - uses: subosito/flutter-action@v2
+      - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      # The rules read an *existing* SDK rather than downloading one, so the
-      # engine artifacts have to be present before the first build.
-      - name: Precache engine artifacts
-        run: flutter precache --android
-
-      # Bazel does not run pub. package_config.json and pubspec.lock are inputs
-      # to the kernel and asset actions, and neither exists in a fresh clone.
-      # One per app module -- each is its own Flutter project, so each needs its
-      # own `pub get`. local_plugin's app is a subdirectory (it is the monorepo
-      # shape); the other three are project roots.
-      - name: pub get
-        run: |
-          for d in examples/demo_app examples/no_plugins examples/pub_plugins \
-                   examples/local_plugin/packages/host_app; do
-            (cd "$d" && flutter pub get)
-          done
-
-      - name: Install bazelisk
-        run: |
-          curl -fsSL -o "$RUNNER_TEMP/bazel" \
-            "https://github.com/bazelbuild/bazelisk/releases/download/$BAZELISK_VERSION/bazelisk-darwin-arm64"
-          chmod +x "$RUNNER_TEMP/bazel"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-
-      # Bazel reads $HOME/.bazelrc after each workspace's own, so this is the
-      # one place that applies to all six invocations below without editing any
-      # checked-in rc. Repository cache only: the engine jars and Maven
-      # artifacts are pinned downloads, so caching them is bounded and safe. An
-      # action cache is not, and eviction policy is not worth inventing here.
-      - name: Bazel CI flags
-        run: |
-          cat >> "$HOME/.bazelrc" <<'RC'
-          common --repository_cache=~/.cache/bazel-repo
-          build --verbose_failures
-          test --test_output=errors
-          RC
-
-      - name: Restore repository cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/bazel-repo
-          key: bazel-repo-macos-15-${{ env.FLUTTER_VERSION }}-${{ hashFiles('**/MODULE.bazel', '**/MODULE.bazel.lock') }}
-          restore-keys: |
-            bazel-repo-macos-15-${{ env.FLUTTER_VERSION }}-
-            bazel-repo-macos-15-
-
-      # NDK 28+ is enforced by //tools/flutter:plugins.bzl -- below that the
-      # linker emits 4 KB-aligned segments and the .so segfaults the loader on a
-      # 16 KB-page device instead of failing cleanly. The runner image ships
-      # 28.2.13676358 beside the 27.x default, so this selects rather than
-      # installs.
-      - name: Select the NDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          # tests/consumer's fixtures carry their own state, and this job builds
+          # no example.
+          pub-get: ''
 
       # Root //... is //sandbox_demo:demo and //tools/format:* -- the examples
       # moved out. It runs the one test the `lint` job already runs, and is kept
       # because it also *builds* every root target.
       #
       # third_party/ is a gitignored clone of the smooth-app test subject, so CI
-      # sees fewer targets than a local tree. The modules below are what cover
-      # the API a real consumer sees.
+      # sees fewer targets than a local tree.
       - name: bazel test //...
         run: bazel test //...
 
@@ -149,36 +101,67 @@ jobs:
         working-directory: tests/consumer
         run: bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...
 
-      # Each example is a separate module, so each needs its own invocation --
-      # the same reason tests/consumer does. They are listed rather than globbed
-      # so a new example has to be added here deliberately.
-      #
-      # These run the guards (`:guards_test`, `:<name>_check_test`); the APKs
+      # This job owns the save because the key is shared. It runs even if a step
+      # above failed -- a populated cache is worth keeping regardless of whether
+      # the build that populated it was green -- and it is allowed to fail,
+      # because on any run where the key already exists the reservation is
+      # refused, which is not a defect.
+      - name: Save repository cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-repo-macos-15-${{ env.FLUTTER_VERSION }}-${{ hashFiles('**/MODULE.bazel', '**/MODULE.bazel.lock') }}
+
+  example:
+    name: Example — ${{ matrix.description }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      # One red example must not hide the state of the other three: they cover
+      # different shapes, and which ones broke is the diagnosis.
+      fail-fast: false
+      matrix:
+        include:
+          - name: demo_app
+            directory: examples/demo_app
+            description: demo app (3 ABIs, recipes, CMake, path deps)
+          - name: no_plugins
+            directory: examples/no_plugins
+            description: no plugins at all
+          - name: pub_plugins
+            directory: examples/pub_plugins
+            description: pub plugins with a native half
+          - name: local_plugin
+            directory: examples/local_plugin
+            description: monorepo layout with a local path plugin
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          # Only this example's app module. local_plugin's is a subdirectory --
+          # it is the monorepo shape -- so the directory is not derivable from
+          # the module root.
+          pub-get: ${{ matrix.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.directory }}
+
+      # Runs the guards (`:guards_test`, `:<name>_check_test`); the APKs
       # themselves are built by the hash gate below, which is the step that
       # needs them on disk.
-      - name: Example — demo app (3 ABIs, recipes, CMake, path deps)
-        working-directory: examples/demo_app
+      - name: bazel test //...
+        working-directory: ${{ matrix.directory }}
         run: bazel test //...
 
-      - name: Example — no plugins at all
-        working-directory: examples/no_plugins
-        run: bazel test //...
-
-      - name: Example — pub plugins with a native half
-        working-directory: examples/pub_plugins
-        run: bazel test //...
-
-      - name: Example — monorepo layout with a local path plugin
-        working-directory: examples/local_plugin
-        run: bazel test //...
-
-      # Builds every APK shape all four examples declare -- seven, counting
-      # demo_app's fat APK and its three per-ABI ones -- and compares each
-      # against tools/ci/example_hashes.txt. A difference is either a packaging
-      # regression or an intended change that has to be recorded in the same
-      # commit.
-      - name: Example APK hash gate
-        run: python3 tools/ci/example_hashes.py --check
+      # Builds every APK shape this example declares -- four for demo_app,
+      # counting its fat APK and three per-ABI ones, one for the others -- and
+      # compares each against its rows in tools/ci/example_hashes.txt. A
+      # difference is either a packaging regression or an intended change that
+      # has to be recorded in the same commit.
+      - name: APK hash gate
+        run: python3 tools/ci/example_hashes.py --check --only ${{ matrix.name }}
 
       # Uploaded whether the gate passed or not: the per-entry listings are the
       # only way to see *which* file in a bundle moved, and that is needed
@@ -187,6 +170,52 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: example-apk-entries
+          name: example-apk-entries-${{ matrix.name }}
           path: _ci_hashes/
           if-no-files-found: warn
+
+  gate:
+    name: Hash table fully claimed
+    # Splitting the gate per example bought parallelism and lost one property:
+    # nothing checked that the matrix covers every recorded row. A row for an
+    # example no job builds would pass unnoticed. This restores it, and needs
+    # no runner minutes beyond a checkout.
+    runs-on: ubuntu-latest
+    needs: example
+    if: always()
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Every recorded row belongs to a matrix job
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          # Read the matrix out of this workflow rather than duplicating the
+          # list of examples in a third place. Scoped to the `include:` block:
+          # `- name:` also introduces steps, and a step named after an example
+          # would otherwise vouch for coverage it does not provide.
+          workflow = pathlib.Path(".github/workflows/ci.yml").read_text()
+          block = re.search(r"\n +include:\n(.*?)\n    steps:", workflow, re.S)
+          if not block:
+              sys.exit("FAIL: no matrix include block in .github/workflows/ci.yml")
+          jobs = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))
+          recorded = {
+              line.split(" ", 1)[0]
+              for line in pathlib.Path("tools/ci/example_hashes.txt").read_text().splitlines()
+              if line and not line.startswith("#")
+          }
+          missing = sorted(recorded - jobs)
+          if missing:
+              sys.exit(
+                  "FAIL: tools/ci/example_hashes.txt records {} but no matrix job "
+                  "builds it, so its bytes are unchecked.".format(missing)
+              )
+          print("OK: every recorded example has a matrix job: {}".format(sorted(recorded)))
+          PY
+
+      - name: Matrix result
+        if: needs.example.result != 'success'
+        run: |
+          echo "example matrix concluded ${{ needs.example.result }}"
+          exit 1
