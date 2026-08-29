@@ -156,8 +156,10 @@ def _flutter_sdk_impl(ctx):
     # FlutterAssets includes this environment in its action key. Keep portable
     # values fixed; --no-pub does not need PUB_CACHE, and the action sets HOME.
     env = {
-        # Required command locations for the action and Flutter's shell wrapper.
-        "PATH": "/usr/bin:/bin",
+        # Bazel's own default action PATH, which every rule here that sets no
+        # env already gets. Fixed rather than inherited: the ambient value was
+        # the sole cause of a measured cross-machine cache miss.
+        "PATH": "/bin:/usr/bin:/usr/local/bin",
         # Flutter's SDK-scoped lock protects its pre-cached artifacts. The
         # action only reads them and runs with --no-pub.
         "FLUTTER_ALREADY_LOCKED": "true",
