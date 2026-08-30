@@ -776,7 +776,7 @@ def _flutter_assets_impl(ctx):
     args = ctx.actions.args()
     args.add(entrypoint)
 
-    project_files = (
+    stage_manifest_files = (
         [
             ctx.file.entrypoint,
             ctx.file.package_config,
@@ -785,6 +785,14 @@ def _flutter_assets_impl(ctx):
         ctx.files.assets + ctx.files.srcs + ctx.files.pub_stamp +
         ctx.files.path_deps
     )
+    # Keep package_config staged but undeclared: its pub-cache and SDK rootUris
+    # are machine-specific. Invalidation rests on pub_stamp, as in dart_kernel;
+    # reading it requires this rule's existing no-sandbox execution.
+    declared_project_files = [
+        f
+        for f in stage_manifest_files
+        if f != ctx.file.package_config
+    ]
 
     # The set of files to stage, one execroot-relative path per line. Written to
     # a file rather than passed as arguments so the command cannot overflow the
@@ -792,7 +800,7 @@ def _flutter_assets_impl(ctx):
     manifest = ctx.actions.declare_file(ctx.label.name + ".stage_manifest")
     ctx.actions.write(
         manifest,
-        "".join([f.path + "\n" for f in project_files]),
+        "".join([f.path + "\n" for f in stage_manifest_files]),
     )
 
     # Stage project inputs so flutter_tools writes transient state outside the
@@ -849,7 +857,7 @@ exec python3 "$EXECROOT/{merger}" {merge_args}
         command = cmd,
         arguments = [args],
         inputs = depset(
-            direct = project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter],
+            direct = declared_project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter],
         ),
         outputs = [out],
         env = FLUTTER_ENV,
