@@ -44,6 +44,9 @@ jobs:
       - name: buildifier
         run: bazel test //tools/format:buildifier_test
 
+      - name: Key portability contract
+        run: bazel test //tools/ci:key_portability_test
+
   core:
     name: Root and consumer
     runs-on: macos-15

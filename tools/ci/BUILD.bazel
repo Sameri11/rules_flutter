@@ -22,3 +22,24 @@ build_test(
     name = "example_hashes_selftest_test",
     targets = [":example_hashes_selftest"],
 )
+
+genrule(
+    name = "key_portability_check",
+    srcs = [
+        "key_portability_test.py",
+        "//tools/flutter:repo.bzl",
+        "//tools/flutter:defs.bzl",
+        "//tools/flutter:android.bzl",
+        "//tools/flutter:plugins.bzl",
+        "//tools/flutter:ndk.bzl",
+    ],
+    outs = ["key_portability_check.checked"],
+    cmd = """set -euo pipefail
+python3 $(location key_portability_test.py) --root . > "$@"
+""",
+)
+
+build_test(
+    name = "key_portability_test",
+    targets = [":key_portability_check"],
+)
