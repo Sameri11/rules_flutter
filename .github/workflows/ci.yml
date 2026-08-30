@@ -22,7 +22,7 @@ env:
   # Bazelisk release assets are mutable; verify their bytes before execution.
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
   BAZELISK_SHA256_DARWIN_ARM64: cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-  BAZEL_CACHE_KEY: bazel-cache-macos-arm64
+  BAZEL_CACHE_MODE: ${{ github.event_name == 'pull_request' && 'write' || '' }}
 
 jobs:
   lint:
@@ -54,19 +54,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Shared disk cache path
-        shell: bash
-        run: echo "BAZEL_CACHE_DIR=$RUNNER_TEMP/bazel_disk_cache" >> "$GITHUB_ENV"
-
-      - name: Restore shared disk cache
-        if: github.event_name == 'pull_request'
-        id: restore
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache v6.1.0
-        with:
-          path: ${{ env.BAZEL_CACHE_DIR }}
-          key: ${{ env.BAZEL_CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ${{ env.BAZEL_CACHE_KEY }}-
-
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -74,7 +61,6 @@ jobs:
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           pub-get: ''
-          disk-cache: ${{ env.BAZEL_CACHE_DIR }}
 
       - name: bazel test //...
         run: |
@@ -121,19 +107,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Shared disk cache path
-        shell: bash
-        run: echo "BAZEL_CACHE_DIR=$RUNNER_TEMP/bazel_disk_cache" >> "$GITHUB_ENV"
-
-      - name: Restore shared disk cache
-        if: github.event_name == 'pull_request'
-        id: restore
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache v6.1.0
-        with:
-          path: ${{ env.BAZEL_CACHE_DIR }}
-          key: ${{ env.BAZEL_CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ${{ env.BAZEL_CACHE_KEY }}-
-
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -142,7 +115,10 @@ jobs:
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           # Only this example's app module; local_plugin's lives in a subdirectory.
           pub-get: ${{ matrix.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.directory }}
-          disk-cache: ${{ env.BAZEL_CACHE_DIR }}
+          cache-mode: ${{ matrix.name == 'demo_app' && env.BAZEL_CACHE_MODE || '' }}
+          cache-host: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
+          cache-project-id: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
+          cache-token: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
 
       # Hash gate builds the APKs below; tests run their target guards.
       - name: bazel test //...
@@ -169,20 +145,10 @@ jobs:
 
       - name: Report cache statistics
         if: always()
-        env:
-          REQUIRE_CACHE_HITS: ${{ matrix.name == 'demo_app' && steps.restore.outputs.cache-matched-key != '' }}
         run: |
-          args=(bazel_example_test_${{ matrix.name }}.log bazel_example_hash_${{ matrix.name }}.log)
-          if [[ "$REQUIRE_CACHE_HITS" == "true" ]]; then args+=(--require-hits); fi
-          python3 tools/ci/cache_stats.py "${args[@]}"
-
-      # GitHub eviction and one saver enforce quota; keep main cold so the hash gate proves reproducibility.
-      - name: Save shared disk cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'demo_app'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache v6.1.0
-        with:
-          path: ${{ env.BAZEL_CACHE_DIR }}
-          key: ${{ env.BAZEL_CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
+          python3 tools/ci/cache_stats.py \
+            bazel_example_test_${{ matrix.name }}.log \
+            bazel_example_hash_${{ matrix.name }}.log
 
   gate:
     name: Hash table fully claimed

@@ -1,6 +1,10 @@
-# Shared disk cache configuration for long-lived local caches.
-# The path is deliberately unset; CI or a user rc supplies it.
-# GC bounds limit local growth; the 5m idle collector cannot cap CI uploads.
+build --remote_timeout=30
 
-build --experimental_disk_cache_gc_max_size=4G
-build --experimental_disk_cache_gc_max_age=7d
+# Consume cached actions, publish nothing.
+build:cache-read --remote_upload_local_results=false
+
+# Also publish. For CI only, which builds in a pinned environment.
+build:cache-write --remote_upload_local_results=true
+
+# Machine-local endpoint and token. Never committed.
+try-import %workspace%/.bazelrc.local
