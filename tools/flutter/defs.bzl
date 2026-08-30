@@ -24,7 +24,6 @@ problem and is not attempted here.
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("@flutter_sdk//:sdk.bzl", "FLUTTER_ENV")
 load(":abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
@@ -785,6 +784,7 @@ def _flutter_assets_impl(ctx):
         ctx.files.assets + ctx.files.srcs + ctx.files.pub_stamp +
         ctx.files.path_deps
     )
+
     # Keep package_config staged but undeclared: its pub-cache and SDK rootUris
     # are machine-specific. Invalidation rests on pub_stamp, as in dart_kernel;
     # reading it requires this rule's existing no-sandbox execution.
@@ -828,6 +828,10 @@ def _flutter_assets_impl(ctx):
     cmd = """ENTRYPOINT="$1"; shift
 set -euo pipefail
 EXECROOT="$PWD"
+export PATH="/usr/bin:/bin"
+export ANDROID_HOME="$(python3 -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' "$EXECROOT/{android_sdk}")"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export FLUTTER_ALREADY_LOCKED="true"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 # flutter_tools needs writable state; use a stage-local HOME so the host HOME
@@ -843,6 +847,7 @@ cd "$STAGE/{project_dir}"
 exec python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         project_dir = project_dir,
+        android_sdk = ctx.file._android_sdk.path,
         manifest = manifest.path,
         merger = ctx.file._merger.path,
         bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
@@ -857,10 +862,9 @@ exec python3 "$EXECROOT/{merger}" {merge_args}
         command = cmd,
         arguments = [args],
         inputs = depset(
-            direct = declared_project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter],
+            direct = declared_project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter, ctx.file._android_sdk],
         ),
         outputs = [out],
-        env = FLUTTER_ENV,
         mnemonic = "FlutterAssets",
         progress_message = "Bundling Flutter assets (%s) %%{label}" % mode,
         execution_requirements = _exec_requirements(mode),
@@ -915,6 +919,11 @@ than a fact read out of it.""",
 exactly one file it produces -- NativeAssetsManifest.json -- is keyed by
 architecture. The manifests are merged and everything else is compared, so a
 bundle that started varying by architecture fails here rather than shipping.""",
+        ),
+        "_android_sdk": attr.label(
+            default = "//tools/flutter:_android_sdk_marker",
+            allow_single_file = True,
+            cfg = "exec",
         ),
         "_flutter": attr.label(
             default = "@flutter_sdk//:flutter",

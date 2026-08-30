@@ -40,9 +40,6 @@ _NDK_BUILD_MARKERS = [
     "Android.mk",
 ]
 
-# NDK 28 is the first release with 16 KB page alignment by default.
-_MIN_NDK_MAJOR = 28
-
 # Dependency configurations that put classes on the compile/runtime classpath.
 # `testImplementation` and `androidTestImplementation` are deliberately absent:
 # they carry a capital I, so they do not match, and they are not part of the
@@ -151,12 +148,13 @@ _NATIVE_ABI_TEMPLATE = """
 cmake(
     name = "{name}_native_{abi}",
     lib_source = ":{name}_native_srcs",
+    build_data = ["{ndk_source_properties}"],
     # CMakeLists.txt lives under android/, but its sources do not. Note
     # rules_foreign_cc's detect_root() picks the topmost *file* dirname, so this
     # is relative to the package root only because the package root has files.
     working_directory = "{cmake_dir}",
     cache_entries = {{
-        "CMAKE_TOOLCHAIN_FILE": "{toolchain_file}",
+        "CMAKE_TOOLCHAIN_FILE": "$$(dirname $$(realpath $$EXT_BUILD_ROOT$$/$(execpath {ndk_source_properties})))/build/cmake/android.toolchain.cmake",
         "ANDROID_ABI": "{abi}",
         "ANDROID_PLATFORM": "android-{api_level}",
         # NDK 28 defaults to 16 KB page alignment, but that default does not
@@ -938,55 +936,6 @@ def _cmake_shared_libraries(cmakelists_text):
                 libraries.append("lib{}.so".format(name))
     return libraries
 
-def _ndk_root(ctx):
-    """The NDK to build native plugins with, version-checked.
-
-    Read from the same ANDROID_NDK_HOME that rules_android_ndk reads, so the
-    cc_toolchain and the CMake toolchain file can never disagree about which
-    NDK is in use.
-    """
-    ndk = ctx.getenv("ANDROID_NDK_HOME")
-    if not ndk:
-        fail(
-            "This project has a Flutter plugin with a CMake native build, " +
-            "which needs the Android NDK, but ANDROID_NDK_HOME is not set.\n" +
-            "Set it to an NDK {}.0.0 or newer, e.g.\n".format(_MIN_NDK_MAJOR) +
-            "    export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/28.2.13676358",
-        )
-
-    properties = ctx.path("{}/source.properties".format(ndk))
-    if not properties.exists:
-        fail("ANDROID_NDK_HOME={} does not look like an NDK: no source.properties".format(ndk))
-
-    revision = None
-    for line in ctx.read(properties).split("\n"):
-        if line.startswith("Pkg.Revision"):
-            revision = line.split("=")[1].strip()
-            break
-    if not revision:
-        fail("Could not read Pkg.Revision from {}/source.properties".format(ndk))
-
-    major = revision.split(".")[0]
-    if not major.isdigit() or int(major) < _MIN_NDK_MAJOR:
-        # Not a style preference. Below 28 the NDK emits 4 KB-aligned LOAD
-        # segments, and a 4 KB-aligned .so segfaults the loader on a 16 KB-page
-        # device (API 35) with no dlerror() and no log line -- the APK builds,
-        # installs and dies. Refusing here is the only loud moment available.
-        fail(
-            "ANDROID_NDK_HOME points at NDK {}, but {}.0.0 or newer is required.\n".format(
-                revision,
-                _MIN_NDK_MAJOR,
-            ) +
-            "NDK 27 and older default to 4 KB page alignment; such a .so " +
-            "crashes the dynamic loader on 16 KB-page devices (Android 15, " +
-            "API 35) rather than failing to load cleanly.",
-        )
-
-    toolchain_file = ctx.path("{}/build/cmake/android.toolchain.cmake".format(ndk))
-    if not toolchain_file.exists:
-        fail("NDK at {} has no build/cmake/android.toolchain.cmake".format(ndk))
-    return str(toolchain_file)
-
 def _package_roots(ctx):
     """Every pub package in the resolution, name -> absolute root.
 
@@ -1063,11 +1012,6 @@ def _flutter_plugins_impl(ctx):
     # either not a plugin at all, or a Dart-only implementation. Whittled down as
     # plugins are processed; whatever is left is handled afterwards.
     unmatched_recipes = {k: v for k, v in recipes.items()}
-
-    # Resolved on first use, so a project with no CMake plugin needs no NDK at
-    # all -- and one that does gets the version check before anything is
-    # generated.
-    toolchain_file = None
 
     # An override goes stale two ways: the scraper learns to read what it
     # supplies, or its package leaves the graph entirely.
@@ -1271,9 +1215,6 @@ def _flutter_plugins_impl(ctx):
         native = ""
         native_deps = []
         if "external_native_build" in reasons:
-            if toolchain_file == None:
-                toolchain_file = _ndk_root(ctx)
-
             cmake_directory = _cmake_subdirectory(ctx.read(build_gradle))
             cmakelists = root.get_child(cmake_directory).get_child("CMakeLists.txt")
             if not cmakelists.exists:
@@ -1301,7 +1242,7 @@ def _flutter_plugins_impl(ctx):
                     libs = repr(libraries),
                     lib_copy = " ".join(libraries),
                     cmake_dir = cmake_directory,
-                    toolchain_file = toolchain_file,
+                    ndk_source_properties = ctx.attr.ndk_source_properties,
                     abi = abi,
                     api_level = MIN_SDK,
                 )
@@ -1544,6 +1485,10 @@ flutter_plugins = repository_rule(
             doc = "Label of //tools/flutter:recipe.bzl, for flutter_native_libs.",
             mandatory = True,
         ),
+        "ndk_source_properties": attr.string(
+            doc = "Canonical label of the NDK source.properties marker.",
+            mandatory = True,
+        ),
         "package_config": attr.label(
             doc = """The project's .dart_tool/package_config.json.
 
@@ -1577,9 +1522,6 @@ project states nothing extra for it.""",
             doc = "Package name -> JSON list of Maven coordinates the scraper could not read.",
         ),
     },
-    # ANDROID_NDK_HOME selects the NDK *and* its CMake toolchain file, so a
-    # change to it has to refetch: the path is baked into the generated BUILD.
-    environ = ["ANDROID_NDK_HOME"],
     local = True,
 )
 
@@ -1856,6 +1798,7 @@ def _flutter_plugins_ext_impl(ctx):
                 embedding = str(project.embedding),
                 android_bzl = str(Label("//tools/flutter:android.bzl")),
                 recipe_bzl = str(Label("//tools/flutter:recipe.bzl")),
+                ndk_source_properties = str(Label("@androidndk_cmake//:ndk_source_properties")),
             )
 
 flutter_plugins_ext = module_extension(

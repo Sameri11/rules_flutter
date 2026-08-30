@@ -27,3 +27,11 @@ config_setting(
     name = "mode_release",
     flag_values = {":mode": "release"},
 )
+
+alias(
+    name = "_android_sdk_marker",
+    actual = select({
+        "@androidsdk//:has_androidsdk": "@androidsdk//:platform-tools/adb",
+        "//conditions:default": "@androidsdk//:sdk",
+    }),
+)

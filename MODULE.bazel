@@ -56,22 +56,20 @@ bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 # llvm-strip instead of hardcoding a path. Only the Android half needs it.
 bazel_dep(name = "rules_cc", version = "0.2.17")
 
-# Supplies the cc_toolchain that cmake() resolves for the Android platform, and
-# locates the NDK. Both this and the CMAKE_TOOLCHAIN_FILE above read
-# ANDROID_NDK_HOME, so there is one source of truth for the path.
+# Supplies the cc_toolchain that cmake() resolves for the Android platform and
+# locates the NDK. The marker repository gives generated CMake targets a stable
+# handle without embedding the installation path.
 #
-# NDK 28 is the enforced minimum -- see the version guard in plugins.bzl.
+# NDK 28 is the enforced minimum -- see the version guard in ndk.bzl.
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 
 # Wrapped rather than used directly, so an absent NDK yields a toolchain-less
 # stub instead of a failed fetch. See //tools/flutter:ndk.bzl.
-# A repo created by an extension resolves apparent names against the module
-# owning that extension, so wrapping the NDK moved its BUILD's references here.
-# `platforms` is declared for that alone.
+# `platforms` is declared for the Android NDK toolchain's platform constraints.
 bazel_dep(name = "platforms", version = "1.0.0")
 
 android_ndk = use_extension("//tools/flutter:ndk.bzl", "android_ndk")
-use_repo(android_ndk, "androidndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
 
 register_toolchains("@androidndk//:all")
 
