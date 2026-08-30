@@ -1,6 +1,3 @@
-build --remote_local_fallback
-build --incompatible_remote_local_fallback_for_remote_cache
-
 build --remote_timeout=30
 
 # Consume cached actions, publish nothing.
