@@ -9,6 +9,11 @@ exports_files([
     "inject_version.py",
     "merge_native_assets.py",
     "read_pubspec.py",
+    "repo.bzl",
+    "defs.bzl",
+    "android.bzl",
+    "plugins.bzl",
+    "ndk.bzl",
 ])
 
 # Flutter runtime mode, independent of --compilation_mode.
