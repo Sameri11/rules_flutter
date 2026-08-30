@@ -1,6 +1,5 @@
 name: CI
 
-
 on:
   push:
     branches: [main]
@@ -23,6 +22,7 @@ env:
   # Bazelisk release assets are mutable; verify their bytes before execution.
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
   BAZELISK_SHA256_DARWIN_ARM64: cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+  BAZEL_CACHE_KEY: bazel-cache-macos-arm64
 
 jobs:
   lint:
@@ -54,6 +54,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Shared disk cache path
+        shell: bash
+        run: echo "BAZEL_CACHE_DIR=$RUNNER_TEMP/bazel_disk_cache" >> "$GITHUB_ENV"
+
+      - name: Restore shared disk cache
+        if: github.event_name == 'pull_request'
+        id: restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache v6.1.0
+        with:
+          path: ${{ env.BAZEL_CACHE_DIR }}
+          key: ${{ env.BAZEL_CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ env.BAZEL_CACHE_KEY }}-
+
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -61,17 +74,28 @@ jobs:
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           pub-get: ''
+          disk-cache: ${{ env.BAZEL_CACHE_DIR }}
 
       - name: bazel test //...
-        run: bazel test //...
+        run: |
+          set -o pipefail
+          bazel test //... 2>&1 | tee bazel_test_root.log
 
       - name: Consumer API test
         working-directory: tests/consumer
-        run: bazel build --nobuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...
+        run: |
+          set -o pipefail
+          bazel build --nobuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_api.log
 
       - name: Consumer behaviour checks
         working-directory: tests/consumer
-        run: bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...
+        run: |
+          set -o pipefail
+          bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_test.log
+
+      - name: Report cache statistics
+        if: always()
+        run: python3 tools/ci/cache_stats.py bazel_test_root.log bazel_consumer_api.log bazel_consumer_test.log
 
   example:
     name: Example — ${{ matrix.description }}
@@ -97,6 +121,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Shared disk cache path
+        shell: bash
+        run: echo "BAZEL_CACHE_DIR=$RUNNER_TEMP/bazel_disk_cache" >> "$GITHUB_ENV"
+
+      - name: Restore shared disk cache
+        if: github.event_name == 'pull_request'
+        id: restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache v6.1.0
+        with:
+          path: ${{ env.BAZEL_CACHE_DIR }}
+          key: ${{ env.BAZEL_CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ env.BAZEL_CACHE_KEY }}-
+
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -105,16 +142,21 @@ jobs:
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           # Only this example's app module; local_plugin's lives in a subdirectory.
           pub-get: ${{ matrix.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.directory }}
+          disk-cache: ${{ env.BAZEL_CACHE_DIR }}
 
       # Hash gate builds the APKs below; tests run their target guards.
       - name: bazel test //...
         working-directory: ${{ matrix.directory }}
-        run: bazel test //...
+        run: |
+          set -o pipefail
+          bazel test //... 2>&1 | tee ../../bazel_example_test_${{ matrix.name }}.log
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout changes.
       - name: APK hash gate
-        run: python3 tools/ci/example_hashes.py --check --only ${{ matrix.name }}
+        run: |
+          set -o pipefail
+          python3 tools/ci/example_hashes.py --check --only ${{ matrix.name }} 2>&1 | tee bazel_example_hash_${{ matrix.name }}.log
 
       # Upload after failures so changed bundle entries remain diagnosable.
       - name: Upload APK entry listings
@@ -124,6 +166,23 @@ jobs:
           name: example-apk-entries-${{ matrix.name }}
           path: _ci_hashes/
           if-no-files-found: warn
+
+      - name: Report cache statistics
+        if: always()
+        env:
+          REQUIRE_CACHE_HITS: ${{ matrix.name == 'demo_app' && steps.restore.outputs.cache-matched-key != '' }}
+        run: |
+          args=(bazel_example_test_${{ matrix.name }}.log bazel_example_hash_${{ matrix.name }}.log)
+          if [[ "$REQUIRE_CACHE_HITS" == "true" ]]; then args+=(--require-hits); fi
+          python3 tools/ci/cache_stats.py "${args[@]}"
+
+      # GitHub eviction and one saver enforce quota; keep main cold so the hash gate proves reproducibility.
+      - name: Save shared disk cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'demo_app'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache v6.1.0
+        with:
+          path: ${{ env.BAZEL_CACHE_DIR }}
+          key: ${{ env.BAZEL_CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   gate:
     name: Hash table fully claimed
