@@ -113,7 +113,7 @@ runs:
         cat >> "$HOME/.bazelrc" <<RC
         build --config=cache-$CACHE_MODE
         build --remote_cache=grpcs://${BAZEL_CACHE_BAZEL_REMOTE_CACHE_HOST}
-        build --remote_instance_name=reapi/bazel/${BAZEL_CACHE_BAZEL_PROJECT_ID}
+        build --remote_instance_name=${BAZEL_CACHE_BAZEL_PROJECT_ID}
         build --remote_cache_header='Authorization=Bearer ${BAZEL_CACHE_BAZEL_REMOTE_CACHE_TOKEN}'
         RC
 
