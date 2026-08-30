@@ -14,6 +14,8 @@
 # Smooth app fixture clone. See docs/package-recipes.md.
 /third_party/
 
+.bazelrc.local
+
 .DS_Store
 
 # Gradle caches in nested projects.

@@ -1,6 +1,5 @@
 common --enable_bzlmod
 
-# Shared cache settings for long-lived local cache growth.
 import %workspace%/../../.bazelrc.cache
 # Shared Android configuration.
 import %workspace%/../../.bazelrc.android

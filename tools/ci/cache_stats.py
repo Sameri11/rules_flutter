@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report Bazel action, disk-cache, and local execution counts from logs."""
+"""Report Bazel action, remote-cache, and local execution counts from logs."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ SUMMARY_RE = re.compile(
 class CacheStats:
     processes: int = 0
     action_cache_hits: int = 0
-    disk_cache_hits: int = 0
+    remote_cache_hits: int = 0
     local_actions: int = 0
 
     @classmethod
@@ -38,7 +38,7 @@ class CacheStats:
         return cls(
             processes=int(match.group("processes")),
             action_cache_hits=count("action cache"),
-            disk_cache_hits=count("disk cache"),
+            remote_cache_hits=count("remote cache"),
             local_actions=int(local.group(1)) if local else 0,
         )
 
@@ -46,7 +46,7 @@ class CacheStats:
         return CacheStats(
             self.processes + other.processes,
             self.action_cache_hits + other.action_cache_hits,
-            self.disk_cache_hits + other.disk_cache_hits,
+            self.remote_cache_hits + other.remote_cache_hits,
             self.local_actions + other.local_actions,
         )
 
@@ -68,8 +68,8 @@ def extract_stats_from_log(log_path: Path) -> CacheStats | None:
         return None
 
 
-def has_disk_cache_hits(stats: CacheStats | None) -> bool:
-    return stats is not None and stats.disk_cache_hits > 0
+def has_remote_cache_hits(stats: CacheStats | None) -> bool:
+    return stats is not None and stats.remote_cache_hits > 0
 
 
 def format_stats_table(
@@ -77,7 +77,7 @@ def format_stats_table(
 ) -> str:
     header = (
         f"{'Invocation':<35} {'Processes':>9} {'Action-cache':>13} "
-        f"{'Disk-cache':>10} {'Local':>5}"
+        f"{'Remote-cache':>12} {'Local':>5}"
     )
     lines = [header, "-" * len(header)]
     for name, stats in invocations:
@@ -87,19 +87,19 @@ def format_stats_table(
             values = (
                 str(stats.processes),
                 str(stats.action_cache_hits),
-                str(stats.disk_cache_hits),
+                str(stats.remote_cache_hits),
                 str(stats.local_actions),
             )
         lines.append(
             f"{name:<35} {values[0]:>9} {values[1]:>13} "
-            f"{values[2]:>10} {values[3]:>5}"
+            f"{values[2]:>12} {values[3]:>5}"
         )
     if totals is not None:
         lines.extend(
             [
                 "-" * len(header),
                 f"{'TOTAL':<35} {totals.processes:>9} "
-                f"{totals.action_cache_hits:>13} {totals.disk_cache_hits:>10} "
+                f"{totals.action_cache_hits:>13} {totals.remote_cache_hits:>12} "
                 f"{totals.local_actions:>5}",
             ]
         )
@@ -109,19 +109,19 @@ def format_stats_table(
 def selftest() -> int:
     """Exercise real prefixes, omitted categories, aggregation, and hit gating."""
     parsed = parse_log(
-        "INFO: 3 processes: 2 action cache hits, 1 disk cache hit, 0 local.\n"
-        "INFO: 1 process: 1 disk cache hit, 0 local.\n"
+        "INFO: 3 processes: 2 action cache hits, 1 remote cache hit, 0 local.\n"
+        "INFO: 45 processes: 2 internal, 43 remote cache hit.\n"
     )
-    assert parsed == CacheStats(processes=4, action_cache_hits=2, disk_cache_hits=2)
+    assert parsed == CacheStats(processes=48, action_cache_hits=2, remote_cache_hits=44)
 
     omitted = parse_log("INFO: 2 processes: 2 local.\n")
     assert omitted == CacheStats(processes=2, local_actions=2)
     assert parse_log("unrelated output\n") is None
     cold = CacheStats(processes=2, local_actions=2)
 
-    assert has_disk_cache_hits(parsed)
-    assert not has_disk_cache_hits(cold)
-    assert has_disk_cache_hits(None) is False
+    assert has_remote_cache_hits(parsed)
+    assert not has_remote_cache_hits(cold)
+    assert has_remote_cache_hits(None) is False
     print("OK: cache summary parsing and hit gating selftests passed")
     return 0
 
@@ -133,7 +133,7 @@ def main() -> int:
     parser.add_argument(
         "--require-hits",
         action="store_true",
-        help="Fail when the supplied logs contain no disk-cache hits",
+        help="Fail when the supplied logs contain no remote-cache hits",
     )
     args = parser.parse_args()
     if args.selftest:
@@ -149,8 +149,8 @@ def main() -> int:
         if stats is not None:
             totals = stats if totals is None else totals + stats
     print(format_stats_table(invocations, totals))
-    if args.require_hits and not has_disk_cache_hits(totals):
-        print("ERROR: restored cache produced zero disk-cache hits", file=sys.stderr)
+    if args.require_hits and not has_remote_cache_hits(totals):
+        print("ERROR: reading build produced zero remote-cache hits", file=sys.stderr)
         return 1
     return 0
 
