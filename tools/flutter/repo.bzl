@@ -161,35 +161,12 @@ def _flutter_sdk_impl(ctx):
         ]),
     ))
 
-    # FlutterAssets includes this environment in its action key. Keep portable
-    # values fixed; --no-pub does not need PUB_CACHE, and the action sets HOME.
-    env = {
-        # Bazel's own default action PATH, which every rule here that sets no
-        # env already gets. Fixed rather than inherited: the ambient value was
-        # the sole cause of a measured cross-machine cache miss.
-        "PATH": "/bin:/usr/bin:/usr/local/bin",
-        # Flutter's SDK-scoped lock protects its pre-cached artifacts. The
-        # action only reads them and runs with --no-pub.
-        "FLUTTER_ALREADY_LOCKED": "true",
-    }
-
-    # Dart build hooks require an Android SDK; accept either conventional name.
-    for optional in ["ANDROID_HOME", "ANDROID_SDK_ROOT"]:
-        value = ctx.os.environ.get(optional, "")
-        if value:
-            env[optional] = value
-
-    ctx.file(
-        "sdk.bzl",
-        "FLUTTER_ENV = {env}\n".format(env = repr(env)),
-    )
-
 flutter_sdk = repository_rule(
     implementation = _flutter_sdk_impl,
     doc = "Exposes the pinned Flutter SDK's compiler + snapshotter to Bazel.",
     local = True,
     # PATH is needed when FLUTTER_ROOT is unset. HOME and PUB_CACHE are not read.
-    environ = ["FLUTTER_ROOT", "PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT"],
+    environ = ["FLUTTER_ROOT", "PATH"],
 )
 
 # The Android embedding is not in bin/cache -- Flutter fetches it from Maven at

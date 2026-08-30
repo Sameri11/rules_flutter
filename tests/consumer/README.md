@@ -156,6 +156,6 @@ repository:
 - **The generated `@flutter_plugins` repo's CMake path.** `fixtures/fake_plugin`
   (below) reaches the repository-free, non-native half of that path — a plain
   `android_library` plugin with one Maven coordinate. It declares no
-  `externalNativeBuild`, so `_ndk_root`'s toolchain check and the CMake
-  cross-compile chain stay unreached. `//examples/demo_app` and smooth_app
+  `externalNativeBuild`, so the declared NDK marker and CMake cross-compile
+  chain stay unreached. `//examples/demo_app` and smooth_app
   cover that.
