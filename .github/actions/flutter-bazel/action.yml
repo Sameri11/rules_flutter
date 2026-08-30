@@ -23,6 +23,10 @@ inputs:
     default: >-
       examples/demo_app examples/no_plugins examples/pub_plugins
       examples/local_plugin/packages/host_app
+  disk-cache:
+    description: Optional disk cache path; passed as --disk_cache to Bazel.
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -74,6 +78,12 @@ runs:
         build --verbose_failures
         test --test_output=errors
         RC
+
+    - name: Bazel disk cache
+      if: inputs.disk-cache != ''
+      shell: bash
+      run: |
+        echo "build --disk_cache=${{ inputs.disk-cache }}" >> "$HOME/.bazelrc"
 
     # NDK 28+ avoids 4 KB-aligned .so segments that fail on 16 KB-page devices.
     - name: Select the NDK

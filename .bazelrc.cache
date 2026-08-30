@@ -1,0 +1,6 @@
+# Shared disk cache configuration for long-lived local caches.
+# The path is deliberately unset; CI or a user rc supplies it.
+# GC bounds limit local growth; the 5m idle collector cannot cap CI uploads.
+
+build --experimental_disk_cache_gc_max_size=4G
+build --experimental_disk_cache_gc_max_age=7d

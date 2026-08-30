@@ -2,8 +2,9 @@
 # spawn strategy here.
 common --enable_bzlmod
 
-# Configure a remote cache here when absolute-path inputs are canonicalised.
-# build --remote_cache=grpc://...
+# Shared disk cache: pass --disk_cache=<path> via CI or user rc.
+# The imported .bazelrc.cache bounds long-lived local cache growth.
+import %workspace%/.bazelrc.cache
 
 # Shared Android flags; each nested module imports this file and opts in locally.
 import %workspace%/.bazelrc.android

@@ -23,6 +23,22 @@ build_test(
     targets = [":example_hashes_selftest"],
 )
 
+# The cache statistics parser's hermetic logic, checked in-process.
+# A genrule rather than a py_test for the same reason as example_hashes_selftest.
+genrule(
+    name = "cache_stats_selftest",
+    srcs = ["cache_stats.py"],
+    outs = ["cache_stats_selftest.checked"],
+    cmd = """set -euo pipefail
+python3 $(location cache_stats.py) --selftest > "$@"
+""",
+)
+
+build_test(
+    name = "cache_stats_selftest_test",
+    targets = [":cache_stats_selftest"],
+)
+
 genrule(
     name = "key_portability_check",
     srcs = [
