@@ -118,7 +118,7 @@ class Checker:
                 args = node.args
                 if not args or _string(args[0]) != "FLUTTER_ROOT":
                     self.fail("A", "repo.bzl may capture only FLUTTER_ROOT from ctx.os.environ")
-        for token in ("FLUTTER_ENV", "sdk.bzl", "ANDROID_HOME", "ANDROID_SDK_ROOT", "PUB_CACHE"):
+        for token in ("FLUTTER_ENV", "sdk.bzl", "ANDROID_HOME", "ANDROID_SDK_ROOT", "HOME", "PUB_CACHE"):
             if _contains_string(tree, token):
                 self.fail("A", "repo.bzl must not capture generated SDK or {} environment state".format(token))
 

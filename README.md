@@ -223,6 +223,7 @@ Android release and debug packaging across the supported ABIs, including fat and
 
 - The local Flutter, Android SDK, and NDK installations are not hermetic.
 - Most Dart and asset actions are unsandboxed and do not support remote execution; source tracking is imperfect and Dart compilation is not incremental.
+- A cold analysis with an empty `HOME` may leave the `Analyzing` count unchanged for minutes while Maven/Coursier, JDK, Flutter engine, Kotlin, NDK, and tool repositories are fetched; continued download or process activity indicates network-bound setup, not proof of a deadlock. When intentionally perturbing `HOME`, pin `BAZELISK_HOME` and Bazel's startup `--output_user_root` to isolate launcher and download caches from rules behavior.
 - Native assets require manual consumer recipes, and the first plugin graph requires manual bootstrap and committed generated state.
 - Custom release signing is not supported, and `ndk-build` plugins are not supported.
 - Plugin Maven coordinates that cannot be read statically require `plugins.package(artifacts = ...)`.
