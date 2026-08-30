@@ -22,10 +22,7 @@ env:
   # Bazelisk release assets are mutable; verify their bytes before execution.
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
   BAZELISK_SHA256_DARWIN_ARM64: cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-  BAZEL_CACHE_MODE: >-
-    ${{ github.event_name == 'pull_request' && 'write'
-    || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'read'
-    || '' }}
+  BAZEL_CACHE_MODE: ${{ github.event_name == 'pull_request' && 'write' || '' }}
 
 jobs:
   lint:
@@ -64,12 +61,6 @@ jobs:
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           pub-get: ''
-          cache-mode: ${{ env.BAZEL_CACHE_MODE }}
-          cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
-          cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
-          cache-token: >-
-            ${{ env.BAZEL_CACHE_MODE == 'write' && secrets.BAZEL_CACHE_TOKEN_RW
-            || env.BAZEL_CACHE_MODE == 'read' && secrets.BAZEL_CACHE_TOKEN_RO || '' }}
 
       - name: bazel test //...
         run: |
@@ -124,12 +115,10 @@ jobs:
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           # Only this example's app module; local_plugin's lives in a subdirectory.
           pub-get: ${{ matrix.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.directory }}
-          cache-mode: ${{ env.BAZEL_CACHE_MODE }}
-          cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
-          cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
-          cache-token: >-
-            ${{ env.BAZEL_CACHE_MODE == 'write' && secrets.BAZEL_CACHE_TOKEN_RW
-            || env.BAZEL_CACHE_MODE == 'read' && secrets.BAZEL_CACHE_TOKEN_RO || '' }}
+          cache-mode: ${{ matrix.name == 'demo_app' && env.BAZEL_CACHE_MODE || '' }}
+          cache-host: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
+          cache-project-id: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
+          cache-token: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
 
       # Hash gate builds the APKs below; tests run their target guards.
       - name: bazel test //...
@@ -156,14 +145,10 @@ jobs:
 
       - name: Report cache statistics
         if: always()
-        env:
-          REQUIRE_CACHE_HITS: >-
-            ${{ matrix.name == 'demo_app' && env.BAZEL_CACHE_MODE == 'read'
-            && secrets.BAZEL_TOKEN_RO != '' }}
         run: |
-          args=(bazel_example_test_${{ matrix.name }}.log bazel_example_hash_${{ matrix.name }}.log)
-          if [[ "$REQUIRE_CACHE_HITS" == "true" ]]; then args+=(--require-hits); fi
-          python3 tools/ci/cache_stats.py "${args[@]}"
+          python3 tools/ci/cache_stats.py \
+            bazel_example_test_${{ matrix.name }}.log \
+            bazel_example_hash_${{ matrix.name }}.log
 
   gate:
     name: Hash table fully claimed
