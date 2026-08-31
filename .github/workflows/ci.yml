@@ -132,11 +132,16 @@ jobs:
           bazel test //... 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Query declared targets first so stale or omitted configured labels fail.
-      # Raw APK and canonical entry hashes distinguish content from ZIP-layout changes.
+      # Raw APK and canonical entry hashes distinguish content from ZIP-layout
+      # changes. gen_snapshot, the NDK's per-host clang, and the gzip encoder
+      # are not byte-reproducible across host platforms, so each OS gates
+      # against its own recorded table.
       - name: APK hash gate
         run: |
           set -o pipefail
-          python3 tools/ci/example_hashes.py --check --only ${{ matrix.example.name }} 2>&1 | tee bazel_example_hash_${{ matrix.example.name }}.log
+          python3 tools/ci/example_hashes.py --check --only ${{ matrix.example.name }} \
+            --golden tools/ci/example_hashes_${{ matrix.os == 'ubuntu-latest' && 'linux' || 'macos' }}.txt \
+            2>&1 | tee bazel_example_hash_${{ matrix.example.name }}.log
 
       # Upload after failures so changed bundle entries and bytes remain
       # diagnosable; raw APKs enable byte-for-byte cross-OS comparison.
@@ -176,18 +181,44 @@ jobs:
           if not block:
               sys.exit("FAIL: no example matrix in .github/workflows/ci.yml")
           jobs = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))
-          recorded = {
-              line.split(" ", 1)[0]
-              for line in pathlib.Path("tools/ci/example_hashes.txt").read_text().splitlines()
-              if line and not line.startswith("#")
+
+          def recorded_examples(golden):
+              return {
+                  line.split(" ", 1)[0]
+                  for line in pathlib.Path(golden).read_text().splitlines()
+                  if line and not line.startswith("#")
+              }
+
+          goldens = ["tools/ci/example_hashes_macos.txt", "tools/ci/example_hashes_linux.txt"]
+          by_golden = {golden: recorded_examples(golden) for golden in goldens}
+
+          missing = {
+              golden: sorted(examples - jobs)
+              for golden, examples in by_golden.items()
+              if examples - jobs
           }
-          missing = sorted(recorded - jobs)
           if missing:
               sys.exit(
-                  "FAIL: tools/ci/example_hashes.txt records {} but no matrix job "
-                  "builds it, so its bytes are unchecked.".format(missing)
+                  "FAIL: {} but no matrix job builds it, so its bytes are "
+                  "unchecked.".format(
+                      "; ".join("{} records {}".format(g, e) for g, e in missing.items())
+                  )
               )
-          print("OK: every recorded example has a matrix job: {}".format(sorted(recorded)))
+
+          # Both OS tables must gate the same examples; a table updated alone
+          # would silently stop covering the other OS.
+          first_golden, first_examples = goldens[0], by_golden[goldens[0]]
+          for golden in goldens[1:]:
+              if by_golden[golden] != first_examples:
+                  sys.exit(
+                      "FAIL: {} records {} but {} records {} -- the per-OS "
+                      "tables must cover the same examples.".format(
+                          first_golden, sorted(first_examples),
+                          golden, sorted(by_golden[golden]),
+                      )
+                  )
+
+          print("OK: every recorded example has a matrix job: {}".format(sorted(first_examples)))
           PY
 
       - name: Matrix result

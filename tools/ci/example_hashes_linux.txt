@@ -1,0 +1,21 @@
+# Recorded APK hashes, one line per declared APK:
+#
+#   <example> <target> apk=<unsigned APK sha256> entries=<canonical entry-listing sha256>
+#
+# Regenerate with `tools/ci/example_hashes.py --record` and commit intentional byte changes.
+#
+# Linux-specific: gen_snapshot, the NDK's per-host clang, and the gzip encoder
+# are not byte-reproducible across host platforms for identical source (see
+# docs_internal/ or the CI investigation that introduced this file), so this
+# table cannot share values with example_hashes_macos.txt. Verified equivalent
+# to the macOS build on 2026-08-31: both APKs were debug-signed, installed on
+# an arm64-v8a API 35 emulator, and produced identical logcat output for every
+# plugin/native check (connectivity_plus, image_picker, rive_common, sqlite3,
+# rive_native) with no crash, no ANR, and no uncaught exception.
+demo_app //android/app:demo_app apk=194cb1a210ab63a87495cec59030bf0a11afc8efdb11c5fb3d87a6098bb6f8db entries=2b7f1ca01cfdbffbf8de5e457d2d3c05df3b11521097a7da1f50913dea8b383e
+demo_app //android/app:demo_app_arm64-v8a apk=52e189d483f6fe9b9e43353e2e9429ca8d72db3476ea054acfeef61cdabfd5fa entries=668de0a41e5ee4b9851a25c62b384ca6d6dad45bb7886f32786c5ff7eb3fead2
+demo_app //android/app:demo_app_x86_64 apk=29871c96cd8c6c084c3279582be51964634e96d09e3671838a9dac3176438da4 entries=3e1de13a245bc58f2a3bcb43bddbcd37b4afcc5fb910ae816857d386e237de60
+demo_app //android/app:demo_app_armeabi-v7a apk=e0d15e1d9fdbd09f8e866f9e4a54b5110f39658a28284bbbc99bf72ec6b043e2 entries=8a9821ff3a98fba2bf05e659a5c0da97f514cbb3ac34ab30868fdfea77a8e7a3
+no_plugins //android/app:no_plugins apk=342ba4f7a47f3412019f0d2797e7dadf3492c4451929c5cd94f748055cdcd050 entries=91de04f3c253112a5adce037febb8080c25109dab0f884461992c0493850e347
+pub_plugins //android/app:pub_plugins apk=86803959ccea9efc4888089ddcf70eed279b0576e7bf2ca4fe6717877336d9b3 entries=a1086a53bda790d6739a2e9cce1514dd0918a5a11a53bfcf466e3d6a425f09b3
+local_plugin //packages/host_app/android/app:host_app apk=46509432db2aa9576ca8428654ba9cacc98698ce0d631bed2ce125e8f6981367 entries=3f5c17b994e7e385c535b500f2c58a160163f91d6bf4a1ef8fe4e183015476b5

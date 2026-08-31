@@ -40,7 +40,7 @@ EXAMPLES = (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_GOLDEN = REPO_ROOT / "tools" / "ci" / "example_hashes.txt"
+DEFAULT_GOLDEN = REPO_ROOT / "tools" / "ci" / "example_hashes_macos.txt"
 DEFAULT_MANIFESTS = REPO_ROOT / "_ci_hashes"
 
 HEADER = """\
