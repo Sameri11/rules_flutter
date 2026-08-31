@@ -138,12 +138,13 @@ jobs:
           set -o pipefail
           python3 tools/ci/example_hashes.py --check --only ${{ matrix.example.name }} 2>&1 | tee bazel_example_hash_${{ matrix.example.name }}.log
 
-      # Upload after failures so changed bundle entries remain diagnosable.
-      - name: Upload APK entry listings
+      # Upload after failures so changed bundle entries and bytes remain
+      # diagnosable; raw APKs enable byte-for-byte cross-OS comparison.
+      - name: Upload APK entries and binaries
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: example-apk-entries-${{ matrix.os }}-${{ matrix.example.name }}
+          name: example-apk-artifacts-${{ matrix.os }}-${{ matrix.example.name }}
           path: _ci_hashes/
           if-no-files-found: warn
 
@@ -171,7 +172,7 @@ jobs:
 
           # Read the matrix instead of duplicating its example list.
           workflow = pathlib.Path(".github/workflows/ci.yml").read_text()
-          block = re.search(r"\n +example:\n(.*?)\n    steps:", workflow, re.S)
+          block = re.search(r"\n        example:\n(.*?)\n    steps:", workflow, re.S)
           if not block:
               sys.exit("FAIL: no example matrix in .github/workflows/ci.yml")
           jobs = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))

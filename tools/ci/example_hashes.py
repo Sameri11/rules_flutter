@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -146,6 +147,7 @@ def collect(bazel: str, manifests: Path, build: bool, only: str | None) -> list[
             manifests.mkdir(parents=True, exist_ok=True)
             slug = "{}{}".format(example, target.replace("/", "_").replace(":", "_"))
             (manifests / (slug + ".entries.txt")).write_text(listing)
+            shutil.copyfile(apk, manifests / (slug + ".apk"))
             rows.append(
                 "{} {} apk={} entries={}".format(
                     example,
