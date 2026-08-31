@@ -9,13 +9,13 @@ inputs:
     description: Flutter SDK version; engine artifact URLs derive from it.
     required: true
   flutter-sha256:
-    description: SHA-256 of the Flutter macOS arm64 archive.
+    description: SHA-256 of the Flutter archive for the current runner platform.
     required: true
   bazelisk-version:
     required: false
     default: v1.29.0
   bazelisk-sha256:
-    description: SHA-256 of bazelisk-darwin-arm64. Release assets are mutable, so verify before execution.
+    description: SHA-256 of the Bazelisk binary for the current runner platform.
     required: true
   pub-get:
     description: Space-separated directories for `flutter pub get`; empty skips it.
@@ -50,11 +50,29 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        archive="flutter_macos_arm64_${{ inputs.flutter-version }}-stable.zip"
+        case "$RUNNER_OS/$RUNNER_ARCH" in
+          macOS/ARM64)
+            platform="macos"
+            archive="flutter_macos_arm64_${{ inputs.flutter-version }}-stable.zip"
+            ;;
+          Linux/X64)
+            platform="linux"
+            archive="flutter_linux_${{ inputs.flutter-version }}-stable.tar.xz"
+            ;;
+          *)
+            echo "unsupported Flutter runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+            exit 1
+            ;;
+        esac
         curl -fsSL -o "$RUNNER_TEMP/$archive" \
-          "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
-        echo "${{ inputs.flutter-sha256 }}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
-        unzip -q "$RUNNER_TEMP/$archive" -d "$HOME"
+          "https://storage.googleapis.com/flutter_infra_release/releases/stable/$platform/$archive"
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          echo "${{ inputs.flutter-sha256 }}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/$archive" -d "$HOME"
+        else
+          echo "${{ inputs.flutter-sha256 }}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$HOME"
+        fi
         rm "$RUNNER_TEMP/$archive"
         echo "FLUTTER_ROOT=$HOME/flutter" >> "$GITHUB_ENV"
         echo "FLUTTER_SUPPRESS_ANALYTICS=true" >> "$GITHUB_ENV"
@@ -80,9 +98,21 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        case "$RUNNER_OS/$RUNNER_ARCH" in
+          macOS/ARM64) asset="bazelisk-darwin-arm64" ;;
+          Linux/X64) asset="bazelisk-linux-amd64" ;;
+          *)
+            echo "unsupported Bazelisk runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+            exit 1
+            ;;
+        esac
         curl -fsSL -o "$RUNNER_TEMP/bazel" \
-          "https://github.com/bazelbuild/bazelisk/releases/download/${{ inputs.bazelisk-version }}/bazelisk-darwin-arm64"
-        echo "${{ inputs.bazelisk-sha256 }}  $RUNNER_TEMP/bazel" | shasum -a 256 -c -
+          "https://github.com/bazelbuild/bazelisk/releases/download/${{ inputs.bazelisk-version }}/$asset"
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          echo "${{ inputs.bazelisk-sha256 }}  $RUNNER_TEMP/bazel" | shasum -a 256 -c -
+        else
+          echo "${{ inputs.bazelisk-sha256 }}  $RUNNER_TEMP/bazel" | sha256sum -c -
+        fi
         chmod +x "$RUNNER_TEMP/bazel"
         echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 

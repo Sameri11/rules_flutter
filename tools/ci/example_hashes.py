@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -39,7 +40,7 @@ EXAMPLES = (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_GOLDEN = REPO_ROOT / "tools" / "ci" / "example_hashes.txt"
+DEFAULT_GOLDEN = REPO_ROOT / "tools" / "ci" / "example_hashes_macos.txt"
 DEFAULT_MANIFESTS = REPO_ROOT / "_ci_hashes"
 
 HEADER = """\
@@ -146,6 +147,7 @@ def collect(bazel: str, manifests: Path, build: bool, only: str | None) -> list[
             manifests.mkdir(parents=True, exist_ok=True)
             slug = "{}{}".format(example, target.replace("/", "_").replace(":", "_"))
             (manifests / (slug + ".entries.txt")).write_text(listing)
+            shutil.copyfile(apk, manifests / (slug + ".apk"))
             rows.append(
                 "{} {} apk={} entries={}".format(
                     example,
