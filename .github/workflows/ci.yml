@@ -16,8 +16,9 @@ concurrency:
 env:
   # Matches the SDK used to record the example APK hashes.
   FLUTTER_VERSION: 3.44.2
-  # Verify the downloaded SDK archive before unpacking it.
-  FLUTTER_SHA256: 57fbfdc7032678ab30ad577872bbfc4114a25d3cba94fbfa14a050ec61381a23
+  # Verify each downloaded SDK archive before unpacking it.
+  FLUTTER_SHA256_DARWIN_ARM64: 57fbfdc7032678ab30ad577872bbfc4114a25d3cba94fbfa14a050ec61381a23
+  FLUTTER_SHA256_LINUX_X64: b0de1d19754688ec6769c9a067db3b0594479d3d767f971bfecfc132904c8d5e
   BAZELISK_VERSION: v1.29.0
   # Bazelisk release assets are mutable; verify their bytes before execution.
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
@@ -57,7 +58,7 @@ jobs:
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          flutter-sha256: ${{ env.FLUTTER_SHA256 }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_DARWIN_ARM64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           pub-get: ''
@@ -84,14 +85,17 @@ jobs:
         run: python3 tools/ci/cache_stats.py bazel_test_root.log bazel_consumer_api.log bazel_consumer_test.log
 
   example:
-    name: Example — ${{ matrix.description }}
-    runs-on: macos-15
+    name: Example — ${{ matrix.os }} — ${{ matrix.example.description }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       # Report every independent example failure.
       fail-fast: false
       matrix:
-        include:
+        os:
+          - macos-15
+          - ubuntu-latest
+        example:
           - name: demo_app
             directory: examples/demo_app
             description: demo app (3 ABIs, recipes, CMake, path deps)
@@ -110,36 +114,36 @@ jobs:
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          flutter-sha256: ${{ env.FLUTTER_SHA256 }}
+          flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
-          bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
+          bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
           # Only this example's app module; local_plugin's lives in a subdirectory.
-          pub-get: ${{ matrix.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.directory }}
-          cache-mode: ${{ matrix.name == 'demo_app' && env.BAZEL_CACHE_MODE || '' }}
-          cache-host: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
-          cache-project-id: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
-          cache-token: ${{ matrix.name == 'demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
+          pub-get: ${{ matrix.example.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.example.directory }}
+          cache-mode: ${{ matrix.example.name == 'demo_app' && env.BAZEL_CACHE_MODE || '' }}
+          cache-host: ${{ matrix.example.name == 'demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
+          cache-project-id: ${{ matrix.example.name == 'demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
+          cache-token: ${{ matrix.example.name == 'demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
 
       # Hash gate builds the APKs below; tests run their target guards.
       - name: bazel test //...
-        working-directory: ${{ matrix.directory }}
+        working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... 2>&1 | tee ../../bazel_example_test_${{ matrix.name }}.log
+          bazel test //... 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout changes.
       - name: APK hash gate
         run: |
           set -o pipefail
-          python3 tools/ci/example_hashes.py --check --only ${{ matrix.name }} 2>&1 | tee bazel_example_hash_${{ matrix.name }}.log
+          python3 tools/ci/example_hashes.py --check --only ${{ matrix.example.name }} 2>&1 | tee bazel_example_hash_${{ matrix.example.name }}.log
 
       # Upload after failures so changed bundle entries remain diagnosable.
       - name: Upload APK entry listings
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: example-apk-entries-${{ matrix.name }}
+          name: example-apk-entries-${{ matrix.os }}-${{ matrix.example.name }}
           path: _ci_hashes/
           if-no-files-found: warn
 
@@ -147,8 +151,8 @@ jobs:
         if: always()
         run: |
           python3 tools/ci/cache_stats.py \
-            bazel_example_test_${{ matrix.name }}.log \
-            bazel_example_hash_${{ matrix.name }}.log
+            bazel_example_test_${{ matrix.example.name }}.log \
+            bazel_example_hash_${{ matrix.example.name }}.log
 
   gate:
     name: Hash table fully claimed
@@ -167,9 +171,9 @@ jobs:
 
           # Read the matrix instead of duplicating its example list.
           workflow = pathlib.Path(".github/workflows/ci.yml").read_text()
-          block = re.search(r"\n +include:\n(.*?)\n    steps:", workflow, re.S)
+          block = re.search(r"\n +example:\n(.*?)\n    steps:", workflow, re.S)
           if not block:
-              sys.exit("FAIL: no matrix include block in .github/workflows/ci.yml")
+              sys.exit("FAIL: no example matrix in .github/workflows/ci.yml")
           jobs = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))
           recorded = {
               line.split(" ", 1)[0]
