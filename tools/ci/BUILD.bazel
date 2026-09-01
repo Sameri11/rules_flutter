@@ -59,3 +59,20 @@ build_test(
     name = "key_portability_test",
     targets = [":key_portability_check"],
 )
+
+# The committed-lock guard's detection logic, checked in-process. The real scan
+# reads locks from five separate Bazel modules, which cannot be inputs of a
+# root-module action; CI runs it directly, as it does the APK hash gate.
+genrule(
+    name = "committed_lock_guard_selftest",
+    srcs = ["committed_lock_guard.py"],
+    outs = ["committed_lock_guard_selftest.checked"],
+    cmd = """set -euo pipefail
+python3 $(location committed_lock_guard.py) --selftest > "$@"
+""",
+)
+
+build_test(
+    name = "committed_lock_guard_selftest_test",
+    targets = [":committed_lock_guard_selftest"],
+)

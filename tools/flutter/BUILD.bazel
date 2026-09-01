@@ -33,10 +33,15 @@ config_setting(
     flag_values = {":mode": "release"},
 )
 
+# Reached only through an implicit rule attribute, in a Consumer Module that has
+# already configured an SDK. `manual` keeps it out of wildcard patterns, because
+# resolving it needs `@androidsdk`, whose stub fails by design when no SDK is
+# configured, and this module's own checks must stay Android-free.
 alias(
     name = "_android_sdk_marker",
     actual = select({
         "@androidsdk//:has_androidsdk": "@androidsdk//:platform-tools/adb",
         "//conditions:default": "@androidsdk//:sdk",
     }),
+    tags = ["manual"],
 )

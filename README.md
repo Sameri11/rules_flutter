@@ -36,9 +36,9 @@ monorepos, and consumer recipes/native assets, see the
 
 ### Prerequisites
 
-Install Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 (Bazelisk recommended), a recent Android SDK, and an Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME`. The rules pin their own JDK 17 toolchain.
+Install Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 (Bazelisk recommended), a recent Android SDK, and an Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME` (for the NDK). The rules pin their own JDK 17 toolchain.
 
-With no `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed.
+With no `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed. An Android Consumer Module must explicitly register NDK toolchains in its `MODULE.bazel` and inherit the stable repositories from `rules_flutter`'s NDK extension; an NDK that is not configured will be discovered only when a target tries to use Android toolchains, at which point the repository fetch will fail with a diagnostic naming `ANDROID_NDK_HOME`.
 
 ### Create the project
 
@@ -67,10 +67,10 @@ Create `.bazelrc`:
 
 ```
 common --enable_bzlmod
-
 build:android --merge_android_manifest_permissions
 build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
 build:android --java_language_version=17 --java_runtime_version=remotejdk_17
+# Forwarded to repository rules, which is where the NDK path is read.
 common:android --repo_env=ANDROID_NDK_HOME
 common --config=android
 ```
@@ -89,6 +89,22 @@ local_path_override(
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+# Android toolchains are owned by this Consumer Module.
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+register_toolchains("@androidsdk//:all")
+
+android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+register_toolchains("@androidndk//:all")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(

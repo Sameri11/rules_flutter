@@ -41,12 +41,20 @@ jobs:
           chmod +x "$RUNNER_TEMP/bazel"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      # Test failure, not formatting output, is the CI contract.
+      # Root checks are intentionally Android-free; do not let a runner's
+      # installed SDK/NDK affect their repository graph.
       - name: buildifier
-        run: bazel test //tools/format:buildifier_test
+        run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/format:buildifier_test
 
       - name: Key portability contract
-        run: bazel test //tools/ci:key_portability_test
+        run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/ci:key_portability_test
+
+      - name: Committed lock portability guard
+        run: |
+          set -euo pipefail
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME \
+            bazel test //tools/ci:committed_lock_guard_selftest_test
+          python3 tools/ci/committed_lock_guard.py
 
   core:
     name: Root and consumer
@@ -63,16 +71,50 @@ jobs:
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           pub-get: ''
 
+      # Android-free by construction: the ruleset registers no SDK or NDK
+      # toolchain, and no target in this module's wildcard universe resolves one.
       - name: bazel test //...
         run: |
           set -o pipefail
-          bazel test //... 2>&1 | tee bazel_test_root.log
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... 2>&1 | tee bazel_test_root.log
+
+      # A separate module with no Android dependency of its own: it resolves a
+      # host C++ toolchain from a fresh output base with both Android variables
+      # unset and must materialise no SDK, NDK or ruleset-generated repository.
+      - name: Core Consumer isolation
+        working-directory: tests/core_consumer
+        run: |
+          set -euo pipefail
+          core_output_base="$(mktemp -d)"
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME \
+            python3 ../../tools/ci/android_toolchain_probe.py \
+            --scenario core-isolation --output-base "$core_output_base"
+
+      - name: Consumer missing-NDK scenario
+        working-directory: tests/consumer
+        run: |
+          set -euo pipefail
+          missing_output_base="$(mktemp -d)"
+          python3 ../../tools/ci/android_toolchain_probe.py \
+            --scenario missing-ndk --output-base "$missing_output_base"
 
       - name: Consumer API test
         working-directory: tests/consumer
         run: |
           set -o pipefail
           bazel build --nobuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_api.log
+
+      - name: Consumer Android toolchain inventory
+        working-directory: tests/consumer
+        run: python3 ../../tools/ci/android_toolchain_probe.py --scenario inventory
+
+      - name: Consumer NDK compile probe
+        working-directory: tests/consumer
+        run: python3 ../../tools/ci/android_toolchain_probe.py --scenario compile-probe
+
+      - name: Lock portability gate
+        run: |
+          python3 tools/ci/android_toolchain_probe.py --scenario lock-portability
 
       - name: Consumer behaviour checks
         working-directory: tests/consumer

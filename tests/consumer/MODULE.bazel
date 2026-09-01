@@ -13,8 +13,25 @@ bazel_dep(name = "rules_java", version = "9.3.0")
 # Direct dependency for the Label-typed CPU constraint assertions below.
 bazel_dep(name = "platforms", version = "1.0.0")
 
+# This fixture configures and registers its own Android SDK and C++ rules.
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_cc", version = "0.2.17")
+
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+
+register_toolchains("@androidsdk//:all")
+
 # The no-plugin fixture still packages Flutter's Android embedding, whose
 # AndroidX runtime graph must be resolved by the consuming project.
+
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
@@ -64,6 +81,12 @@ local_path_override(
     module_name = "external_app",
     path = "external_app",
 )
+
+# Android toolchain registration is owned explicitly by this Consumer Module.
+android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+
+register_toolchains("@androidndk//:all")
 
 # `external_app` supplies the unmatched dependency recipe now that the demo is
 # a separate module outside this graph. The distinct `plugin_maven` repository

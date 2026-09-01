@@ -260,15 +260,14 @@
   "moduleExtensions": {
     "//tools/flutter:ndk.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "65Ne47eOE8qQp0yTOPyHGNSpRiyNfzB1KGZv/5L2XyA=",
+        "bzlTransitiveDigest": "wubp2T1WtFjfb9+kfYhB63NRFwpD0mXcOWF3daEO03c=",
         "usagesDigest": "iqWYoA9j7grhPWQtR56x1n6RjeC/ZLyxxoSOj5m8u4Q=",
         "recordedInputs": [
-          "ENV:ANDROID_NDK_HOME \\0",
           "REPO_MAPPING:,rules_android_ndk rules_android_ndk+"
         ],
         "generatedRepoSpecs": {
           "androidndk": {
-            "repoRuleId": "@@//tools/flutter:ndk.bzl%_stub_ndk_repository",
+            "repoRuleId": "@@rules_android_ndk+//:rules.bzl%android_ndk_repository",
             "attributes": {}
           },
           "androidndk_cmake": {

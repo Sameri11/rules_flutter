@@ -420,8 +420,8 @@ class Checker:
         if ext_impl is None:
             self.fail("G", "ndk.bzl must define _android_ndk_impl")
         else:
-            if not _has_call_with_string(ext_impl, ["module_ctx", "getenv"], "ANDROID_NDK_HOME"):
-                self.fail("G", "NDK module extension must read ANDROID_NDK_HOME with module_ctx.getenv")
+            if _has_call_with_string(ext_impl, ["module_ctx", "getenv"], "ANDROID_NDK_HOME"):
+                self.fail("G", "NDK module extension must not read ANDROID_NDK_HOME with module_ctx.getenv")
             cmake_calls = [
                 node
                 for node in ast.walk(ext_impl)
@@ -433,25 +433,30 @@ class Checker:
                 isinstance(statement, ast.Expr) and statement.value is cmake_calls[0]
                 for statement in ext_impl.body
             ):
-                self.fail("G", "androidndk_cmake must be created unconditionally after the cc-repository branch")
+                self.fail("G", "androidndk_cmake must be created unconditionally")
             cc_calls = [
                 _call_path(node)[0]
                 for node in ast.walk(ext_impl)
                 if isinstance(node, ast.Call)
                 and _call_path(node)
-                and _call_path(node)[0] in ("android_ndk_repository", "_stub_ndk_repository")
+                and _call_path(node)[0] in ("android_ndk_repository",)
             ]
-            if sorted(cc_calls) != ["_stub_ndk_repository", "android_ndk_repository"]:
-                self.fail("G", "NDK module extension may branch only between real and stub cc repositories")
+            if sorted(cc_calls) != ["android_ndk_repository"]:
+                self.fail("G", "NDK module extension must always invoke upstream android_ndk_repository")
 
         for name, expected in (
             ("_androidndk_cmake_repository", ["ANDROID_NDK_HOME"]),
-            ("android_ndk", ["ANDROID_NDK_HOME"]),
         ):
             call = _named_call(tree, name)
             values = _string_list(_keyword(call, "environ")) if call is not None else None
             if values != expected:
                 self.fail("G", "{} environment declaration must be exactly ANDROID_NDK_HOME".format(name))
+
+        if _named_call(tree, "android_ndk") is not None:
+            ndk_ext = _named_call(tree, "android_ndk")
+            environ = _keyword(ndk_ext, "environ")
+            if environ is not None:
+                self.fail("G", "android_ndk extension must not declare environ")
 
         env_reads = [
             node
@@ -459,11 +464,10 @@ class Checker:
             if isinstance(node, ast.Call)
             and _call_path(node) in (
                 ["ctx", "os", "environ", "get"],
-                ["module_ctx", "getenv"],
             )
         ]
-        if len(env_reads) != 2:
-            self.fail("G", "only repository and module-extension implementations may read the NDK environment")
+        if len(env_reads) != 1:
+            self.fail("G", "only the NDK repository implementation may read the NDK environment")
 
     def check_h(self):
         regions = []

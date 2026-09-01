@@ -1,0 +1,14 @@
+module(
+    name = "core_consumer",
+    version = "0.0.1",
+)
+
+bazel_dep(name = "rules_flutter", version = "0.1.0")
+local_path_override(
+    module_name = "rules_flutter",
+    path = "../..",
+)
+
+# This direct dependency provides the host cc_toolchain used by the real core
+# action. It deliberately does not import or register any Android toolchain.
+bazel_dep(name = "rules_cc", version = "0.2.17")
