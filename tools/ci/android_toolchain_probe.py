@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise Android toolchain ownership from the public Consumer fixture.
-
-The runner keeps each check as a small scenario so later isolation and lock
-portability checks can share its Bazel invocation and reporting helpers without
-coupling those checks to the real Android compile probe.
-"""
+"""Exercise Android toolchain ownership."""
 
 import argparse
 import hashlib
@@ -27,13 +22,8 @@ SCENARIOS = (
     "missing-ndk",
     "lock-portability",
 )
+EM_AARCH64 = 183
 
-# Toolchain resolution loads every registered toolchain's repository, because a
-# `toolchain()` target's own package is what declares its type. Two consequences
-# are measured, not assumed, and this scenario pins both.
-#
-# 1. The ruleset's registrations are gone, so no NDK repository is materialised
-#    and no core build reads an NDK path. These names must never come back.
 CORE_FORBIDDEN_MARKERS = (
     "androidndk",
     "rules_android_ndk",
@@ -41,11 +31,7 @@ CORE_FORBIDDEN_MARKERS = (
     "android_tools",
 )
 
-# 2. `rules_android`, `rules_kotlin` and `rules_foreign_cc` register their own
-#    toolchains in their own modules. While rules_flutter depends on them for its
-#    Android packages, a core Consumer still materialises exactly these
-#    repositories -- and no more. Removing them requires taking Android modules
-#    out of the core module graph, which is a separate, out-of-scope decision.
+# Measured transitive module registrations that remain.
 CORE_DEPENDENCY_REGISTRATIONS = (
     "rules_android+",
     "rules_android++android_sdk_repository_extension+androidsdk",
@@ -57,8 +43,6 @@ CORE_DEPENDENCY_REGISTRATIONS = (
     "rules_kotlin++rules_kotlin_extensions+com_github_jetbrains_kotlin",
 )
 
-# Everything Android-adjacent, used to separate the two groups above from the
-# ordinary Java/protobuf/platform repositories a host C++ build also loads.
 ANDROID_REPO_MARKERS = CORE_FORBIDDEN_MARKERS + (
     "androidsdk",
     "rules_android",
@@ -67,9 +51,7 @@ ANDROID_REPO_MARKERS = CORE_FORBIDDEN_MARKERS + (
     "rules_kotlin",
 )
 
-# Measured before Consumer-owned registration: e485184^, external core Consumer
-# with a host `cc_binary`, fresh output base, `ANDROID_HOME` and
-# `ANDROID_NDK_HOME` unset. The three NDK entries are what the cutover removed.
+# Pre-cutover baseline: e485184^ with Android variables unset.
 PRE_CUTOVER_ANDROID_REPOSITORIES = (
     "rules_android++android_sdk_repository_extension+androidsdk.marker",
     "rules_flutter++android_ndk+androidndk.marker",
@@ -90,7 +72,7 @@ PRE_CUTOVER_ANDROID_REPOSITORIES = (
 
 
 class ProbeError(RuntimeError):
-    """A scenario could not establish its ownership contract."""
+    """Probe contract failure."""
 
 
 def _workspace_path(value):
@@ -109,7 +91,6 @@ def _bazel_command(workspace, output_base, args):
 
 
 def _repo_environment_args(environment):
-    """Forward installed Android roots explicitly when they are configured."""
     args = []
     for name in ("ANDROID_HOME", "ANDROID_NDK_HOME"):
         value = environment.get(name, "").strip()
@@ -151,7 +132,6 @@ def _labels(output, repository):
 
 
 def run_analysis(workspace, output_base):
-    """Retain the complete fixture's no-build analysis as its own scenario."""
     _run_bazel(workspace, output_base, ["build", "--nobuild", "//..."])
     return {
         "scenario": "analysis",
@@ -174,7 +154,6 @@ def _fresh_output_base(output_base):
 
 
 def run_core_isolation(workspace, output_base):
-    """Build the host C++ core action and reject Android repository materialisation."""
     environment = os.environ.copy()
     environment.pop("ANDROID_HOME", None)
     environment.pop("ANDROID_NDK_HOME", None)
@@ -251,7 +230,6 @@ def run_core_isolation(workspace, output_base):
 
 
 def run_inventory(workspace, output_base):
-    """Inventory the SDK repository and all four NDK ABI toolchains."""
     sdk_output = _run_bazel(workspace, output_base, ["query", "@androidsdk//:all"])
     ndk_output = _run_bazel(
         workspace,
@@ -298,12 +276,11 @@ def _elf_machine(binary):
     if byteorder is None:
         raise ProbeError("{} has an invalid ELF byte order".format(binary))
     machine = int.from_bytes(data[18:20], byteorder=byteorder)
-    if machine != 183:  # EM_AARCH64
+    if machine != EM_AARCH64:
         raise ProbeError("{} is ELF machine {} rather than AArch64".format(binary, machine))
 
 
 def run_compile_probe(workspace, output_base):
-    """Compile the real C++ probe for rules_android's arm64 platform."""
     _run_bazel(
         workspace,
         output_base,
@@ -341,7 +318,6 @@ def run_compile_probe(workspace, output_base):
 
 
 def _fetch_diagnostic(output):
-    """Return the fetch failure line that names the missing NDK path."""
     named = [line.strip() for line in output.splitlines() if "ANDROID_NDK_HOME" in line]
     for line in named:
         if "must be set" in line:
@@ -350,7 +326,6 @@ def _fetch_diagnostic(output):
 
 
 def run_missing_ndk(workspace, output_base):
-    """Require the upstream NDK repository fetch to fail and name the NDK path."""
     environment = os.environ.copy()
     environment.pop("ANDROID_NDK_HOME", None)
 
@@ -431,17 +406,13 @@ register_toolchains("@androidndk//:all")
 
 
 def _lock_consumer(directory):
-    """Write the disposable Android Consumer Module used by the lock gate."""
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "MODULE.bazel").write_text(_LOCK_CONSUMER_MODULE.format(ruleset=ROOT))
-    (directory / "BUILD.bazel").write_text(
-        "# Registration alone drives module resolution; no target is needed.\n",
-    )
+    (directory / "BUILD.bazel").write_text("")
     return directory
 
 
 def _resolved_lock(scratch, name, environment):
-    """Resolve a fresh copy of the disposable Consumer and return its lock bytes."""
     workspace = _lock_consumer(scratch / name)
     output_base = scratch / "{}-output-base".format(name)
     _run_bazel(
@@ -464,13 +435,7 @@ def _first_difference(left, right):
 
 
 def run_lock_portability(workspace, output_base):
-    """Resolve one disposable Consumer with ANDROID_NDK_HOME unset and set.
-
-    Each resolution gets its own copy of the module and its own output base, so
-    neither a retained lock nor a reused repository cache can hide an
-    environment-sensitive reevaluation. The scenario ignores `workspace` and
-    `output_base`: its subject is generated, not committed.
-    """
+    """Compare fresh locks with ANDROID_NDK_HOME unset and set."""
     ndk = os.environ.get("ANDROID_NDK_HOME", "").strip()
     if not ndk:
         raise ProbeError(

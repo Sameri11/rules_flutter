@@ -41,8 +41,6 @@ jobs:
           chmod +x "$RUNNER_TEMP/bazel"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      # Root checks are intentionally Android-free; do not let a runner's
-      # installed SDK/NDK affect their repository graph.
       - name: buildifier
         run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/format:buildifier_test
 
@@ -71,16 +69,11 @@ jobs:
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
           pub-get: ''
 
-      # Android-free by construction: the ruleset registers no SDK or NDK
-      # toolchain, and no target in this module's wildcard universe resolves one.
       - name: bazel test //...
         run: |
           set -o pipefail
           env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... 2>&1 | tee bazel_test_root.log
 
-      # A separate module with no Android dependency of its own: it resolves a
-      # host C++ toolchain from a fresh output base with both Android variables
-      # unset and must materialise no SDK, NDK or ruleset-generated repository.
       - name: Core Consumer isolation
         working-directory: tests/core_consumer
         run: |

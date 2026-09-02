@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Guard that committed module locks record no local NDK input.
-
-Bazel writes module-extension inputs into `MODULE.bazel.lock`. While the NDK
-module extension read `ANDROID_NDK_HOME`, every lock recorded either that
-variable's machine-local value or the toolchain-less stub that stood in for a
-missing NDK. Both are gone; this guard keeps them gone.
-
-`--selftest` exercises the detection logic in-process, which is what the
-hermetic Bazel target runs. The real scan reads the committed locks, which live
-in five separate Bazel modules and therefore cannot be genrule inputs.
-"""
+"""Guard committed module locks against local NDK inputs."""
 
 import argparse
 import json
@@ -18,9 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Every committed lock: the ruleset root, the four examples, and the public
-# consumer fixture. Listed rather than globbed so a new module's lock is an
-# explicit decision instead of a silent omission.
 COMMITTED_LOCKS = (
     "MODULE.bazel.lock",
     "examples/demo_app/MODULE.bazel.lock",
@@ -30,16 +17,11 @@ COMMITTED_LOCKS = (
     "tests/consumer/MODULE.bazel.lock",
 )
 
-# The extension input and the stub repository that recorded it.
 FORBIDDEN_SUBSTRINGS = (
     "ENV:ANDROID_NDK_HOME",
     "_stub_ndk_repository",
 )
 
-# An installed NDK is always addressed through one of these path segments:
-# `$ANDROID_HOME/ndk/<version>` for the SDK manager layout, `ndk-bundle` for
-# the legacy one. Matching path segments rather than home prefixes keeps the
-# check meaningful on any runner.
 NDK_PATH_SEGMENTS = (
     "/ndk/",
     "/ndk-bundle",
@@ -47,7 +29,6 @@ NDK_PATH_SEGMENTS = (
 
 
 def _recorded_strings(data):
-    """Yield every string a lock records as a module-extension input or spec."""
     if isinstance(data, dict):
         for key, value in data.items():
             yield str(key)
@@ -62,7 +43,6 @@ def _recorded_strings(data):
 
 
 def check_lock(name, content):
-    """Return every violation the given lock content contains."""
     violations = []
     for substring in FORBIDDEN_SUBSTRINGS:
         if substring in content:

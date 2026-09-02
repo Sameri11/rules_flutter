@@ -10,8 +10,6 @@ local_path_override(
     path = "../..",
 )
 
-# rules_flutter provides the Flutter SDK/engine repositories and build rules.
-
 # Dependencies named directly by this module; rules_flutter declares the rest.
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
@@ -38,7 +36,6 @@ use_repo(android_sdk, "androidsdk")
 
 register_toolchains("@androidsdk//:all")
 
-# Android toolchain registration is owned by the Consumer Module.
 android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 

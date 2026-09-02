@@ -30,7 +30,6 @@ use_repo(android_sdk, "androidsdk")
 
 register_toolchains("@androidsdk//:all")
 
-# Android toolchain registration is owned by the Consumer Module.
 android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 

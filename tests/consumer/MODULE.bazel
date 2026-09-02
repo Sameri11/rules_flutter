@@ -12,8 +12,6 @@ bazel_dep(name = "rules_java", version = "9.3.0")
 
 # Direct dependency for the Label-typed CPU constraint assertions below.
 bazel_dep(name = "platforms", version = "1.0.0")
-
-# This fixture configures and registers its own Android SDK and C++ rules.
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_cc", version = "0.2.17")
 
@@ -82,7 +80,6 @@ local_path_override(
     path = "external_app",
 )
 
-# Android toolchain registration is owned explicitly by this Consumer Module.
 android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 

@@ -38,13 +38,12 @@ directly, one scenario per invocation. Each is one command, and CI runs all of
 them:
 
 ```sh
-# From the repository root, with an SDK and NDK 28+ configured:
-python3 tools/ci/android_toolchain_probe.py --scenario analysis        # this fixture, --nobuild //...
-python3 tools/ci/android_toolchain_probe.py --scenario inventory       # @androidsdk labels, four NDK ABI toolchains
-python3 tools/ci/android_toolchain_probe.py --scenario compile-probe   # real Android arm64 C++ action
-python3 tools/ci/android_toolchain_probe.py --scenario missing-ndk     # upstream fetch fails, names ANDROID_NDK_HOME
-python3 tools/ci/android_toolchain_probe.py --scenario lock-portability # lock bytes identical, NDK set vs unset
-python3 tools/ci/android_toolchain_probe.py --scenario core-isolation  # core Consumer resolves no Android toolchain
+python3 tools/ci/android_toolchain_probe.py --scenario analysis
+python3 tools/ci/android_toolchain_probe.py --scenario inventory
+python3 tools/ci/android_toolchain_probe.py --scenario compile-probe
+python3 tools/ci/android_toolchain_probe.py --scenario missing-ndk
+python3 tools/ci/android_toolchain_probe.py --scenario lock-portability
+python3 tools/ci/android_toolchain_probe.py --scenario core-isolation
 ```
 
 `lock-portability` generates a disposable Android Consumer, resolves it twice in

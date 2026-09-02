@@ -70,7 +70,6 @@ common --enable_bzlmod
 build:android --merge_android_manifest_permissions
 build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
 build:android --java_language_version=17 --java_runtime_version=remotejdk_17
-# Forwarded to repository rules, which is where the NDK path is read.
 common:android --repo_env=ANDROID_NDK_HOME
 common --config=android
 ```
@@ -90,7 +89,6 @@ bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
-# Android toolchains are owned by this Consumer Module.
 android_sdk = use_extension(
     "@rules_android//rules/android_sdk_repository:rule.bzl",
     "android_sdk_repository_extension",

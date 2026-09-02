@@ -9,6 +9,4 @@ local_path_override(
     path = "../..",
 )
 
-# This direct dependency provides the host cc_toolchain used by the real core
-# action. It deliberately does not import or register any Android toolchain.
 bazel_dep(name = "rules_cc", version = "0.2.17")
