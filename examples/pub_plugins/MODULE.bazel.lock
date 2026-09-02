@@ -378,7 +378,7 @@
     },
     "@@rules_flutter+//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "b0pqGPbZ/pGka0zWS2+CLRHFxo5p1sWoSHvX92wrKNs=",
+        "bzlTransitiveDigest": "0yLq259JjWNeUGIYlSqXkjKSfmbAfiOMKoLDIpKy4bI=",
         "usagesDigest": "YAm/jbk0GwO9p9qd76oXRuG29FRMV6Bi9F3BHgRBbI0=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
