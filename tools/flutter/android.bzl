@@ -13,9 +13,26 @@ entirely on this side.
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
+load(
+    "@rules_android//providers:providers.bzl",
+    "AndroidBinaryNativeLibsInfo",
+    "AndroidFeatureFlagSet",
+    "AndroidIdeInfo",
+    "AndroidIdlInfo",
+    "AndroidInstrumentationInfo",
+    "AndroidOptimizationInfo",
+    "AndroidPreDexJarInfo",
+    "ArtProfileInfo",
+    "DataBindingV2Info",
+)
+load(
+    "@rules_android//rules:rules.bzl",
+    "ApkInfo",
+    "android_binary",
+    "android_library",
+)
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
-load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_java//java:defs.bzl", "JavaInfo", "java_import")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MIN_SDK", "check_abis", "check_platform_abi", "engine_jar_label", "plugin_repo_target")
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
 load(":embedding.bzl", "flutter_embedding_deps")
@@ -915,6 +932,130 @@ _MANIFEST_VALUES = {
     "targetSdkVersion": "36",
 }
 
+# Pin release builds to `opt`; preserve explicitly non-fastbuild modes.
+def _pin_release_compilation_mode_impl(settings, _attr):
+    mode = settings["//tools/flutter:mode"]
+    compilation_mode = str(settings["//command_line_option:compilation_mode"])
+    if mode == "release" and compilation_mode == "fastbuild":
+        compilation_mode = "opt"
+    return {"//command_line_option:compilation_mode": compilation_mode}
+
+_pin_release_compilation_mode = transition(
+    implementation = _pin_release_compilation_mode_impl,
+    inputs = [
+        "//tools/flutter:mode",
+        "//command_line_option:compilation_mode",
+    ],
+    outputs = ["//command_line_option:compilation_mode"],
+)
+
+def _flutter_apk_impl(ctx):
+    apk = ctx.attr.apk
+    info = apk[ApkInfo]
+
+    ctx.actions.symlink(output = ctx.outputs.apk, target_file = info.signed_apk)
+    ctx.actions.symlink(output = ctx.outputs.unsigned_apk, target_file = info.unsigned_apk)
+    ctx.actions.symlink(output = ctx.outputs.deploy_jar, target_file = info.deploy_jar)
+
+    outputs = [ctx.outputs.apk, ctx.outputs.unsigned_apk, ctx.outputs.deploy_jar]
+    known = {info.signed_apk: None, info.unsigned_apk: None, info.deploy_jar: None}
+
+    # Mirror extra DefaultInfo outputs by replacing the private target prefix.
+    inner_name = apk.label.name
+    for f in apk[DefaultInfo].files.to_list():
+        if f in known:
+            continue
+        if not f.basename.startswith(inner_name):
+            fail((
+                "flutter_android_binary: {}'s DefaultInfo carries {}, whose " +
+                "name does not start with the wrapped target's own name " +
+                "({}) -- the rename this wrapper relies on to republish it " +
+                "under the public label does not apply. See " +
+                "docs_internal/compilation-mode-pinning.md."
+            ).format(apk.label, f.basename, inner_name))
+        renamed = ctx.actions.declare_file(ctx.label.name + f.basename[len(inner_name):])
+        ctx.actions.symlink(output = renamed, target_file = f)
+        outputs.append(renamed)
+
+    # `_primary.prof` is predeclared but excluded from DefaultInfo, matching
+    # android_binary. ApkInfo does not expose it, so the macro passes it directly.
+    if ctx.file.primary_profile_src:
+        ctx.actions.symlink(
+            output = ctx.outputs.primary_profile,
+            target_file = ctx.file.primary_profile_src,
+        )
+
+    providers = [
+        DefaultInfo(
+            files = depset(outputs),
+            runfiles = ctx.runfiles(files = outputs),
+        ),
+        ApkInfo(
+            signing_lineage = info.signing_lineage,
+            keystore = info.keystore,
+            coverage_metadata = info.coverage_metadata,
+            deploy_jar = ctx.outputs.deploy_jar,
+            unsigned_apk = ctx.outputs.unsigned_apk,
+            signed_apk = ctx.outputs.apk,
+            signing_keys = info.signing_keys,
+            signing_min_v3_rotation_api_version = info.signing_min_v3_rotation_api_version,
+        ),
+        apk[JavaInfo],
+    ]
+
+    # Forward conditional android_binary providers unchanged.
+    for provider in (
+        OutputGroupInfo,
+        InstrumentedFilesInfo,
+        AndroidBinaryNativeLibsInfo,
+        AndroidFeatureFlagSet,
+        AndroidIdeInfo,
+        AndroidIdlInfo,
+        AndroidInstrumentationInfo,
+        AndroidOptimizationInfo,
+        AndroidPreDexJarInfo,
+        ArtProfileInfo,
+        DataBindingV2Info,
+    ):
+        if provider in apk:
+            providers.append(apk[provider])
+
+    return providers
+
+def _flutter_apk_outputs(name, has_primary_profile):
+    outputs = {
+        "apk": "%{name}.apk",
+        "unsigned_apk": "%{name}_unsigned.apk",
+        "deploy_jar": "%{name}_deploy.jar",
+    }
+    if has_primary_profile:
+        outputs["primary_profile"] = "%{name}_primary.prof"
+    return outputs
+
+_flutter_apk = rule(
+    implementation = _flutter_apk_impl,
+    cfg = _pin_release_compilation_mode,
+    attrs = {
+        "apk": attr.label(mandatory = True, providers = [ApkInfo, JavaInfo]),
+        "primary_profile_src": attr.label(
+            allow_single_file = True,
+            doc = "`apk`'s own _primary.prof sibling label, or unset when " +
+                  "`generate_art_profile` is off for this android_binary.",
+        ),
+        "has_primary_profile": attr.bool(mandatory = True),
+    },
+    outputs = _flutter_apk_outputs,
+    provides = [ApkInfo, JavaInfo],
+    doc = """Republishes a private android_binary under a public, self-transitioned label.
+
+    Mirrors android_binary's predeclared APK outputs and providers. Other
+    DefaultInfo files are renamed from the private prefix to the public one.
+
+    Proguard outputs are unsupported because flutter_android_binary rejects
+    `proguard_specs` rather than silently omitting their labels.
+    """,
+)
+
 def flutter_android_binary(
         name,
         abis,
@@ -988,7 +1129,16 @@ def flutter_android_binary(
         default to what flutter_tools pins and are overridable.
       deps: the app's own targets -- the activity, anything else it compiles.
         The Flutter join is appended, so ordering matches what a hand-written
-        android_binary had.
+        android_binary had. Must not provide `CcInfo` with linkable code --
+        `android_binary` derives its synthesized native-deps library's
+        filename and SONAME (`lib<label-name>.so`) from its own label name,
+        which is now the private `<name>_apk` this wrapper creates (see
+        docs_internal/compilation-mode-pinning.md), not the public `<name>`
+        a `System.loadLibrary` call would expect. This repo's own convention
+        already avoids this path -- route native code through
+        `jni_lib_jar`/`android_native_lib_jar`/a package recipe instead,
+        which land the library at a filename this wrapper does not derive
+        from either target's label.
       aot: the flutter_aot_library prefix; see flutter_android_libs.
       assets: a flutter_assets tree artifact.
       pubspec: the app's flutter_pubspec target, whose `version:` becomes
@@ -1019,10 +1169,31 @@ def flutter_android_binary(
         match what `flutter_embedding_library` was given.
       engine_jars: ABI -> an engine jar overriding the ABI table's.
       **kwargs: passed to every android_binary this declares -- visibility,
-        tags, and anything else android_binary accepts. The emitted
+        tags, and anything else android_binary accepts, except
+        `proguard_specs`, which the release-compilation-mode wrapper refuses
+        (see docs_internal/compilation-mode-pinning.md). The emitted
         `<name>_check_test` takes only visibility and tags.
     """
     check_abis(abis, "flutter_android_binary " + name)
+
+    if kwargs.get("proguard_specs"):
+        fail(
+            ("flutter_android_binary {}: `proguard_specs` is not supported " +
+             "through the release-compilation-mode wrapper -- it would " +
+             "predeclare `_proguard.jar`/`_proguard.config`/`_proguard.map` " +
+             "on the private android_binary without republishing those " +
+             "labels on the public target. Extend `_flutter_apk` in " +
+             "tools/flutter/android.bzl (see docs_internal/" +
+             "compilation-mode-pinning.md) if this is genuinely needed.").format(name),
+        )
+
+    # Match android_binary's select-aware, default-true profile-output check.
+    generate_art_profile = kwargs.get("generate_art_profile", True)
+    has_primary_profile = (
+        type(generate_art_profile) == "select" or
+        generate_art_profile or
+        generate_art_profile == None
+    )
 
     if app:
         # `same_package_label`, not a rebuilt string: it keeps the *repository*
@@ -1164,15 +1335,30 @@ def flutter_android_binary(
             maven_repo = maven_repo,
         )
 
+        packaging_kwargs = dict(kwargs)
+        wrapper_visibility = packaging_kwargs.pop("visibility", None)
+
+        packaged = target + "_apk"
         android_binary(
-            name = target,
+            name = packaged,
             assets = [assets],
             assets_dir = flutter_assets_dir(assets = assets),
             manifest = ":" + versioned_manifest,
             manifest_values = values,
             resource_files = resource_files,
             deps = deps + [":" + join] + debug_manifest_deps,
-            **kwargs
+            visibility = ["//visibility:private"],
+            **packaging_kwargs
+        )
+
+        _flutter_apk(
+            name = target,
+            apk = ":" + packaged,
+            primary_profile_src = ":" + packaged + "_primary.prof" if has_primary_profile else None,
+            has_primary_profile = has_primary_profile,
+            visibility = wrapper_visibility,
+            tags = kwargs.get("tags", []),
+            testonly = kwargs.get("testonly"),
         )
 
     # The bundle check per shape, under `bazel test`. It fails as an action, so
