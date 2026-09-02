@@ -167,7 +167,9 @@ cmake(
         # segfaults the loader on a 16 KB-page device (API 35), with no
         # dlerror() and nothing in logcat. Verify with
         # `llvm-readelf -l <so> | grep LOAD` -- want 0x4000, not 0x1000.
-        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,max-page-size=16384",
+        # Strip before LLD hashes the output for its build ID. Android packaging
+        # strips it later anyway, after that ID has captured unstable symbols.
+        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,max-page-size=16384 -Wl,--strip-all",
     }},
     generate_args = ["-GNinja"],
     # The plugin declares no install() rules -- there is nothing for
