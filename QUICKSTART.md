@@ -123,9 +123,8 @@ misleading missing-registrant message.
 
 ### Add the module and Dart target
 
-After adding the common `.bazelversion` and `.bazelrc` above, create this root
-`MODULE.bazel`. The Maven install is required even without plugins because the
-Flutter embedding depends on AndroidX.
+After adding the common `.bazelversion` and `.bazelrc` above, keep platform
+details out of the root `MODULE.bazel`:
 
 ```python
 module(name = "hello_bazel", version = "0.0.1")
@@ -136,6 +135,19 @@ local_path_override(
     path = "../rules_flutter",
 )
 
+include("//android:config.MODULE.bazel")
+```
+
+Export the included file from `android/BUILD.bazel`:
+
+```python
+exports_files(["config.MODULE.bazel"])
+```
+
+Create `android/config.MODULE.bazel`. The Maven install is required even
+without plugins because the Flutter embedding depends on AndroidX.
+
+```python
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
@@ -554,9 +566,7 @@ Seed the root `plugin_deps.MODULE.bazel` by moving the complete
 from the plugin-free module above into that file, unchanged. This valid seed
 makes `@flutter_maven//:pin` available while `plugins.project()` is evaluated.
 
-At the **module root**, use the local-plugin module pattern. `embedding` and
-`metadata` name the app subpackage, while the generated Maven segment remains
-beside the root `MODULE.bazel` because `include()` is evaluated there.
+Keep the root module as a composition point and delegate Android configuration:
 
 ```python
 module(
@@ -570,6 +580,21 @@ local_path_override(
     path = "../..",
 )
 
+include("//packages/host_app/android:config.MODULE.bazel")
+```
+
+Export the platform fragment from
+`packages/host_app/android/BUILD.bazel`:
+
+```python
+exports_files(["config.MODULE.bazel"])
+```
+
+Put the Android dependency and plugin graph in
+`packages/host_app/android/config.MODULE.bazel`. The generated Maven segment
+stays at the module root.
+
+```python
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")

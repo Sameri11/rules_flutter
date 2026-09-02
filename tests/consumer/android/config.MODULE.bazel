@@ -1,0 +1,84 @@
+bazel_dep(name = "external_app", version = "0.0.1")
+bazel_dep(name = "rules_java", version = "9.3.0")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+
+register_toolchains("@androidsdk//:all")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "flutter_maven",
+    artifacts = [
+        "androidx.lifecycle:lifecycle-common:2.7.0",
+        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
+        "androidx.lifecycle:lifecycle-process:2.7.0",
+        "androidx.lifecycle:lifecycle-runtime:2.7.0",
+        "androidx.fragment:fragment:1.7.1",
+        "androidx.annotation:annotation:1.8.1",
+        "androidx.tracing:tracing:1.2.0",
+        "androidx.core:core:1.13.1",
+        "androidx.window:window-java:1.2.0",
+        "androidx.window:window:1.2.0",
+        "androidx.exifinterface:exifinterface:1.4.1",
+        "com.getkeepsafe.relinker:relinker:1.4.5",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+maven.install(
+    name = "plugin_maven",
+    artifacts = [
+        "androidx.annotation:annotation-experimental:1.4.1",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+use_repo(maven, "flutter_maven", "plugin_maven")
+
+local_path_override(
+    module_name = "external_app",
+    path = "external_app",
+)
+
+android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+
+register_toolchains("@androidndk//:all")
+
+fake_plugin_metadata = use_repo_rule("//:fixtures/plugin_fixture.bzl", "fake_plugin_metadata")
+
+fake_plugin_metadata(
+    name = "fake_plugin_metadata",
+    marker = "//:fixtures/fake_plugin/pubspec.yaml",
+)
+
+plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins.project(
+    abis = ["arm64-v8a"],
+    embedding = "//:flutter_embedding_no_plugins",
+    maven_repo = "@plugin_maven//:pin",
+    metadata = "@fake_plugin_metadata//:.flutter-plugins-dependencies",
+    package_config = "@fake_plugin_metadata//:package_config.json",
+)
+use_repo(plugins, "flutter_plugins")
+
+flutter = use_extension("@rules_flutter//tools/flutter:repo.bzl", "flutter")
+use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release", "flutter_sdk")

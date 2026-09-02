@@ -74,7 +74,7 @@ common:android --repo_env=ANDROID_NDK_HOME
 common --config=android
 ```
 
-Create `MODULE.bazel` (the `local_path_override` is development-only until `rules_flutter` is published to a registry):
+Create the root `MODULE.bazel` (the `local_path_override` is development-only until `rules_flutter` is published to a registry):
 
 ```python
 module(name = "hello_bazel", version = "0.0.1")
@@ -85,6 +85,19 @@ local_path_override(
     path = "../rules_flutter",
 )
 
+include("//android:config.MODULE.bazel")
+```
+
+Export the platform configuration from `android/BUILD.bazel`:
+
+```python
+exports_files(["config.MODULE.bazel"])
+```
+
+Put Android dependencies, repositories, and toolchain registration in
+`android/config.MODULE.bazel`:
+
+```python
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")

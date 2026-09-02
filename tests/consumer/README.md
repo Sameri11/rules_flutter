@@ -10,9 +10,8 @@ bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //
 ```
 
 The real prerequisite is an **installed NDK named by `ANDROID_NDK_HOME`**, not the
-flag. This module owns its Android toolchains: it imports `@androidsdk` and the
-NDK extension's `@androidndk`/`@androidndk_cmake` repositories and registers both
-toolchain sets itself, exactly as an application does. `//...` includes
+flag. This module owns its Android toolchains in `android/config.MODULE.bazel`,
+where it imports and registers both SDK and NDK repositories. `//...` includes
 `:apk_derived_flutter_engine_<abi>_stripped`, and stripping resolves
 `@@bazel_tools//tools/cpp:toolchain_type` through the registered NDK toolchains.
 

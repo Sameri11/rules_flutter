@@ -386,6 +386,10 @@ local_path_override(
     path = "{ruleset}",
 )
 
+include("//android:config.MODULE.bazel")
+"""
+
+_LOCK_ANDROID_MODULE = """\
 bazel_dep(name = "rules_android", version = "0.7.3")
 
 android_sdk = use_extension(
@@ -406,9 +410,12 @@ register_toolchains("@androidndk//:all")
 
 
 def _lock_consumer(directory):
-    directory.mkdir(parents=True, exist_ok=True)
+    android = directory / "android"
+    android.mkdir(parents=True, exist_ok=True)
     (directory / "MODULE.bazel").write_text(_LOCK_CONSUMER_MODULE.format(ruleset=ROOT))
     (directory / "BUILD.bazel").write_text("")
+    (android / "BUILD.bazel").write_text('exports_files(["config.MODULE.bazel"])\n')
+    (android / "config.MODULE.bazel").write_text(_LOCK_ANDROID_MODULE)
     return directory
 
 
