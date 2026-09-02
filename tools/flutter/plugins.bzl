@@ -75,9 +75,6 @@ _BUILD_PACKAGE = """
 package(default_visibility = ["//visibility:public"])
 """
 
-# Kept for the aggregate and gated BUILD files, which need no extra loads.
-_BUILD_HEADER = _BUILD_LOADS + _BUILD_PACKAGE
-
 _PLUGIN_TEMPLATE = """
 # {name}, built from the Gradle module the pub package ships.
 # {path}
@@ -1142,7 +1139,7 @@ def _flutter_plugins_impl(ctx):
             # the error names the plugin that actually caused it.
             ctx.file(
                 "{}/BUILD.bazel".format(name),
-                _BUILD_HEADER + _GATED_TEMPLATE.format(
+                _BUILD_LOADS + _BUILD_PACKAGE + _GATED_TEMPLATE.format(
                     name = name,
                     reasons = ", ".join(gated),
                     hint = (
@@ -1437,8 +1434,9 @@ def _flutter_plugins_impl(ctx):
     # contributes only a .so.
     ctx.file(
         "BUILD.bazel",
-        _BUILD_HEADER +
+        _BUILD_LOADS +
         _NATIVE_LIBS_LOADS.format(recipe = ctx.attr.recipe_bzl) +
+        _BUILD_PACKAGE +
         "exports_files([\"plugin_deps.MODULE.bazel\", \"plugins.json\", \"dart_plugin_registrant.dart\"])\n\n" +
         "android_library(\n    name = \"all\",\n    exports = [{}\n    ],\n)\n".format(
             "".join([
