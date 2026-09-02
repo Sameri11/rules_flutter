@@ -33,10 +33,12 @@ config_setting(
     flag_values = {":mode": "release"},
 )
 
+# Excluded from wildcard checks because resolving it requires @androidsdk.
 alias(
     name = "_android_sdk_marker",
     actual = select({
         "@androidsdk//:has_androidsdk": "@androidsdk//:platform-tools/adb",
         "//conditions:default": "@androidsdk//:sdk",
     }),
+    tags = ["manual"],
 )

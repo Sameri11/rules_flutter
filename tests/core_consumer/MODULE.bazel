@@ -1,14 +1,12 @@
 module(
-    name = "consumer_test",
+    name = "core_consumer",
     version = "0.0.1",
 )
 
 bazel_dep(name = "rules_flutter", version = "0.1.0")
-bazel_dep(name = "bazel_skylib", version = "1.8.2")
-
 local_path_override(
     module_name = "rules_flutter",
     path = "../..",
 )
 
-include("//android:config.MODULE.bazel")
+bazel_dep(name = "rules_cc", version = "0.2.17")

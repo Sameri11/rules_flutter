@@ -71,8 +71,6 @@ bazel_dep(name = "platforms", version = "1.0.0")
 android_ndk = use_extension("//tools/flutter:ndk.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 
-register_toolchains("@androidndk//:all")
-
 remote_android_extensions = use_extension(
     "@bazel_tools//tools/android:android_extensions.bzl",
     "remote_android_tools_extensions",
@@ -84,5 +82,3 @@ android_sdk_repository_extension = use_extension(
     "android_sdk_repository_extension",
 )
 use_repo(android_sdk_repository_extension, "androidsdk")
-
-register_toolchains("@androidsdk//:all")

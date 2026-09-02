@@ -3,7 +3,11 @@
 
 # Nested-module output-base symlinks.
 /tests/consumer/bazel-*
+/tests/core_consumer/bazel-*
 /examples/*/bazel-*
+
+# Python bytecode from the CI helper scripts.
+__pycache__/
 
 # Keep fixture `.dart_tool` files; ignore generated extension metadata.
 /tests/consumer/**/.dart_tool/extension_discovery/

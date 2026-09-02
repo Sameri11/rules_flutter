@@ -11,45 +11,4 @@ local_path_override(
     path = "../..",
 )
 
-# Dependencies named directly by this module.
-bazel_dep(name = "rules_android", version = "0.7.3")
-bazel_dep(name = "rules_kotlin", version = "2.4.0")
-bazel_dep(name = "rules_jvm_external", version = "7.1")
-
-# The compile SDK, pinned; see examples/demo_app/MODULE.bazel for why. Only a
-# root module can configure this extension, so every example carries it.
-android_sdk = use_extension(
-    "@rules_android//rules/android_sdk_repository:rule.bzl",
-    "android_sdk_repository_extension",
-)
-android_sdk.configure(
-    api_level = 36,
-    build_tools_version = "36.0.0",
-)
-
-# The embedding still needs AndroidX. Without plugins this module declares its
-# Maven graph directly; the generated segment normally supplies it.
-maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
-maven.install(
-    name = "flutter_maven",
-    artifacts = [
-        "androidx.annotation:annotation:1.8.1",
-        "androidx.core:core:1.13.1",
-        "androidx.exifinterface:exifinterface:1.4.1",
-        "androidx.fragment:fragment:1.7.1",
-        "androidx.lifecycle:lifecycle-common:2.7.0",
-        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
-        "androidx.lifecycle:lifecycle-process:2.7.0",
-        "androidx.lifecycle:lifecycle-runtime:2.7.0",
-        "androidx.tracing:tracing:1.2.0",
-        "androidx.window:window:1.2.0",
-        "androidx.window:window-java:1.2.0",
-        "com.getkeepsafe.relinker:relinker:1.4.5",
-    ],
-    repositories = [
-        "https://maven.google.com",
-        "https://repo1.maven.org/maven2",
-    ],
-    version_conflict_policy = "pinned",
-)
-use_repo(maven, "flutter_maven")
+include("//android:config.MODULE.bazel")

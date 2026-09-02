@@ -359,15 +359,14 @@
     },
     "@@rules_flutter+//tools/flutter:ndk.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "65Ne47eOE8qQp0yTOPyHGNSpRiyNfzB1KGZv/5L2XyA=",
-        "usagesDigest": "Q3qZJykhpHtZoJToxTMR/EZcnaCwLAw62l6+9EgLyrg=",
+        "bzlTransitiveDigest": "wubp2T1WtFjfb9+kfYhB63NRFwpD0mXcOWF3daEO03c=",
+        "usagesDigest": "mkjKkchHR7H1XcdGkM5V55k1la2WT0Tsje+hxJeCI3E=",
         "recordedInputs": [
-          "ENV:ANDROID_NDK_HOME \\0",
           "REPO_MAPPING:rules_flutter+,rules_android_ndk rules_android_ndk+"
         ],
         "generatedRepoSpecs": {
           "androidndk": {
-            "repoRuleId": "@@rules_flutter+//tools/flutter:ndk.bzl%_stub_ndk_repository",
+            "repoRuleId": "@@rules_android_ndk+//:rules.bzl%android_ndk_repository",
             "attributes": {}
           },
           "androidndk_cmake": {

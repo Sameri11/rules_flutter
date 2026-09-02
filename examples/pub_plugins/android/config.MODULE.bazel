@@ -1,0 +1,31 @@
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+
+register_toolchains("@androidsdk//:all")
+
+android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+
+register_toolchains("@androidndk//:all")
+
+plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins.project(
+    abis = ["arm64-v8a"],
+    embedding = "//android/app:flutter_embedding",
+    maven_repo = "@flutter_maven//:pin",
+    metadata = "//:.flutter-plugins-dependencies",
+)
+use_repo(plugins, "flutter_plugins")
+
+include("//:plugin_deps.MODULE.bazel")

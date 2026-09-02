@@ -69,29 +69,25 @@ Pin Bazel with `.bazelversion`:
 ```
 
 Use this complete `.bazelrc` in an outside consumer (the examples import the
-repository's shared Android fragment because they are nested in this checkout):
-
 ```
 common --enable_bzlmod
 
 build:android --merge_android_manifest_permissions
 build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
 build:android --java_language_version=17 --java_runtime_version=remotejdk_17
-common:android --repo_env=ANDROID_NDK_HOME
 common --config=android
 ```
 
-The Android configuration enables the Android toolchain, forwards the NDK to
-repository rules, uses the JDK 17 toolchain required by `rules_android`, and
-preserves permissions declared by plugin manifests. The rules provide their own
-JDK 17; no local JDK selection is needed.
+The Android configuration enables the Android toolchain, uses the JDK 17 toolchain required by `rules_android`, and preserves permissions declared by plugin manifests. The rules provide their own JDK 17; no local JDK selection is needed. The `ANDROID_NDK_HOME` environment variable will be read at repository-fetch time when a target requires Android toolchains; if unset, the repository fetch will fail with a diagnostic naming the variable and the NDK path requirement.
 
 ### Generated state, assets, labels, and ABIs
 
 - Add `/bazel-*` to the Flutter-generated `.gitignore`; do **not** ignore
-  `MODULE.bazel.lock`. Commit the lockfile. In a plugin graph, also commit the
-  generated `plugin_deps.MODULE.bazel` and `lib/dart_plugin_registrant.dart`.
-  Their guards intentionally fail when pub state changes.
+  `MODULE.bazel.lock`. Commit the lockfile. It is machine-independent: the NDK
+  module extension records no NDK path, so the same lock bytes are produced with
+  `ANDROID_NDK_HOME` set or unset. In a plugin graph, also commit the generated
+  `plugin_deps.MODULE.bazel` and `lib/dart_plugin_registrant.dart`. Their guards
+  intentionally fail when pub state changes.
 - If the project declares no assets, set `assets = []` in `flutter_app()`: the
   default `glob(["assets/**"])` deliberately rejects an empty directory. Once
   the app declares files under `assets/` in `pubspec.yaml`, omit that override
@@ -127,9 +123,8 @@ misleading missing-registrant message.
 
 ### Add the module and Dart target
 
-After adding the common `.bazelversion` and `.bazelrc` above, create this root
-`MODULE.bazel`. The Maven install is required even without plugins because the
-Flutter embedding depends on AndroidX.
+After adding the common `.bazelversion` and `.bazelrc` above, keep platform
+details out of the root `MODULE.bazel`:
 
 ```python
 module(name = "hello_bazel", version = "0.0.1")
@@ -140,9 +135,37 @@ local_path_override(
     path = "../rules_flutter",
 )
 
+include("//android:config.MODULE.bazel")
+```
+
+Export the included file from `android/BUILD.bazel`:
+
+```python
+exports_files(["config.MODULE.bazel"])
+```
+
+Create `android/config.MODULE.bazel`. The Maven install is required even
+without plugins because the Flutter embedding depends on AndroidX.
+
+```python
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+register_toolchains("@androidsdk//:all")
+
+android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+register_toolchains("@androidndk//:all")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
@@ -543,9 +566,7 @@ Seed the root `plugin_deps.MODULE.bazel` by moving the complete
 from the plugin-free module above into that file, unchanged. This valid seed
 makes `@flutter_maven//:pin` available while `plugins.project()` is evaluated.
 
-At the **module root**, use the local-plugin module pattern. `embedding` and
-`metadata` name the app subpackage, while the generated Maven segment remains
-beside the root `MODULE.bazel` because `include()` is evaluated there.
+Keep the root module as a composition point and delegate Android configuration:
 
 ```python
 module(
@@ -559,9 +580,39 @@ local_path_override(
     path = "../..",
 )
 
+include("//packages/host_app/android:config.MODULE.bazel")
+```
+
+Export the platform fragment from
+`packages/host_app/android/BUILD.bazel`:
+
+```python
+exports_files(["config.MODULE.bazel"])
+```
+
+Put the Android dependency and plugin graph in
+`packages/host_app/android/config.MODULE.bazel`. The generated Maven segment
+stays at the module root.
+
+```python
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+register_toolchains("@androidsdk//:all")
+
+android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+register_toolchains("@androidndk//:all")
 
 plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(

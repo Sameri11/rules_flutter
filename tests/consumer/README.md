@@ -10,27 +10,45 @@ bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //
 ```
 
 The real prerequisite is an **installed NDK named by `ANDROID_NDK_HOME`**, not the
-flag. `//...` here includes `:apk_derived_flutter_engine_<abi>_stripped`, and
-stripping resolves `@@bazel_tools//tools/cpp:toolchain_type`; with no NDK,
-`@rules_flutter//tools/flutter:ndk.bzl` substitutes its toolchain-less stub and
-analysis fails:
+flag. This module owns its Android toolchains in `android/config.MODULE.bazel`,
+where it imports and registers both SDK and NDK repositories. `//...` includes
+`:apk_derived_flutter_engine_<abi>_stripped`, and stripping resolves
+`@@bazel_tools//tools/cpp:toolchain_type` through the registered NDK toolchains.
 
-    No matching toolchains found for types:
-      @@bazel_tools//tools/cpp:toolchain_type
+With no NDK the failure now happens where the path is required, at the upstream
+repository fetch:
 
-`--repo_env` **explicitly forwards** that variable, and is recommended for
-reproducibility rather than required. `ndk.bzl` declares `environ =
-["ANDROID_NDK_HOME"]` on its extension, so `module_ctx.getenv` reads the client
-environment and an exported variable works on its own — measured: the plain
-`bazel build --nobuild //...` succeeds with it exported. Naming it on the command
-line makes the input explicit and deterministic instead of depending on whatever
-the invoking shell holds, which matters most in CI.
+    Error in fail: Either the ANDROID_NDK_HOME environment variable or the path
+    attribute of android_ndk_repository must be set.
 
-It cannot substitute for the NDK. With `ANDROID_NDK_HOME` unset the flag forwards
-an empty value, the stub is still selected and the same toolchain error appears —
-also measured. It is passed here rather than added to this module's `.bazelrc`,
-which deliberately carries only the three flags an APK build needs and not the
-ruleset's whole Android group.
+That is intentional. The module extension declares the same repositories in every
+environment and reads no environment variable, so committed locks stay portable;
+only repository evaluation looks for the NDK. `--repo_env` **explicitly forwards**
+the variable, and is recommended for reproducibility rather than required: an
+exported `ANDROID_NDK_HOME` works on its own, and naming it on the command line
+makes the input deterministic instead of shell-dependent, which matters most in
+CI. It cannot substitute for the NDK: unset, it forwards an empty value and the
+fetch failure above appears. It is passed here rather than added to this module's
+`.bazelrc`, which deliberately carries only the three flags an APK build needs
+and not the ruleset's whole Android group.
+
+`tools/ci/android_toolchain_probe.py` exercises Android toolchain ownership
+directly, one scenario per invocation. Each is one command, and CI runs all of
+them:
+
+```sh
+python3 tools/ci/android_toolchain_probe.py --scenario analysis
+python3 tools/ci/android_toolchain_probe.py --scenario inventory
+python3 tools/ci/android_toolchain_probe.py --scenario compile-probe
+python3 tools/ci/android_toolchain_probe.py --scenario missing-ndk
+python3 tools/ci/android_toolchain_probe.py --scenario lock-portability
+python3 tools/ci/android_toolchain_probe.py --scenario core-isolation
+```
+
+`lock-portability` generates a disposable Android Consumer, resolves it twice in
+separate scratch state with `ANDROID_NDK_HOME` unset and set, and requires
+byte-identical locks that name neither the variable nor the local NDK path.
+`core-isolation` uses `tests/core_consumer`; the others use this fixture.
 
 It is **not** part of the root workspace's `//...`. It cannot be: a nested
 `MODULE.bazel` is not a repo boundary, so without the root `.bazelignore` entry

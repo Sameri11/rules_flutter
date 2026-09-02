@@ -6,3 +6,4 @@ import %workspace%/../../.bazelrc.android
 
 # Enable Android targets.
 common --config=android
+try-import %workspace%/../../.bazelrc.local
