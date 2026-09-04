@@ -240,6 +240,15 @@ def _flutter_native_libs_impl(ctx):
             ))
         seen[f.basename] = f.path
 
+    # Explicit members keep archive order deterministic; recursive traversal does not.
+    basenames = sorted(seen)
+
+    sources = " ".join(['"{}"'.format(seen[basename]) for basename in basenames])
+    members = " ".join(
+        ['"lib/"', '"lib/{}/"'.format(ctx.attr.slice)] +
+        ['"lib/{}/{}"'.format(ctx.attr.slice, basename) for basename in basenames],
+    )
+
     # Same mechanism as jni_lib_jar: android_binary extracts lib/<abi>/*.so from
     # jars on the classpath, which is how the prebuilt engine artifact ships
     # libflutter.so and how libapp.so is packaged. Recipe output rides the same
@@ -258,14 +267,15 @@ for so in {sos}; do
     cp "$so" "$STAGE/lib/{abi}/"
 done
 chmod -R u+w "$STAGE"
-( cd "$STAGE" && zip -q -X -r "$OLDPWD/{jar}" lib )
+( cd "$STAGE" && zip -q -X "$OLDPWD/{jar}" {members} )
 """.format(
             # `lib/<slice>/` is Android's layout, and on Android a slice *is* an
             # ABI -- which is why this used to be a second attribute carrying
             # the same string. An Apple bundle lays its slices out differently
             # and will need its own packaging step, not another attribute here.
             abi = ctx.attr.slice,
-            sos = " ".join(['"{}"'.format(f.path) for f in libs]),
+            sos = sources,
+            members = members,
             jar = jar.path,
         ),
         inputs = libs,
