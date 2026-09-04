@@ -78,9 +78,40 @@ def entry_listing(apk: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def unsigned_apk(bazel_bin: Path, target: str) -> Path:
-    package, _, name = target.removeprefix("//").partition(":")
-    return bazel_bin / package / (name + "_unsigned.apk")
+def unsigned_apks(
+        bazel: str, module: Path, targets: tuple[str, ...]) -> dict[str, Path]:
+    suffixes = {}
+    output_labels = []
+    for target in targets:
+        package, _, name = target.removeprefix("//").partition(":")
+        suffixes[target] = Path(package) / (name + "_unsigned.apk")
+        output_labels.append("//{}:{}_unsigned.apk".format(package, name))
+
+    outputs = [
+        Path(line)
+        for line in run(
+            [bazel, "cquery", "--output=files", "set({})".format(
+                " ".join(output_labels)
+            )],
+            module,
+        ).splitlines()
+    ]
+    execution_root = Path(run([bazel, "info", "execution_root"], module).strip())
+    resolved = {}
+    for target, suffix in suffixes.items():
+        matches = [
+            output
+            for output in outputs
+            if output.parts[-len(suffix.parts):] == suffix.parts
+        ]
+        if len(matches) != 1:
+            sys.exit(
+                "FAIL: {} resolves to {} unsigned APK outputs: {}".format(
+                    target, len(matches), matches
+                )
+            )
+        resolved[target] = execution_root / matches[0]
+    return resolved
 
 
 def declared_apk_targets(bazel: str, module: Path) -> set[str]:
@@ -89,10 +120,13 @@ def declared_apk_targets(bazel: str, module: Path) -> set[str]:
     `generator_function` is target-graph metadata Bazel records for rules
     emitted by a macro. Querying it is resilient to formatting, aliases, and
     generated per-ABI names; parsing BUILD source would not be.
+
+    Queries the macro's public `_flutter_apk` wrapper, not its private
+    `android_binary`.
     """
     query = (
         'attr("generator_function", "^flutter_android_binary$", '
-        'kind("android_binary rule", //...))'
+        'kind("_flutter_apk rule", //...))'
     )
     return set(run([bazel, "query", "--output=label", query], module).splitlines())
 
@@ -132,14 +166,13 @@ def collect(bazel: str, manifests: Path, build: bool, only: str | None) -> list[
         if build:
             print("==> building {} ({} APK shapes)".format(example, len(targets)))
             run([bazel, "build", *targets], module)
-        bazel_bin = Path(run([bazel, "info", "bazel-bin"], module).strip())
+        apks = unsigned_apks(bazel, module, targets)
         for target in targets:
-            apk = unsigned_apk(bazel_bin, target)
+            apk = apks[target]
             if not apk.is_file():
                 sys.exit(
-                    "FAIL: {} {} built, but {} is absent. `android_binary` "
-                    "declares it as the packaging step's output; a rename "
-                    "upstream means this script needs updating.".format(
+                    "FAIL: {} {} built, but configured output {} is absent. "
+                    "`_flutter_apk` declares this sibling output.".format(
                         example, target, apk
                     )
                 )
@@ -380,7 +413,7 @@ def main() -> int:
     parser.add_argument(
         "--no-build",
         action="store_true",
-        help="hash what is already in bazel-bin instead of building first",
+        help="hash configured outputs without building first",
     )
     args = parser.parse_args()
 
