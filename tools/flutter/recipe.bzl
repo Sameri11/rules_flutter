@@ -40,6 +40,8 @@ a fixed value set, a typo names itself instead of surfacing later as a missing
 library.
 """
 
+load(":archive.bzl", "ZIPPER_ATTRS", "deterministic_jar")
+
 # `dart_kernel`'s `target_os` names, not a second vocabulary. The list grows
 # with the platform table; macOS is absent until there is something to build for
 # it, and is named separately rather than folded into an `apple` -- flutter_tools
@@ -235,19 +237,19 @@ def _flutter_native_libs_impl(ctx):
         if f.basename in seen:
             fail("Two recipes contribute {}: {} and {}".format(
                 f.basename,
-                seen[f.basename],
+                seen[f.basename].path,
                 f.path,
             ))
-        seen[f.basename] = f.path
+        seen[f.basename] = f
 
-    # Explicit members keep archive order deterministic; recursive traversal does not.
-    basenames = sorted(seen)
+    entries = {
+        "lib/{}/{}".format(ctx.attr.slice, basename): f
+        for basename, f in seen.items()
+    }
 
-    sources = " ".join(['"{}"'.format(seen[basename]) for basename in basenames])
-    members = " ".join(
-        ['"lib/"', '"lib/{}/"'.format(ctx.attr.slice)] +
-        ['"lib/{}/{}"'.format(ctx.attr.slice, basename) for basename in basenames],
-    )
+    # Keep an empty jar for unconditional java_import consumers.
+    if not entries:
+        entries = {"lib/{}/".format(ctx.attr.slice): None}
 
     # Same mechanism as jni_lib_jar: android_binary extracts lib/<abi>/*.so from
     # jars on the classpath, which is how the prebuilt engine artifact ships
@@ -258,28 +260,10 @@ def _flutter_native_libs_impl(ctx):
     # what it just compiled, these are vendor prebuilts. Stripping them would
     # need a cc_toolchain (and so a platform transition) to reach llvm-strip, to
     # discard symbols the vendor already chose to ship.
-    ctx.actions.run_shell(
-        command = """set -euo pipefail
-STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutternativelibs.XXXXXX")"
-trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/lib/{abi}"
-for so in {sos}; do
-    cp "$so" "$STAGE/lib/{abi}/"
-done
-chmod -R u+w "$STAGE"
-( cd "$STAGE" && zip -q -X "$OLDPWD/{jar}" {members} )
-""".format(
-            # `lib/<slice>/` is Android's layout, and on Android a slice *is* an
-            # ABI -- which is why this used to be a second attribute carrying
-            # the same string. An Apple bundle lays its slices out differently
-            # and will need its own packaging step, not another attribute here.
-            abi = ctx.attr.slice,
-            sos = sources,
-            members = members,
-            jar = jar.path,
-        ),
-        inputs = libs,
-        outputs = [jar],
+    deterministic_jar(
+        ctx,
+        jar = jar,
+        entries = entries,
         mnemonic = "FlutterNativeLibs",
         progress_message = "Packaging recipe native libraries %{label}",
     )
@@ -295,7 +279,7 @@ flutter_native_libs = rule(
 
 Instantiated in the generated @flutter_plugins repository, not written by hand,
 and wrapped there in a java_import the app can depend on directly.""",
-    attrs = {
+    attrs = ZIPPER_ATTRS | {
         "deps": attr.label_list(
             providers = [FlutterNativeInfo],
             doc = "flutter_native_contribution targets, one per recipe.",

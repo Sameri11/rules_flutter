@@ -178,6 +178,17 @@ jobs:
             --golden tools/ci/example_hashes_${{ matrix.os == 'ubuntu-latest' && 'linux' || 'macos' }}.txt \
             2>&1 | tee bazel_example_hash_${{ matrix.example.name }}.log
 
+      # The gate above cannot see a producer regression: a classpath jar reaches
+      # the APK through SingleJar --normalize, so wall-clock entry timestamps
+      # vanish from the APK while forking every downstream input digest. Checked
+      # on the jars themselves, by re-executing the producers.
+      - name: Native jar producer reproducibility
+        run: |
+          set -o pipefail
+          python3 tools/ci/native_jar_reproducibility.py \
+            --only ${{ matrix.example.name }} \
+            2>&1 | tee bazel_example_repro_${{ matrix.example.name }}.log
+
       # Upload after failures so changed bundle entries and bytes remain
       # diagnosable; raw APKs enable byte-for-byte cross-OS comparison.
       - name: Upload APK entries and binaries
@@ -193,7 +204,8 @@ jobs:
         run: |
           python3 tools/ci/cache_stats.py \
             bazel_example_test_${{ matrix.example.name }}.log \
-            bazel_example_hash_${{ matrix.example.name }}.log
+            bazel_example_hash_${{ matrix.example.name }}.log \
+            bazel_example_repro_${{ matrix.example.name }}.log
 
   gate:
     name: Hash table fully claimed
