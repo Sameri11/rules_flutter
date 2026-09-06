@@ -25,6 +25,11 @@ load(
     "ArtProfileInfo",
     "DataBindingV2Info",
 )
+
+# `android_transition` leaves checks in the plain configuration when
+# `--android_platforms` is unset. Use the public-but-unexported split transition
+# so checks follow the APK's splits.
+load("@rules_android//rules:android_split_transition.bzl", "android_split_transition")
 load(
     "@rules_android//rules:rules.bzl",
     "ApkInfo",
@@ -428,15 +433,14 @@ def _contributions_for(mode):
 def _libraries_required(mode):
     return ["engine"] if mode == "debug" else ["aot_library", "engine"]
 
-def _flutter_bundle_check_impl(ctx):
-    marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+def _check_split(ctx, mode, expected, deps, marker):
+    """Checks one configured slice of the bundle, and writes its marker.
 
-    check_abis(ctx.attr.abis, str(ctx.label))
-    mode = ctx.attr._mode[BuildSettingInfo].value
-    expected = _contributions_for(mode)
-
+    `deps` is one split of the Java/native contributions plus the assets
+    contribution, which `android_binary` keeps in its own target configuration.
+    """
     by_kind = {}
-    for dep in ctx.attr.contributions:
+    for dep in deps:
         info = dep[FlutterBundleContributionInfo]
         if info.kind in by_kind:
             fail("Two contributions declare kind '{}'.".format(info.kind))
@@ -533,10 +537,51 @@ def _flutter_bundle_check_impl(ctx):
         progress_message = "Checking bundle contributions %{label}",
     )
 
-    return [DefaultInfo(files = depset([marker]))]
+def _flutter_bundle_check_impl(ctx):
+    check_abis(ctx.attr.abis, str(ctx.label))
+    mode = ctx.attr._mode[BuildSettingInfo].value
+    expected = _contributions_for(mode)
+
+    # Check every Android split; without `--android_platforms`, there is one.
+    splits = ctx.split_attr.contributions
+    if not splits:
+        # Fail closed: an empty split would make `build_test` pass unchecked.
+        fail("flutter_bundle_check: the Android dependency split produced no configuration.")
+
+    markers = []
+    for platform in sorted(splits.keys()):
+        marker = ctx.actions.declare_file("{}.{}.checked".format(ctx.label.name, platform))
+        _check_split(
+            ctx,
+            mode,
+            expected,
+            splits[platform] + [ctx.attr.assets_contribution],
+            marker,
+        )
+        markers.append(marker)
+
+    return [DefaultInfo(files = depset(markers))]
+
+# Pin release builds to `opt`; preserve explicitly non-fastbuild modes.
+def _pin_release_compilation_mode_impl(settings, _attr):
+    mode = settings["//tools/flutter:mode"]
+    compilation_mode = str(settings["//command_line_option:compilation_mode"])
+    if mode == "release" and compilation_mode == "fastbuild":
+        compilation_mode = "opt"
+    return {"//command_line_option:compilation_mode": compilation_mode}
+
+_pin_release_compilation_mode = transition(
+    implementation = _pin_release_compilation_mode_impl,
+    inputs = [
+        "//tools/flutter:mode",
+        "//command_line_option:compilation_mode",
+    ],
+    outputs = ["//command_line_option:compilation_mode"],
+)
 
 flutter_bundle_check = rule(
     implementation = _flutter_bundle_check_impl,
+    cfg = _pin_release_compilation_mode,
     doc = """Fails the build if the bundle is missing a piece for any ABI it declares.
 
 Instantiated by flutter_android_libs, not written by hand. Three checks, in
@@ -547,15 +592,35 @@ code assets the manifest names for that ABI.
 
 The last two are one guard split across phases, because analysis sees only that
 a label was supplied. Handing the arm64 jar to the x86_64 slot resolves, builds,
-and ships an empty ABI.""",
+and ships an empty ABI.
+
+All three run once per `android_binary` dependency split, emitting one
+`<name>.<platform>.checked` marker each: with `--android_platforms` naming two
+platforms the APK packages two configurations, so both are checked.""",
     attrs = {
         "abis": attr.string_list(
             mandatory = True,
             doc = "The ABIs the bundle claims to support. Every native contribution must cover each.",
         ),
         "contributions": attr.label_list(
+            cfg = android_split_transition,
             providers = [FlutterBundleContributionInfo],
             mandatory = True,
+            doc = """The Java/native contributions, checked once per split.
+
+`android_binary` reaches its own `deps` through rules_android's
+`android_split_transition`, so this edge takes it too: the check then inspects
+the configured inputs the APK ships instead of a third target-configuration
+copy of them.""",
+        ),
+        "assets_contribution": attr.label(
+            providers = [FlutterBundleContributionInfo],
+            mandatory = True,
+            doc = """The asset contribution, in this target's own configuration.
+
+Deliberately unsplit: `android_binary.assets` is `cfg = "target"`
+(rules_android `rules/attrs.bzl`), so splitting here would check a bundle the
+APK does not package.""",
         ),
         "_checker": attr.label(
             default = "//tools/flutter:check_native_assets.py",
@@ -649,6 +714,20 @@ def _per_abi(supplied, abis, kind):
         return _plugin_libs(kind, abis)
     return {abi: supplied[abi] for abi in abis if abi in supplied}
 
+# Mark macro internals `manual` to prevent wildcard builds alongside transitioned
+# edges. Preserve the caller's tags for the graph producing its APK.
+# Use these helpers for every macro-internal declaration.
+def _internal_tags(kwargs):
+    tags = list(kwargs.get("tags", []))
+    if "manual" not in tags:
+        tags.append("manual")
+    return tags
+
+def _internal_kwargs(kwargs):
+    internal = dict(kwargs)
+    internal["tags"] = _internal_tags(kwargs)
+    return internal
+
 def flutter_android_libs(
         name,
         abis,
@@ -715,7 +794,8 @@ def flutter_android_libs(
       Under `mode=debug` the `aot_library` contribution and its `_libapp`
         export are dropped: debug ships no AOT snapshot, so nothing supplies
         one and android_binary must not expect it.
-      **kwargs: visibility, tags.
+      **kwargs: visibility and tags for the caller-facing join and check;
+        macro-internal targets append `manual`.
     """
     no_plugin_graph = plugins == None
     if native_libs == None:
@@ -728,6 +808,7 @@ def flutter_android_libs(
         embedding_deps = flutter_embedding_deps(maven_repo)
 
     check_abis(abis, "flutter_android_libs " + name)
+    internal_kwargs = _internal_kwargs(kwargs)
 
     # A non-empty dict has to cover the declared ABI set exactly. `{}` is the
     # deliberate declaration that this app has no recipe or plugin-native
@@ -800,7 +881,7 @@ def flutter_android_libs(
             name = libapp_jars[abi],
             src = "{}_{}".format(aot, abi),
             abi = abi,
-            **kwargs
+            **internal_kwargs
         )
 
         engine_stripped[abi] = "{}_engine_{}_stripped".format(name, abi)
@@ -811,7 +892,7 @@ def flutter_android_libs(
                 _MODE_RELEASE: engine_jar_label(abi, "release"),
             })),
             abi = abi,
-            **kwargs
+            **internal_kwargs
         )
 
     # One java_import per contribution, not per ABI: android_binary collects
@@ -820,12 +901,12 @@ def flutter_android_libs(
     java_import(
         name = name + "_libapp",
         jars = [libapp_jars[abi] for abi in abis],
-        **kwargs
+        **internal_kwargs
     )
     java_import(
         name = name + "_engine",
         jars = [engine_stripped[abi] for abi in abis],
-        **kwargs
+        **internal_kwargs
     )
 
     # Which contributions vary by ABI is the location's property, not a second
@@ -857,6 +938,7 @@ def flutter_android_libs(
         "registrant",
     ]
     contributions = []
+    asset_contribution = None
     aot_contribution = None
     for kind, location in _ANDROID_CONTRIBUTIONS:
         contribution = "{}_{}_contribution".format(name, kind)
@@ -868,21 +950,23 @@ def flutter_android_libs(
             location = location,
             srcs = srcs,
             libraries = libraries,
-            # These four contributions may genuinely be absent. Declaring
-            # emptiness is still explicit at this boundary; the two structural
-            # runtime contributions and the asset/AOT/engine never are.
+            # These contributions may be absent; declare that explicitly here.
             empty = kind in empty_kinds and not srcs and not libraries,
-            **kwargs
+            **internal_kwargs
         )
         if kind == "aot_library":
-            # Declare AOT for all modes; debug excludes it before inputs are needed.
+            # Debug excludes this before inputs are needed.
             aot_contribution = contribution
+        elif kind == "assets":
+            # This edge does not use the dependency split.
+            asset_contribution = contribution
         else:
             contributions.append(contribution)
 
     flutter_bundle_check(
         name = name + "_check",
         abis = abis,
+        assets_contribution = asset_contribution,
         contributions = contributions + select({
             _MODE_DEBUG: [],
             _MODE_RELEASE: [aot_contribution],
@@ -957,23 +1041,6 @@ _MANIFEST_VALUES = {
     "minSdkVersion": str(MIN_SDK),
     "targetSdkVersion": "36",
 }
-
-# Pin release builds to `opt`; preserve explicitly non-fastbuild modes.
-def _pin_release_compilation_mode_impl(settings, _attr):
-    mode = settings["//tools/flutter:mode"]
-    compilation_mode = str(settings["//command_line_option:compilation_mode"])
-    if mode == "release" and compilation_mode == "fastbuild":
-        compilation_mode = "opt"
-    return {"//command_line_option:compilation_mode": compilation_mode}
-
-_pin_release_compilation_mode = transition(
-    implementation = _pin_release_compilation_mode_impl,
-    inputs = [
-        "//tools/flutter:mode",
-        "//command_line_option:compilation_mode",
-    ],
-    outputs = ["//command_line_option:compilation_mode"],
-)
 
 def _flutter_apk_impl(ctx):
     apk = ctx.attr.apk
@@ -1194,13 +1261,14 @@ def flutter_android_binary(
       maven_repo: the repository the embedding's Maven deps resolve in; must
         match what `flutter_embedding_library` was given.
       engine_jars: ABI -> an engine jar overriding the ABI table's.
-      **kwargs: passed to every android_binary this declares -- visibility,
-        tags, and anything else android_binary accepts, except
-        `proguard_specs`, which the release-compilation-mode wrapper refuses
-        (see docs_internal/compilation-mode-pinning.md). The emitted
-        `<name>_check_test` takes only visibility and tags.
+      **kwargs: android_binary attributes for private packaging, except
+        `proguard_specs` (see docs_internal/compilation-mode-pinning.md).
+        `visibility` applies to the public wrapper; tags are forwarded and
+        private targets append `manual`. `<name>_check_test` receives only
+        visibility and tags.
     """
     check_abis(abis, "flutter_android_binary " + name)
+    internal_tags = _internal_tags(kwargs)
 
     if kwargs.get("proguard_specs"):
         fail(
@@ -1270,6 +1338,7 @@ def flutter_android_binary(
         name = versioned_manifest,
         manifest = manifest,
         pubspec = pubspec,
+        tags = internal_tags,
     )
 
     if resource_files == None:
@@ -1288,6 +1357,9 @@ def flutter_android_binary(
                 # Android manifest merging requires a package.
                 custom_package = values["applicationId"],
                 resource_files = [],
+                # Avoid wildcard builds of this debug-only dependency in
+                # redundant configurations.
+                tags = internal_tags,
             )
             debug_manifest_deps = select({
                 _MODE_DEBUG: [":" + debug_manifest_lib],
@@ -1359,10 +1431,12 @@ def flutter_android_binary(
             plugins = plugins,
             registrant = registrant,
             maven_repo = maven_repo,
+            tags = internal_tags,
         )
 
         packaging_kwargs = dict(kwargs)
         wrapper_visibility = packaging_kwargs.pop("visibility", None)
+        packaging_kwargs.pop("tags", None)
 
         packaged = target + "_apk"
         android_binary(
@@ -1374,6 +1448,7 @@ def flutter_android_binary(
             resource_files = resource_files,
             deps = deps + [":" + join] + debug_manifest_deps,
             visibility = ["//visibility:private"],
+            tags = internal_tags,
             **packaging_kwargs
         )
 
