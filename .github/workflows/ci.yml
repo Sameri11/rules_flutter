@@ -164,7 +164,7 @@ jobs:
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+          bazel test //... --lockfile_mode=error 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout
@@ -178,10 +178,7 @@ jobs:
             --golden tools/ci/example_hashes_${{ matrix.os == 'ubuntu-latest' && 'linux' || 'macos' }}.txt \
             2>&1 | tee bazel_example_hash_${{ matrix.example.name }}.log
 
-      # The gate above cannot see a producer regression: a classpath jar reaches
-      # the APK through SingleJar --normalize, so wall-clock entry timestamps
-      # vanish from the APK while forking every downstream input digest. Checked
-      # on the jars themselves, by re-executing the producers.
+      # Re-execute jar producers: SingleJar normalization hides timestamp drift.
       - name: Native jar producer reproducibility
         run: |
           set -o pipefail
