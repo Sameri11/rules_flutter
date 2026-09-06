@@ -20,7 +20,13 @@ _CREATE_DEFLATED = "cC"
 def deterministic_jar(ctx, jar, entries, mnemonic, progress_message):
     """Packages non-empty entries as a jar with fixed metadata.
 
-    `entries` maps `lib/<abi>/<soname>` to Files; None writes an empty entry.
+    Args:
+      ctx: the rule context; its rule must include `ZIPPER_ATTRS`.
+      jar: the declared output jar.
+      entries: dict mapping `lib/<abi>/<soname>` to a File to store there, or
+        None to write an empty entry.
+      mnemonic: the action mnemonic.
+      progress_message: the action progress message.
     """
     if not entries:
         fail("{}: deterministic_jar needs at least one entry".format(ctx.label))
