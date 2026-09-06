@@ -164,7 +164,7 @@ jobs:
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+          bazel test //... --lockfile_mode=error 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout

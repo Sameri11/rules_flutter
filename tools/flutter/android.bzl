@@ -34,6 +34,7 @@ load(
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_java//java:defs.bzl", "JavaInfo", "java_import")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MIN_SDK", "check_abis", "check_platform_abi", "engine_jar_label", "plugin_repo_target")
+load(":archive.bzl", "ZIPPER_ATTRS", "deterministic_jar")
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
 load(":embedding.bzl", "flutter_embedding_deps")
 load(":pubspec.bzl", "FlutterPubspecInfo")
@@ -49,23 +50,15 @@ def _jni_lib_jar_impl(ctx):
     # prebuilt engine artifact (arm64_v8a_release.jar) ships libflutter.so.
     # Packaging libapp.so the same way avoids standing up an Android CC
     # toolchain just to carry one prebuilt shared object.
-    ctx.actions.run_shell(
-        command = """set -euo pipefail
-STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/jnilib.XXXXXX")"
-trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/lib/{abi}"
-cp "{so}" "$STAGE/lib/{abi}/{soname}"
-# -X drops extra attributes; entries are added in a fixed order so the jar is
-# reproducible.
-( cd "$STAGE" && zip -q -X -r "$OLDPWD/{jar}" lib )
-""".format(
-            abi = ctx.attr.abi,
-            so = ctx.file.src.path,
-            soname = ctx.attr.soname or ctx.file.src.basename,
-            jar = jar.path,
-        ),
-        inputs = [ctx.file.src],
-        outputs = [jar],
+    deterministic_jar(
+        ctx,
+        jar = jar,
+        entries = {
+            "lib/{}/{}".format(
+                ctx.attr.abi,
+                ctx.attr.soname or ctx.file.src.basename,
+            ): ctx.file.src,
+        },
         mnemonic = "JniLibJar",
         progress_message = "Packaging %{label} for Android",
     )
@@ -75,15 +68,16 @@ cp "{so}" "$STAGE/lib/{abi}/{soname}"
 jni_lib_jar = rule(
     implementation = _jni_lib_jar_impl,
     doc = "Wraps a prebuilt .so as lib/<abi>/<name>.so inside a jar, for android_binary.",
-    attrs = {
-        "src": attr.label(allow_single_file = True, mandatory = True),
+    attrs = dict(
+        ZIPPER_ATTRS,
+        src = attr.label(allow_single_file = True, mandatory = True),
         # Mandatory: it decides which lib/<abi>/ the library is loaded from, so
         # a default packages one architecture's .so as another's, silently.
         # This rule does not transition --platforms; its ambient platform is the
         # caller's, so check_platform_abi is not applicable.
-        "abi": attr.string(mandatory = True),
-        "soname": attr.string(doc = "Override the packaged filename."),
-    },
+        abi = attr.string(mandatory = True),
+        soname = attr.string(doc = "Override the packaged filename."),
+    ),
 )
 
 def _android_platform_transition_impl(_settings, attr):
@@ -125,31 +119,34 @@ def _android_native_lib_jar_impl(ctx):
 
     cc_toolchain = find_cpp_toolchain(ctx)
 
-    # Same mechanism as jni_lib_jar: android_binary extracts lib/<abi>/*.so from
-    # jars on the classpath, so a plugin's native library rides exactly the path
-    # libapp.so and libflutter.so already ride.
-    #
     # Stripped on the way in. A CMake plugin's .so keeps its symbol table under
     # the NDK's release flags -- rive_common's is 4.3 MB stripping to 3.5 MB --
     # so this is not an engine-only concern.
-    ctx.actions.run_shell(
-        command = """set -euo pipefail
-STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/jnilib.XXXXXX")"
-trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/lib/{abi}"
-for so in {sos}; do
-    cp "$so" "$STAGE/lib/{abi}/"
-    "{strip}" --strip-unneeded "$STAGE/lib/{abi}/$(basename "$so")"
-done
-( cd "$STAGE" && zip -q -X -r "$OLDPWD/{jar}" lib )
-""".format(
-            abi = abi,
-            sos = " ".join(['"{}"'.format(f.path) for f in sos]),
-            jar = jar.path,
-            strip = cc_toolchain.strip_executable,
-        ),
-        inputs = depset(sos, transitive = [cc_toolchain.all_files]),
-        outputs = [jar],
+    # Strip each library to a declared output.
+    entries = {}
+    for so in sos:
+        entry = "lib/{}/{}".format(abi, so.basename)
+        if entry in entries:
+            fail("{}: two sources contribute {} -- inside one jar the second would silently overwrite the first.".format(
+                ctx.label,
+                entry,
+            ))
+        stripped = ctx.actions.declare_file("{}/{}".format(ctx.label.name, entry))
+        ctx.actions.run(
+            executable = cc_toolchain.strip_executable,
+            arguments = ["--strip-unneeded", "-o", stripped.path, so.path],
+            inputs = [so],
+            tools = cc_toolchain.all_files,
+            outputs = [stripped],
+            mnemonic = "AndroidNativeLibStrip",
+            progress_message = "Stripping " + so.basename + " for %{label}",
+        )
+        entries[entry] = stripped
+
+    deterministic_jar(
+        ctx,
+        jar = jar,
+        entries = entries,
         mnemonic = "AndroidNativeLibJar",
         progress_message = "Packaging native libraries %{label} for Android",
     )
@@ -164,7 +161,7 @@ _android_native_lib_jar = rule(
 reached from -- see _android_platform_transition.""",
     cfg = _android_platform_transition,
     attrs = dict(
-        ABI_PLATFORM_ATTRS,
+        ABI_PLATFORM_ATTRS | ZIPPER_ATTRS,
         src = attr.label_list(
             mandatory = True,
             doc = "Target producing .so files, typically a rules_foreign_cc cmake().",
@@ -221,17 +218,41 @@ def _strip_native_libs_impl(ctx):
     # AGP does this automatically for release builds (`stripDebugSymbolsRelease`);
     # android_binary has no equivalent, which is why the engine's DWARF
     # was reaching the APK.
+    # Members are discovered at execution; preserve source archive order.
     ctx.actions.run_shell(
         command = """set -euo pipefail
+ZIPPER="$PWD/{zipper}"
+JAR="$PWD/{jar}"
+OUT="$PWD/{out}"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/strip.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
-unzip -q -o "{jar}" -d "$STAGE"
+
+# Extract relative to the staging directory.
+( cd "$STAGE" && "$ZIPPER" x "$JAR" -d tree )
+"$ZIPPER" v "$JAR" > "$STAGE/listing"
 
 found=0
-for so in $(find "$STAGE" -type f -name '*.so' | sort); do
-    found=1
-    "{strip}" --strip-unneeded "$so"
-done
+set --
+while read -r kind _mode path; do
+    [ "$kind" = "f" ] || continue
+    # Zipper uses `=` as the member separator.
+    case "$path" in
+    *=*)
+        echo "strip_native_libs: {jar} holds an entry whose name contains '=':" >&2
+        echo "  $path" >&2
+        echo "zipper splits a member specification at the first '=', so this" >&2
+        echo "jar cannot be repacked without renaming the entry." >&2
+        exit 1
+        ;;
+    esac
+    case "$path" in
+    *.so)
+        found=1
+        "{strip}" --strip-unneeded "$STAGE/tree/$path"
+        ;;
+    esac
+    set -- "$@" "$path"
+done < "$STAGE/listing"
 
 if [ "$found" -eq 0 ]; then
     echo "strip_native_libs: no .so found in {jar}" >&2
@@ -240,13 +261,18 @@ if [ "$found" -eq 0 ]; then
     exit 1
 fi
 
-( cd "$STAGE" && zip -q -X -r "$OLDPWD/{out}" . )
+( cd "$STAGE/tree" && "$ZIPPER" cC "$OUT" "$@" )
 """.format(
             jar = ctx.file.jar.path,
             out = stripped.path,
             strip = cc_toolchain.strip_executable,
+            zipper = ctx.executable._zipper.path,
         ),
-        inputs = depset([ctx.file.jar], transitive = [cc_toolchain.all_files]),
+        inputs = [ctx.file.jar],
+        tools = depset(
+            [ctx.executable._zipper],
+            transitive = [cc_toolchain.all_files],
+        ),
         outputs = [stripped],
         mnemonic = "StripNativeLibs",
         progress_message = "Stripping native libraries %{label}",
@@ -262,7 +288,7 @@ The stripped jar is the default output, so it drops straight into an
 android_binary's classpath where the original jar was.""",
     cfg = _android_platform_transition,
     attrs = dict(
-        ABI_PLATFORM_ATTRS,
+        ABI_PLATFORM_ATTRS | ZIPPER_ATTRS,
         jar = attr.label(
             allow_single_file = [".jar"],
             mandatory = True,
