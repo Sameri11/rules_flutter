@@ -378,7 +378,7 @@
     },
     "@@rules_flutter+//tools/flutter:plugins.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "0yLq259JjWNeUGIYlSqXkjKSfmbAfiOMKoLDIpKy4bI=",
+        "bzlTransitiveDigest": "mlUnmmd2GGMEeXDB/CCY6gCL7bKjzIHQBr0JTpXCtw8=",
         "usagesDigest": "MM5qL4l0rXCX1ki2Bk8iDaeEbFfREdpk3KGY5JkftEE=",
         "recordedInputs": [
           "REPO_MAPPING:,fake_plugin_metadata +fake_plugin_metadata+fake_plugin_metadata",
