@@ -22,6 +22,7 @@ unsandboxed. Making them hermetic means modelling pub packages as Bazel repos
 problem and is not attempted here.
 """
 
+load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "check_abis")
@@ -527,26 +528,48 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
             **kwargs
         )
 
-# What `flutter pub get` writes, at the paths pub fixes. Declared for
-# invalidation: identity stamps rather than the pub-cache contents themselves,
-# which nothing here models. See the invalidation section of README.md.
+# Files written by `flutter pub get`, used as invalidation stamps.
 _PUB_STAMP = [
     ".dart_tool/version",
     ".dart_tool/package_graph.json",
     "pubspec.lock",
 ]
 
-# Distinguishes the documented default from a caller deliberately opting out.
-# `None` remains an explicit no-registrant declaration.
+# Sentinel distinguishes the default from an explicit `None`.
 _DEFAULT_DART_PLUGIN_REGISTRANT = struct()
 
+# Keep macro-internal targets out of wildcard roots.
+def _internal_tags(kwargs):
+    tags = list(kwargs.get("tags", []))
+    if "manual" not in tags:
+        tags.append("manual")
+    return tags
+
+def _internal_kwargs(kwargs):
+    internal = dict(kwargs)
+    internal["tags"] = _internal_tags(kwargs)
+    return internal
+
+def _workspace_label(label):
+    """Resolve a committed destination and reject external repositories."""
+    requested = str(label)
+    label = native.package_relative_label(label)
+    workspace = native.package_relative_label("//:__pkg__")
+    if label.repo_name != workspace.repo_name:
+        fail(
+            (
+                "flutter_app: destination label {} belongs to repository {}, but " +
+                "BUILD_WORKSPACE_DIRECTORY can only update files in the invoking " +
+                "workspace."
+            ).format(
+                requested,
+                label.repo_name,
+            ),
+        )
+    return label
+
 # buildifier: disable=unnamed-macro
-# Deliberately unnamed: every target it declares is named by convention, because
-# the Android half derives those names (`//<pkg>:app`, `:assets`, `:pubspec`)
-# from the package alone. A `name` parameter would be a knob that cannot vary --
-# passing one produced `:myapp_arm64-v8a` while the APK still asked for
-# `:app_arm64-v8a`. One Flutter app per package, which is also one pubspec per
-# package.
+# Target names are fixed: Android packaging derives them from the package.
 def flutter_app(
         abis = None,
         path_deps = [],
@@ -579,7 +602,9 @@ def flutter_app(
     | `:assets` | the asset bundle, built for every ABI |
     | `:path_deps_check` | fails if a `path:` dependency is undeclared |
     | `:plugins_check` | fails if the committed Maven coordinates drifted |
+    | `:plugins_update` | writes the generated Maven segment into the workspace |
     | `:dart_registrant_check` | fails if the committed registrant drifted |
+    | `:dart_registrant_update` | writes the generated registrant into the workspace |
     | `:guards_test` | the guards, under `bazel test` |
 
     `:app_<abi>` and `:assets` compile to their debug shape under
@@ -711,22 +736,40 @@ def flutter_app(
     # Both compare against @flutter_plugins, so both are skipped by a project
     # that has no such repo -- rather than making the macro uninstantiable there.
     if plugin_deps:
+        plugin_deps_label = _workspace_label(plugin_deps)
         pub_plugins_check(
             name = "plugins_check",
-            committed = plugin_deps,
+            committed = plugin_deps_label,
             expected = "@flutter_plugins//:plugin_deps.MODULE.bazel",
+            updater = ":plugins_update",
             **kwargs
         )
         guards.append(":plugins_check")
 
+        _write_source_file(
+            name = "plugins_update",
+            source = "@flutter_plugins//:plugin_deps.MODULE.bazel",
+            destination = plugin_deps_label,
+            **_internal_kwargs(kwargs)
+        )
+
         if dart_plugin_registrant:
+            registrant_label = _workspace_label(dart_plugin_registrant)
             pub_plugins_check(
                 name = "dart_registrant_check",
-                committed = dart_plugin_registrant,
+                committed = registrant_label,
                 expected = "@flutter_plugins//:dart_plugin_registrant.dart",
+                updater = ":dart_registrant_update",
                 **kwargs
             )
             guards.append(":dart_registrant_check")
+
+            _write_source_file(
+                name = "dart_registrant_update",
+                source = "@flutter_plugins//:dart_plugin_registrant.dart",
+                destination = registrant_label,
+                **_internal_kwargs(kwargs)
+            )
 
     # The guards fail as *actions*, which is stronger than a test: anything
     # depending on one fails too, and the result is remote-cacheable. build_test
@@ -991,11 +1034,17 @@ target from CI, or wire it into a test suite, before enabling a shared cache."""
 
 def _pub_plugins_check_impl(ctx):
     marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+    updater = ""
+    if ctx.attr.updater:
+        updater_label = ctx.attr.updater.label
+        updater = (
+            "//{}:{}".format(updater_label.package, updater_label.name) if updater_label.repo_name == ctx.label.repo_name else str(updater_label)
+        )
 
     ctx.actions.run_shell(
         command = """
 set -eu
-expected="$1"; committed="$2"; marker="$3"
+expected="$1"; committed="$2"; marker="$3"; updater="$4"
 if ! diff -u "$committed" "$expected" > /dev/null 2>&1; then
     echo "ERROR: $committed is out of date." >&2
     echo "" >&2
@@ -1003,13 +1052,23 @@ if ! diff -u "$committed" "$expected" > /dev/null 2>&1; then
     echo "not match the committed MODULE.bazel segment. Replace it with:" >&2
     echo "" >&2
     sed 's/^/    /' "$expected" >&2
+    if [[ -n "$updater" ]]; then
+        echo "" >&2
+        echo "To regenerate it, run:" >&2
+        echo "    bazel run $updater" >&2
+    fi
     echo "" >&2
     diff -u "$committed" "$expected" >&2 || true
     exit 1
 fi
 touch "$marker"
 """,
-        arguments = [ctx.file.expected.path, ctx.file.committed.path, marker.path],
+        arguments = [
+            ctx.file.expected.path,
+            ctx.file.committed.path,
+            marker.path,
+            updater,
+        ],
         inputs = [ctx.file.expected, ctx.file.committed],
         outputs = [marker],
         mnemonic = "PubPluginsCheck",
@@ -1037,6 +1096,95 @@ or upgraded. This is the guard, and it prints the file to write.""",
             allow_single_file = True,
             mandatory = True,
             doc = "The segment generated by the plugins repository rule.",
+        ),
+        "updater": attr.label(
+            doc = "Optional updater command to print when this guard drifts.",
+        ),
+    },
+)
+
+_WRITE_SOURCE_FILE_SCRIPT = """#!/usr/bin/env bash
+# Bazel Bash runfiles initialization.
+set -uo pipefail; set +e; f=bazel_tools/tools/bash/runfiles/runfiles.bash
+# shellcheck disable=SC1090
+source "${{RUNFILES_DIR:-/dev/null}}/$f" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "${{RUNFILES_MANIFEST_FILE:-/dev/null}}" | cut -f2- -d' ')" 2>/dev/null || \\
+  source "$0.runfiles/$f" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
+  {{ echo>&2 "ERROR: cannot find $f"; exit 1; }}; f=; set -e
+
+key={source}
+source_file="$(rlocation "$key" || true)"
+if [[ ! -f "$source_file" ]]; then
+  echo "ERROR: cannot locate generated source file $key in runfiles." >&2
+  exit 1
+fi
+
+workspace="${{BUILD_WORKSPACE_DIRECTORY:?this target must be run with bazel run}}"
+destination="$workspace"/{destination}
+mkdir -p "$(dirname "$destination")"
+cp "$source_file" "$destination"
+"""
+
+def _write_source_file_impl(ctx):
+    script = ctx.actions.declare_file(ctx.label.name)
+    source = ctx.file.source
+
+    # Convert short_path to the repository-qualified runfiles key.
+    source_path = source.short_path
+    if source_path.startswith("../"):
+        source_path = source_path[3:]
+    else:
+        source_path = ctx.workspace_name + "/" + source_path
+
+    # Only source files in this workspace can be safely overwritten.
+    destination = ctx.file.destination
+    if destination.short_path.startswith("../") or not destination.is_source:
+        fail(
+            (
+                "{}: destination {} is not a source file in the invoking " +
+                "workspace, and BUILD_WORKSPACE_DIRECTORY can only update files " +
+                "there. Name the committed file directly."
+            ).format(
+                ctx.label,
+                ctx.attr.destination.label,
+            ),
+        )
+
+    ctx.actions.write(
+        output = script,
+        content = _WRITE_SOURCE_FILE_SCRIPT.format(
+            source = shell.quote(source_path),
+            destination = shell.quote(destination.short_path),
+        ),
+        is_executable = True,
+    )
+
+    return [DefaultInfo(
+        executable = script,
+        runfiles = ctx.runfiles(files = [source]).merge(
+            ctx.attr._runfiles[DefaultInfo].default_runfiles,
+        ),
+    )]
+
+_write_source_file = rule(
+    implementation = _write_source_file_impl,
+    executable = True,
+    doc = "Writes a generated artifact into a source file in the Consumer Module.",
+    attrs = {
+        "source": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The generated artifact to write back.",
+        ),
+        "destination": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The committed file to overwrite in the invoking workspace.",
+        ),
+        "_runfiles": attr.label(
+            default = "@bazel_tools//tools/bash/runfiles",
         ),
     },
 )

@@ -2,6 +2,12 @@ bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
+# The proxy and import stay in this Consumer Module so the mandatory
+# `plugins.project(maven_repo = ...)` label resolves before the generated
+# segment is included.
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+use_repo(maven, "flutter_maven")
+
 # The compile SDK, pinned. Left unpinned, rules_android selects the *highest
 # installed* platform, which is a machine-dependent input: every APK this
 # example builds was byte-identical between a developer machine and a CI runner

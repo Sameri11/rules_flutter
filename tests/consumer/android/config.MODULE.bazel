@@ -17,6 +17,10 @@ use_repo(android_sdk, "androidsdk")
 
 register_toolchains("@androidsdk//:all")
 
+# The proxy and both imports stay in this Consumer Module so the mandatory
+# `plugins.project(maven_repo = ...)` label resolves before the generated
+# segment is included. The plugin graph intentionally uses `plugin_maven`;
+# the embedding keeps its separate `flutter_maven` repository.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "flutter_maven",

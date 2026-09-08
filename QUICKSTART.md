@@ -68,13 +68,15 @@ Pin Bazel with `.bazelversion`:
 9.2.0
 ```
 
-Use this complete `.bazelrc` in an outside consumer (the examples import the
+Use this complete `.bazelrc` in an outside consumer; the examples import
+repository-shared cache settings instead:
 ```
 common --enable_bzlmod
 
 build:android --merge_android_manifest_permissions
 build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
 build:android --java_language_version=17 --java_runtime_version=remotejdk_17
+common:android --repo_env=ANDROID_NDK_HOME
 common --config=android
 ```
 
@@ -376,27 +378,24 @@ Future<void> _checkDocumentsDirectory() async {
 This is the runtime assertion: after installation it must resolve a directory,
 not report `MissingPluginException`.
 
-### Seed generated state before changing the module graph
+### Create generated state and wire the plugin graph
 
-The ordering is required. First create the Dart registrant placeholder, but do
-**not** create an empty `plugin_deps.MODULE.bazel`:
+After `flutter pub get`, create both generated-state files as zero-byte
+placeholders. The plugin guards require their committed files to exist, and
+`include()` requires its target file to exist while the module is evaluated:
 
 ```sh
-touch lib/dart_plugin_registrant.dart
-# NOT `touch plugin_deps.MODULE.bazel`.
+touch plugin_deps.MODULE.bazel lib/dart_plugin_registrant.dart
 ```
 
-Move the complete `maven = use_extension(...)` through
-`use_repo(maven, "flutter_maven")` block from the plugin-free `MODULE.bazel`
-above into `plugin_deps.MODULE.bazel` unchanged. It is a valid seed for the
-module include; an empty included file does not create `@flutter_maven`, so
-`plugins.project(maven_repo = "@flutter_maven//:pin")` cannot resolve.
-
-Then remove that Maven block from `MODULE.bazel` and replace it with the real
-plugin graph. Keep the module declaration, `rules_flutter` override, and three
-direct Bazel dependencies unchanged.
+In the same editing pass, replace the hand-written Maven install in
+`android/config.MODULE.bazel` with the Consumer Module's permanent extension
+proxy and import, then add the plugin extension and generated segment:
 
 ```python
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+use_repo(maven, "flutter_maven")
+
 plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a", "x86_64"],
@@ -409,9 +408,16 @@ use_repo(plugins, "flutter_plugins")
 include("//:plugin_deps.MODULE.bazel")
 ```
 
-`use_repo` makes the generated per-package targets and
-`@flutter_plugins//:all` visible. `include` creates the one Maven repository in
-the consumer module. They are different, and both are required.
+The Consumer Module owns the Maven proxy and `use_repo(maven, "flutter_maven")`;
+the generated segment owns the single `maven.install`. The position of
+`include()` relative to `plugins.project()` does not matter, provided the
+segment declaring the repository name has been evaluated. Do not leave a
+second `use_repo` in the generated segment: declaring the name in both places
+fails with:
+
+```text
+Error in use_repo: The repo name 'flutter_maven' cannot be defined by a use_repo() call at ... as it is already defined by a use_repo() call at ...
+```
 
 ### Turn on the Dart and Android plugin graph
 
@@ -425,9 +431,9 @@ flutter_app(
 )
 ```
 
-Apply that change in the same edit as the module extension above: enabling the
-Dart guard without creating `@flutter_plugins` leaves its expected file
-unresolvable.
+This BUILD edit and the module wiring above are one transition; apply both
+before running a guard. With a graph, `flutter_android_binary` derives the
+conventional registrant target.
 
 In `android/app/BUILD.bazel`, retain the existing imports, embedding, and
 `main_activity`, then replace the opt-out Android setup with the plugin-aware
@@ -467,20 +473,23 @@ registrant target.
 
 ### Generate, commit, build, and prove the transition
 
-Use the guards' generated outputs rather than hand-editing either committed
-file. The first guard fails against the seed by design; copy its expected file
-from the generated repository:
+The placeholders make the plugin guard fail once, as expected. Its failure
+output names the updater command; run the updater rather than copying from
+Bazel's output tree:
 
 ```sh
 bazel build //:plugins_check
-cp "$(bazel info output_base)/$(bazel cquery --output=files @flutter_plugins//:plugin_deps.MODULE.bazel)" plugin_deps.MODULE.bazel
-bazel build //:plugins_check
+bazel run //:plugins_update
 
 bazel build //:dart_registrant_check
-cp "$(bazel info output_base)/$(bazel cquery --output=files @flutter_plugins//:dart_plugin_registrant.dart)" lib/dart_plugin_registrant.dart
-bazel build //:dart_registrant_check
+# Run the `bazel run //:dart_registrant_update` command printed above.
+bazel run //:dart_registrant_update
+
+bazel build //:plugins_check //:dart_registrant_check
 bazel test //:guards_test
 ```
+
+The guard prints this command because it owns the generated artifact's identity.
 
 Commit `plugin_deps.MODULE.bazel` and `lib/dart_plugin_registrant.dart`. Then
 build and install the APK:
@@ -495,15 +504,16 @@ adb install -r bazel-bin/android/app/hello_bazel.apk
 Launch the app and make the `path_provider` call. It should return the
 application documents directory without throwing `MissingPluginException`.
 If the app opens but the call throws that exception, the APK build and install
-succeeded but plugin registration is stale or missing; refresh the generated
-registrants and rebuild.
+succeeded but plugin registration is stale or missing; rerun the registrant
+guard and its printed updater, then rebuild.
 
 For every later pub plugin addition, removal, or upgrade, run `flutter pub get`.
-Flutter refreshes `GeneratedPluginRegistrant.java`; keep its BUILD target dependent
-on `@flutter_plugins//:all`, rather than maintaining a per-plugin Bazel list.
-Rerun the two guards, copy their generated outputs when they drift, commit them,
-rebuild, install, and exercise the changed plugin. Standard CMake-backed plugins
-are generated automatically. If a plugin's Maven coordinate cannot be read statically,
+Flutter refreshes `GeneratedPluginRegistrant.java`; keep its BUILD target
+dependent on `@flutter_plugins//:all`, rather than maintaining a per-plugin
+list. Run both guards; when a file drifts, use the updater command printed
+by its guard and commit the resulting files. Rebuild, install, and
+exercise the changed plugin. Standard CMake-backed plugins are generated
+automatically. If a plugin's Maven coordinate cannot be read statically,
 declare it on that package instead of adding a second Maven install:
 
 ```python
@@ -552,19 +562,17 @@ flutter pub get
 cd ../..
 ```
 
-Before enabling `plugins.project()`, bootstrap the two committed generated-state
-files. From the module root, create the Dart placeholder but do **not** create an
-empty Maven segment:
+Create both committed generated-state files as zero-byte placeholders from the
+module root:
 
 ```sh
-touch packages/host_app/lib/dart_plugin_registrant.dart
-# NOT `touch plugin_deps.MODULE.bazel`.
+touch plugin_deps.MODULE.bazel packages/host_app/lib/dart_plugin_registrant.dart
 ```
 
-Seed the root `plugin_deps.MODULE.bazel` by moving the complete
-`maven = use_extension(...)` through `use_repo(maven, "flutter_maven")` block
-from the plugin-free module above into that file, unchanged. This valid seed
-makes `@flutter_maven//:pin` available while `plugins.project()` is evaluated.
+The root `include()` requires the Maven segment to exist, and the plugin
+guards' committed-file attributes are mandatory. The placeholders carry no
+Maven content; the Consumer Module's wiring below makes `@flutter_maven`
+visible before the generated segment is populated.
 
 Keep the root module as a composition point and delegate Android configuration:
 
@@ -614,6 +622,9 @@ android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_nd
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+use_repo(maven, "flutter_maven")
+
 plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
@@ -625,6 +636,12 @@ use_repo(plugins, "flutter_plugins")
 
 include("//:plugin_deps.MODULE.bazel")
 ```
+
+The Maven proxy and import are owned by this Consumer Module; the generated
+segment contributes the single install. `include()` may appear before or after
+`plugins.project()` because its position does not matter once the segment
+declaring the repository name has been evaluated. Do not duplicate the
+`use_repo` declaration in the generated segment.
 
 The root needs a Bazel package solely so it can export the included generated
 segment:
@@ -700,20 +717,23 @@ the generated Android app; the canonical full file is
 [`packages/host_app/android/app/BUILD.bazel`](examples/local_plugin/packages/host_app/android/app/BUILD.bazel).
 
 Generate the root Maven segment and the app's Dart registrant through their
-guards; the first build is expected to fail against the seed and print the
-expected generated content:
+updater targets. The empty placeholders make the plugin guard fail once, and
+its failure output names the Maven updater:
 
 ```sh
 bazel build //packages/host_app:plugins_check
-cp "$(bazel info output_base)/$(bazel cquery --output=files @flutter_plugins//:plugin_deps.MODULE.bazel)" plugin_deps.MODULE.bazel
-bazel build //packages/host_app:plugins_check
+bazel run //packages/host_app:plugins_update
 
 bazel build //packages/host_app:dart_registrant_check
-cp "$(bazel info output_base)/$(bazel cquery --output=files @flutter_plugins//:dart_plugin_registrant.dart)" packages/host_app/lib/dart_plugin_registrant.dart
-bazel build //packages/host_app:dart_registrant_check
+# Run the `bazel run //packages/host_app:dart_registrant_update` command printed above.
+bazel run //packages/host_app:dart_registrant_update
+
+bazel build //packages/host_app:plugins_check //packages/host_app:dart_registrant_check
 bazel test //packages/host_app:guards_test
 bazel build //packages/host_app/android/app:host_app
 ```
+
+The guard prints this command because it owns the generated artifact's identity.
 
 Adapt all three label families together when your layout differs:
 `metadata = "//<app-package>:.flutter-plugins-dependencies"`,
@@ -999,10 +1019,11 @@ at the monorepo root for the subpackage shape), and map the real
 the explicit root-vs-named `app` label rule.
 
 After every pub resolution change, run `flutter pub get`. For any plugin graph,
-then run `:plugins_check` and `:dart_registrant_check`, copy the generator's
-expected files with the `bazel cquery --output=files` commands above, and commit
-them with the lockfile changes. For `path:` dependencies, keep the local Dart
-filegroup in `path_deps`; its content is not represented by a pub lock hash.
+run `:plugins_check` and `:dart_registrant_check`; when either guard reports
+drift, run the updater command it prints and commit the generated files with
+the lockfile changes. For `path:` dependencies,
+keep the local Dart filegroup in `path_deps`; its content is not represented by
+a pub lock hash.
 
 Finally, treat building as artifact production, not runtime proof. Discover the
 APK, install it on a device or emulator for a shipped ABI, launch it, and
