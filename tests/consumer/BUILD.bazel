@@ -1,6 +1,8 @@
-"""Every public symbol, instantiated the way a consumer would.
+"""The supported BUILD API, with deliberate coverage of macro internals.
 
-This is an API test, not a behaviour test.
+All supported symbols load from @rules_flutter//flutter:defs.bzl. The specialist
+loads below exercise helpers that consumers do not write and are excluded from
+the supported API.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
@@ -8,7 +10,6 @@ load(
     "@rules_flutter//flutter:defs.bzl",
     "ABIS",
     "android_native_lib_jar",
-    "dart_aot_elf",
     "dart_kernel",
     "flutter_android_binary",
     "flutter_android_libs",
@@ -36,6 +37,11 @@ load(
     "NATIVE_LIB",
     "flutter_bundle_contribution",
 )
+
+#
+# These specialist loads are deliberate macro-internal coverage only. Their
+# symbols are not part of the supported Consumer Module API.
+load("@rules_flutter//tools/flutter:defs.bzl", "dart_aot_elf")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":assertions.bzl", "expect_equal", "expect_label_equal")
 

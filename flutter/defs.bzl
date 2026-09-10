@@ -17,7 +17,6 @@ load(
 )
 load(
     "//tools/flutter:defs.bzl",
-    _dart_aot_elf = "dart_aot_elf",
     _dart_kernel = "dart_kernel",
     _flutter_aot_library = "flutter_aot_library",
     _flutter_app = "flutter_app",
@@ -40,7 +39,6 @@ load(
 # importing names with load() does not re-export them to downstream BUILD files.
 ABIS = _ABIS
 android_native_lib_jar = _android_native_lib_jar
-dart_aot_elf = _dart_aot_elf
 dart_kernel = _dart_kernel
 flutter_android_binary = _flutter_android_binary
 flutter_android_libs = _flutter_android_libs
