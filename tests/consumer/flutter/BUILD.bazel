@@ -1,4 +1,4 @@
-# A colliding package -- this module has no reason to own `tools/flutter`,
+# A colliding package -- this module has no reason to own `flutter`,
 # and that is the point. `select()` keys written as bare strings inside a
 # macro resolve in the *caller's* repo mapping, not the defining module's
 # (docs_internal/build-modes-plan.md P2). Every real select() in

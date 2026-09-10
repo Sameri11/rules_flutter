@@ -518,7 +518,7 @@ genrule(
 if ! cmp -s "$(location :flutter_embedding_no_plugins)" "$(location :embedding_mode_hazard_expected)"; then
     echo "flutter_embedding_no_plugins is not this configuration's embedding" >&2
     echo "jar. embedding.bzl's jars select() resolved a select() key against" >&2
-    echo "the legacy implementation package instead of @rules_flutter's --" >&2
+    echo "this module's decoy package instead of @rules_flutter's --" >&2
     echo "see the comment above." >&2
     exit 1
 fi
