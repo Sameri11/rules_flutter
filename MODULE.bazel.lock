@@ -258,12 +258,32 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
-    "//tools/flutter:ndk.bzl%android_ndk": {
+    "//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "wubp2T1WtFjfb9+kfYhB63NRFwpD0mXcOWF3daEO03c=",
-        "usagesDigest": "ODsxSS/bHQV4H/lVib94fc3moWuBdb51ekbQ1pT4FHo=",
+        "bzlTransitiveDigest": "myIOBLM9s4amVM4T5T6C1tqW7cS9Lfibpp0Fm+0j9n0=",
+        "usagesDigest": "u+HEkcGg21uv1v1Y5n7OFzVXl5/8Fi8W5y561YLsmWA=",
         "recordedInputs": [
-          "REPO_MAPPING:,rules_android_ndk rules_android_ndk+"
+          "REPO_MAPPING:,platforms platforms",
+          "REPO_MAPPING:,rules_android rules_android+",
+          "REPO_MAPPING:,rules_android_ndk rules_android_ndk+",
+          "REPO_MAPPING:,rules_java rules_java+",
+          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
+          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
+          "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
+          "REPO_MAPPING:protobuf+,rules_java rules_java+",
+          "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
+          "REPO_MAPPING:rules_cc+,platforms platforms",
+          "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java+,bazel_features bazel_features+",
+          "REPO_MAPPING:rules_java+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_java+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_java+,com_google_protobuf protobuf+",
+          "REPO_MAPPING:rules_java+,compatibility_proxy rules_java++compatibility_proxy+compatibility_proxy",
+          "REPO_MAPPING:rules_java+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java++compatibility_proxy+compatibility_proxy,rules_java rules_java+"
         ],
         "generatedRepoSpecs": {
           "androidndk": {

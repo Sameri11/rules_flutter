@@ -6,7 +6,7 @@ module(
 bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
 
 # Report and ignore unmatched dependency recipes.
-plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.package(
     name = "absent_package",
     bzl_file = "//:absent_package.bzl",
