@@ -557,7 +557,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "h0f/0RNvDpo1r9DeVB1pJNoDRBHQDBih+l5n+H8Gacw=",
+        "bzlTransitiveDigest": "hdvS83CtH504cF/AHNScFkfQnnPeFFdgwAl9Vz64I2s=",
         "usagesDigest": "CE2Z/tOTJqwioicux0yXg4nzWLIvZDfcM/KtRNy1Og4=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -596,7 +596,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "h0f/0RNvDpo1r9DeVB1pJNoDRBHQDBih+l5n+H8Gacw=",
+        "bzlTransitiveDigest": "hdvS83CtH504cF/AHNScFkfQnnPeFFdgwAl9Vz64I2s=",
         "usagesDigest": "Ledc+BavJyeReHRqHvz5/Wcm+5OIAQF8UJuGmSbzKpI=",
         "recordedInputs": [
           "REPO_MAPPING:,fake_plugin_metadata +fake_plugin_metadata+fake_plugin_metadata",
@@ -643,8 +643,8 @@
                 "absent_package": "{\"bzl\":\"@@external_app+//:absent_package.bzl\",\"macro\":\"absent_package_recipe\",\"root\":false}"
               },
               "embedding": "'@@//:flutter_embedding_no_plugins'",
-              "android_bzl": "'@@sameri11_rules_flutter+//tools/flutter:android.bzl'",
-              "recipe_bzl": "'@@sameri11_rules_flutter+//tools/flutter:recipe.bzl'",
+              "android_bzl": "'@@sameri11_rules_flutter+//flutter:defs.bzl'",
+              "recipe_bzl": "'@@sameri11_rules_flutter+//flutter:defs.bzl'",
               "ndk_source_properties": "'@@sameri11_rules_flutter++android_ndk+androidndk_cmake//:ndk_source_properties'"
             }
           }
@@ -653,7 +653,7 @@
     },
     "@@sameri11_rules_flutter+//tools/flutter:repo.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "xF3NHN89e0wpLlITfvPlzlq4YYs2Cm7XkvAn18uvo1k=",
+        "bzlTransitiveDigest": "d0akA1llff6BLmlVnXIvFQO70c00GoPx6Qps3UswgoY=",
         "usagesDigest": "eda2QKoZ+OsZtf4G6TFDQlPX9B2jypD8+TJmVZiVbyA=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter+,bazel_tools bazel_tools",
