@@ -79,9 +79,9 @@ Create the root `MODULE.bazel` (the `local_path_override` is development-only un
 ```python
 module(name = "hello_bazel", version = "0.0.1")
 
-bazel_dep(name = "rules_flutter", version = "0.1.0")
+bazel_dep(name = "sameri11_rules_flutter", repo_name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "rules_flutter",
+    module_name = "sameri11_rules_flutter",
     path = "../rules_flutter",
 )
 

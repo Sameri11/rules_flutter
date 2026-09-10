@@ -70,7 +70,7 @@ def _selftest():
                 "//tools/flutter:ndk.bzl%android_ndk": {
                     "general": {
                         "recordedInputs": [
-                            "REPO_MAPPING:rules_flutter+,rules_android_ndk rules_android_ndk+",
+                            "REPO_MAPPING:sameri11_rules_flutter+,rules_android_ndk rules_android_ndk+",
                         ],
                         "generatedRepoSpecs": {
                             "androidndk": {
@@ -87,7 +87,7 @@ def _selftest():
         raise SystemExit("FAIL: selftest rejected a portable lock")
 
     captured = clean.replace(
-        '"REPO_MAPPING:rules_flutter+,rules_android_ndk rules_android_ndk+"',
+        '"REPO_MAPPING:sameri11_rules_flutter+,rules_android_ndk rules_android_ndk+"',
         '"ENV:ANDROID_NDK_HOME /Users/someone/Library/Android/sdk/ndk/28.2.13676358"',
     )
     findings = check_lock("captured", captured)

@@ -51,9 +51,9 @@ Until `rules_flutter` is published to the Bazel Central Registry, create a
 consumer as a sibling of a checkout and retain a development override:
 
 ```python
-bazel_dep(name = "rules_flutter", version = "0.1.0")
+bazel_dep(name = "sameri11_rules_flutter", repo_name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "rules_flutter",
+    module_name = "sameri11_rules_flutter",
     path = "../rules_flutter",
 )
 ```
@@ -131,9 +131,9 @@ details out of the root `MODULE.bazel`:
 ```python
 module(name = "hello_bazel", version = "0.0.1")
 
-bazel_dep(name = "rules_flutter", version = "0.1.0")
+bazel_dep(name = "sameri11_rules_flutter", repo_name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "rules_flutter",
+    module_name = "sameri11_rules_flutter",
     path = "../rules_flutter",
 )
 
@@ -582,9 +582,9 @@ module(
     version = "0.0.1",
 )
 
-bazel_dep(name = "rules_flutter", version = "0.1.0")
+bazel_dep(name = "sameri11_rules_flutter", repo_name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "rules_flutter",
+    module_name = "sameri11_rules_flutter",
     path = "../..",
 )
 

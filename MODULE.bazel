@@ -1,6 +1,5 @@
 module(
-    name = "rules_flutter",
-    version = "0.1.0",
+    name = "sameri11_rules_flutter",
 )
 
 flutter = use_extension("//tools/flutter:repo.bzl", "flutter")

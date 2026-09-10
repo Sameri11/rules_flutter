@@ -343,7 +343,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "Fa4fW6E8A+wsY22aoShdXiSvAllwtbKhnwpbfpkkcy0=",
+        "usagesDigest": "9UjDg9wkN5K6e7GB90KMHVuyddbJ1ToGJg13DnhuYTE=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
@@ -352,90 +352,6 @@
               "api_level": 36,
               "build_tools_version": "36.0.0",
               "path": ""
-            }
-          }
-        }
-      }
-    },
-    "@@rules_flutter+//tools/flutter:ndk.bzl%android_ndk": {
-      "general": {
-        "bzlTransitiveDigest": "wubp2T1WtFjfb9+kfYhB63NRFwpD0mXcOWF3daEO03c=",
-        "usagesDigest": "M/4V/lGzy1WeTjBWAtTIb4YSbgK6sJ+w8mvyyiivGw8=",
-        "recordedInputs": [
-          "REPO_MAPPING:rules_flutter+,rules_android_ndk rules_android_ndk+"
-        ],
-        "generatedRepoSpecs": {
-          "androidndk": {
-            "repoRuleId": "@@rules_android_ndk+//:rules.bzl%android_ndk_repository",
-            "attributes": {}
-          },
-          "androidndk_cmake": {
-            "repoRuleId": "@@rules_flutter+//tools/flutter:ndk.bzl%_androidndk_cmake_repository",
-            "attributes": {}
-          }
-        }
-      }
-    },
-    "@@rules_flutter+//tools/flutter:repo.bzl%flutter": {
-      "general": {
-        "bzlTransitiveDigest": "xF3NHN89e0wpLlITfvPlzlq4YYs2Cm7XkvAn18uvo1k=",
-        "usagesDigest": "cw4CePI4DWiQZm/66uKnW1chHGB6MLzXF+K2CxUxGyw=",
-        "recordedInputs": [
-          "REPO_MAPPING:rules_flutter+,bazel_tools bazel_tools",
-          "REPO_MAPPING:rules_flutter+,platforms platforms",
-          "REPO_MAPPING:rules_flutter+,rules_android rules_android+"
-        ],
-        "generatedRepoSpecs": {
-          "flutter_sdk": {
-            "repoRuleId": "@@rules_flutter+//tools/flutter:repo.bzl%flutter_sdk",
-            "attributes": {}
-          },
-          "flutter_embedding_release": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/flutter_embedding_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
-            }
-          },
-          "flutter_embedding_debug": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/flutter_embedding_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
-            }
-          },
-          "flutter_engine_arm64_v8a_release": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/arm64_v8a_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
-            }
-          },
-          "flutter_engine_arm64_v8a_debug": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/arm64_v8a_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
-            }
-          },
-          "flutter_engine_x86_64_release": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/x86_64_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
-            }
-          },
-          "flutter_engine_x86_64_debug": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/x86_64_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
-            }
-          },
-          "flutter_engine_armeabi_v7a_release": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/armeabi_v7a_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
-            }
-          },
-          "flutter_engine_armeabi_v7a_debug": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
-            "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/armeabi_v7a_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
             }
           }
         }
@@ -634,6 +550,90 @@
                 ]
               },
               "toolchain_target_settings": {}
+            }
+          }
+        }
+      }
+    },
+    "@@sameri11_rules_flutter+//tools/flutter:ndk.bzl%android_ndk": {
+      "general": {
+        "bzlTransitiveDigest": "wubp2T1WtFjfb9+kfYhB63NRFwpD0mXcOWF3daEO03c=",
+        "usagesDigest": "HyHKof/Hwyc4Aa/4VHEFWpZTPqhUXqxO4KBOHKeIK5o=",
+        "recordedInputs": [
+          "REPO_MAPPING:sameri11_rules_flutter+,rules_android_ndk rules_android_ndk+"
+        ],
+        "generatedRepoSpecs": {
+          "androidndk": {
+            "repoRuleId": "@@rules_android_ndk+//:rules.bzl%android_ndk_repository",
+            "attributes": {}
+          },
+          "androidndk_cmake": {
+            "repoRuleId": "@@sameri11_rules_flutter+//tools/flutter:ndk.bzl%_androidndk_cmake_repository",
+            "attributes": {}
+          }
+        }
+      }
+    },
+    "@@sameri11_rules_flutter+//tools/flutter:repo.bzl%flutter": {
+      "general": {
+        "bzlTransitiveDigest": "xF3NHN89e0wpLlITfvPlzlq4YYs2Cm7XkvAn18uvo1k=",
+        "usagesDigest": "R5N9St8lZgehSPaOYkim03MK+V5jF4ZlA8/A8xndCVA=",
+        "recordedInputs": [
+          "REPO_MAPPING:sameri11_rules_flutter+,bazel_tools bazel_tools",
+          "REPO_MAPPING:sameri11_rules_flutter+,platforms platforms",
+          "REPO_MAPPING:sameri11_rules_flutter+,rules_android rules_android+"
+        ],
+        "generatedRepoSpecs": {
+          "flutter_sdk": {
+            "repoRuleId": "@@sameri11_rules_flutter+//tools/flutter:repo.bzl%flutter_sdk",
+            "attributes": {}
+          },
+          "flutter_embedding_release": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/flutter_embedding_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+            }
+          },
+          "flutter_embedding_debug": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/flutter_embedding_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+            }
+          },
+          "flutter_engine_arm64_v8a_release": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/arm64_v8a_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+            }
+          },
+          "flutter_engine_arm64_v8a_debug": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/arm64_v8a_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+            }
+          },
+          "flutter_engine_x86_64_release": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/x86_64_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+            }
+          },
+          "flutter_engine_x86_64_debug": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/x86_64_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+            }
+          },
+          "flutter_engine_armeabi_v7a_release": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/armeabi_v7a_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+            }
+          },
+          "flutter_engine_armeabi_v7a_debug": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
+            "attributes": {
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/armeabi_v7a_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
             }
           }
         }
