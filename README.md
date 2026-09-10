@@ -143,7 +143,7 @@ use_repo(maven, "flutter_maven")
 Create `BUILD.bazel` at the project root:
 
 ```python
-load("@rules_flutter//tools/flutter:defs.bzl", "flutter_app")
+load("@rules_flutter//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -166,8 +166,7 @@ Create `android/app/BUILD.bazel`, replacing `com.example.hello_bazel`, `hello_ba
 
 ```python
 load("@rules_android//rules:rules.bzl", "android_library")
-load("@rules_flutter//tools/flutter:android.bzl", "flutter_android_binary")
-load("@rules_flutter//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -219,7 +218,7 @@ bazel test //:guards_test
 Replace `<name>.apk` with the APK discovered in `bazel-bin/android/app/`. To build the optional debug-shaped APK:
 
 ```sh
-bazel build //android/app:hello_bazel --@rules_flutter//tools/flutter:mode=debug
+bazel build //android/app:hello_bazel --@rules_flutter//flutter:mode=debug
 ```
 
 Run the Bazel-built debug APK through Flutter. This installs it, launches it,
