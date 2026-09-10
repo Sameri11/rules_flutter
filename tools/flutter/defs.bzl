@@ -607,6 +607,7 @@ def flutter_app(
     | `:dart_registrant_update` | writes the generated registrant into the workspace |
     | `:guards_test` | the guards, under `bazel test` |
 
+    `:app_<abi>` and `:assets` compile to their debug shape under
     `--@rules_flutter//flutter:mode=debug`; see
     docs_internal/build-modes-plan.md.
 
