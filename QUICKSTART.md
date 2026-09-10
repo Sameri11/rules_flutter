@@ -197,7 +197,7 @@ arm64 device slice and an x86_64 emulator slice; use one identical list in all
 three locations if you choose a different supported set.
 
 ```python
-load("@rules_flutter//tools/flutter:defs.bzl", "flutter_app")
+load("@rules_flutter//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -226,8 +226,7 @@ path with the ones Flutter generated for your app:
 
 ```python
 load("@rules_android//rules:rules.bzl", "android_library")
-load("@rules_flutter//tools/flutter:android.bzl", "flutter_android_binary")
-load("@rules_flutter//tools/flutter:embedding.bzl", "flutter_embedding_library")
+load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -285,7 +284,7 @@ build does not prove that the APK launches.
 To build the debug-shaped APK, select debug mode on the APK target:
 
 ```sh
-bazel build //android/app:hello_bazel --@rules_flutter//tools/flutter:mode=debug
+bazel build //android/app:hello_bazel --@rules_flutter//flutter:mode=debug
 ```
 
 #### Hot reload with `flutter run`
@@ -657,7 +656,7 @@ dependency, so omitting `path_deps` would leave an undeclared input and make the
 path-dependency guard fail.
 
 ```python
-load("@rules_flutter//tools/flutter:defs.bzl", "flutter_app")
+load("@rules_flutter//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -878,7 +877,7 @@ the consumer's declared repository while the recipe file is loaded.
 A concise arm64 `rive_native` recipe is:
 
 ```python
-load("@rules_flutter//tools/flutter:recipe.bzl", "flutter_native_contribution")
+load("@rules_flutter//flutter:defs.bzl", "flutter_native_contribution")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 _LIBRARIES = {
@@ -916,7 +915,7 @@ Flutter's native-assets manifest uses, then creates the empty conventional
 package target:
 
 ```python
-load("@rules_flutter//tools/flutter:recipe.bzl", "flutter_native_contribution")
+load("@rules_flutter//flutter:defs.bzl", "flutter_native_contribution")
 
 _LIBRARIES = {
     "arm64-v8a": Label("@libsqlite3_android_arm64_v8a//file"),
@@ -1003,7 +1002,7 @@ bazel build //android/app:demo_app
 For the debug-shaped APK, select debug on the Android target:
 
 ```sh
-bazel build //android/app:demo_app --@rules_flutter//tools/flutter:mode=debug
+bazel build //android/app:demo_app --@rules_flutter//flutter:mode=debug
 ```
 
 Debug bundles use a kernel blob rather than a release AOT snapshot. Therefore

@@ -1,6 +1,26 @@
+load("//tools/flutter:abis.bzl", "MODES")
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "defs.bzl",
     "extensions.bzl",
 ])
+
+# Flutter runtime mode, independent of --compilation_mode.
+string_flag(
+    name = "mode",
+    build_setting_default = "release",
+    values = MODES,
+)
+
+config_setting(
+    name = "mode_debug",
+    flag_values = {":mode": "debug"},
+)
+
+config_setting(
+    name = "mode_release",
+    flag_values = {":mode": "release"},
+)

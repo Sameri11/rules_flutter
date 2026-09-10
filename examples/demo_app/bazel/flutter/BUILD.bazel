@@ -1,5 +1,5 @@
 # Recipes for pub packages that fall outside the standard build, supplied by
-# this project to //tools/flutter:plugins.bzl through plugins.package().
+# this project to //flutter:extensions.bzl through plugins.package().
 #
 # These are consumer-side files: they are loaded by BUILD files the rules
 # generate, by canonical label, and their own load() statements resolve in this

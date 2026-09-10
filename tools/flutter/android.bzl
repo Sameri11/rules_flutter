@@ -44,8 +44,8 @@ load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIV
 load(":embedding.bzl", "flutter_embedding_deps")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 
-_MODE_DEBUG = Label("//tools/flutter:mode_debug")
-_MODE_RELEASE = Label("//tools/flutter:mode_release")
+_MODE_DEBUG = Label("//flutter:mode_debug")
+_MODE_RELEASE = Label("//flutter:mode_release")
 
 def _jni_lib_jar_impl(ctx):
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
@@ -564,7 +564,7 @@ def _flutter_bundle_check_impl(ctx):
 
 # Pin release builds to `opt`; preserve explicitly non-fastbuild modes.
 def _pin_release_compilation_mode_impl(settings, _attr):
-    mode = settings["//tools/flutter:mode"]
+    mode = settings["//flutter:mode"]
     compilation_mode = str(settings["//command_line_option:compilation_mode"])
     if mode == "release" and compilation_mode == "fastbuild":
         compilation_mode = "opt"
@@ -573,7 +573,7 @@ def _pin_release_compilation_mode_impl(settings, _attr):
 _pin_release_compilation_mode = transition(
     implementation = _pin_release_compilation_mode_impl,
     inputs = [
-        "//tools/flutter:mode",
+        "//flutter:mode",
         "//command_line_option:compilation_mode",
     ],
     outputs = ["//command_line_option:compilation_mode"],
@@ -627,7 +627,7 @@ APK does not package.""",
             allow_single_file = True,
         ),
         "_mode": attr.label(
-            default = "//tools/flutter:mode",
+            default = "//flutter:mode",
             providers = [BuildSettingInfo],
         ),
     },

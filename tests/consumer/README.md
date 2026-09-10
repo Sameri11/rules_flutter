@@ -58,17 +58,16 @@ Bazel would descend in and evaluate these packages as *root* packages, where
 
 ## What it covers
 
-Loading and analysis — `--nobuild` — of every public symbol, plus focused
-behavior checks:
+Loading and analysis — `--nobuild` — of every supported BUILD symbol through
+`@rules_flutter//flutter:defs.bzl`, plus focused behavior checks:
 
-| file | symbols |
+| entry point | symbols |
 | --- | --- |
-| `defs.bzl` | `dart_kernel`, `dart_aot_elf`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check`, `flutter_app` |
-| `android.bzl` | `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs` |
-| `bundle.bzl` | `flutter_bundle_contribution` (all three forms: `srcs`, slice-keyed `libraries`, `empty`), the location constants |
-| `android.bzl` (join) | `flutter_android_libs` over **two** ABIs, and `flutter_android_binary` on top of it — the entry point that names a consumer's APK targets; `:apk_external_app` drives that high-level API from an external module through a real bundle and signed APK |
-| `recipe.bzl` | `flutter_native_contribution` (both the populated and `empty = True` forms), `flutter_native_libs` |
-| `plugins.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`) over a real, checked-in external plugin graph — `:fake_plugin_deps_check`, `:fake_plugin_test` |
+| `defs.bzl` | `ABIS`, `dart_kernel`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check`, `flutter_app`, `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `flutter_android_libs`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `flutter_native_libs`, `flutter_pubspec` |
+| `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`) over a real, checked-in external plugin graph — `:fake_plugin_deps_check`, `:fake_plugin_test` |
+
+Implementation-only rules and helpers are covered indirectly by these supported
+macros; this Consumer Module does not load specialist implementation files.
 
 That catches the two things a refactor of these rules actually breaks: a symbol
 moving between files (load phase) and an attribute renamed, removed or made
