@@ -67,7 +67,7 @@ bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 # `platforms` is declared for the Android NDK toolchain's platform constraints.
 bazel_dep(name = "platforms", version = "1.0.0")
 
-android_ndk = use_extension("//tools/flutter:ndk.bzl", "android_ndk")
+android_ndk = use_extension("//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 
 remote_android_extensions = use_extension(
