@@ -1026,13 +1026,17 @@ def _flutter_plugins_impl(ctx):
         if override != None:
             used_overrides.append(name)
 
-            # An override that clears nothing is dead weight, and dead weight
-            # drifts out of date unnoticed. Recorded, not failed: what it
-            # supplies is still correct, so the build is right either way.
-            if "unresolved_dep" not in reasons:
+            # Stale only when it does neither thing it can do: clear
+            # `unresolved_dep`, or contribute a coordinate the scraper missed --
+            # which is how a classless KMP root gets its `-android`/`-jvm`
+            # child. Judging by the gate alone called those dead and told the
+            # consumer to delete them, silently dropping the coordinate.
+            # Recorded, not failed: what it supplies is correct either way.
+            contributed = [c for c in override if c not in coordinates]
+            if "unresolved_dep" not in reasons and not contributed:
                 stale_overrides.append(name)
 
-            coordinates = coordinates + [c for c in override if c not in coordinates]
+            coordinates = coordinates + contributed
             reasons = [r for r in reasons if r != "unresolved_dep"]
 
         gated = [r for r in reasons if r in _GATED_REASONS]
