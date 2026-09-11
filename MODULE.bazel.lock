@@ -260,7 +260,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "W+b9mUmjJokRiRa9wTCAJ9dZ3uQ9K+TAfIefMFVXYGc=",
+        "bzlTransitiveDigest": "PbHufQ8Ef0dxRku/+V8j/hIWIdUoSzsJVSDuoykOXkQ=",
         "usagesDigest": "u+HEkcGg21uv1v1Y5n7OFzVXl5/8Fi8W5y561YLsmWA=",
         "recordedInputs": [
           "REPO_MAPPING:,platforms platforms",
@@ -291,16 +291,16 @@
             "attributes": {}
           },
           "androidndk_cmake": {
-            "repoRuleId": "@@//tools/flutter:ndk.bzl%_androidndk_cmake_repository",
+            "repoRuleId": "@@//flutter/private:ndk.bzl%_androidndk_cmake_repository",
             "attributes": {}
           }
         }
       }
     },
-    "//tools/flutter:repo.bzl%flutter": {
+    "//flutter/private:repo.bzl%flutter": {
       "general": {
         "bzlTransitiveDigest": "d0akA1llff6BLmlVnXIvFQO70c00GoPx6Qps3UswgoY=",
-        "usagesDigest": "XPc34iYcVtVwau1/PJTQZHYQ8UUdz8xOBCqsX8yLGUw=",
+        "usagesDigest": "jrBaZOcWDOcKabJnjwy68BVDrd46XjcPFZOpHFqt7ZE=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools",
           "REPO_MAPPING:,platforms platforms",
@@ -308,55 +308,55 @@
         ],
         "generatedRepoSpecs": {
           "flutter_sdk": {
-            "repoRuleId": "@@//tools/flutter:repo.bzl%flutter_sdk",
+            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_sdk",
             "attributes": {}
           },
           "flutter_embedding_release": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/flutter_embedding_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/flutter_embedding_release-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           },
           "flutter_embedding_debug": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/flutter_embedding_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/flutter_embedding_debug-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           },
           "flutter_engine_arm64_v8a_release": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/arm64_v8a_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_release/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/arm64_v8a_release-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           },
           "flutter_engine_arm64_v8a_debug": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/arm64_v8a_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/arm64_v8a_debug/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/arm64_v8a_debug-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           },
           "flutter_engine_x86_64_release": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/x86_64_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_release/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/x86_64_release-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           },
           "flutter_engine_x86_64_debug": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/x86_64_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_debug/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/x86_64_debug-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           },
           "flutter_engine_armeabi_v7a_release": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_release/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/armeabi_v7a_release-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_release/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/armeabi_v7a_release-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           },
           "flutter_engine_armeabi_v7a_debug": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_jar",
             "attributes": {
-              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_debug/1.0.0-77e2e94772b6eb43759e34ed1ad7da4674e19cab/armeabi_v7a_debug-1.0.0-04efd7c093d4e9281d5526ebcad6ecc60ba8badf.jar"
+              "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/armeabi_v7a_debug/1.0.0-06a2e2a110089dff50fe635cffd2a61e1b24fbcd/armeabi_v7a_debug-1.0.0-0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7.jar"
             }
           }
         }

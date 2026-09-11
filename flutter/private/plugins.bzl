@@ -204,7 +204,7 @@ genrule(
     outs = ["{name}_unsupported.java"],
     cmd = "echo 'Flutter plugin {name} is not supported: {reasons}.' >&2; " +
           "echo 'To fix, {hint}, or drop a reason code from ' >&2; " +
-          "echo '_GATED_REASONS in tools/flutter/plugins.bzl.' >&2; " +
+          "echo '_GATED_REASONS in flutter/private/plugins.bzl.' >&2; " +
           "exit 1",
 )
 

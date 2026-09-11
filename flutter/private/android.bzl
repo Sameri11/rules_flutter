@@ -386,7 +386,7 @@ stays readable against the template `flutter create` generated.""",
             doc = "A flutter_pubspec target; supplies both version facts.",
         ),
         "_injector": attr.label(
-            default = "//tools/flutter:inject_version.py",
+            default = "//flutter/private:inject_version.py",
             allow_single_file = True,
         ),
     },
@@ -623,7 +623,7 @@ Deliberately unsplit: `android_binary.assets` is `cfg = "target"`
 APK does not package.""",
         ),
         "_checker": attr.label(
-            default = "//tools/flutter:check_native_assets.py",
+            default = "//flutter/private:check_native_assets.py",
             allow_single_file = True,
         ),
         "_mode": attr.label(
@@ -659,7 +659,7 @@ def flutter_assets_dir(assets):
     """
 
     # package_relative_label, not Label: Label() resolves against *this file's*
-    # package, so a caller writing ":assets" would get tools/flutter/assets.
+    # package, so a caller writing ":assets" would get flutter/private/assets.
     # Absolute labels hid that -- both real consumers happen to write one.
     label = native.package_relative_label(assets)
 
@@ -1277,7 +1277,7 @@ def flutter_android_binary(
              "predeclare `_proguard.jar`/`_proguard.config`/`_proguard.map` " +
              "on the private android_binary without republishing those " +
              "labels on the public target. Extend `_flutter_apk` in " +
-             "tools/flutter/android.bzl (see docs_internal/" +
+             "flutter/private/android.bzl (see docs_internal/" +
              "compilation-mode-pinning.md) if this is genuinely needed.").format(name),
         )
 

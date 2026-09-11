@@ -1,3 +1,10 @@
+"""Implementation of the Flutter rules.
+
+Nothing here is supported API. Consumer Modules load //flutter:defs.bzl and
+//flutter:extensions.bzl; these files are exported only because generated
+repositories and the ruleset's own CI guards name them by label.
+"""
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
@@ -7,7 +14,7 @@ exports_files([
     "merge_native_assets.py",
     "read_pubspec.py",
     "repo.bzl",
-    "defs.bzl",
+    "rules.bzl",
     "android.bzl",
     "plugins.bzl",
     "ndk.bzl",

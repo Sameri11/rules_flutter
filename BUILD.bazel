@@ -1,5 +1,9 @@
+# The root package is inside the Ruleset Module, not a consumer: it asserts an
+# implementation helper below, which is the only reason it reaches into
+# //flutter/private.
+# buildifier: disable=bzl-visibility
+load("//flutter/private:android.bzl", "flutter_assets_dir")
 load("//tools/ci:assertions.bzl", "expect_equal")
-load("//tools/flutter:android.bzl", "flutter_assets_dir")
 
 # The root package exists so //tools/format:buildifier_test has a label in it to
 # locate the tree it should check. Nothing reads MODULE.bazel's contents through
