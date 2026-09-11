@@ -1,12 +1,12 @@
 """Rules for the Android half of a Flutter build.
 
-Half 2 of the decomposition in defs.bzl: taking `libapp.so`, the engine, the
+Half 2 of the decomposition in rules.bzl: taking `libapp.so`, the engine, the
 plugin libraries and the asset bundle and getting them into an APK. Everything
 here is Android-specific -- the jar-on-the-classpath mechanism `android_binary`
 uses to pick up native libraries, the NDK strip, and the guard that ties the
 asset bundle's code assets to the libraries a recipe supplied.
 
-Kept apart from defs.bzl so a consumer building for another platform does not
+Kept apart from rules.bzl so a consumer building for another platform does not
 load Android rules to get `dart_kernel`. The cc toolchain dependency lives
 entirely on this side.
 """

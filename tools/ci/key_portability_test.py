@@ -181,7 +181,7 @@ class Checker:
             return
         function = _function(tree, "_dart_kernel_impl")
         if function is None:
-            self.fail("C", "defs.bzl must define _dart_kernel_impl")
+            self.fail("C", "{} must define _dart_kernel_impl".format(FILES["defs"]))
             return
 
         package_add = False
@@ -256,7 +256,7 @@ class Checker:
             return
         function = _function(tree, "_flutter_assets_impl")
         if function is None:
-            self.fail("D", "defs.bzl must define _flutter_assets_impl")
+            self.fail("D", "{} must define _flutter_assets_impl".format(FILES["defs"]))
             return
 
         stage = _named_value(function, "stage_manifest_files")
