@@ -2,7 +2,7 @@ module(
     name = "sameri11_rules_flutter",
 )
 
-flutter = use_extension("//tools/flutter:repo.bzl", "flutter")
+flutter = use_extension("//flutter/private:repo.bzl", "flutter")
 use_repo(
     flutter,
     "flutter_embedding_debug",
@@ -21,7 +21,7 @@ bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = Tr
 # For build_test, which is what makes the guard rules runnable under
 # `bazel test`. The guards fail as *actions*, which is stronger than a test --
 # anything depending on them fails too -- so they are wrapped rather than
-# converted. Not a dev_dependency: //tools/flutter:defs.bzl loads it, so it has
+# converted. Not a dev_dependency: //flutter/private:rules.bzl loads it, so it has
 # to be visible to every consumer of the rules, which also means no consumer
 # declares it for this purpose themselves.
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
@@ -50,7 +50,7 @@ bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 
 # Explicit rather than inherited: the native cc rules were removed from Bazel,
-# so `rules_cc` has to be visible to this module for //tools/flutter:android.bzl
+# so `rules_cc` has to be visible to this module for //flutter/private:android.bzl
 # to load find_cc_toolchain.bzl -- which is how the strip rules reach the NDK's
 # llvm-strip instead of hardcoding a path. Only the Android half needs it.
 bazel_dep(name = "rules_cc", version = "0.2.17")
@@ -63,7 +63,7 @@ bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 
 # Wrapped rather than used directly, so an absent NDK yields a toolchain-less
-# stub instead of a failed fetch. See //tools/flutter:ndk.bzl.
+# stub instead of a failed fetch. See //flutter/private:ndk.bzl.
 # `platforms` is declared for the Android NDK toolchain's platform constraints.
 bazel_dep(name = "platforms", version = "1.0.0")
 

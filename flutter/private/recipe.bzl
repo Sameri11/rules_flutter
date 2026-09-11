@@ -3,7 +3,7 @@
 A *recipe* is a Starlark macro, written in the consuming project, that builds one
 pub package the generated rules cannot describe -- a package whose native half is
 downloaded rather than compiled, or that ships a Dart build hook instead of an
-Android module. `//tools/flutter:plugins.bzl` generates a BUILD file that loads
+Android module. `//flutter/private:plugins.bzl` generates a BUILD file that loads
 the macro by canonical label and calls it; everything the macro then does happens
 in the *user's* repo mapping, so a recipe can use rulesets this module has never
 heard of. See docs_internal/package-recipes.md.

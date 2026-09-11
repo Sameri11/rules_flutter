@@ -964,7 +964,7 @@ architecture. The manifests are merged and everything else is compared, so a
 bundle that started varying by architecture fails here rather than shipping.""",
         ),
         "_android_sdk": attr.label(
-            default = "//tools/flutter:_android_sdk_marker",
+            default = "//flutter/private:_android_sdk_marker",
             allow_single_file = True,
             cfg = "exec",
         ),
@@ -973,7 +973,7 @@ bundle that started varying by architecture fails here rather than shipping.""",
             allow_single_file = True,
         ),
         "_merger": attr.label(
-            default = "//tools/flutter:merge_native_assets.py",
+            default = "//flutter/private:merge_native_assets.py",
             allow_single_file = True,
         ),
         "_mode": attr.label(
@@ -1026,7 +1026,7 @@ target from CI, or wire it into a test suite, before enabling a shared cache."""
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
         "path_deps": attr.label_list(allow_files = True),
         "_checker": attr.label(
-            default = "//tools/flutter:check_path_deps.py",
+            default = "//flutter/private:check_path_deps.py",
             allow_single_file = True,
         ),
     },

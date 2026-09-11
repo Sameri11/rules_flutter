@@ -70,7 +70,7 @@ _flutter_pubspec = rule(
             doc = "The app's pubspec.yaml.",
         ),
         "_reader": attr.label(
-            default = "//tools/flutter:read_pubspec.py",
+            default = "//flutter/private:read_pubspec.py",
             allow_single_file = True,
         ),
     },
@@ -92,7 +92,7 @@ def flutter_pubspec(name = "pubspec", src = "pubspec.yaml", **kwargs):
 
     The defaults live here rather than on the rule's attribute deliberately. A
     label default on a rule resolves in the package that *defines* the rule, so
-    `src = "pubspec.yaml"` there means `//tools/flutter:pubspec.yaml` for every
+    `src = "pubspec.yaml"` there means `//flutter/private:pubspec.yaml` for every
     consumer. A macro expands in the caller's package, where the same string
     means what a reader expects.
 

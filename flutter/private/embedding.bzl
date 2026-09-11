@@ -11,7 +11,7 @@ against the embedding too, and the plugin repository rule must not depend on the
 layout of whichever app is being built.
 
 **Coordinates, not labels, are the source of truth.** They are read by
-//tools/flutter:plugins.bzl, merged with every plugin's Maven dependencies, and
+//flutter/private:plugins.bzl, merged with every plugin's Maven dependencies, and
 emitted as a single maven.install in the generated plugin_deps.MODULE.bazel.
 MODULE.bazel declares no artifacts of its own: two install tags sharing a
 repository name merge into one resolution, and whichever came last won
