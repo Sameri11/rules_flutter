@@ -165,7 +165,7 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
@@ -395,7 +395,7 @@ proxy and import, then add the plugin extension and generated segment:
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 use_repo(maven, "flutter_maven")
 
-plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a", "x86_64"],
     metadata = "//:.flutter-plugins-dependencies",
@@ -617,14 +617,14 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 use_repo(maven, "flutter_maven")
 
-plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//packages/host_app/android/app:flutter_embedding",
