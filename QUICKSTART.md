@@ -56,6 +56,11 @@ selected with `--@rules_flutter//flutter:mode=debug`; there is no profile mode.
 AOT is release-only. Supported Android ABIs are `arm64-v8a`, `x86_64`, and
 `armeabi-v7a`; `x86`, `x86_32`, and `riscv64` are unsupported Android CPUs.
 
+The rules request `minSdkVersion` 21, the level a plugin's CMake half also
+compiles against, and `targetSdkVersion` 36. `rules_android` applies its own
+min-SDK floor during resource processing, so the shipped APK declares 23 today.
+The Android SDK pin above is the compile SDK, not the minimum supported device.
+
 Supported plugin inputs include pub plugins with Java/Kotlin Android halves,
 pub plugins with CMake-built native halves, local path plugins in a monorepo,
 consumer-written Package Recipes, and Dart build-hook packages surfaced through
