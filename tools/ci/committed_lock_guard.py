@@ -67,7 +67,7 @@ def _selftest():
     clean = json.dumps(
         {
             "moduleExtensions": {
-                "//tools/flutter:ndk.bzl%android_ndk": {
+                "//flutter:extensions.bzl%android_ndk": {
                     "general": {
                         "recordedInputs": [
                             "REPO_MAPPING:sameri11_rules_flutter+,rules_android_ndk rules_android_ndk+",
