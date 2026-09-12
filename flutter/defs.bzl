@@ -1,9 +1,8 @@
-"""The supported BUILD-file API for Flutter Consumer Modules.
+"""Supported BUILD-file API for Flutter Consumer Modules.
 
-Consumer BUILD files load this one entrypoint rather than implementation-oriented
-packages under ``//tools/flutter``. The implementation delegation is temporary:
-the public names below are the complete contract exercised by the consumer API
-fixture and can move without another consumer migration.
+Consumer BUILD files load this entrypoint, not ``//tools/flutter``. These
+exports are the complete consumer contract; implementation may move without a
+consumer migration.
 """
 
 load("//tools/flutter:abis.bzl", _ABIS = "ABIS")
@@ -35,8 +34,7 @@ load(
     _flutter_native_libs = "flutter_native_libs",
 )
 
-# Explicit assignments make the curated names exports of this module. Merely
-# importing names with load() does not re-export them to downstream BUILD files.
+# Assigning these names re-exports them to downstream BUILD files.
 ABIS = _ABIS
 android_native_lib_jar = _android_native_lib_jar
 dart_kernel = _dart_kernel

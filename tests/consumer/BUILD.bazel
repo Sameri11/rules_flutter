@@ -1,8 +1,7 @@
-"""The supported BUILD API, with deliberate coverage of macro internals.
+"""Supported BUILD API, including macro-internal coverage.
 
-All supported symbols load from @rules_flutter//flutter:defs.bzl. The specialist
-loads below exercise helpers that consumers do not write and are excluded from
-the supported API.
+Public symbols load from @rules_flutter//flutter:defs.bzl. Specialist loads
+cover private helpers, not Consumer Module API.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
@@ -38,9 +37,7 @@ load(
     "flutter_bundle_contribution",
 )
 
-#
-# These specialist loads are deliberate macro-internal coverage only. Their
-# symbols are not part of the supported Consumer Module API.
+# Macro-internal coverage only; not Consumer Module API.
 load("@rules_flutter//tools/flutter:defs.bzl", "dart_aot_elf")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":assertions.bzl", "expect_equal", "expect_label_equal")
