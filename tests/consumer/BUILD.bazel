@@ -1,28 +1,43 @@
 """The supported BUILD API for a Consumer Module.
 
-All supported symbols load from @rules_flutter//flutter:defs.bzl. Internal
-implementation helpers are exercised indirectly through the supported macros.
+Supported symbols load from @rules_flutter//flutter:defs.bzl. The rules those
+macros compose are not supported API; the loads below name them through
+@rules_flutter//flutter/private so this fixture keeps its load-and-analysis
+coverage of them without implying a consumer may do the same.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load(
     "@rules_flutter//flutter:defs.bzl",
-    "ABIS",
     "android_native_lib_jar",
-    "dart_kernel",
     "flutter_android_binary",
-    "flutter_android_libs",
     "flutter_aot_library",
     "flutter_assets",
     "flutter_embedding_library",
     "flutter_native_contribution",
     "flutter_native_libs",
     "flutter_pubspec",
-    "jni_lib_jar",
     "pub_path_deps_check",
     "pub_plugins_check",
+)
+
+# Internal coverage: composed by the macros above and deliberately absent from
+# defs.bzl. Reaching into //flutter/private is exactly what a real Consumer
+# Module must not do, so the warning is correct and suppressed only here, in
+# the fixture whose job is to notice when these rules' attributes change.
+# buildifier: disable=bzl-visibility
+load("@rules_flutter//flutter/private:abis.bzl", "ABIS")
+
+# buildifier: disable=bzl-visibility
+load(
+    "@rules_flutter//flutter/private:android.bzl",
+    "flutter_android_libs",
+    "jni_lib_jar",
     "strip_native_libs",
 )
+
+# buildifier: disable=bzl-visibility
+load("@rules_flutter//flutter/private:rules.bzl", "dart_kernel")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":assertions.bzl", "expect_equal", "expect_label_equal")
 
