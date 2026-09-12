@@ -1,6 +1,6 @@
 # rules_flutter consumer quickstart
 
-Status: community-maintained development preview, Android-only. Not affiliated
+Status: Community-maintained, Android-only development preview; not affiliated
 with, endorsed by, or supported by Google or the Flutter project.
 
 Bazel rules that build a Flutter application's Dart and Android halves as ordinary
@@ -38,11 +38,11 @@ Targets are Android-only—iOS, web, and desktop packaging are absent, with no
 dedicated diagnostic; see the [README](README.md) for the full limitations and
 support boundaries.
 
-### Versions and local tools
+### CI-tested versions and local tools
 
-The supported, verified toolchain is:
+CI currently tests:
 
-| Tool | Required version or setup | Why it is load-bearing |
+| Tool | Tested version or setup | Why it is load-bearing |
 | --- | --- | --- |
 | Flutter SDK | Flutter **3.44.2** / Dart **3.12.2**; locate it with `FLUTTER_ROOT` or `flutter` on `PATH` | The rules invoke this SDK's frontend server, `gen_snapshot`, and bundle tooling; the SDK is not downloaded. |
 | Bazel | **9.2.0**, Bzlmod only; no `WORKSPACE` path | The module extension and generated repositories use Bzlmod. |
@@ -50,11 +50,15 @@ The supported, verified toolchain is:
 | Android SDK | API level **36** and build-tools **36.0.0**, configured by the consumer module; set `ANDROID_HOME` | `rules_android` discovers Android build tools and `aapt2` through the consumer's SDK. |
 | Android NDK | **28 or newer** with `ANDROID_NDK_HOME` set | The ruleset enforces revision 28+ because its native build must support 16 KB-page Android devices; the NDK wrapper rejects lower revisions, and this is not a device-compatibility guarantee. |
 
-Only the Dart toolchain bundled with the Flutter SDK is supported; a standalone
-Dart SDK is not supported. Build modes are `release` (default) and `debug`,
-selected with `--@rules_flutter//flutter:mode=debug`; there is no profile mode.
-AOT is release-only. Supported Android ABIs are `arm64-v8a`, `x86_64`, and
-`armeabi-v7a`; `x86`, `x86_32`, and `riscv64` are unsupported Android CPUs.
+Other versions may work, but are unverified; add a configuration after it passes
+CI.
+
+The rules use Flutter's bundled Dart toolchain; a standalone Dart SDK is not
+selected. Build modes are `release` (default) and `debug`, selected with
+`--@rules_flutter//flutter:mode=debug`; there is no profile mode.
+AOT is release-only. Supported Android ABIs: `arm64-v8a`, `x86_64`, and
+`armeabi-v7a`. 32-bit `x86` (`@platforms//cpu:x86_32`), `riscv64`, and other
+ABI values are unsupported.
 
 The rules request `minSdkVersion` 21, the level a plugin's CMake half also
 compiles against, and `targetSdkVersion` 36. `rules_android` applies its own
@@ -64,9 +68,9 @@ The Android SDK pin above is the compile SDK, not the minimum supported device.
 Supported plugin inputs include pub plugins with Java/Kotlin Android halves,
 pub plugins with CMake-built native halves, local path plugins in a monorepo,
 consumer-written Package Recipes, and Dart build-hook packages surfaced through
-a recipe (native assets). `ndk-build` plugins and prebuilt-JNI plugin shapes are
-unsupported; if a plugin's Maven coordinates cannot be read statically, declare
-them with `plugins.package(artifacts = ...)`.
+recipes. The automatic graph does not support `ndk-build` or prebuilt-JNI
+plugins; use a Package Recipe. For unreadable Maven coordinates, declare
+`plugins.package(artifacts = ...)`.
 
 Either set `FLUTTER_ROOT` or put `flutter` on `PATH`; set the Android locations
 before building an APK:
@@ -101,7 +105,7 @@ The `path = "../.."` spelling in the in-repository fixtures is specific to their
 location two levels below this checkout. An outside sibling consumer normally
 uses `path = "../rules_flutter"`; change the path only to match your layout.
 
-Pin Bazel with `.bazelversion`:
+Start with the CI-tested Bazel version in `.bazelversion`:
 
 ```
 9.2.0

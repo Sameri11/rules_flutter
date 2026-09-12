@@ -4,7 +4,7 @@
 
 Bazel rules that build a Flutter application's Dart and Android halves as ordinary Bazel targets: `frontend_server` and `gen_snapshot` compile the Dart half, and `rules_android` packages the Android half.
 
-Status: community-maintained development preview, Android-only. Not affiliated with, endorsed by, or supported by Google or the Flutter project.
+Status: Community-maintained, Android-only development preview; not affiliated with, endorsed by, or supported by Google or the Flutter project.
 
 ## Why rules_flutter?
 
@@ -18,15 +18,20 @@ flutter_assets ─────────────────────�
        \________ Dart compilation ________/    \__ Android packaging __/
 ```
 
-### Supported and verified
+### CI-tested toolchains
 
-- Flutter 3.44.2 / Dart 3.12.2, using the Dart toolchain bundled with that Flutter SDK; standalone Dart SDKs are not supported.
-- Bazel 9.2.0 with bzlmod only; there is no WORKSPACE path.
-- Tested hosts are macOS 15 arm64 and Ubuntu Linux x64; the CI setup action rejects other hosts.
+CI currently tests the configurations below. Other versions may work, but are
+not verified; add a configuration here after it passes CI.
+
+- Flutter 3.44.2 / Dart 3.12.2, using Flutter's bundled Dart toolchain.
+- Bazel 9.2.0 with Bzlmod; no WORKSPACE path is implemented.
+- macOS 15 arm64 and Ubuntu Linux x64; the CI setup action rejects other hosts.
+
+### Supported behavior
 - Android release (the default) and debug builds (`--@rules_flutter//flutter:mode=debug`) are supported; there is no profile mode, and AOT is release-only.
-- Supported Android ABIs are `arm64-v8a`, `x86_64`, and `armeabi-v7a`; `x86` is absent, and `x86_32` and `riscv64` are unsupported Android CPUs.
+- Supported Android ABIs: `arm64-v8a`, `x86_64`, and `armeabi-v7a`. 32-bit `x86` (`@platforms//cpu:x86_32`), `riscv64`, and other ABI values are unsupported.
 - The rules request `minSdkVersion` 21 (the same level a plugin's CMake half compiles against) and `targetSdkVersion` 36, but `rules_android` applies its own min-SDK floor during resource processing, so the shipped APK declares 23 today. The consumer's Android SDK pin (36 in the examples) is the compile SDK, not the minimum supported device.
-- Proven plugin shapes are pub plugins with Java/Kotlin Android halves, pub plugins with CMake-built native halves, local path plugins in a monorepo layout, consumer-written Package Recipes, and Dart build-hook packages surfaced through a recipe (native assets). `ndk-build` plugins and prebuilt-JNI plugin shapes are not supported. A plugin whose Maven coordinates cannot be read statically works only when the consumer declares them with `plugins.package(artifacts = ...)`.
+- Proven plugin shapes are pub plugins with Java/Kotlin Android halves, pub plugins with CMake-built native halves, local path plugins in a monorepo, consumer-written Package Recipes, and Dart build-hook packages surfaced through recipes. The automatic graph does not support `ndk-build` or prebuilt-JNI plugins; use a Package Recipe. Plugins whose Maven coordinates cannot be read statically require `plugins.package(artifacts = ...)`.
 - A real arm64 APK has been built, installed, and launched on an API 35 emulator.
 - Every example module builds on CI, and all seven APK shapes they declare are compared byte-for-byte against a recorded per-host table (`tools/ci/example_hashes.py`). This proves identical bytes for the same host and the same pinned SDK, not cross-machine reproducibility.
 
@@ -35,7 +40,7 @@ flutter_assets ─────────────────────�
 These are the hard constraints; [Current constraints](#current-constraints) has the
 detail behind each one.
 
-- Local Flutter 3.44.2/Dart 3.12.2, an Android SDK, and Android NDK 28+ are required and are not hermetic: use `FLUTTER_ROOT` or `flutter` on `PATH`, `ANDROID_HOME`, and `ANDROID_NDK_HOME`. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a no-toolchains stub and the build fails only when a target needs an Android toolchain. The examples pin SDK platform 36 and build-tools 36.0.0; the consumer module chooses its own.
+- A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not hermetic: use `FLUTTER_ROOT` or `flutter` on `PATH`, `ANDROID_HOME`, and `ANDROID_NDK_HOME`. CI uses Flutter 3.44.2/Dart 3.12.2. The examples pin SDK platform 36 and build-tools 36.0.0; the consumer module chooses its own. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a no-toolchains stub and the build fails only when a target needs an Android toolchain.
 - Dart and asset actions run unsandboxed with remote execution disabled because they read the local Flutter SDK and `~/.pub-cache` by absolute path.
 - Hosted pub dependencies are keyed by `pubspec.lock`, path dependencies are not hashed and go stale unless the consumer declares their sources, `.dart_tool` state is a bootstrap prerequisite rather than a tracked input, and Dart compilation is not incremental.
 - Bazel emits an unsigned APK; release signing happens outside Bazel, and custom release signing inside Bazel is not supported.
@@ -57,7 +62,7 @@ monorepos, and consumer recipes/native assets, see the
 
 ### Prerequisites
 
-Install Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 with bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The rules pin their own JDK 17 toolchain.
+Start with the CI-tested Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 with Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The rules pin their own JDK 17 toolchain.
 
 Without `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed. A consumer module must explicitly register NDK toolchains in its `MODULE.bazel` and inherit the stable repositories from `rules_flutter`'s NDK extension. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a stub declaring no toolchains; the failure surfaces only when a target needs an Android toolchain.
 
