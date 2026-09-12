@@ -15,6 +15,8 @@ there is no `gen_snapshot` to pair with an x86 library however many a package
 publishes.
 """
 
+visibility(["//flutter"])
+
 MODES = ["release", "debug"]
 
 # Modes that require gen_snapshot.

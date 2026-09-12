@@ -22,6 +22,8 @@ Two things this deliberately does not do:
     that assembles plus a rule that checks.
 """
 
+visibility(["//flutter"])
+
 # Where a contribution's files land -- named for the destination, not for the
 # contribution, so a platform putting two in the same place says so.
 #

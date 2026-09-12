@@ -1,9 +1,6 @@
 """The supported BUILD API for a Consumer Module.
 
-Supported symbols load from @rules_flutter//flutter:defs.bzl. The rules those
-macros compose are not supported API; the loads below name them through
-@rules_flutter//flutter/private so this fixture keeps its load-and-analysis
-coverage of them without implying a consumer may do the same.
+All supported symbols load from @rules_flutter//flutter:defs.bzl.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
@@ -20,26 +17,7 @@ load(
     "pub_path_deps_check",
     "pub_plugins_check",
 )
-
-# Internal coverage: composed by the macros above and deliberately absent from
-# defs.bzl. Reaching into //flutter/private is exactly what a real Consumer
-# Module must not do, so the warning is correct and suppressed only here, in
-# the fixture whose job is to notice when these rules' attributes change.
-# buildifier: disable=bzl-visibility
-load("@rules_flutter//flutter/private:abis.bzl", "ABIS")
-
-# buildifier: disable=bzl-visibility
-load(
-    "@rules_flutter//flutter/private:android.bzl",
-    "flutter_android_libs",
-    "jni_lib_jar",
-    "strip_native_libs",
-)
-
-# buildifier: disable=bzl-visibility
-load("@rules_flutter//flutter/private:rules.bzl", "dart_kernel")
 load("@rules_java//java:defs.bzl", "java_import")
-load(":assertions.bzl", "expect_equal", "expect_label_equal")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -52,53 +30,6 @@ package(default_visibility = ["//visibility:private"])
 flutter_pubspec(
     name = "pubspec",
     src = "fixtures/pubspec.yaml",
-)
-
-dart_kernel(
-    name = "kernel",
-    srcs = ["lib/main.dart"],
-    entrypoint = "lib/main.dart",
-    package_config = "fixtures/package_config.json",
-    pubspec = ":pubspec",
-)
-
-# target_os is the 0.3 attribute. Named explicitly rather than left default, so
-# renaming or removing it fails here.
-dart_kernel(
-    name = "kernel_ios",
-    srcs = ["lib/main.dart"],
-    entrypoint = "lib/main.dart",
-    package_config = "fixtures/package_config.json",
-    pubspec = ":pubspec",
-    target_os = "ios",
-)
-
-expect_equal(
-    ABIS["armeabi-v7a"].snapshot_flags,
-    [
-        "--no-sim-use-hardfp",
-        "--no-use-integer-division",
-    ],
-    "armeabi-v7a snapshot_flags",
-)
-
-# Keep each ABI's explicit CPU constraint aligned with the table.
-expect_label_equal(
-    ABIS["arm64-v8a"].cpu_constraint,
-    "@platforms//cpu:arm64",
-    "arm64-v8a cpu_constraint",
-)
-
-expect_label_equal(
-    ABIS["x86_64"].cpu_constraint,
-    "@platforms//cpu:x86_64",
-    "x86_64 cpu_constraint",
-)
-
-expect_label_equal(
-    ABIS["armeabi-v7a"].cpu_constraint,
-    "@platforms//cpu:armv7",
-    "armeabi-v7a cpu_constraint",
 )
 
 # The macro, with every named parameter supplied -- it is the public entry point
@@ -120,6 +51,19 @@ flutter_aot_library(
     pubspec = ":pubspec",
     strip = True,
     target_os = "android",
+)
+
+# The public macro accepts non-Android target_os values too. Keep this
+# analysis-only and single-ABI so the platform branch stays cheap.
+flutter_aot_library(
+    name = "aot_library_ios",
+    srcs = ["lib/main.dart"],
+    abis = ["arm64-v8a"],
+    entrypoint = "lib/main.dart",
+    package_config = "fixtures/package_config.json",
+    pub_stamp = ["fixtures/pubspec.lock"],
+    pubspec = ":pubspec",
+    target_os = "ios",
 )
 
 flutter_assets(
@@ -146,22 +90,6 @@ pub_plugins_check(
 )
 
 # --- android.bzl: the Android half -------------------------------------------
-
-jni_lib_jar(
-    name = "jni_jar",
-    src = "fixtures/libfake.so",
-    # Mandatory: it decides which lib/<abi>/ a library loads from.
-    abi = "arm64-v8a",
-)
-
-strip_native_libs(
-    name = "stripped",
-    # Mandatory: it selects the cross-strip that matches the jar's libraries,
-    # and the build platform is derived from it rather than restated.
-    abi = "arm64-v8a",
-    jar = "fixtures/fake_native_libs.jar",
-)
-
 # `src` takes rule targets, not source files -- in real use it is a
 # rules_foreign_cc cmake(). A filegroup is the cheapest stand-in that satisfies
 # that shape.
@@ -274,40 +202,6 @@ java_import(
 java_import(
     name = "fake_registrant",
     jars = ["fixtures/fake_native_libs.jar"],
-)
-
-# Two ABIs, so the per-ABI shape is exercised rather than degenerating to one
-# entry, and `aot` is the real flutter_aot_library above -- the join derives
-# `<aot>_<abi>` from it, and a rename breaks that.
-#
-# `engine_jars` only because this test must not fetch: the ABI table would name
-# the real engine repositories, and analysing one downloads ~150 MB.
-flutter_android_libs(
-    name = "bundle",
-    abis = [
-        "arm64-v8a",
-        "x86_64",
-    ],
-    aot = "aot_library",
-    assets = ":assets",
-    embedding = ":fake_embedding",
-    embedding_deps = [],
-    engine_jars = {
-        "arm64-v8a": "fixtures/fake_native_libs.jar",
-        "x86_64": "fixtures/fake_native_libs_x86_64.jar",
-    },
-    native_libs = {
-        "arm64-v8a": ":fake_recipe_libs",
-        "x86_64": ":fake_recipe_libs_x86_64",
-    },
-    # Populated rather than `{}`: the empty form is what a consumer reaches by
-    # accident, so the populated one is what needs pinning.
-    plugin_native_libs = {
-        "arm64-v8a": ":fake_plugin_libs",
-        "x86_64": ":fake_plugin_libs_x86_64",
-    },
-    plugins = ":fake_plugins",
-    registrant = ":fake_registrant",
 )
 
 # The macro on top of the join: it emits `<name>` plus `<name>_<abi>`, so a

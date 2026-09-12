@@ -13,7 +13,7 @@
 # release build -- dropping the `aot_library` contribution while
 # `flutter_bundle_check`'s own `_mode` (a rule attribute, resolved against
 # `@rules_flutter` regardless of this decoy) still expects it, and every
-# `:apk*`/`:bundle` target's bundle check in this module fails loudly.
+# `:apk*` target's bundle check in this module fails loudly.
 package(default_visibility = ["//visibility:public"])
 
 config_setting(

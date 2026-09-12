@@ -44,6 +44,14 @@ load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIV
 load(":embedding.bzl", "flutter_embedding_deps")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 
+# `//flutter` holds the public facades. `//` is the repository root package,
+# which asserts `flutter_assets_dir` there because the root is the one package
+# with no path separator and the helper is deliberately not public API.
+visibility([
+    "//",
+    "//flutter",
+])
+
 _MODE_DEBUG = Label("//flutter:mode_debug")
 _MODE_RELEASE = Label("//flutter:mode_release")
 

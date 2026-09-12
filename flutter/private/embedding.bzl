@@ -23,6 +23,8 @@ load("@rules_java//java:defs.bzl", "java_import")
 load(":abis.bzl", "embedding_repo")
 load(":maven.bzl", "maven_label")
 
+visibility(["//flutter"])
+
 _MODE_DEBUG = Label("//flutter:mode_debug")
 _MODE_RELEASE = Label("//flutter:mode_release")
 
