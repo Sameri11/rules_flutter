@@ -15,6 +15,8 @@ invalidate the kernel -- Bazel keys an action on the content of its inputs, and
 the package-name file is unchanged.
 """
 
+visibility(["//flutter"])
+
 FlutterPubspecInfo = provider(
     doc = "Facts read out of an app's pubspec.yaml.",
     fields = {

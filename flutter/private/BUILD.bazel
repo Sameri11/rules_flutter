@@ -1,24 +1,79 @@
 """Implementation of the Flutter rules.
 
-Nothing here is supported API. Consumer Modules load //flutter:defs.bzl and
-//flutter:extensions.bzl; these files are exported only because generated
-repositories and the ruleset's own CI guards name them by label.
+Nothing here is supported API: Consumer Modules load //flutter:defs.bzl and
+//flutter:extensions.bzl, and every `.bzl` beside this file declares
+`visibility(["//flutter"])` so Bazel rejects any other load, in this repository
+or a consumer's. Two mechanical exceptions need a label, and only those:
+
+  * The Python helpers are attribute defaults of rules defined here. Bazel
+    resolves an implicit dependency against the package of the `.bzl` that
+    defines the rule, so `//flutter:__subpackages__` is enough even though the
+    rules are instantiated in another module's packages.
+  * The five `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
+    That guard parses their source for action-key portability contracts, which
+    requires a label, not a load.
+
+`repo.bzl` carries no `visibility()` declaration: tests/consumer's
+`android/config.MODULE.bazel` uses its module extension directly, which is that
+fixture's only coverage of the explicit embedding debug and release labels.
 """
 
-package(default_visibility = ["//visibility:public"])
+load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
+load(":abis.bzl", "ABIS")
 
-exports_files([
-    "check_path_deps.py",
-    "check_native_assets.py",
-    "inject_version.py",
-    "merge_native_assets.py",
-    "read_pubspec.py",
-    "repo.bzl",
-    "rules.bzl",
-    "android.bzl",
-    "plugins.bzl",
-    "ndk.bzl",
-])
+package(default_visibility = ["//visibility:private"])
+
+exports_files(
+    [
+        "check_path_deps.py",
+        "check_native_assets.py",
+        "inject_version.py",
+        "merge_native_assets.py",
+        "read_pubspec.py",
+    ],
+    visibility = ["//flutter:__subpackages__"],
+)
+
+exports_files(
+    [
+        "android.bzl",
+        "ndk.bzl",
+        "plugins.bzl",
+        "repo.bzl",
+        "rules.bzl",
+    ],
+    visibility = ["//tools/ci:__pkg__"],
+)
+
+# The ABI table is implementation, so these assertions live beside it rather
+# than in the Consumer Module fixture: a wrong snapshot flag or CPU constraint
+# mislabels a platform, and nothing else in the build would notice.
+expect_equal(
+    ABIS["armeabi-v7a"].snapshot_flags,
+    [
+        "--no-sim-use-hardfp",
+        "--no-use-integer-division",
+    ],
+    "armeabi-v7a snapshot_flags",
+)
+
+expect_label_equal(
+    ABIS["arm64-v8a"].cpu_constraint,
+    "@platforms//cpu:arm64",
+    "arm64-v8a cpu_constraint",
+)
+
+expect_label_equal(
+    ABIS["x86_64"].cpu_constraint,
+    "@platforms//cpu:x86_64",
+    "x86_64 cpu_constraint",
+)
+
+expect_label_equal(
+    ABIS["armeabi-v7a"].cpu_constraint,
+    "@platforms//cpu:armv7",
+    "armeabi-v7a cpu_constraint",
+)
 
 # Excluded from wildcard checks because resolving it requires @androidsdk.
 alias(

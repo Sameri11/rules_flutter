@@ -15,6 +15,8 @@ load(":abis.bzl", "MIN_SDK", "check_abis", "plugin_repo_target")
 load(":embedding.bzl", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
+visibility(["//flutter"])
+
 # Plugin reason codes. Ungated plugins build from source.
 #
 #   external_native_build  CMake/ndk-build configuration.

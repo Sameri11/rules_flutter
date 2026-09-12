@@ -28,6 +28,8 @@ load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
+visibility(["//flutter"])
+
 # Release actions may be shared through a remote cache.
 #
 # no-sandbox:     package_config.json reaches into ~/.pub-cache, which is not a

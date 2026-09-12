@@ -42,6 +42,8 @@ library.
 
 load(":archive.bzl", "ZIPPER_ATTRS", "deterministic_jar")
 
+visibility(["//flutter"])
+
 # `dart_kernel`'s `target_os` names, not a second vocabulary. The list grows
 # with the platform table; macOS is absent until there is something to build for
 # it, and is named separately rather than folded into an `apple` -- flutter_tools

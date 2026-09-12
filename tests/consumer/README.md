@@ -63,11 +63,11 @@ Loading and analysis — `--nobuild` — of every supported BUILD symbol through
 
 | entry point | symbols |
 | --- | --- |
-| `defs.bzl` | `ABIS`, `dart_kernel`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check`, `flutter_app`, `jni_lib_jar`, `android_native_lib_jar`, `strip_native_libs`, `flutter_android_libs`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `flutter_native_libs`, `flutter_pubspec` |
+| `defs.bzl` | `flutter_app`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs`, `flutter_pubspec`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
 | `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`) over a real, checked-in external plugin graph — `:fake_plugin_deps_check`, `:fake_plugin_test` |
 
-Implementation-only rules and helpers are covered indirectly by these supported
-macros; this Consumer Module does not load specialist implementation files.
+Remaining implementation rules and helpers are covered indirectly by the
+supported macros; the Consumer BUILD file loads no private implementation file.
 
 That catches the two things a refactor of these rules actually breaks: a symbol
 moving between files (load phase) and an attribute renamed, removed or made
