@@ -6,7 +6,7 @@ load("@bazel_skylib//rules:build_test.bzl", "build_test")
 # comparison that stops a Flutter macro's new shape escaping the hash gate.
 #
 # A genrule rather than a py_test because this repository does not depend on
-# rules_python and Bazel 9 has no native py_binary (tools/flutter/defs.bzl).
+# rules_python and Bazel 9 has no native py_binary (flutter/private/rules.bzl).
 # `python3` is taken from the environment, which is the same assumption the
 # packaging genrules in tests/consumer make of `unzip` and `cmp`.
 genrule(
@@ -43,11 +43,11 @@ genrule(
     name = "key_portability_check",
     srcs = [
         "key_portability_test.py",
-        "//tools/flutter:repo.bzl",
-        "//tools/flutter:defs.bzl",
-        "//tools/flutter:android.bzl",
-        "//tools/flutter:plugins.bzl",
-        "//tools/flutter:ndk.bzl",
+        "//flutter/private:repo.bzl",
+        "//flutter/private:rules.bzl",
+        "//flutter/private:android.bzl",
+        "//flutter/private:plugins.bzl",
+        "//flutter/private:ndk.bzl",
     ],
     outs = ["key_portability_check.checked"],
     cmd = """set -euo pipefail

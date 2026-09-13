@@ -9,11 +9,11 @@ from pathlib import Path
 
 
 FILES = {
-    "repo": "tools/flutter/repo.bzl",
-    "defs": "tools/flutter/defs.bzl",
-    "android": "tools/flutter/android.bzl",
-    "plugins": "tools/flutter/plugins.bzl",
-    "ndk": "tools/flutter/ndk.bzl",
+    "repo": "flutter/private/repo.bzl",
+    "defs": "flutter/private/rules.bzl",
+    "android": "flutter/private/android.bzl",
+    "plugins": "flutter/private/plugins.bzl",
+    "ndk": "flutter/private/ndk.bzl",
 }
 
 
@@ -181,7 +181,7 @@ class Checker:
             return
         function = _function(tree, "_dart_kernel_impl")
         if function is None:
-            self.fail("C", "defs.bzl must define _dart_kernel_impl")
+            self.fail("C", "{} must define _dart_kernel_impl".format(FILES["defs"]))
             return
 
         package_add = False
@@ -256,7 +256,7 @@ class Checker:
             return
         function = _function(tree, "_flutter_assets_impl")
         if function is None:
-            self.fail("D", "defs.bzl must define _flutter_assets_impl")
+            self.fail("D", "{} must define _flutter_assets_impl".format(FILES["defs"]))
             return
 
         stage = _named_value(function, "stage_manifest_files")
@@ -302,8 +302,8 @@ class Checker:
 
         for target, expected in (
             ("_flutter", "@flutter_sdk//:flutter"),
-            ("_android_sdk", "//tools/flutter:_android_sdk_marker"),
-            ("_merger", "//tools/flutter:merge_native_assets.py"),
+            ("_android_sdk", "//flutter/private:_android_sdk_marker"),
+            ("_merger", "//flutter/private:merge_native_assets.py"),
             ("_sdk_version", "@flutter_sdk//:flutter.version.json"),
         ):
             if not _rule_attr_default(tree, "flutter_assets", target, expected):
@@ -790,7 +790,7 @@ def _action_regions(name, tree):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path("."), help="workspace root containing tools/flutter")
+    parser.add_argument("--root", type=Path, default=Path("."), help="workspace root containing flutter/private")
     args = parser.parse_args(argv)
     failures = Checker(args.root).run()
     if failures:

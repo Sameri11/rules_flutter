@@ -1,4 +1,4 @@
-# Action execution policy lives in tools/flutter/defs.bzl; do not set a global
+# Action execution policy lives in flutter/private/rules.bzl; do not set a global
 # spawn strategy here.
 common --enable_bzlmod
 

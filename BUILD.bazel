@@ -1,3 +1,10 @@
+# The root package is inside the Ruleset Module, not a consumer: it asserts an
+# implementation helper below, which is the only reason it reaches into
+# //flutter/private.
+# buildifier: disable=bzl-visibility
+load("//flutter/private:android.bzl", "flutter_assets_dir")
+load("//tools/ci:assertions.bzl", "expect_equal")
+
 # The root package exists so //tools/format:buildifier_test has a label in it to
 # locate the tree it should check. Nothing reads MODULE.bazel's contents through
 # this export.
@@ -8,3 +15,13 @@
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["MODULE.bazel"])
+
+# Asserted rather than merely called: a silently wrong prefix is the failure
+# this helper exists to prevent, and the root package is the case with no
+# separator. Checked here rather than from a Consumer Module because the
+# supported API deliberately does not export the helper.
+expect_equal(
+    flutter_assets_dir(assets = ":assets"),
+    "assets",
+    "flutter_assets_dir in the root package",
+)

@@ -28,6 +28,8 @@ load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
+visibility(["//flutter"])
+
 # Release actions may be shared through a remote cache.
 #
 # no-sandbox:     package_config.json reaches into ~/.pub-cache, which is not a
@@ -361,9 +363,9 @@ half of the input set that is not declared file-by-file.""",
             allow_files = True,
         ),
         "_mode": attr.label(
-            default = "//tools/flutter:mode",
+            default = "//flutter:mode",
             providers = [BuildSettingInfo],
-            doc = """Build mode, read from //tools/flutter:mode. Governs both
+            doc = """Build mode, read from //flutter:mode. Governs both
 compiler flags and cache policy.
 
 Release output is stripped of absolute paths by gen_snapshot, so it is safe to
@@ -442,7 +444,7 @@ dart_aot_elf = rule(
             executable = True,
             cfg = "exec",
             allow_single_file = True,
-            doc = "The ABI's gen_snapshot; see //tools/flutter:abis.bzl.",
+            doc = "The ABI's gen_snapshot from the ABI table.",
         ),
         "snapshot_flags": attr.string_list(
             doc = """Extra gen_snapshot flags for this ABI.
@@ -459,7 +461,7 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
 
     Produces an AOT-shaped `.dill` and its `libapp.so` per ABI. `dart_kernel`'s
     `--aot`/`--tfa` branch is what gen_snapshot needs; it is selected by the
-    ambient `//tools/flutter:mode`, not pinned here. Under `mode=debug` this
+    ambient `//flutter:mode`, not pinned here. Under `mode=debug` this
     target's kernel compiles without them, so each `dart_aot_elf` here is
     `target_compatible_with` only the modes `AOT_MODES` lists -- an explicit
     debug build, or a `//...` sweep under debug, reports incompatibility
@@ -608,7 +610,7 @@ def flutter_app(
     | `:guards_test` | the guards, under `bazel test` |
 
     `:app_<abi>` and `:assets` compile to their debug shape under
-    `--@rules_flutter//tools/flutter:mode=debug`; see
+    `--@rules_flutter//flutter:mode=debug`; see
     docs_internal/build-modes-plan.md.
 
     The names are fixed rather than derived from a `name` parameter: the Android
@@ -964,7 +966,7 @@ architecture. The manifests are merged and everything else is compared, so a
 bundle that started varying by architecture fails here rather than shipping.""",
         ),
         "_android_sdk": attr.label(
-            default = "//tools/flutter:_android_sdk_marker",
+            default = "//flutter/private:_android_sdk_marker",
             allow_single_file = True,
             cfg = "exec",
         ),
@@ -973,11 +975,11 @@ bundle that started varying by architecture fails here rather than shipping.""",
             allow_single_file = True,
         ),
         "_merger": attr.label(
-            default = "//tools/flutter:merge_native_assets.py",
+            default = "//flutter/private:merge_native_assets.py",
             allow_single_file = True,
         ),
         "_mode": attr.label(
-            default = "//tools/flutter:mode",
+            default = "//flutter:mode",
             providers = [BuildSettingInfo],
             doc = "See dart_kernel._mode. Debug bundles ship kernel_blob.bin.",
         ),
@@ -1026,7 +1028,7 @@ target from CI, or wire it into a test suite, before enabling a shared cache."""
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
         "path_deps": attr.label_list(allow_files = True),
         "_checker": attr.label(
-            default = "//tools/flutter:check_path_deps.py",
+            default = "//flutter/private:check_path_deps.py",
             allow_single_file = True,
         ),
     },

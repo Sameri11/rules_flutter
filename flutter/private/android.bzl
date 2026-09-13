@@ -1,12 +1,12 @@
 """Rules for the Android half of a Flutter build.
 
-Half 2 of the decomposition in defs.bzl: taking `libapp.so`, the engine, the
+Half 2 of the decomposition in rules.bzl: taking `libapp.so`, the engine, the
 plugin libraries and the asset bundle and getting them into an APK. Everything
 here is Android-specific -- the jar-on-the-classpath mechanism `android_binary`
 uses to pick up native libraries, the NDK strip, and the guard that ties the
 asset bundle's code assets to the libraries a recipe supplied.
 
-Kept apart from defs.bzl so a consumer building for another platform does not
+Kept apart from rules.bzl so a consumer building for another platform does not
 load Android rules to get `dart_kernel`. The cc toolchain dependency lives
 entirely on this side.
 """
@@ -44,8 +44,16 @@ load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIV
 load(":embedding.bzl", "flutter_embedding_deps")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 
-_MODE_DEBUG = Label("//tools/flutter:mode_debug")
-_MODE_RELEASE = Label("//tools/flutter:mode_release")
+# `//flutter` holds the public facades. `//` is the repository root package,
+# which asserts `flutter_assets_dir` there because the root is the one package
+# with no path separator and the helper is deliberately not public API.
+visibility([
+    "//",
+    "//flutter",
+])
+
+_MODE_DEBUG = Label("//flutter:mode_debug")
+_MODE_RELEASE = Label("//flutter:mode_release")
 
 def _jni_lib_jar_impl(ctx):
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
@@ -386,7 +394,7 @@ stays readable against the template `flutter create` generated.""",
             doc = "A flutter_pubspec target; supplies both version facts.",
         ),
         "_injector": attr.label(
-            default = "//tools/flutter:inject_version.py",
+            default = "//flutter/private:inject_version.py",
             allow_single_file = True,
         ),
     },
@@ -564,7 +572,7 @@ def _flutter_bundle_check_impl(ctx):
 
 # Pin release builds to `opt`; preserve explicitly non-fastbuild modes.
 def _pin_release_compilation_mode_impl(settings, _attr):
-    mode = settings["//tools/flutter:mode"]
+    mode = settings["//flutter:mode"]
     compilation_mode = str(settings["//command_line_option:compilation_mode"])
     if mode == "release" and compilation_mode == "fastbuild":
         compilation_mode = "opt"
@@ -573,7 +581,7 @@ def _pin_release_compilation_mode_impl(settings, _attr):
 _pin_release_compilation_mode = transition(
     implementation = _pin_release_compilation_mode_impl,
     inputs = [
-        "//tools/flutter:mode",
+        "//flutter:mode",
         "//command_line_option:compilation_mode",
     ],
     outputs = ["//command_line_option:compilation_mode"],
@@ -623,11 +631,11 @@ Deliberately unsplit: `android_binary.assets` is `cfg = "target"`
 APK does not package.""",
         ),
         "_checker": attr.label(
-            default = "//tools/flutter:check_native_assets.py",
+            default = "//flutter/private:check_native_assets.py",
             allow_single_file = True,
         ),
         "_mode": attr.label(
-            default = "//tools/flutter:mode",
+            default = "//flutter:mode",
             providers = [BuildSettingInfo],
         ),
     },
@@ -659,7 +667,7 @@ def flutter_assets_dir(assets):
     """
 
     # package_relative_label, not Label: Label() resolves against *this file's*
-    # package, so a caller writing ":assets" would get tools/flutter/assets.
+    # package, so a caller writing ":assets" would get flutter/private/assets.
     # Absolute labels hid that -- both real consumers happen to write one.
     label = native.package_relative_label(assets)
 
@@ -1277,7 +1285,7 @@ def flutter_android_binary(
              "predeclare `_proguard.jar`/`_proguard.config`/`_proguard.map` " +
              "on the private android_binary without republishing those " +
              "labels on the public target. Extend `_flutter_apk` in " +
-             "tools/flutter/android.bzl (see docs_internal/" +
+             "flutter/private/android.bzl (see docs_internal/" +
              "compilation-mode-pinning.md) if this is genuinely needed.").format(name),
         )
 
