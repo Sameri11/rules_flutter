@@ -85,10 +85,31 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/<your 28+ version>"
 `flutter pub get` is required before the first Bazel build and after every pub
 change. It creates `.dart_tool/package_config.json`, which the Dart compiler
 uses; it also refreshes `.flutter-plugins-dependencies` and Flutter's Android
-registrant when a plugin graph exists. `.dart_tool` is bootstrap state rather
-than a tracked input. For the first plugin graph, create the two zero-byte
-placeholder files by hand before evaluation; this bootstrap path has no automated
-regression gate.
+`GeneratedPluginRegistrant.java` when a plugin graph exists. `.dart_tool` is
+bootstrap state rather than a tracked input.
+
+For the first plugin graph, Bazel also needs two committed generated-state files
+to exist before their updater targets can run. They are not both plugin
+registrants: `plugin_deps.MODULE.bazel` is the generated Maven dependency
+segment, while `lib/dart_plugin_registrant.dart` is the Dart registrant. From a
+root-app module, create the zero-byte placeholders without overwriting existing
+generated files:
+
+```sh
+test -e plugin_deps.MODULE.bazel || touch plugin_deps.MODULE.bazel
+test -e lib/dart_plugin_registrant.dart || touch lib/dart_plugin_registrant.dart
+```
+
+For the documented monorepo layout, run this from the module root instead:
+
+```sh
+test -e plugin_deps.MODULE.bazel || touch plugin_deps.MODULE.bazel
+test -e packages/host_app/lib/dart_plugin_registrant.dart || \
+  touch packages/host_app/lib/dart_plugin_registrant.dart
+```
+
+The root-app and monorepo walkthroughs below give the corresponding updater
+commands. This first-plugin bootstrap path has no automated regression gate.
 
 Until `rules_flutter` is published to the Bazel Central Registry, create a
 consumer as a sibling of a checkout and retain a development override:
