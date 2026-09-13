@@ -123,7 +123,7 @@ common:android --repo_env=ANDROID_NDK_HOME
 common --config=android
 ```
 
-The Android configuration enables the Android toolchain, uses the JDK 17 toolchain required by `rules_android`, and preserves permissions declared by plugin manifests. The rules provide their own JDK 17; no local JDK selection is needed. The `ANDROID_NDK_HOME` environment variable is read at repository-fetch time when a target requires Android toolchains; if unset, the NDK wrapper supplies a stub declaring no toolchains, so failure surfaces only when a target needs an Android toolchain.
+The Android configuration enables the Android toolchain, selects Bazel's remote JDK 17 toolchain required by `rules_android`, and preserves permissions declared by plugin manifests. No local JDK installation or selection is required. The `ANDROID_NDK_HOME` environment variable is read at repository-fetch time when a target requires Android toolchains; if unset, the NDK wrapper supplies a stub declaring no toolchains, so failure surfaces only when a target needs an Android toolchain.
 
 ### Generated state, assets, labels, and ABIs
 

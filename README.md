@@ -62,7 +62,7 @@ monorepos, and consumer recipes/native assets, see the
 
 ### Prerequisites
 
-Start with the CI-tested Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 with Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The rules pin their own JDK 17 toolchain.
+Start with the CI-tested Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 with Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The documented `.bazelrc` selects Bazel's remote JDK 17 toolchain, so no local JDK installation is required.
 
 Without `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed. A consumer module must explicitly register NDK toolchains in its `MODULE.bazel` and inherit the stable repositories from `rules_flutter`'s NDK extension. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a stub declaring no toolchains; the failure surfaces only when a target needs an Android toolchain.
 
