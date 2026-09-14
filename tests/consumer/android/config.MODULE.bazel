@@ -62,7 +62,7 @@ local_path_override(
     path = "external_app",
 )
 
-android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 
 register_toolchains("@androidndk//:all")
@@ -74,7 +74,7 @@ fake_plugin_metadata(
     marker = "//:fixtures/fake_plugin/pubspec.yaml",
 )
 
-plugins = use_extension("@rules_flutter//tools/flutter:plugins.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//:flutter_embedding_no_plugins",
@@ -84,5 +84,8 @@ plugins.project(
 )
 use_repo(plugins, "flutter_plugins")
 
-flutter = use_extension("@rules_flutter//tools/flutter:repo.bzl", "flutter")
-use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release", "flutter_sdk")
+# The private SDK/engine extension is direct fixture-only internal coverage for
+# explicit embedding debug/release labels. It lives with the implementation
+# under //flutter/private and is intentionally absent from extensions.bzl.
+flutter = use_extension("@rules_flutter//flutter/private:repo.bzl", "flutter")
+use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")

@@ -380,9 +380,9 @@ module(
     version = "0.0.1",
 )
 
-bazel_dep(name = "rules_flutter", version = "0.1.0")
+bazel_dep(name = "sameri11_rules_flutter", repo_name = "rules_flutter", version = "0.1.0")
 local_path_override(
-    module_name = "rules_flutter",
+    module_name = "sameri11_rules_flutter",
     path = "{ruleset}",
 )
 
@@ -403,7 +403,7 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter//tools/flutter:ndk.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 """

@@ -291,7 +291,7 @@ def selftest() -> int:
     from `EXAMPLES`.
 
     A self-check rather than a py_test: this repository does not depend on
-    rules_python and Bazel 9 has no native py_binary (tools/flutter/defs.bzl).
+    rules_python and Bazel 9 has no native py_binary (flutter/private/rules.bzl).
     """
     first = EXAMPLES[0][0]
     a0, a1 = EXAMPLES[0][2][0], EXAMPLES[0][2][1]

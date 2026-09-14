@@ -5,6 +5,8 @@ Uses Bazel's declared `zipper`, which fixes metadata and follows argv order.
 `StripNativeLibs` preserves input order because it discovers entries at execution.
 """
 
+visibility(["//flutter"])
+
 ZIPPER_ATTRS = {
     "_zipper": attr.label(
         default = Label("@bazel_tools//tools/zip:zipper"),

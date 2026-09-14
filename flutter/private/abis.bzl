@@ -15,6 +15,8 @@ there is no `gen_snapshot` to pair with an x86 library however many a package
 publishes.
 """
 
+visibility(["//flutter"])
+
 MODES = ["release", "debug"]
 
 # Modes that require gen_snapshot.
@@ -267,7 +269,7 @@ def aot_target_compatible_with():
     """
     conditions = {"//conditions:default": [Label("@platforms//:incompatible")]}
     for mode in AOT_MODES:
-        conditions[Label("//tools/flutter:mode_" + mode)] = []
+        conditions[Label("//flutter:mode_" + mode)] = []
     return select(conditions)
 
 def aot_gen_snapshot(abi):
@@ -285,7 +287,7 @@ def aot_gen_snapshot(abi):
       A select() value for a `gen_snapshot` attribute.
     """
     conditions = {
-        Label("//tools/flutter:mode_" + mode): gen_snapshot_label(abi, mode)
+        Label("//flutter:mode_" + mode): gen_snapshot_label(abi, mode)
         for mode in AOT_MODES
     }
     conditions["//conditions:default"] = gen_snapshot_label(abi, AOT_MODES[0])

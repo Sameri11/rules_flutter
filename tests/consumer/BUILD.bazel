@@ -1,18 +1,23 @@
-"""Every public symbol, instantiated the way a consumer would.
+"""The supported BUILD API for a Consumer Module.
 
-This is an API test, not a behaviour test.
+All supported symbols load from @rules_flutter//flutter:defs.bzl.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@rules_flutter//tools/flutter:abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "plugin_repo_target")
-load("@rules_flutter//tools/flutter:android.bzl", "android_native_lib_jar", "flutter_android_binary", "flutter_android_libs", "flutter_assets_dir", "jni_lib_jar", "strip_native_libs")
-load("@rules_flutter//tools/flutter:bundle.bzl", "CLASSES", "NATIVE_LIB", "flutter_bundle_contribution")
-load("@rules_flutter//tools/flutter:defs.bzl", "dart_aot_elf", "dart_kernel", "flutter_aot_library", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
-load("@rules_flutter//tools/flutter:embedding.bzl", "flutter_embedding_library")
-load("@rules_flutter//tools/flutter:pubspec.bzl", "flutter_pubspec")
-load("@rules_flutter//tools/flutter:recipe.bzl", "flutter_native_contribution", "flutter_native_libs")
+load(
+    "@rules_flutter//flutter:defs.bzl",
+    "android_native_lib_jar",
+    "flutter_android_binary",
+    "flutter_aot_library",
+    "flutter_assets",
+    "flutter_embedding_library",
+    "flutter_native_contribution",
+    "flutter_native_libs",
+    "flutter_pubspec",
+    "pub_path_deps_check",
+    "pub_plugins_check",
+)
 load("@rules_java//java:defs.bzl", "java_import")
-load(":assertions.bzl", "expect_equal", "expect_label_equal")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -25,73 +30,6 @@ package(default_visibility = ["//visibility:private"])
 flutter_pubspec(
     name = "pubspec",
     src = "fixtures/pubspec.yaml",
-)
-
-dart_kernel(
-    name = "kernel",
-    srcs = ["lib/main.dart"],
-    entrypoint = "lib/main.dart",
-    package_config = "fixtures/package_config.json",
-    pubspec = ":pubspec",
-)
-
-# target_os is the 0.3 attribute. Named explicitly rather than left default, so
-# renaming or removing it fails here.
-dart_kernel(
-    name = "kernel_ios",
-    srcs = ["lib/main.dart"],
-    entrypoint = "lib/main.dart",
-    package_config = "fixtures/package_config.json",
-    pubspec = ":pubspec",
-    target_os = "ios",
-)
-
-dart_aot_elf(
-    name = "aot",
-    dill = ":kernel",
-    gen_snapshot = aot_gen_snapshot("arm64-v8a"),
-    snapshot_flags = ABIS["arm64-v8a"].snapshot_flags,
-    strip = True,
-    target_compatible_with = aot_target_compatible_with(),
-)
-
-# The ABI carrying gen_snapshot flags. Named so a table entry losing them is an
-# analysis-visible change here rather than a silent one in a snapshot.
-dart_aot_elf(
-    name = "aot_armv7",
-    dill = ":kernel",
-    gen_snapshot = aot_gen_snapshot("armeabi-v7a"),
-    snapshot_flags = ABIS["armeabi-v7a"].snapshot_flags,
-    strip = True,
-    target_compatible_with = aot_target_compatible_with(),
-)
-
-expect_equal(
-    ABIS["armeabi-v7a"].snapshot_flags,
-    [
-        "--no-sim-use-hardfp",
-        "--no-use-integer-division",
-    ],
-    "armeabi-v7a snapshot_flags",
-)
-
-# Keep each ABI's explicit CPU constraint aligned with the table.
-expect_label_equal(
-    ABIS["arm64-v8a"].cpu_constraint,
-    "@platforms//cpu:arm64",
-    "arm64-v8a cpu_constraint",
-)
-
-expect_label_equal(
-    ABIS["x86_64"].cpu_constraint,
-    "@platforms//cpu:x86_64",
-    "x86_64 cpu_constraint",
-)
-
-expect_label_equal(
-    ABIS["armeabi-v7a"].cpu_constraint,
-    "@platforms//cpu:armv7",
-    "armeabi-v7a cpu_constraint",
 )
 
 # The macro, with every named parameter supplied -- it is the public entry point
@@ -113,6 +51,19 @@ flutter_aot_library(
     pubspec = ":pubspec",
     strip = True,
     target_os = "android",
+)
+
+# The public macro accepts non-Android target_os values too. Keep this
+# analysis-only and single-ABI so the platform branch stays cheap.
+flutter_aot_library(
+    name = "aot_library_ios",
+    srcs = ["lib/main.dart"],
+    abis = ["arm64-v8a"],
+    entrypoint = "lib/main.dart",
+    package_config = "fixtures/package_config.json",
+    pub_stamp = ["fixtures/pubspec.lock"],
+    pubspec = ":pubspec",
+    target_os = "ios",
 )
 
 flutter_assets(
@@ -139,22 +90,6 @@ pub_plugins_check(
 )
 
 # --- android.bzl: the Android half -------------------------------------------
-
-jni_lib_jar(
-    name = "jni_jar",
-    src = "fixtures/libfake.so",
-    # Mandatory: it decides which lib/<abi>/ a library loads from.
-    abi = "arm64-v8a",
-)
-
-strip_native_libs(
-    name = "stripped",
-    # Mandatory: it selects the cross-strip that matches the jar's libraries,
-    # and the build platform is derived from it rather than restated.
-    abi = "arm64-v8a",
-    jar = "fixtures/fake_native_libs.jar",
-)
-
 # `src` takes rule targets, not source files -- in real use it is a
 # rules_foreign_cc cmake(). A filegroup is the cheapest stand-in that satisfies
 # that shape.
@@ -267,77 +202,6 @@ java_import(
 java_import(
     name = "fake_registrant",
     jars = ["fixtures/fake_native_libs.jar"],
-)
-
-# Asserted rather than merely called: a silently wrong prefix is the failure it
-# exists to prevent, and this module's assets target sits in the root package,
-# the case with no separator.
-expect_equal(
-    flutter_assets_dir(assets = ":assets"),
-    "assets",
-    "flutter_assets_dir(':assets')",
-)
-
-# Two ABIs, so the per-ABI shape is exercised rather than degenerating to one
-# entry, and `aot` is the real flutter_aot_library above -- the join derives
-# `<aot>_<abi>` from it, and a rename breaks that.
-#
-# `engine_jars` only because this test must not fetch: the ABI table would name
-# the real engine repositories, and analysing one downloads ~150 MB.
-flutter_android_libs(
-    name = "bundle",
-    abis = [
-        "arm64-v8a",
-        "x86_64",
-    ],
-    aot = "aot_library",
-    assets = ":assets",
-    embedding = ":fake_embedding",
-    embedding_deps = [],
-    engine_jars = {
-        "arm64-v8a": "fixtures/fake_native_libs.jar",
-        "x86_64": "fixtures/fake_native_libs_x86_64.jar",
-    },
-    native_libs = {
-        "arm64-v8a": ":fake_recipe_libs",
-        "x86_64": ":fake_recipe_libs_x86_64",
-    },
-    # Populated rather than `{}`: the empty form is what a consumer reaches by
-    # accident, so the populated one is what needs pinning.
-    plugin_native_libs = {
-        "arm64-v8a": ":fake_plugin_libs",
-        "x86_64": ":fake_plugin_libs_x86_64",
-    },
-    plugins = ":fake_plugins",
-    registrant = ":fake_registrant",
-)
-
-# The contribution rule on its own, in all three forms: slice-keyed, not, and
-# the `empty = True` one VI.2 names as the first thing a non-Android platform
-# needs.
-flutter_bundle_contribution(
-    name = "contribution",
-    srcs = ["fixtures/libfake.so"],
-    kind = "aot_library",
-    location = NATIVE_LIB,
-)
-
-flutter_bundle_contribution(
-    name = "contribution_sliced",
-    kind = "recipe_libraries",
-    libraries = {
-        "arm64-v8a": "fixtures/libfake.so",
-        "x86_64": "fixtures/libfake.so",
-    },
-    location = NATIVE_LIB,
-)
-
-flutter_bundle_contribution(
-    name = "contribution_empty",
-    srcs = [],
-    empty = True,
-    kind = "runtime_classes",
-    location = CLASSES,
 )
 
 # The macro on top of the join: it emits `<name>` plus `<name>_<abi>`, so a
@@ -539,7 +403,7 @@ build_test(
         "@flutter_plugins//fake_plugin:fake_plugin",
         # A Kotlin-only plugin leaves this per-ABI native aggregate empty. It
         # must still provide JavaInfo through an empty `java_library`.
-        "@flutter_plugins//:" + plugin_repo_target("plugin_native_libraries", "arm64-v8a"),
+        "@flutter_plugins//:plugin_libs_arm64-v8a",
     ],
 )
 
@@ -547,8 +411,8 @@ build_test(
 alias(
     name = "embedding_mode_hazard_expected",
     actual = select({
-        "@rules_flutter//tools/flutter:mode_debug": "@flutter_embedding_debug//jar:file",
-        "@rules_flutter//tools/flutter:mode_release": "@flutter_embedding_release//jar:file",
+        "@rules_flutter//flutter:mode_debug": "@flutter_embedding_debug//jar:file",
+        "@rules_flutter//flutter:mode_release": "@flutter_embedding_release//jar:file",
     }),
 )
 
@@ -563,7 +427,7 @@ genrule(
 if ! cmp -s "$(location :flutter_embedding_no_plugins)" "$(location :embedding_mode_hazard_expected)"; then
     echo "flutter_embedding_no_plugins is not this configuration's embedding" >&2
     echo "jar. embedding.bzl's jars select() resolved a select() key against" >&2
-    echo "the decoy //tools/flutter package instead of @rules_flutter's --" >&2
+    echo "this module's decoy package instead of @rules_flutter's --" >&2
     echo "see the comment above." >&2
     exit 1
 fi
