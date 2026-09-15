@@ -1,0 +1,6 @@
+group 'com.example.namespace_bare'
+version '1.0'
+
+android {
+    namespace 'com.example.namespace.bare'
+}

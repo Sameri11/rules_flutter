@@ -5,6 +5,7 @@
 /tests/consumer/bazel-*
 /tests/core_consumer/bazel-*
 /examples/*/bazel-*
+/tests/namespace_dynamic/bazel-*
 
 # Python bytecode from the CI helper scripts.
 __pycache__/

@@ -67,11 +67,15 @@ use_repo(android_ndk, "androidndk", "androidndk_cmake")
 
 register_toolchains("@androidndk//:all")
 
-fake_plugin_metadata = use_repo_rule("//:fixtures/plugin_fixture.bzl", "fake_plugin_metadata")
+namespace_plugin_metadata = use_repo_rule("//:fixtures/plugin_fixture.bzl", "namespace_plugin_metadata")
 
-fake_plugin_metadata(
-    name = "fake_plugin_metadata",
-    marker = "//:fixtures/fake_plugin/pubspec.yaml",
+namespace_plugin_metadata(
+    name = "namespace_plugin_metadata",
+    assignment_marker = "//:fixtures/namespace_assignment/pubspec.yaml",
+    bare_marker = "//:fixtures/namespace_bare/pubspec.yaml",
+    call_marker = "//:fixtures/namespace_call/pubspec.yaml",
+    fake_marker = "//:fixtures/fake_plugin/pubspec.yaml",
+    guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
 )
 
 plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
@@ -79,8 +83,8 @@ plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//:flutter_embedding_no_plugins",
     maven_repo = "@plugin_maven//:pin",
-    metadata = "@fake_plugin_metadata//:.flutter-plugins-dependencies",
-    package_config = "@fake_plugin_metadata//:package_config.json",
+    metadata = "@namespace_plugin_metadata//:.flutter-plugins-dependencies",
+    package_config = "@namespace_plugin_metadata//:package_config.json",
 )
 use_repo(plugins, "flutter_plugins")
 
