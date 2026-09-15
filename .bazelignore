@@ -4,3 +4,4 @@ examples/no_plugins
 examples/pub_plugins
 examples/local_plugin
 tests/core_consumer
+tests/namespace_dynamic

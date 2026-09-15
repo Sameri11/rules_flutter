@@ -395,6 +395,18 @@ pub_plugins_check(
 )
 
 build_test(
+    name = "namespace_plugin_test",
+    targets = [
+        # Each source package references its generated R class. An incorrect
+        # custom_package (the namespace parser's output) therefore fails javac.
+        "@flutter_plugins//namespace_bare:namespace_bare",
+        "@flutter_plugins//namespace_call:namespace_call",
+        "@flutter_plugins//namespace_assignment:namespace_assignment",
+        "@flutter_plugins//namespace_guarded:namespace_guarded",
+    ],
+)
+
+build_test(
     name = "fake_plugin_test",
     targets = [
         # Unlike every other fixture, this module names the repository

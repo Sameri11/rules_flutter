@@ -700,34 +700,212 @@ def _dart_plugin_class(ctx, package_root, name):
     # Parenthesised because buildifier cannot parse a bare conditional here.
     return dart_class, (dart_file if dart_file else "{}.dart".format(name))
 
-def _namespace(build_gradle_text):
-    """Read the `namespace` AGP assigns the module, from build.gradle.
+def _namespace(build_gradle_text, source_path, strict = True):
+    """Read the static `namespace` AGP assigns the module.
 
-    AGP 7 deprecated the manifest's `package=` and AGP 8 removed it, so a plugin
-    written against a current AGP declares its package name here instead and
-    ships a bare `<manifest />`. This is the authoritative source of the two:
-    where both exist AGP errors on a disagreement rather than reconciling them.
-
-    Matched line by line rather than by substring, so that `testNamespace` and a
-    coordinate mentioning the word are not mistaken for it. `namespace 'x'`
-    (Groovy) and `namespace = "x"` (Kotlin, and the Groovy assignment form) are
-    both accepted.
+    This is deliberately a small lexer rather than a substring search. Gradle
+    has both Groovy and Kotlin syntax in the wild, and the word also appears in
+    comments, strings, and identifiers such as `testNamespace`. A declaration
+    that is present but not a literal is an error in the standard generator:
+    treating it as absent would incorrectly fall through to a manifest that AGP
+    itself does not use. Package recipes set `strict = False` because their
+    custom implementation may know how to handle a dynamic namespace.
     """
-    for line in _strip_buildscript(build_gradle_text).splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("namespace"):
+    text = _strip_buildscript(build_gradle_text)
+    i = 0
+    for _ in range(len(text)):
+        if i >= len(text):
+            break
+        c = text[i]
+        if text[i:i + 2] == "//":
+            newline = text.find("\n", i + 2)
+            i = len(text) if newline == -1 else newline + 1
             continue
-        rest = stripped[len("namespace"):].lstrip()
-        if rest.startswith("="):
-            rest = rest[1:].lstrip()
-        if not rest or rest[0] not in "'\"":
+        if text[i:i + 2] == "/*":
+            end = text.find("*/", i + 2)
+            i = len(text) if end == -1 else end + 2
             continue
-        quote = rest[0]
-        end = rest.find(quote, 1)
-        if end == -1:
+        if c in ["'", "\""]:
+            i = _namespace_string_end(text, i)
             continue
-        return rest[1:end]
+        if not (c.isalpha() or c == "_"):
+            i += 1
+            continue
+
+        start = i
+        i += 1
+        for _ in range(len(text)):
+            if i >= len(text) or not (text[i].isalnum() or text[i] == "_"):
+                break
+            i += 1
+        if text[start:i] != "namespace":
+            continue
+
+        # Only a DSL statement can introduce the module namespace. In
+        # particular, do not interpret `foo.namespace` or a namespace named as
+        # an argument to an unrelated call.
+        previous = start - 1
+        at_line_start = previous < 0
+        for _ in range(len(text)):
+            if previous < 0:
+                at_line_start = True
+                break
+            if not text[previous].isspace():
+                break
+            if text[previous] == "\n":
+                at_line_start = True
+                break
+            previous -= 1
+        if not at_line_start and (previous < 0 or text[previous] not in ["{", "}", ";"]):
+            continue
+
+        value, expression = _parse_namespace_declaration(text, i)
+        if value != None:
+            return value
+        if strict:
+            fail("Unsupported namespace expression in {}: {}".format(
+                source_path,
+                expression if expression else "<missing expression>",
+            ))
+        return None
     return None
+
+def _namespace_string_end(text, start):
+    """Return the end of a quoted Gradle string, or the end of the text."""
+    quote = text[start]
+    delimiter = quote * 3 if text[start:start + 3] == quote * 3 else quote
+    i = start + len(delimiter)
+    for _ in range(len(text)):
+        if i >= len(text):
+            break
+        if text[i:i + len(delimiter)] == delimiter:
+            return i + len(delimiter)
+        if text[i] == "\\":
+            i += 2
+            continue
+        i += 1
+    return len(text)
+
+def _namespace_tail(text, start):
+    """Return a declaration tail, including a continued literal when needed."""
+    line_end = text.find("\n", start)
+    if line_end == -1:
+        line_end = len(text)
+    first_line = text[start:line_end]
+    comment = first_line.find("//")
+    first_code = first_line if comment == -1 else first_line[:comment]
+    continuation = (
+        first_code.rstrip().endswith("=") or
+        first_code.rstrip().endswith("(")
+    )
+    if not continuation:
+        return first_line if comment == -1 else first_line[:comment]
+
+    # Assignment and call forms may put their literal on the next line. Keep
+    # scanning through a call's balanced parentheses, but stop an assignment
+    # after its first complete line expression. The loop is bounded by the
+    # input length so malformed Gradle cannot make repository evaluation hang.
+    depth = 0
+    seen_value = False
+    pieces = []
+    segment_start = start
+    i = start
+    for _ in range(len(text)):
+        if i >= len(text):
+            pieces.append(text[segment_start:])
+            return "".join(pieces)
+        if text[i] in ["'", "\""]:
+            i = _namespace_string_end(text, i)
+            seen_value = True
+            continue
+        if text[i:i + 2] == "//":
+            pieces.append(text[segment_start:i])
+            newline = text.find("\n", i + 2)
+            if newline == -1:
+                return "".join(pieces)
+            segment_start = newline
+            i = newline
+            continue
+        c = text[i]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            if depth > 0:
+                depth -= 1
+        elif c == "\n":
+            if depth == 0 and seen_value:
+                pieces.append(text[segment_start:i])
+                return "".join(pieces)
+        elif not c.isspace() and c != "=":
+            seen_value = True
+        i += 1
+    pieces.append(text[segment_start:])
+    return "".join(pieces)
+
+def _namespace_literal(expression):
+    """Return a literal's value, or None when `expression` is not one."""
+    expression = expression.strip()
+    if len(expression) < 2 or expression[0] not in ["'", "\""]:
+        return None
+    if expression.startswith(expression[0] * 3):
+        return None
+    end = _namespace_string_end(expression, 0)
+    if end == len(expression) and expression[-1] != expression[0]:
+        return None
+    if expression[end:].strip():
+        return None
+    value = expression[1:end - 1]
+    if "$" in value or "\\" in value:
+        return None
+    return value
+
+def _namespace_structural_tail(tail):
+    """Remove syntax closing an inline guard and return the remaining text."""
+    tail = tail.strip()
+    for _ in range(len(tail)):
+        if not tail or tail[-1] not in ["}", ";"]:
+            break
+        tail = tail[:-1].rstrip()
+    return tail
+
+def _parse_namespace_declaration(text, after_name):
+    """Return (literal value, unsupported expression) for one declaration."""
+    tail = _namespace_tail(text, after_name)
+    stripped = tail.lstrip()
+    if stripped.startswith("="):
+        expression = _namespace_structural_tail(stripped[1:])
+        return _namespace_literal(expression), expression
+
+    if stripped.startswith("("):
+        depth = 0
+        end = -1
+        i = 0
+        for _ in range(len(stripped)):
+            if i >= len(stripped):
+                break
+            if stripped[i] in ["'", "\""]:
+                i = _namespace_string_end(stripped, i)
+                continue
+            if stripped[i] == "(":
+                depth += 1
+            elif stripped[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+            i += 1
+        if end == -1:
+            expression = _namespace_structural_tail(stripped[1:])
+            return None, expression
+        expression = stripped[1:end].strip()
+        trailing = _namespace_structural_tail(stripped[end + 1:])
+        if trailing:
+            expression = "{} {}".format(expression, trailing).strip()
+            return None, expression
+        return _namespace_literal(expression), expression
+
+    expression = _namespace_structural_tail(stripped)
+    return _namespace_literal(expression), expression
 
 def _manifest_package(ctx, manifest_path):
     """Read the `package=` attribute from a library manifest.
@@ -1066,7 +1244,7 @@ def _flutter_plugins_impl(ctx):
                 _list_files(root, "android/src/main/kotlin", [".kt"]) +
                 _list_files(root, "android/src/main/java", [".kt"])
             )
-            package = _namespace(ctx.read(build_gradle))
+            package = _namespace(ctx.read(build_gradle), str(build_gradle), strict = False)
             if not package:
                 manifest_path = root.get_child("android/src/main/AndroidManifest.xml")
                 if manifest_path.exists:
@@ -1175,8 +1353,7 @@ def _flutter_plugins_impl(ctx):
         # manifest was enough for the demo app's plugins and is not enough in
         # the wild: four of smooth_app's thirty carry a bare `<manifest />` and
         # name themselves in build.gradle, while qr_code_scanner is the mirror
-        # case, predating `namespace` entirely.
-        package = _namespace(ctx.read(build_gradle))
+        package = _namespace(ctx.read(build_gradle), str(build_gradle))
         if not package:
             package = _manifest_package(ctx, root.get_child("android/src/main/AndroidManifest.xml"))
         if not package:

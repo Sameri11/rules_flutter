@@ -1,0 +1,13 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(name = "dynamic_embedding")
+
+filegroup(name = "dynamic_maven")
+
+# Repository evaluation fails before this target is analyzed. Keeping a named
+# target makes the expected diagnostic an isolated focused check:
+# bazel build //:dynamic_namespace_failure
+alias(
+    name = "dynamic_namespace_failure",
+    actual = "@flutter_plugins//namespace_dynamic:namespace_dynamic",
+)

@@ -64,7 +64,7 @@ Loading and analysis — `--nobuild` — of every supported BUILD symbol through
 | entry point | symbols |
 | --- | --- |
 | `defs.bzl` | `flutter_app`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs`, `flutter_pubspec`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
-| `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`) over a real, checked-in external plugin graph — `:fake_plugin_deps_check`, `:fake_plugin_test` |
+| `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`) over a real, checked-in external plugin graph — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test` |
 
 Remaining implementation rules and helpers are covered indirectly by the
 supported macros; the Consumer BUILD file loads no private implementation file.
@@ -119,14 +119,15 @@ embedding's Maven dependencies: `MODULE.bazel` declares
 with the complete embedding coordinate list, and imports it with
 `use_repo(maven, "flutter_maven")`.
 
-`fixtures/fake_plugin` is a third package layout: a minimal external Flutter
-plugin, wired up via `plugins.project()` in `MODULE.bazel`. Unlike the
-fixtures above, its two pub-written inputs
+`fixtures/fake_plugin` is an external Flutter plugin layout, and the four
+`fixtures/namespace_*` directories are plugin layouts dedicated to namespace
+syntax coverage. Unlike the fixtures above, their two pub-written inputs
 (`.flutter-plugins-dependencies`/`package_config.json`) cannot be checked in
 verbatim — both carry **absolute** `file://` paths into `~/.pub-cache`, unique
 to whichever machine ran `pub get`. `fixtures/plugin_fixture.bzl` is a small
-repository rule that synthesizes both at fetch time from `fake_plugin`'s real
-on-disk location, so the pair stays correct on any checkout. This proves two
+repository rule that synthesizes the metadata for this combined fake-plugin and
+four-namespace fixture set at fetch time from each layout's real on-disk
+location, so the pair stays correct on any checkout. This proves two
 things nothing else here can, because this module reaches `rules_flutter` the
 same way `hello_bazel` and `smooth-app` do and those two are external to this
 repository:
@@ -161,6 +162,10 @@ repository:
   `:fake_plugin_test` builds the generated `@flutter_plugins//fake_plugin`
   target, which only resolves that dependency if `maven_repo` was actually
   threaded through to `maven_label()` rather than a hardcoded apparent name.
+- Four namespace parser fixtures use bare Android manifests and source packages
+  that each reference `R.string.namespace_marker`; `:namespace_plugin_test`
+  builds all four generated targets, making javac observe the exact namespace
+  emitted as `custom_package` rather than accepting a manifest fallback.
 
 ## What it does not cover
 

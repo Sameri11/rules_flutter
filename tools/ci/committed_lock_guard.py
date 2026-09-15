@@ -15,6 +15,7 @@ COMMITTED_LOCKS = (
     "examples/no_plugins/MODULE.bazel.lock",
     "examples/pub_plugins/MODULE.bazel.lock",
     "tests/consumer/MODULE.bazel.lock",
+    "tests/namespace_dynamic/MODULE.bazel.lock",
 )
 
 FORBIDDEN_SUBSTRINGS = (
