@@ -92,6 +92,9 @@ jobs:
               exit 1
             fi
           done
+      - name: BuildConfig validation rejection
+        working-directory: tests/consumer
+        run: python3 build_config_probe.py
       - name: Core Consumer isolation
         working-directory: tests/core_consumer
         run: |

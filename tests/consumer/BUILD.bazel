@@ -17,9 +17,11 @@ load(
     "pub_path_deps_check",
     "pub_plugins_check",
 )
-load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_java//java:defs.bzl", "java_binary", "java_import")
 
 package(default_visibility = ["//visibility:private"])
+
+exports_files(["build_config_probe.py"])
 
 # `//standard_layout` exercises `flutter_app` defaults. This fixture names every
 # attribute explicitly to catch removed defaults.
@@ -416,7 +418,69 @@ build_test(
         # A Kotlin-only plugin leaves this per-ABI native aggregate empty. It
         # must still provide JavaInfo through an empty `java_library`.
         "@flutter_plugins//:plugin_libs_arm64-v8a",
+        "@flutter_plugins//build_config_plugin:build_config_plugin",
     ],
+)
+
+genrule(
+    name = "build_config_plugin_jar_check",
+    srcs = ["@flutter_plugins//build_config_plugin"],
+    outs = ["build_config_plugin_jar.checked"],
+    cmd = """set -eu
+found=false
+for archive in $(locations @flutter_plugins//build_config_plugin:build_config_plugin); do
+  if unzip -l "$$archive" | grep -q 'com/example/build_config_plugin/BuildConfig.class'; then
+    found=true
+  fi
+  if unzip -l "$$archive" | grep -q 'classes.jar'; then
+    classes="$(@D)/build_config_plugin.classes.jar"
+    unzip -p "$$archive" classes.jar > "$$classes"
+    if unzip -l "$$classes" | grep -q 'com/example/build_config_plugin/BuildConfig.class'; then
+      found=true
+    fi
+  fi
+done
+test "$$found" = true
+printf 'BuildConfig.class present in plugin jar\\n' > "$@"
+""",
+)
+
+build_test(
+    name = "build_config_plugin_jar_test",
+    targets = [":build_config_plugin_jar_check"],
+)
+
+java_binary(
+    name = "build_config_plugin_values",
+    srcs = ["fixtures/BuildConfigValues.java"],
+    main_class = "com.example.consumer.BuildConfigValues",
+    deps = [
+        ":flutter_embedding_no_plugins",
+        "@flutter_plugins//build_config_plugin",
+    ],
+)
+
+genrule(
+    name = "build_config_plugin_values_check",
+    outs = ["build_config_plugin_values.checked"],
+    cmd = select({
+        "@rules_flutter//flutter:mode_debug": """set -eu
+actual="$$( $(location :build_config_plugin_values) )"
+test "$$actual" = "true:debug:com.example.build_config_plugin:explicit-value:1.2.3:true:127:-32768:2147483640:9223372036854775807:3.4028235E38:4.9E-324"
+printf '%s\\n' "$$actual" > "$@"
+""",
+        "@rules_flutter//flutter:mode_release": """set -eu
+actual="$$( $(location :build_config_plugin_values) )"
+test "$$actual" = "false:release:com.example.build_config_plugin:explicit-value:1.2.3:true:127:-32768:2147483640:9223372036854775807:3.4028235E38:4.9E-324"
+printf '%s\\n' "$$actual" > "$@"
+""",
+    }),
+    tools = [":build_config_plugin_values"],
+)
+
+build_test(
+    name = "build_config_plugin_values_test",
+    targets = [":build_config_plugin_values_check"],
 )
 
 # Decoy package verifies macro select keys resolve in this repository.

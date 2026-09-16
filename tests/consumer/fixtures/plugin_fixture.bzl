@@ -6,7 +6,7 @@ files; the plugin sources remain checked in.
 """
 
 def _namespace_plugin_metadata_impl(ctx):
-    """Generate pub metadata for the fake plugin and namespace parser fixtures."""
+    """Generate pub metadata for namespace and BuildConfig fixtures."""
     plugins = []
     for name, marker in [
         ("namespace_bare", ctx.attr.bare_marker),
@@ -14,6 +14,7 @@ def _namespace_plugin_metadata_impl(ctx):
         ("namespace_assignment", ctx.attr.assignment_marker),
         ("namespace_guarded", ctx.attr.guarded_marker),
         ("fake_plugin", ctx.attr.fake_marker),
+        ("build_config_plugin", ctx.attr.build_config_marker),
     ]:
         root = str(ctx.path(marker).dirname)
         plugins.append({
@@ -71,6 +72,10 @@ namespace_plugin_metadata = repository_rule(
             mandatory = True,
         ),
         "fake_marker": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+        ),
+        "build_config_marker": attr.label(
             allow_single_file = True,
             mandatory = True,
         ),

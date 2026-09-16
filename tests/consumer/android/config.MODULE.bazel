@@ -73,12 +73,67 @@ namespace_plugin_metadata(
     name = "namespace_plugin_metadata",
     assignment_marker = "//:fixtures/namespace_assignment/pubspec.yaml",
     bare_marker = "//:fixtures/namespace_bare/pubspec.yaml",
+    build_config_marker = "//:fixtures/build_config_plugin/pubspec.yaml",
     call_marker = "//:fixtures/namespace_call/pubspec.yaml",
     fake_marker = "//:fixtures/fake_plugin/pubspec.yaml",
     guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
 )
 
 plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins.build_config_field(
+    name = "STRING_VALUE",
+    package = "build_config_plugin",
+    type = "String",
+    value = "explicit-value",
+)
+plugins.build_config_field(
+    name = "VERSION",
+    package = "build_config_plugin",
+    type = "String",
+    value_from = "package_version",
+)
+plugins.build_config_field(
+    name = "BOOLEAN_VALUE",
+    package = "build_config_plugin",
+    type = "boolean",
+    value = "true",
+)
+plugins.build_config_field(
+    name = "BYTE_VALUE",
+    package = "build_config_plugin",
+    type = "byte",
+    value = "127",
+)
+plugins.build_config_field(
+    name = "SHORT_VALUE",
+    package = "build_config_plugin",
+    type = "short",
+    value = "-32768",
+)
+plugins.build_config_field(
+    name = "INT_VALUE",
+    package = "build_config_plugin",
+    type = "int",
+    value = "2147483640",
+)
+plugins.build_config_field(
+    name = "LONG_VALUE",
+    package = "build_config_plugin",
+    type = "long",
+    value = "9223372036854775807",
+)
+plugins.build_config_field(
+    name = "FLOAT_VALUE",
+    package = "build_config_plugin",
+    type = "float",
+    value = "3.4028235e38",
+)
+plugins.build_config_field(
+    name = "DOUBLE_VALUE",
+    package = "build_config_plugin",
+    type = "double",
+    value = "4.9e-324",
+)
 plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//:flutter_embedding_no_plugins",

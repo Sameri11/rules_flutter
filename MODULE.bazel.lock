@@ -260,7 +260,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "tk7h/i/5pLwX98HyQPrUm97zkahKnvbO9iRwqNv4z4c=",
+        "bzlTransitiveDigest": "FwxIHQu68L6OWf670OSqk5PaQKrm/ciWdmbpP6G3S6M=",
         "usagesDigest": "u+HEkcGg21uv1v1Y5n7OFzVXl5/8Fi8W5y561YLsmWA=",
         "recordedInputs": [
           "REPO_MAPPING:,platforms platforms",
