@@ -64,7 +64,7 @@ Loading and analysis — `--nobuild` — of every supported BUILD symbol through
 | entry point | symbols |
 | --- | --- |
 | `defs.bzl` | `flutter_app`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs`, `flutter_pubspec`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
-| `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`) over a real, checked-in external plugin graph — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test` |
+| `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`/`plugins.build_config_field()`) over real, checked-in external plugin graphs — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test`, `:build_config_plugin_jar_test`, `:build_config_plugin_values_test` |
 
 Remaining implementation rules and helpers are covered indirectly by the
 supported macros; the Consumer BUILD file loads no private implementation file.
@@ -166,6 +166,16 @@ repository:
   that each reference `R.string.namespace_marker`; `:namespace_plugin_test`
   builds all four generated targets, making javac observe the exact namespace
   emitted as `custom_package` rather than accepting a manifest fallback.
+- `fixtures/build_config_plugin` disables AGP BuildConfig generation and reads
+  Bazel's generated built-ins plus custom fields of every supported primitive
+  type. The release and debug runtime tests prove mode-sensitive built-ins,
+  typed values, and `package_version`; `build_config_probe.py` separately proves
+  all invalid declarations fail repository evaluation with the responsible
+  package and field in the diagnostic:
+
+  ```sh
+  python3 build_config_probe.py
+  ```
 
 ## What it does not cover
 

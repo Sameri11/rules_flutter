@@ -72,6 +72,45 @@ recipes. The automatic graph does not support `ndk-build` or prebuilt-JNI
 plugins; use a Package Recipe. For unreadable Maven coordinates, declare
 `plugins.package(artifacts = ...)`.
 
+Every ordinary source-built Android plugin also receives a package-scoped
+`BuildConfig` with `DEBUG`, `BUILD_TYPE`, and `LIBRARY_PACKAGE_NAME`, selected
+from the Flutter `debug`/`release` mode. This is generated even when the
+plugin's Gradle file says `buildFeatures { buildConfig = false }`.
+
+Custom constants are explicit Consumer Module data; the generator does not
+parse Gradle `buildConfigField` declarations. Declare each field with a
+repeated tag, using semantic values rather than Java expressions:
+
+```python
+plugins.build_config_field(
+    package = "cloud_firestore",
+    name = "LIBRARY_NAME",
+    type = "String",
+    value = "flutter-fire-fst",
+)
+plugins.build_config_field(
+    package = "cloud_firestore",
+    name = "LIBRARY_VERSION",
+    type = "String",
+    value_from = "package_version",
+)
+```
+
+Supported types are `String`, `boolean`, `byte`, `short`, `int`, `long`,
+`float`, and `double`. Strings are plain text without Java quoting, booleans
+are `true` or `false`, and numeric values are decimal literals validated and
+range-checked for the declared type. The only supported value source is
+`package_version`, resolved from the package's `pubspec.yaml`; exactly one of
+`value` and `value_from` is required. Absent packages, duplicate fields,
+built-in collisions, unsupported types or sources, and invalid values fail
+repository generation with the package and field named. Only the root Consumer
+Module may declare these tags.
+
+Applied scripts, interpolation, Gradle control flow, file I/O, build types,
+flavors, and arbitrary Java expressions remain Package Recipe territory. A
+Package Recipe replaces standard generation for a package when explicit
+primitive or String constants cannot represent its build contract.
+
 Either set `FLUTTER_ROOT` or put `flutter` on `PATH`; set the Android locations
 before building an APK:
 

@@ -1,0 +1,7 @@
+group 'com.example.build_config_plugin'
+version '1.0'
+
+android {
+    namespace 'com.example.build_config_plugin'
+    buildFeatures { buildConfig = false }
+}

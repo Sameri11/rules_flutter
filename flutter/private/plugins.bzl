@@ -82,7 +82,10 @@ _PLUGIN_TEMPLATE = """
 # {path}
 {rule}(
     name = "{name}",
-    srcs = {srcs},
+    srcs = {srcs} + select({{
+        "{mode_debug}": ["generated/debug/BuildConfig.java"],
+        "{mode_release}": ["generated/release/BuildConfig.java"],
+    }}),
     manifest = "android/src/main/AndroidManifest.xml",
     # The plugin manifest carries more than a package name -- connectivity_plus
     # declares ACCESS_NETWORK_STATE -- and it has to reach the APK, so it is
@@ -492,6 +495,239 @@ def _substitute(coordinate, variables):
             return None
         out += variables[name]
     return None
+
+def _java_string(value):
+    # JSON's string grammar uses the same escapes accepted in a Java literal
+    # for the primitive contract here, including every ASCII control character.
+    return json.encode(value)
+
+def _decimal_error(type_name, value, package_name, field_name):
+    fail("Invalid BuildConfig value for {}.{} ({}): {}".format(
+        package_name,
+        field_name,
+        type_name,
+        value,
+    ))
+
+def _decimal_parts(value, type_name, package_name, field_name):
+    if not value or value[-1:] in ["f", "F", "d", "D"]:
+        _decimal_error(type_name, value, package_name, field_name)
+    raw = value
+    sign = ""
+    if raw[0] in ["+", "-"]:
+        sign = raw[0]
+        raw = raw[1:]
+    pieces = raw.lower().split("e")
+    if len(pieces) > 2:
+        _decimal_error(type_name, value, package_name, field_name)
+    mantissa = pieces[0]
+    exponent = 0
+    if len(pieces) == 2:
+        exponent_text = pieces[1]
+        exponent_sign = 1
+        if exponent_text[:1] in ["+", "-"]:
+            exponent_sign = -1 if exponent_text[0] == "-" else 1
+            exponent_text = exponent_text[1:]
+        invalid_exponent = not exponent_text
+        for i in range(len(exponent_text)):
+            if exponent_text[i] not in "0123456789":
+                invalid_exponent = True
+                break
+        if invalid_exponent:
+            _decimal_error(type_name, value, package_name, field_name)
+        for i in range(len(exponent_text)):
+            exponent = exponent * 10 + "0123456789".find(exponent_text[i])
+        exponent *= exponent_sign
+    if mantissa.count(".") > 1:
+        _decimal_error(type_name, value, package_name, field_name)
+    halves = mantissa.split(".")
+    integer = halves[0]
+    fraction = halves[1] if len(halves) == 2 else ""
+    invalid_digits = not integer + fraction
+    for i in range(len(integer + fraction)):
+        if (integer + fraction)[i] not in "0123456789":
+            invalid_digits = True
+            break
+    if invalid_digits:
+        _decimal_error(type_name, value, package_name, field_name)
+    digits = integer + fraction
+    first = len(digits)
+    for i in range(len(digits)):
+        if digits[i] != "0":
+            first = i
+            break
+    if first == len(digits):
+        return sign, "0", 0
+    significant = digits[first:].rstrip("0")
+    effective_exponent = exponent + len(integer) - first - 1
+    return sign, significant, effective_exponent
+
+def _decimal_integer(digits):
+    number = 0
+    for i in range(len(digits)):
+        number = number * 10 + "0123456789".find(digits[i])
+    return number
+
+def _positive_power(base, exponent):
+    result = 1
+    for _ in range(exponent):
+        result *= base
+    return result
+
+def _build_config_semantic(type_name, value, package_name, field_name):
+    """Validate a Consumer Module semantic value and return Java source."""
+    if type_name == "String":
+        return _java_string(value)
+    if type_name == "boolean":
+        if value not in ["true", "false"]:
+            fail("Invalid BuildConfig value for {}.{} (boolean): {}".format(
+                package_name,
+                field_name,
+                value,
+            ))
+        return value
+    if type_name not in ["byte", "short", "int", "long", "float", "double"]:
+        fail("Unsupported BuildConfig type for {}.{}: {}".format(
+            package_name,
+            field_name,
+            type_name,
+        ))
+    sign, digits, effective_exponent = _decimal_parts(value, type_name, package_name, field_name)
+    if type_name in ["byte", "short", "int", "long"]:
+        if "." in value or "e" in value.lower():
+            _decimal_error(type_name, value, package_name, field_name)
+        if effective_exponent < len(digits) - 1:
+            _decimal_error(type_name, value, package_name, field_name)
+        digits += "0" * (effective_exponent - (len(digits) - 1))
+        if len(digits) > 19:
+            _decimal_error(type_name, value, package_name, field_name)
+        number = _decimal_integer(digits)
+        number *= -1 if sign == "-" else 1
+        bounds = {
+            "byte": [-128, 127],
+            "short": [-32768, 32767],
+            "int": [-2147483648, 2147483647],
+            "long": [-9223372036854775808, 9223372036854775807],
+        }[type_name]
+        if number < bounds[0] or number > bounds[1]:
+            fail("BuildConfig value for {}.{} is outside {} range: {}".format(
+                package_name,
+                field_name,
+                type_name,
+                value,
+            ))
+        return "{}{}".format("-" if sign == "-" and number != 0 else "", digits) + (
+            "L" if type_name == "long" else ""
+        )
+    if digits == "0":
+        return "{}0.0{}".format("-" if sign == "-" else "", "f" if type_name == "float" else "")
+    scale = effective_exponent - (len(digits) - 1)
+    coefficient = _decimal_integer(digits)
+    numerator = coefficient * (_positive_power(10, scale) if scale > 0 else 1)
+    denominator = _positive_power(10, -scale) if scale < 0 else 1
+
+    # JLS 3.10.2 accepts a decimal floating-point literal exactly when rounding
+    # produces a finite non-zero value. Compare as integers against the
+    # overflow midpoint and half the smallest subnormal, avoiding host floats.
+    if type_name == "float":
+        overflow_midpoint = _positive_power(2, 128) - _positive_power(2, 103)
+        underflow_denominator = _positive_power(2, 150)
+    else:
+        overflow_midpoint = _positive_power(2, 1024) - _positive_power(2, 970)
+        underflow_denominator = _positive_power(2, 1075)
+    if numerator >= overflow_midpoint * denominator:
+        fail("BuildConfig value for {}.{} is outside finite {} range: {}".format(
+            package_name,
+            field_name,
+            type_name,
+            value,
+        ))
+    if numerator * underflow_denominator <= denominator:
+        fail("BuildConfig value for {}.{} underflows {}: {}".format(
+            package_name,
+            field_name,
+            type_name,
+            value,
+        ))
+    return "{}{}{}".format(sign if sign == "-" else "", digits, (
+        "e{}".format(scale) if scale != 0 else ""
+    )) + ("f" if type_name == "float" else "")
+
+def _package_version(ctx, package_root, package_name):
+    pubspec = ctx.path("{}/pubspec.yaml".format(package_root))
+    if not pubspec.exists:
+        fail("BuildConfig value_from package_version for {} has no pubspec.yaml".format(
+            package_name,
+        ))
+    for line in ctx.read(pubspec).split("\n"):
+        if not line.startswith("version:"):
+            continue
+        version = line[len("version:"):].strip()
+        if version.startswith("\"") or version.startswith("'"):
+            version = _quoted(version)
+        if version:
+            return version
+    fail("BuildConfig value_from package_version for {} found no version in pubspec.yaml".format(
+        package_name,
+    ))
+
+def _build_config_sources(ctx, package_name, package_root, namespace, specs):
+    builtins = ["DEBUG", "BUILD_TYPE", "LIBRARY_PACKAGE_NAME"]
+    seen = {}
+    custom = []
+    for spec in specs:
+        name = spec["name"]
+        if name in builtins:
+            fail("BuildConfig field {}.{} collides with generated built-in".format(
+                package_name,
+                name,
+            ))
+        if name in seen:
+            fail("Duplicate BuildConfig field {}.{}".format(package_name, name))
+        invalid_name = False
+        for i in range(len(name)):
+            if not (name[i].isalnum() or name[i] == "_"):
+                invalid_name = True
+                break
+        if not name or not (name[0].isalpha() or name[0] == "_") or invalid_name:
+            fail("Invalid BuildConfig field name for {}: {}".format(package_name, name))
+        seen[name] = spec
+        type_name = spec["type"]
+        if type_name not in ["String", "boolean", "byte", "short", "int", "long", "float", "double"]:
+            fail("Unsupported BuildConfig type for {}.{}: {}".format(
+                package_name,
+                name,
+                type_name,
+            ))
+        if spec.get("value_from") != None:
+            if spec["value_from"] != "package_version" or type_name != "String":
+                fail("Unsupported BuildConfig value_from for {}.{}: {}".format(
+                    package_name,
+                    name,
+                    spec["value_from"],
+                ))
+            value = _package_version(ctx, package_root, package_name)
+        else:
+            value = spec.get("value", "")
+        custom.append("    public static final {} {} = {};\n".format(
+            type_name,
+            name,
+            _build_config_semantic(type_name, value, package_name, name),
+        ))
+    custom_text = "".join(sorted(custom))
+    sources = {}
+    for mode, debug, build_type in [("debug", "true", "debug"), ("release", "false", "release")]:
+        sources[mode] = (
+            "package {};\n\n".format(namespace) +
+            "public final class BuildConfig {\n" +
+            "    public static final boolean DEBUG = {};\n".format(debug) +
+            "    public static final String BUILD_TYPE = \"{}\";\n".format(build_type) +
+            "    public static final String LIBRARY_PACKAGE_NAME = {};\n".format(_java_string(namespace)) +
+            custom_text +
+            "    private BuildConfig() {}\n" +
+            "}\n"
+        )
+    return sources
 
 def _extract_dependencies(build_gradle_text):
     """Return (coordinates, reasons) for one plugin's build.gradle.
@@ -1153,6 +1389,7 @@ def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
     plugins = metadata.get("plugins", {}).get("android", [])
     overrides = {k: json.decode(v) for k, v in ctx.attr.overrides.items()}
+    build_config_fields = {k: json.decode(v) for k, v in ctx.attr.build_config_fields.items()}
     recipes = {k: json.decode(v) for k, v in ctx.attr.recipes.items()}
 
     manifest = []
@@ -1167,6 +1404,7 @@ def _flutter_plugins_impl(ctx):
     # An override goes stale two ways: the scraper learns to read what it
     # supplies, or its package leaves the graph entirely.
     used_overrides = []
+    used_build_config_packages = []
     stale_overrides = []
     for plugin in plugins:
         name = plugin["name"]
@@ -1364,6 +1602,16 @@ def _flutter_plugins_impl(ctx):
                     android,
                 ),
             )
+        used_build_config_packages.append(name)
+        build_config_sources = _build_config_sources(
+            ctx,
+            name,
+            package_root,
+            package,
+            build_config_fields.get(name, []),
+        )
+        ctx.file("{}/generated/debug/BuildConfig.java".format(name), build_config_sources["debug"])
+        ctx.file("{}/generated/release/BuildConfig.java".format(name), build_config_sources["release"])
 
         # The native half, for plugins whose build.gradle drives CMake.
         native = ""
@@ -1438,6 +1686,8 @@ def _flutter_plugins_impl(ctx):
                     ] + native_deps,
                 ),
                 embedding = ctx.attr.embedding,
+                mode_debug = ctx.attr.mode_debug,
+                mode_release = ctx.attr.mode_release,
             ),
         )
         manifest.append({
@@ -1541,6 +1791,19 @@ def _flutter_plugins_impl(ctx):
         ),
     )
 
+    unused_build_config = [
+        n
+        for n in sorted(build_config_fields)
+        if n not in used_build_config_packages
+    ]
+    if unused_build_config:
+        lines = ["plugins.build_config_field package(s) absent or non-standard:"]
+        for package_name in unused_build_config:
+            for field in build_config_fields[package_name]:
+                lines.append("  {}.{}".format(package_name, field["name"]))
+        lines.append("Delete them from MODULE.bazel or use a Package Recipe.")
+        fail("\n".join(lines))
+
     # The one place the chosen strategy per plugin is recorded.
     unused_overrides = [n for n in sorted(overrides) if n not in used_overrides]
     if stale_overrides or unused_overrides:
@@ -1630,6 +1893,14 @@ flutter_plugins = repository_rule(
             doc = "Label of //flutter:defs.bzl, for android_native_lib_jar.",
             mandatory = True,
         ),
+        "mode_debug": attr.string(
+            doc = "Canonical label of Flutter's debug mode selector.",
+            mandatory = True,
+        ),
+        "mode_release": attr.string(
+            doc = "Canonical label of Flutter's release mode selector.",
+            mandatory = True,
+        ),
         "recipe_bzl": attr.string(
             doc = "Label of //flutter:defs.bzl, for flutter_native_libs.",
             mandatory = True,
@@ -1669,6 +1940,9 @@ project states nothing extra for it.""",
         ),
         "overrides": attr.string_dict(
             doc = "Package name -> JSON list of Maven coordinates the scraper could not read.",
+        ),
+        "build_config_fields": attr.string_dict(
+            doc = "Package name -> JSON list of explicit BuildConfig field specifications.",
         ),
     },
     local = True,
@@ -1840,9 +2114,43 @@ rather than repeating it per package.""",
     },
 )
 
+_BUILD_CONFIG_MISSING = "__rules_flutter_build_config_value_missing__"
+
+_build_config_field = tag_class(
+    attrs = {
+        "package": attr.string(mandatory = True),
+        "name": attr.string(mandatory = True),
+        "type": attr.string(mandatory = True),
+        # A sentinel distinguishes omission from an explicitly empty String.
+        "value": attr.string(default = _BUILD_CONFIG_MISSING),
+        "value_from": attr.string(default = _BUILD_CONFIG_MISSING),
+    },
+)
+
 def _flutter_plugins_ext_impl(ctx):
     overrides = {}
+    build_config_fields = {}
     recipes = {}
+
+    for mod in ctx.modules:
+        for field in mod.tags.build_config_field:
+            if not mod.is_root:
+                fail("plugins.build_config_field may only be declared by the root Consumer Module")
+            has_value = field.value != _BUILD_CONFIG_MISSING
+            has_source = field.value_from != _BUILD_CONFIG_MISSING
+            if has_value == has_source:
+                fail("plugins.build_config_field {}.{} must set exactly one of value or value_from".format(
+                    field.package,
+                    field.name,
+                ))
+            if field.package not in build_config_fields:
+                build_config_fields[field.package] = []
+            build_config_fields[field.package].append({
+                "name": field.name,
+                "type": field.type,
+                "value": field.value if has_value else None,
+                "value_from": field.value_from if has_source else None,
+            })
 
     # Dependencies may provide recipes; root-module settings take precedence.
     for mod in [m for m in ctx.modules if not m.is_root] + [m for m in ctx.modules if m.is_root]:
@@ -1883,6 +2191,7 @@ def _flutter_plugins_ext_impl(ctx):
             flutter_plugins(
                 name = "flutter_plugins",
                 abis = project.abis,
+                embedding = str(project.embedding),
                 metadata = project.metadata,
                 package_config = package_config,
                 coursier_options = project.coursier_options,
@@ -1891,15 +2200,23 @@ def _flutter_plugins_ext_impl(ctx):
                 maven_lock_file = project.maven_lock_file,
                 maven_repo = maven_repo,
                 overrides = overrides,
+                build_config_fields = {
+                    n: json.encode(v)
+                    for n, v in build_config_fields.items()
+                },
                 recipes = recipes,
-                # Labels resolve in the Consumer Module before generation.
-                embedding = str(project.embedding),
                 android_bzl = str(Label("//flutter:defs.bzl")),
+                mode_debug = str(Label("//flutter:mode_debug")),
+                mode_release = str(Label("//flutter:mode_release")),
                 recipe_bzl = str(Label("//flutter:defs.bzl")),
                 ndk_source_properties = str(Label("@androidndk_cmake//:ndk_source_properties")),
             )
 
 flutter_plugins_ext = module_extension(
     implementation = _flutter_plugins_ext_impl,
-    tag_classes = {"project": _project, "package": _package},
+    tag_classes = {
+        "project": _project,
+        "package": _package,
+        "build_config_field": _build_config_field,
+    },
 )
