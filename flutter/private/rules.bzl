@@ -786,12 +786,12 @@ def _bundle_dir(ctx, out, abi, index):
     """Where one ABI's bundle goes.
 
     The first is the declared output itself, so the shared files are written
-    once rather than copied in afterwards; the rest go beside it and exist only
-    to be compared and to have their manifests read.
+    once rather than copied in afterwards; the rest are action-local scratch
+    used only for comparison and to read their manifests.
     """
     if index == 0:
-        return out.path
-    return "{}/{}.abi_{}".format(out.dirname, ctx.label.name, abi)
+        return "$EXECROOT/{}".format(out.path)
+    return "$STAGE/bundles/{}".format(abi)
 
 def _bundle_command(ctx, out, abi, index):
     return """"$EXECROOT/{flutter}" build bundle \
@@ -799,10 +799,10 @@ def _bundle_command(ctx, out, abi, index):
     --no-pub \
     --target="$ENTRYPOINT" \
     --target-platform={platform} \
-    --asset-dir="$EXECROOT/{dir}" \
+    --asset-dir="{dir}" \
     --suppress-analytics >/dev/null
-rm -f "$EXECROOT/{dir}/.last_build_id"
-rm -rf "$EXECROOT/{dir}/native_assets"
+rm -f "{dir}/.last_build_id"
+rm -rf "{dir}/native_assets"
 """.format(
         flutter = ctx.file._flutter.path,
         mode = ctx.attr._mode[BuildSettingInfo].value,
@@ -888,8 +888,10 @@ tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
 
 cd "$STAGE/{project_dir}"
+mkdir -p "$STAGE/bundles"
 {bundles}
-exec python3 "$EXECROOT/{merger}" {merge_args}
+# Keep the shell alive so its EXIT trap removes STAGE after the merger.
+python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         project_dir = project_dir,
         android_sdk = ctx.file._android_sdk.path,
@@ -897,7 +899,7 @@ exec python3 "$EXECROOT/{merger}" {merge_args}
         merger = ctx.file._merger.path,
         bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
         merge_args = " ".join([
-            '--bundle "{}=$EXECROOT/{}"'.format(abi, _bundle_dir(ctx, out, abi, i))
+            '--bundle "{}={}"'.format(abi, _bundle_dir(ctx, out, abi, i))
             for i, abi in enumerate(ctx.attr.abis)
         ]),
     )
