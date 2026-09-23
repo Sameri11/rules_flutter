@@ -782,7 +782,7 @@ def flutter_app(
         **kwargs
     )
 
-def _bundle_dir(ctx, out, abi, index):
+def _bundle_dir(out, abi, index):
     """Where one ABI's bundle goes.
 
     The first is the declared output itself, so the shared files are written
@@ -807,7 +807,7 @@ rm -rf "{dir}/native_assets"
         flutter = ctx.file._flutter.path,
         mode = ctx.attr._mode[BuildSettingInfo].value,
         platform = ABIS[abi].target_platform,
-        dir = _bundle_dir(ctx, out, abi, index),
+        dir = _bundle_dir(out, abi, index),
     )
 
 def _flutter_assets_impl(ctx):
@@ -899,7 +899,7 @@ python3 "$EXECROOT/{merger}" {merge_args}
         merger = ctx.file._merger.path,
         bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
         merge_args = " ".join([
-            '--bundle "{}={}"'.format(abi, _bundle_dir(ctx, out, abi, i))
+            '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
             for i, abi in enumerate(ctx.attr.abis)
         ]),
     )
