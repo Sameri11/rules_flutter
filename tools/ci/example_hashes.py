@@ -18,24 +18,31 @@ import sys
 import zipfile
 from pathlib import Path
 
-# Exact (example, module, declared Flutter APK targets) inventory, checked against query.
+# Exact (example, module, declared Flutter APK targets, build flags) inventory,
+# checked against query. Flags select the configuration the rows record.
+DEMO_APP_TARGETS = (
+    "//android/app:demo_app",
+    "//android/app:demo_app_arm64-v8a",
+    "//android/app:demo_app_x86_64",
+    "//android/app:demo_app_armeabi-v7a",
+)
 EXAMPLES = (
+    ("demo_app", "examples/demo_app", DEMO_APP_TARGETS, ()),
+    # The debug kernel embeds the Flutter SDK and pub-cache paths, so these
+    # rows only hold for CI's runner layout: record them from CI output.
     (
-        "demo_app",
+        "demo_app_debug",
         "examples/demo_app",
-        (
-            "//android/app:demo_app",
-            "//android/app:demo_app_arm64-v8a",
-            "//android/app:demo_app_x86_64",
-            "//android/app:demo_app_armeabi-v7a",
-        ),
+        DEMO_APP_TARGETS,
+        ("--@rules_flutter//flutter:mode=debug",),
     ),
-    ("no_plugins", "examples/no_plugins", ("//android/app:no_plugins",)),
-    ("pub_plugins", "examples/pub_plugins", ("//android/app:pub_plugins",)),
+    ("no_plugins", "examples/no_plugins", ("//android/app:no_plugins",), ()),
+    ("pub_plugins", "examples/pub_plugins", ("//android/app:pub_plugins",), ()),
     (
         "local_plugin",
         "examples/local_plugin",
         ("//packages/host_app/android/app:host_app",),
+        (),
     ),
 )
 
@@ -79,7 +86,8 @@ def entry_listing(apk: Path) -> str:
 
 
 def unsigned_apks(
-        bazel: str, module: Path, targets: tuple[str, ...]) -> dict[str, Path]:
+        bazel: str, module: Path, targets: tuple[str, ...],
+        flags: tuple[str, ...]) -> dict[str, Path]:
     suffixes = {}
     output_labels = []
     for target in targets:
@@ -90,7 +98,7 @@ def unsigned_apks(
     outputs = [
         Path(line)
         for line in run(
-            [bazel, "cquery", "--output=files", "set({})".format(
+            [bazel, "cquery", *flags, "--output=files", "set({})".format(
                 " ".join(output_labels)
             )],
             module,
@@ -156,7 +164,7 @@ def assert_target_inventory(
 
 def collect(bazel: str, manifests: Path, build: bool, only: str | None) -> list[str]:
     rows: list[str] = []
-    for example, directory, targets in EXAMPLES:
+    for example, directory, targets, flags in EXAMPLES:
         if only and only != example:
             continue
         module = REPO_ROOT / directory
@@ -165,8 +173,8 @@ def collect(bazel: str, manifests: Path, build: bool, only: str | None) -> list[
         )
         if build:
             print("==> building {} ({} APK shapes)".format(example, len(targets)))
-            run([bazel, "build", *targets], module)
-        apks = unsigned_apks(bazel, module, targets)
+            run([bazel, "build", *flags, *targets], module)
+        apks = unsigned_apks(bazel, module, targets, flags)
         for target in targets:
             apk = apks[target]
             if not apk.is_file():
@@ -208,13 +216,13 @@ def recorded_rows(golden: Path) -> list[str]:
 def configured_row_keys() -> list[tuple[str, str]]:
     return [
         (example, target)
-        for example, _, targets in EXAMPLES
+        for example, _, targets, _ in EXAMPLES
         for target in targets
     ]
 
 
 def validate_only(only: str) -> None:
-    names = [example for example, _, _ in EXAMPLES]
+    names = [example for example, _, _, _ in EXAMPLES]
     if only not in names:
         sys.exit(
             "FAIL: --only {!r} is not a configured example; expected one of: {}."
@@ -295,7 +303,7 @@ def selftest() -> int:
     """
     first = EXAMPLES[0][0]
     a0, a1 = EXAMPLES[0][2][0], EXAMPLES[0][2][1]
-    second, _, second_targets = EXAMPLES[1]
+    second, _, second_targets, _ = EXAMPLES[1]
     b0 = second_targets[0]
     golden = Path("example_hashes.txt")
 
@@ -303,7 +311,7 @@ def selftest() -> int:
         "{} {} apk=old-{} entries=old-{}".format(
             example, target, example, target
         )
-        for example, _, targets in EXAMPLES
+        for example, _, targets, _ in EXAMPLES
         for target in targets
     ]
     fresh = [

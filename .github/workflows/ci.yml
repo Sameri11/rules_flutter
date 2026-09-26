@@ -155,6 +155,11 @@ jobs:
           - name: demo_app
             directory: examples/demo_app
             description: demo app (3 ABIs, recipes, CMake, path deps)
+          # Same module in debug mode: gates the debug kernel/APK bytes.
+          - name: demo_app_debug
+            directory: examples/demo_app
+            description: demo app, debug mode
+            mode: debug
           - name: no_plugins
             directory: examples/no_plugins
             description: no plugins at all
@@ -175,17 +180,18 @@ jobs:
           bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
           # Only this example's app module; local_plugin's lives in a subdirectory.
           pub-get: ${{ matrix.example.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.example.directory }}
-          cache-mode: ${{ matrix.example.name == 'demo_app' && env.BAZEL_CACHE_MODE || '' }}
-          cache-host: ${{ matrix.example.name == 'demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
-          cache-project-id: ${{ matrix.example.name == 'demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
-          cache-token: ${{ matrix.example.name == 'demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
+          # Both demo_app modes share the module's remote cache.
+          cache-mode: ${{ matrix.example.directory == 'examples/demo_app' && env.BAZEL_CACHE_MODE || '' }}
+          cache-host: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
+          cache-project-id: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
+          cache-token: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
 
       # Hash gate builds the APKs below; tests run their target guards.
       - name: bazel test //...
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... --lockfile_mode=error 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+          bazel test //... --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout
