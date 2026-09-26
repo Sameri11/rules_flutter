@@ -115,6 +115,35 @@ def _project_path(ctx, file, attribute):
         ))
     return path[len(prefix):]
 
+def _sdk_root_for(platform_files, mode):
+    """Directory holding platform_strong.dill, for a patched-SDK filegroup.
+
+    `--sdk-root` wants the directory, not the file.
+    """
+    for f in platform_files:
+        if f.basename == "platform_strong.dill":
+            return f.dirname
+    fail("platform_strong.dill not found for mode '{}'".format(mode))
+
+# frontend_server flags for a debug (JIT) kernel. Shared, verbatim, by
+# dart_kernel (via args.add_all) and _debug_kernel_command (joined into a
+# shell template), so an SDK-driven flag change is made once.
+_DEBUG_KERNEL_FLAGS = [
+    "-Ddart.vm.profile=false",
+    "-Ddart.vm.product=false",
+    "--enable-asserts",
+    "--track-widget-creation",
+    "--no-link-platform",
+]
+
+# `--source`/`-D` triple that compiles a federated plugin's generated Dart
+# registrant into the kernel and makes the engine's `dart_plugin_registrant`
+# lookup match the exact package: URI frontend_server recorded for it -- see
+# the comment on `pubspec` below for why it must be a package: URI. Shared,
+# verbatim, by dart_kernel (formatted with shell variable names, resolved at
+# run time) and _debug_kernel_command (formatted with an analysis-time path).
+_REGISTRANT_SOURCE_ARGS = '--source "package:{pkg}/{registrant}" --source "package:flutter/src/dart_plugin_registrant.dart" "-Dflutter.dart_plugin_registrant=package:{pkg}/{registrant}"'
+
 def _dart_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
     mode = ctx.attr._mode[BuildSettingInfo].value
@@ -125,15 +154,8 @@ def _dart_kernel_impl(ctx):
     platform = ctx.attr._platform_product if release else ctx.attr._platform_debug
     platform_files = ctx.files._platform_product if release else ctx.files._platform_debug
 
-    # --sdk-root wants the directory holding platform_strong.dill, so locate
-    # that file within the filegroup and take its parent.
-    sdk_root = None
-    for f in platform_files:
-        if f.basename == "platform_strong.dill":
-            sdk_root = f.dirname
-            break
-    if sdk_root == None:
-        fail("platform_strong.dill not found for mode '{}'".format(mode))
+    # --sdk-root wants the directory holding platform_strong.dill.
+    sdk_root = _sdk_root_for(platform_files, mode)
 
     args = ctx.actions.args()
 
@@ -163,11 +185,7 @@ def _dart_kernel_impl(ctx):
         if ctx.attr.target_os:
             args.add("--target-os", ctx.attr.target_os)
     else:
-        args.add("-Ddart.vm.profile=false")
-        args.add("-Ddart.vm.product=false")
-        args.add("--enable-asserts")
-        args.add("--track-widget-creation")
-        args.add("--no-link-platform")
+        args.add_all(_DEBUG_KERNEL_FLAGS)
     args.add("--packages", ctx.file.package_config)
 
     # The Dart half of plugin registration. GeneratedPluginRegistrant.java
@@ -216,14 +234,11 @@ REGISTRANT="$1"; shift
 DILL="$1"; shift
 
 if [ -n "$REGISTRANT" ]; then
-    set -- "$@" \
-        --source "package:$PKG/$REGISTRANT" \
-        --source "package:flutter/src/dart_plugin_registrant.dart" \
-        "-Dflutter.dart_plugin_registrant=package:$PKG/$REGISTRANT"
+    set -- "$@" {registrant_args}
 fi
 
 exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
-""",
+""".format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT")),
         arguments = [scalars, args],
         tools = [ctx.attr._dartaotruntime[DefaultInfo].files_to_run],
         # package_config.json is passed as --packages but deliberately NOT
@@ -717,6 +732,7 @@ def flutter_app(
         package_config = ".dart_tool/package_config.json",
         pub_stamp = pub_stamp,
         path_deps = path_deps,
+        dart_plugin_registrant = dart_plugin_registrant,
         **kwargs
     )
 
@@ -810,11 +826,86 @@ rm -rf "{dir}/native_assets"
         dir = _bundle_dir(out, abi, index),
     )
 
+def _debug_kernel_command(ctx, out, project_dir, debug):
+    """Shell recompiling the debug kernel with scheme-relative source URIs.
+
+    Overwrites every ABI bundle's kernel_blob.bin with the result.
+
+    `flutter build bundle --debug` (via _bundle_command above) already
+    produced a kernel_blob.bin per ABI bundle, but flutter_tools has no flag
+    that stops its frontend_server invocation from recording absolute
+    `file://` URIs under the mktemp $STAGE -- see
+    .pi-flow/dependency-portability/issues/06-make-debug-kernel-blob-reproducible.md
+    and its prototype (branch prototype/06-debug-kernel-uris, commit
+    883987a). Two fresh debug builds with unchanged inputs therefore never
+    produce the same kernel_blob.bin, so debug APKs cannot be hash-gated even
+    on one host.
+
+    This recompiles once, calling frontend_server directly, mirroring
+    _dart_kernel_impl's debug branch (mode flags, package: URIs for the
+    entrypoint and plugin registrant) with two additions that make $STAGE's
+    own path invisible to the kernel: --filesystem-root/--filesystem-scheme
+    turn it into a virtual root, and --packages is a URI under that scheme
+    instead of a real path. package_config.json's rootUri for the project's
+    own package (and for a path dependency staged alongside it) is relative,
+    so it resolves under the same scheme; only the SDK and pub-cache packages
+    keep absolute rootUris.
+
+    Removing those remaining SDK/pub-cache paths -- extra filesystem roots
+    plus a rewritten package_config -- is scope B of the ticket and not done
+    here. Debug stays same-host-only (`local`, see _EXEC_DEBUG) until then.
+
+    `debug` is the caller's single mode check, passed in rather than
+    re-derived, so the command and its declared inputs never disagree on
+    whether this build is a debug build.
+    """
+    if not debug:
+        return ""
+
+    sdk_root = _sdk_root_for(ctx.files._platform_debug, "debug")
+    prefix = project_dir + "/" if project_dir else ""
+    entrypoint_library = _library_path(ctx, ctx.file.entrypoint, "entrypoint")
+
+    registrant = ""
+    if ctx.file.dart_plugin_registrant:
+        registrant_library = _library_path(ctx, ctx.file.dart_plugin_registrant, "dart_plugin_registrant")
+        registrant = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = registrant_library) + " "
+
+    overwrites = "\n".join([
+        'cp "$STAGE/kernel_blob.dill" "{dir}/kernel_blob.bin"'.format(dir = _bundle_dir(out, abi, i))
+        for i, abi in enumerate(ctx.attr.abis)
+    ])
+
+    return """PKG="$(cat "$EXECROOT/{package_name}")"
+"$EXECROOT/{dartaotruntime}" "$EXECROOT/{frontend_server}" \
+    --sdk-root "$EXECROOT/{sdk_root}/" \
+    --target=flutter --no-print-incremental-dependencies \
+    {debug_flags} \
+    --filesystem-root "$STAGE" --filesystem-scheme org-dartlang-root \
+    --packages "org-dartlang-root:///{prefix}.dart_tool/package_config.json" \
+    --output-dill "$STAGE/kernel_blob.dill" \
+    {registrant}--verbosity=error "package:$PKG/{entrypoint}"
+{overwrites}
+""".format(
+        package_name = ctx.attr.pubspec[FlutterPubspecInfo].package_name.path,
+        dartaotruntime = ctx.file._dartaotruntime.path,
+        frontend_server = ctx.file._frontend_server.path,
+        sdk_root = sdk_root,
+        debug_flags = " ".join(_DEBUG_KERNEL_FLAGS),
+        prefix = prefix,
+        registrant = registrant,
+        entrypoint = entrypoint_library,
+        overwrites = overwrites,
+    )
+
 def _flutter_assets_impl(ctx):
     # The directory must be named flutter_assets: android_binary derives the
     # in-APK path from the artifact path with assets_dir stripped, and Flutter
     # requires the bundle at assets/flutter_assets/ at runtime.
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+
+    mode = ctx.attr._mode[BuildSettingInfo].value
+    debug = mode == "debug"
 
     entrypoint = _project_path(ctx, ctx.file.entrypoint, "entrypoint")
     args = ctx.actions.args()
@@ -826,6 +917,7 @@ def _flutter_assets_impl(ctx):
             ctx.file.package_config,
             ctx.attr.pubspec[FlutterPubspecInfo].src,
         ] +
+        ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
         ctx.files.assets + ctx.files.srcs + ctx.files.pub_stamp +
         ctx.files.path_deps
     )
@@ -890,6 +982,7 @@ chmod -R u+w "$STAGE"
 cd "$STAGE/{project_dir}"
 mkdir -p "$STAGE/bundles"
 {bundles}
+{debug_kernel}
 # Keep the shell alive so its EXIT trap removes STAGE after the merger.
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
@@ -898,18 +991,29 @@ python3 "$EXECROOT/{merger}" {merge_args}
         manifest = manifest.path,
         merger = ctx.file._merger.path,
         bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
+        debug_kernel = _debug_kernel_command(ctx, out, project_dir, debug),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
             for i, abi in enumerate(ctx.attr.abis)
         ]),
     )
 
-    mode = ctx.attr._mode[BuildSettingInfo].value
+    # Declared and passed as a tool only for a debug build: release never
+    # calls _debug_kernel_command. `debug`, not a second `_mode` read, is the
+    # gate -- see _debug_kernel_command's docstring.
+    debug_kernel_inputs = (
+        [
+            ctx.file._frontend_server,
+            ctx.attr.pubspec[FlutterPubspecInfo].package_name,
+        ] + ctx.files._platform_debug
+    ) if debug else []
+
     ctx.actions.run_shell(
         command = cmd,
         arguments = [args],
+        tools = [ctx.attr._dartaotruntime[DefaultInfo].files_to_run] if debug else [],
         inputs = depset(
-            direct = declared_project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter, ctx.file._android_sdk],
+            direct = declared_project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter, ctx.file._android_sdk] + debug_kernel_inputs,
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
@@ -938,6 +1042,14 @@ documented entry points for driving it from another build system.""",
 Must be the same file dart_kernel compiles. Flutter defaults the command to
 lib/main.dart when omitted, which silently combines a snapshot for one program
 with an asset/code bundle for another when an app overrides its entrypoint.""",
+        ),
+        "dart_plugin_registrant": attr.label(
+            allow_single_file = [".dart"],
+            doc = """The generated Dart plugin registrant, e.g.
+`lib/dart_plugin_registrant.dart`. See dart_kernel.dart_plugin_registrant.
+
+Used to recompile the debug kernel with scheme-relative source URIs; see
+_debug_kernel_command. Omit for an app with no federated plugins.""",
         ),
         "assets": attr.label_list(
             allow_files = True,
@@ -972,8 +1084,18 @@ bundle that started varying by architecture fails here rather than shipping.""",
             allow_single_file = True,
             cfg = "exec",
         ),
+        "_dartaotruntime": attr.label(
+            default = "@flutter_sdk//:dartaotruntime",
+            executable = True,
+            cfg = "exec",
+            allow_single_file = True,
+        ),
         "_flutter": attr.label(
             default = "@flutter_sdk//:flutter",
+            allow_single_file = True,
+        ),
+        "_frontend_server": attr.label(
+            default = "@flutter_sdk//:frontend_server.snapshot",
             allow_single_file = True,
         ),
         "_merger": attr.label(
@@ -984,6 +1106,11 @@ bundle that started varying by architecture fails here rather than shipping.""",
             default = "//flutter:mode",
             providers = [BuildSettingInfo],
             doc = "See dart_kernel._mode. Debug bundles ship kernel_blob.bin.",
+        ),
+        "_platform_debug": attr.label(
+            default = "@flutter_sdk//:platform_debug",
+            allow_files = True,
+            doc = "Non-product patched SDK; --sdk-root for the debug kernel recompile.",
         ),
         "_sdk_version": attr.label(
             default = "@flutter_sdk//:flutter.version.json",
