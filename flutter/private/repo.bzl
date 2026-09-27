@@ -235,11 +235,6 @@ def _flutter_impl(ctx):
         name = "flutter_sdk",
         version = declared_version,
     )
-    flutter_toolchains(
-        name = "flutter_toolchains",
-        toolchain_file = str(Label("//flutter/private:toolchain.bzl")),
-        toolchain_type = str(Label("//flutter/private:flutter_toolchain_type")),
-    )
 
     # Each artifact repository reads the version file through the SDK label.
     # The label dependency makes Bazel re-resolve these URLs with that SDK.
@@ -265,57 +260,3 @@ flutter = module_extension(
     implementation = _flutter_impl,
     tag_classes = {"sdk": _flutter_sdk_tag},
 )
-
-_TOOLCHAIN_BUILD_TEMPLATE = """load("{toolchain_file}", "flutter_toolchain")
-
-package(default_visibility = ["//visibility:public"])
-
-flutter_toolchain(name = "sdk")
-
-toolchain(
-    name = "flutter",
-    toolchain = ":sdk",
-    toolchain_type = "{toolchain_type}",
-    exec_compatible_with = {exec_compatible_with},
-    target_compatible_with = [],
-)
-"""
-
-def _flutter_toolchains_impl(ctx):
-    ctx.file("BUILD.bazel", _TOOLCHAIN_BUILD_TEMPLATE.format(
-        toolchain_file = ctx.attr.toolchain_file,
-        toolchain_type = ctx.attr.toolchain_type,
-        exec_compatible_with = repr(_host_constraints(ctx)),
-    ))
-
-flutter_toolchains = repository_rule(
-    implementation = _flutter_toolchains_impl,
-    attrs = {
-        "toolchain_file": attr.string(mandatory = True),
-        "toolchain_type": attr.string(mandatory = True),
-    },
-)
-
-def _host_constraints(ctx):
-    name = ctx.os.name.lower()
-    if name.startswith("mac os"):
-        host_os = "macos"
-    elif name.startswith("linux"):
-        host_os = "linux"
-    elif name.startswith("windows"):
-        host_os = "windows"
-    else:
-        fail("Unsupported host OS for a Flutter toolchain: '{}'.".format(ctx.os.name))
-
-    host_cpu = {
-        "aarch64": "arm64",
-        "amd64": "x86_64",
-        "arm64": "arm64",
-        "x86_64": "x86_64",
-    }.get(ctx.os.arch.lower())
-    if host_cpu == None:
-        fail("Unsupported host architecture for a Flutter toolchain: '{}'.".format(ctx.os.arch))
-    return [
-        "@platforms//os:" + host_os,
-        "@platforms//cpu:" + host_cpu,
-    ]

@@ -260,7 +260,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "LVQBiYSRHwYKIpzM3e1f1o1V/ht1zj5wpmrvnZTaOV8=",
+        "bzlTransitiveDigest": "wF3CKaHCMwFVLvj1rHFnEcMyWv+V5e+eJDc8pVkDG5w=",
         "usagesDigest": "u+HEkcGg21uv1v1Y5n7OFzVXl5/8Fi8W5y561YLsmWA=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",
@@ -300,7 +300,7 @@
     },
     "//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "VDqIESN4Cay8mkD/yyfMYYBmV5qoF0Z2LpZzzVY9u5M=",
+        "bzlTransitiveDigest": "wF3CKaHCMwFVLvj1rHFnEcMyWv+V5e+eJDc8pVkDG5w=",
         "usagesDigest": "KGsoIb4QJBOnE1uBRa8rnPh+WdNjblAhtwA8ooeGMUE=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",
@@ -331,13 +331,6 @@
             "repoRuleId": "@@//flutter/private:repo.bzl%flutter_sdk",
             "attributes": {
               "version": "3.44.2"
-            }
-          },
-          "flutter_toolchains": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_toolchains",
-            "attributes": {
-              "toolchain_file": "'@@//flutter/private:toolchain.bzl'",
-              "toolchain_type": "'@@//flutter/private:flutter_toolchain_type'"
             }
           },
           "flutter_embedding_release": {
@@ -386,6 +379,22 @@
             "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
             "attributes": {
               "artifact": "armeabi_v7a_debug"
+            }
+          }
+        }
+      }
+    },
+    "//flutter/private:toolchain_repo.bzl%flutter_toolchains": {
+      "general": {
+        "bzlTransitiveDigest": "SmgJh+mcT5us1MAedPt3edvLR/YJ7zFPb+RdrblOFWA=",
+        "usagesDigest": "e34Oyjda7ngNIE4XB/Zd5yAlGX3OFqANSgbDQAzDGfo=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "flutter_toolchains": {
+            "repoRuleId": "@@//flutter/private:toolchain_repo.bzl%_flutter_toolchains_repo",
+            "attributes": {
+              "toolchain_target": "'@@//flutter/private:flutter_toolchain'",
+              "toolchain_type": "'@@//flutter/private:flutter_toolchain_type'"
             }
           }
         }

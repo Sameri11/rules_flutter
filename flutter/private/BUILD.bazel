@@ -13,13 +13,13 @@ or a consumer's. Two mechanical exceptions need a label, and only those:
     That guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
-`repo.bzl` is loaded through the public module extension, and generated host
-toolchain repositories load `toolchain.bzl`. The toolchain type is public so
-the registered repository can expose it to Flutter rules.
+`repo.bzl` is loaded through the public module extension. The generated
+host-compatible registration points at the public static toolchain target.
 """
 
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
 load(":abis.bzl", "ABIS")
+load(":toolchain.bzl", "flutter_toolchain")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -50,6 +50,16 @@ exports_files(
 
 exports_files(
     ["toolchain.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+exports_files(
+    ["toolchain_repo.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+flutter_toolchain(
+    name = "flutter_toolchain",
     visibility = ["//visibility:public"],
 )
 

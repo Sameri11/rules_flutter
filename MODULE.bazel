@@ -15,8 +15,10 @@ use_repo(
     "flutter_engine_x86_64_debug",
     "flutter_engine_x86_64_release",
     "flutter_sdk",
-    "flutter_toolchains",
 )
+
+flutter_toolchains = use_extension("//flutter/private:toolchain_repo.bzl", "flutter_toolchains")
+use_repo(flutter_toolchains, "flutter_toolchains")
 
 register_toolchains("@flutter_toolchains//:all")
 
