@@ -13,9 +13,9 @@ or a consumer's. Two mechanical exceptions need a label, and only those:
     That guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
-`repo.bzl` carries no `visibility()` declaration: tests/consumer's
-`android/config.MODULE.bazel` uses its module extension directly, which is that
-fixture's only coverage of the explicit embedding debug and release labels.
+`repo.bzl` is loaded through the public module extension, and generated host
+toolchain repositories load `toolchain.bzl`. The toolchain type is public so
+the registered repository can expose it to Flutter rules.
 """
 
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
@@ -42,7 +42,20 @@ exports_files(
         "repo.bzl",
         "rules.bzl",
     ],
-    visibility = ["//tools/ci:__pkg__"],
+    visibility = [
+        "//flutter:__pkg__",
+        "//tools/ci:__pkg__",
+    ],
+)
+
+exports_files(
+    ["toolchain.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+toolchain_type(
+    name = "flutter_toolchain_type",
+    visibility = ["//visibility:public"],
 )
 
 # The ABI table is implementation, so these assertions live beside it rather

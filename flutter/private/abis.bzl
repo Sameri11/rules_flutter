@@ -237,23 +237,6 @@ def embedding_repo(mode):
     """
     return "flutter_embedding_" + mode
 
-def gen_snapshot_label(abi, mode):
-    """The @flutter_sdk target holding this ABI's gen_snapshot for one AOT mode.
-
-    A `Label`, for the same reason engine_jar_label returns one: a string handed
-    to an attribute from inside a macro resolves in the *caller's* repo mapping,
-    and @flutter_sdk is our extension's. Resolving here is what lets a consumer
-    import nothing from the `flutter` extension at all.
-
-    Args:
-      abi: an Android ABI name, a key of ABIS.
-      mode: an AOT_MODES entry.
-
-    Returns:
-      A Label for that ABI's gen_snapshot in that mode.
-    """
-    return Label("@flutter_sdk//:gen_snapshot_{}_{}".format(abi, mode))
-
 def aot_target_compatible_with():
     """target_compatible_with for a rule that only runs under an AOT-capable mode.
 
@@ -270,27 +253,6 @@ def aot_target_compatible_with():
     conditions = {"//conditions:default": [Label("@platforms//:incompatible")]}
     for mode in AOT_MODES:
         conditions[Label("//flutter:mode_" + mode)] = []
-    return select(conditions)
-
-def aot_gen_snapshot(abi):
-    """select() choosing one ABI's gen_snapshot for whichever AOT mode is active.
-
-    Built from AOT_MODES for the same reason as aot_target_compatible_with.
-    The default branch is only a placeholder for configurations where the
-    depending rule is itself target-incompatible (every mode outside
-    AOT_MODES), so it is never actually consumed.
-
-    Args:
-      abi: an Android ABI name, a key of ABIS.
-
-    Returns:
-      A select() value for a `gen_snapshot` attribute.
-    """
-    conditions = {
-        Label("//flutter:mode_" + mode): gen_snapshot_label(abi, mode)
-        for mode in AOT_MODES
-    }
-    conditions["//conditions:default"] = gen_snapshot_label(abi, AOT_MODES[0])
     return select(conditions)
 
 # The API level the whole Android build targets: the `minSdkVersion` an APK
