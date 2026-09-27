@@ -9,6 +9,8 @@ download rule is a separate concern. See README for that tradeoff.
 
 load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "embedding_repo", "engine_repo")
 
+visibility(["//flutter"])
+
 _BUILD_TEMPLATE = """
 package(default_visibility = ["//visibility:public"])
 
@@ -88,6 +90,8 @@ def _resolve_flutter_root(ctx):
     return str(flutter.realpath.dirname.dirname)
 
 def _flutter_sdk_impl(ctx):
+    if not ctx.attr.version:
+        fail("The root module must declare flutter.sdk(version = \"X.Y.Z\") to build Flutter targets.")
     root = _resolve_flutter_root(ctx)
     version_file = "{}/bin/cache/flutter.version.json".format(root)
     actual = json.decode(ctx.read(version_file))

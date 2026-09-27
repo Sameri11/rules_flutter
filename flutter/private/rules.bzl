@@ -15,11 +15,12 @@ them apart is what lets a consumer load only the platforms they build.
 
 Sandboxing caveat
 -----------------
-`package_config.json` points at absolute paths in `~/.pub-cache`, which are not
-declared Bazel inputs. These actions therefore run unsandboxed so the compiler
-and Flutter tooling can read those packages. Modelling pub packages as Bazel
-repositories (a pub -> MODULE.bazel resolver) is the genuinely hard part of
-this problem and is not attempted here.
+`package_config.json` points at absolute paths in `~/.pub-cache` and the
+Flutter SDK's framework packages, which are not declared Bazel inputs. These
+actions therefore run unsandboxed so the compiler and Flutter tooling can read
+those packages. Modelling pub packages as Bazel repositories (a pub ->
+MODULE.bazel resolver) is the genuinely hard part of this problem and is not
+attempted here.
 """
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
@@ -408,7 +409,10 @@ def _dart_aot_elf_impl(ctx):
     args.add(ctx.file.dill)
 
     ctx.actions.run(
-        executable = _flutter_toolchain(ctx).gen_snapshots[ctx.attr.abi],
+        executable = _flutter_toolchain(ctx).gen_snapshots["{}_{}".format(
+            ctx.attr.abi,
+            ctx.attr._mode[BuildSettingInfo].value,
+        )],
         arguments = [args],
         inputs = [ctx.file.dill],
         outputs = [so],
@@ -432,8 +436,11 @@ dart_aot_elf = rule(
         ),
         "abi": attr.string(
             mandatory = True,
-            values = ["arm64-v8a", "armeabi-v7a", "x86_64"],
-            doc = "Android ABI whose gen_snapshot the toolchain supplies.",
+            values = sorted(ABIS.keys()),
+        ),
+        "_mode": attr.label(
+            default = "//flutter:mode",
+            providers = [BuildSettingInfo],
         ),
         "snapshot_flags": attr.string_list(
             doc = """Extra gen_snapshot flags for this ABI.

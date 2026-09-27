@@ -240,12 +240,12 @@ def embedding_repo(mode):
 def aot_target_compatible_with():
     """target_compatible_with for a rule that only runs under an AOT-capable mode.
 
-    Built from AOT_MODES rather than naming "debug" directly, so adding
-    "profile" to that one list is the whole edit needed to make an AOT rule
-    compatible with it too -- see docs_internal/build-modes-plan.md. Every
-    mode this omits reports "target incompatible with the current
-    configuration" during analysis instead of reaching gen_snapshot with a
-    kernel it rejects.
+    Built from AOT_MODES rather than naming "debug" directly, so the list
+    controls which modes are compatible with an AOT rule. Adding another AOT
+    mode also requires a matching build-setting value and per-ABI engine
+    directory mapping. Every omitted mode reports "target incompatible with
+    the current configuration" during analysis instead of reaching gen_snapshot
+    with a kernel it rejects -- see docs_internal/build-modes-plan.md.
 
     Returns:
       A select() value for a `target_compatible_with` attribute.

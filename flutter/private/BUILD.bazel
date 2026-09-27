@@ -1,9 +1,10 @@
 """Implementation of the Flutter rules.
 
 Nothing here is supported API: Consumer Modules load //flutter:defs.bzl and
-//flutter:extensions.bzl, and every `.bzl` beside this file declares
-`visibility(["//flutter"])` so Bazel rejects any other load, in this repository
-or a consumer's. Two mechanical exceptions need a label, and only those:
+//flutter:extensions.bzl. The `.bzl` files beside this file declare
+`visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
+allows it to be loaded from the ruleset's root MODULE.bazel only. Two
+mechanical exceptions need a label, and only those:
 
   * The Python helpers are attribute defaults of rules defined here. Bazel
     resolves an implicit dependency against the package of the `.bzl` that
@@ -42,20 +43,7 @@ exports_files(
         "repo.bzl",
         "rules.bzl",
     ],
-    visibility = [
-        "//flutter:__pkg__",
-        "//tools/ci:__pkg__",
-    ],
-)
-
-exports_files(
-    ["toolchain.bzl"],
-    visibility = ["//visibility:public"],
-)
-
-exports_files(
-    ["toolchain_repo.bzl"],
-    visibility = ["//visibility:public"],
+    visibility = ["//tools/ci:__pkg__"],
 )
 
 flutter_toolchain(

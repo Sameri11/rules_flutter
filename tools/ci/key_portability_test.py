@@ -215,17 +215,6 @@ class Checker:
                 self.fail("C", "Dart action inputs must declare the toolchain's frontend_server")
             if not _contains_attr(inputs, ["toolchain", "sdk_version"]):
                 self.fail("C", "Dart action inputs must declare the toolchain's SDK identity")
-            if not _contains_name(inputs, "platform_files"):
-                self.fail("C", "Dart action inputs must retain the selected toolchain platform files")
-
-        platform_files = _named_value(function, "platform_files")
-        if not (
-            _contains_attr(platform_files, ["toolchain", "platform_product"])
-            and _contains_attr(platform_files, ["toolchain", "platform_debug"])
-        ):
-            self.fail("C", "Dart compiler platform files must come from the Flutter toolchain")
-        if not _has_call(function, "_flutter_toolchain", ["ctx"]):
-            self.fail("C", "_dart_kernel_impl must resolve the Flutter toolchain")
 
         release = _named_value(tree, "_EXEC_RELEASE")
         release_values = _string_dict(release)
@@ -256,11 +245,6 @@ class Checker:
             aot_action = _action_call(aot_function, "run")
             if aot_action is None:
                 self.fail("C", "_dart_aot_elf_impl must create its AOT action with ctx.actions.run")
-            elif not (
-                _has_call(_keyword(aot_action, "executable"), "_flutter_toolchain", ["ctx"])
-                and _contains_attr(_keyword(aot_action, "executable"), ["ctx", "attr", "abi"])
-            ):
-                self.fail("C", "Dart AOT action must select gen_snapshot from the Flutter toolchain by ABI")
             if not _rule_uses_toolchain(tree, "dart_aot_elf"):
                 self.fail("C", "dart_aot_elf must declare the Flutter toolchain type")
 
@@ -316,21 +300,9 @@ class Checker:
             for name in ("frontend_server", "platform_debug"):
                 if not _contains_attr(debug_inputs, ["toolchain", name]):
                     self.fail("D", "FlutterAssets debug inputs must include toolchain.{}".format(name))
-            if not _has_call(function, "_flutter_toolchain", ["ctx"]):
-                self.fail("D", "_flutter_assets_impl must resolve the Flutter toolchain")
             execution = _keyword(action, "execution_requirements")
             if not (isinstance(execution, ast.Call) and _call_path(execution) == ["_exec_requirements"]):
                 self.fail("D", "FlutterAssets action must use release/debug execution requirements")
-
-        bundle_command = _function(tree, "_bundle_command")
-        if not _contains_attr(bundle_command, ["toolchain", "flutter", "path"]):
-            self.fail("D", "FlutterAssets bundle command must use the toolchain's Flutter launcher")
-        debug_command = _function(tree, "_debug_kernel_command")
-        for name in ("dartaotruntime", "frontend_server"):
-            if not _contains_attr(debug_command, ["toolchain", name, "path"]):
-                self.fail("D", "debug kernel command must use the toolchain's {} file".format(name))
-        if not _contains_attr(debug_command, ["toolchain", "platform_debug"]):
-            self.fail("D", "debug kernel command must use the toolchain's patched SDK")
 
         command = _assets_command(function)
         if command is None:

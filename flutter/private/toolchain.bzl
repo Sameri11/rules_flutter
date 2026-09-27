@@ -1,5 +1,9 @@
 """Provider and implementation target for the host Flutter SDK toolchain."""
 
+load(":abis.bzl", "ABIS", "AOT_MODES")
+
+visibility(["//flutter"])
+
 FlutterToolchainInfo = provider(
     doc = "Flutter SDK files used by compiler, AOT, and asset rules.",
     fields = {
@@ -9,16 +13,19 @@ FlutterToolchainInfo = provider(
         "sdk_version": "Flutter SDK identity JSON file.",
         "platform_product": "Product patched SDK files.",
         "platform_debug": "Debug patched SDK files.",
-        "gen_snapshots": "ABI to Android gen_snapshot executable file mapping.",
+        "gen_snapshots": "ABI and AOT mode to gen_snapshot executable file mapping.",
     },
 )
 
+def _gen_snapshot_attr_name(abi, mode):
+    return "_gen_snapshot_{}_{}".format(abi.replace("-", "_"), mode)
+
 def _flutter_toolchain_impl(ctx):
-    gen_snapshots = {
-        "arm64-v8a": ctx.executable._gen_snapshot_arm64_v8a,
-        "armeabi-v7a": ctx.executable._gen_snapshot_armeabi_v7a,
-        "x86_64": ctx.executable._gen_snapshot_x86_64,
-    }
+    gen_snapshots = {}
+    for abi in sorted(ABIS.keys()):
+        for mode in AOT_MODES:
+            attr_name = _gen_snapshot_attr_name(abi, mode)
+            gen_snapshots["{}_{}".format(abi, mode)] = getattr(ctx.executable, attr_name)
     return [platform_common.ToolchainInfo(flutter = FlutterToolchainInfo(
         flutter = ctx.file._flutter,
         dartaotruntime = ctx.executable._dartaotruntime,
@@ -29,8 +36,7 @@ def _flutter_toolchain_impl(ctx):
         gen_snapshots = gen_snapshots,
     ))]
 
-flutter_toolchain = rule(
-    implementation = _flutter_toolchain_impl,
+def _toolchain_attrs():
     attrs = {
         "_flutter": attr.label(
             default = "@flutter_sdk//:flutter",
@@ -58,23 +64,18 @@ flutter_toolchain = rule(
             default = "@flutter_sdk//:platform_debug",
             allow_files = True,
         ),
-        "_gen_snapshot_arm64_v8a": attr.label(
-            default = "@flutter_sdk//:gen_snapshot_arm64-v8a_release",
-            executable = True,
-            cfg = "exec",
-            allow_single_file = True,
-        ),
-        "_gen_snapshot_armeabi_v7a": attr.label(
-            default = "@flutter_sdk//:gen_snapshot_armeabi-v7a_release",
-            executable = True,
-            cfg = "exec",
-            allow_single_file = True,
-        ),
-        "_gen_snapshot_x86_64": attr.label(
-            default = "@flutter_sdk//:gen_snapshot_x86_64_release",
-            executable = True,
-            cfg = "exec",
-            allow_single_file = True,
-        ),
-    },
+    }
+    for abi in sorted(ABIS.keys()):
+        for mode in AOT_MODES:
+            attrs[_gen_snapshot_attr_name(abi, mode)] = attr.label(
+                default = "@flutter_sdk//:gen_snapshot_{}_{}".format(abi, mode),
+                executable = True,
+                cfg = "exec",
+                allow_single_file = True,
+            )
+    return attrs
+
+flutter_toolchain = rule(
+    implementation = _flutter_toolchain_impl,
+    attrs = _toolchain_attrs(),
 )
