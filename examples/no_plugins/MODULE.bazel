@@ -11,4 +11,7 @@ local_path_override(
     path = "../..",
 )
 
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.44.2")
+
 include("//android:config.MODULE.bazel")
