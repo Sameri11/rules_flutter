@@ -1,7 +1,8 @@
 """Maven dependencies of the Flutter Android embedding.
 
 These are declared in the flutter_embedding POM and Gradle resolves them
-transitively. `http_jar` fetches only the jar, so they are listed explicitly.
+The artifact repository fetches only the jar, so these transitive deps are
+listed explicitly.
 Without them FlutterActivity fails to load at runtime -- androidx.lifecycle.
 LifecycleOwner is one of its supertypes, and the resulting error names
 FlutterActivity rather than the missing supertype.

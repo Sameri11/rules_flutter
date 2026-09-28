@@ -7,8 +7,9 @@ artifacts are fetched lazily by `flutter precache`, so a fully hermetic
 download rule is a separate concern. See README for that tradeoff.
 """
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
 load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "embedding_repo", "engine_repo")
+
+visibility(["//flutter"])
 
 _BUILD_TEMPLATE = """
 package(default_visibility = ["//visibility:public"])
@@ -72,11 +73,7 @@ def _gen_snapshot_host_dir(ctx):
     return "darwin-x64" if host.startswith("darwin-") else host
 
 def _resolve_flutter_root(ctx):
-    """Locate the SDK from FLUTTER_ROOT, else from `flutter` on PATH.
-
-    Shared by the repository rule and the module extension; both `repository_ctx`
-    and `module_ctx` expose the `os` and `which` members this uses.
-    """
+    """Locate the SDK from FLUTTER_ROOT, else from `flutter` on PATH."""
     root = ctx.os.environ.get("FLUTTER_ROOT", "").strip()
     if root:
         return root
@@ -93,7 +90,20 @@ def _resolve_flutter_root(ctx):
     return str(flutter.realpath.dirname.dirname)
 
 def _flutter_sdk_impl(ctx):
+    if not ctx.attr.version:
+        fail("The root module must declare flutter.sdk(version = \"X.Y.Z\") to build Flutter targets.")
     root = _resolve_flutter_root(ctx)
+    version_file = "{}/bin/cache/flutter.version.json".format(root)
+    actual = json.decode(ctx.read(version_file))
+    if actual["frameworkVersion"] != ctx.attr.version:
+        fail(
+            "Flutter SDK version mismatch: Consumer declared Flutter {}, but host SDK is Flutter {} at {}.".format(
+                ctx.attr.version,
+                actual["frameworkVersion"],
+                root,
+            ),
+        )
+
     cache = "{}/bin/cache".format(root)
     engine = "{}/artifacts/engine".format(cache)
 
@@ -148,10 +158,7 @@ def _flutter_sdk_impl(ctx):
     # it moves on framework-only commits that leave engine artifacts identical.
     # Not to be confused with a project's .metadata, which records the revision
     # the project was scaffolded with and is never updated by ordinary SDK use.
-    ctx.symlink(
-        "{}/flutter.version.json".format(cache),
-        "flutter.version.json",
-    )
+    ctx.symlink(version_file, "flutter.version.json")
 
     ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
         gen_snapshots = repr([
@@ -163,19 +170,22 @@ def _flutter_sdk_impl(ctx):
 
 flutter_sdk = repository_rule(
     implementation = _flutter_sdk_impl,
-    doc = "Exposes the pinned Flutter SDK's compiler + snapshotter to Bazel.",
+    doc = "Exposes the declared Flutter SDK's compiler + snapshotter to Bazel.",
+    attrs = {
+        "version": attr.string(mandatory = True),
+    },
     local = True,
     # PATH is needed when FLUTTER_ROOT is unset. HOME and PUB_CACHE are not read.
     environ = ["FLUTTER_ROOT", "PATH"],
 )
-
 # The Android embedding is not in bin/cache -- Flutter fetches it from Maven at
 # Gradle time. The URLs are derivable from flutter.version.json, with one trap:
 # the *directory* is versioned by engineRevision while the *filename* uses
 # engineContentHash, and the artifacts are .jar, not .aar.
+
 _ENGINE_BASE = "https://storage.googleapis.com/download.flutter.io/io/flutter"
 
-# Builds mode-specific embedding artifact URLs.
+# Builds Maven artifact URLs for engine and embedding jars.
 
 def _engine_url(artifact, revision, content_hash):
     return "{base}/{a}/1.0.0-{rev}/{a}-1.0.0-{hash}.jar".format(
@@ -185,29 +195,72 @@ def _engine_url(artifact, revision, content_hash):
         hash = content_hash,
     )
 
+def _flutter_engine_jar_impl(ctx):
+    version = json.decode(ctx.read(ctx.path(ctx.attr.version_file)))
+    url = _engine_url(
+        ctx.attr.artifact,
+        version["engineRevision"],
+        version["engineContentHash"],
+    )
+    ctx.file("jar/BUILD.bazel", """filegroup(
+    name = "file",
+    srcs = ["{}.jar"],
+    visibility = ["//visibility:public"],
+)
+""".format(ctx.attr.artifact))
+    ctx.download(
+        url = url,
+        output = "jar/{}.jar".format(ctx.attr.artifact),
+        canonical_id = url,
+    )
+
+flutter_engine_jar = repository_rule(
+    implementation = _flutter_engine_jar_impl,
+    attrs = {
+        "artifact": attr.string(mandatory = True),
+        "version_file": attr.label(
+            allow_single_file = True,
+            default = Label("@flutter_sdk//:flutter.version.json"),
+        ),
+    },
+)
+
 def _flutter_impl(ctx):
-    flutter_sdk(name = "flutter_sdk")
+    declared_version = ""
+    for module in ctx.modules:
+        if module.is_root:
+            sdk_tags = module.tags.sdk
+            if len(sdk_tags) != 1:
+                fail("The root module must declare exactly one flutter.sdk(version = \"X.Y.Z\") tag.")
+            declared_version = sdk_tags[0].version
+            break
 
-    # Deriving these from the pinned SDK keeps the engine artifacts in lockstep
-    # with it: bumping the SDK changes both hashes, hence both URLs.
-    root = _resolve_flutter_root(ctx)
-    version = json.decode(ctx.read("{}/bin/cache/flutter.version.json".format(root)))
-    revision = version["engineRevision"]
-    content_hash = version["engineContentHash"]
+    flutter_sdk(
+        name = "flutter_sdk",
+        version = declared_version,
+    )
 
-    # No sha256 on any of these: the URL already embeds engineContentHash, so it
-    # is content-addressed by construction, and pinning a digest would have to be
-    # re-edited on every SDK bump.
+    # Each artifact repository reads the version file through the SDK label.
+    # The label dependency makes Bazel re-resolve these URLs with that SDK.
     for mode in MODES:
-        http_jar(
+        flutter_engine_jar(
             name = embedding_repo(mode),
-            url = _engine_url("flutter_embedding_" + mode, revision, content_hash),
+            artifact = "flutter_embedding_" + mode,
         )
     for abi, info in ABIS.items():
         for mode in MODES:
-            http_jar(
+            flutter_engine_jar(
                 name = engine_repo(abi, mode),
-                url = _engine_url(info.maven_artifact[mode], revision, content_hash),
+                artifact = info.maven_artifact[mode],
             )
 
-flutter = module_extension(implementation = _flutter_impl)
+_flutter_sdk_tag = tag_class(
+    attrs = {
+        "version": attr.string(mandatory = True),
+    },
+)
+
+flutter = module_extension(
+    implementation = _flutter_impl,
+    tag_classes = {"sdk": _flutter_sdk_tag},
+)

@@ -1,9 +1,10 @@
 """Implementation of the Flutter rules.
 
 Nothing here is supported API: Consumer Modules load //flutter:defs.bzl and
-//flutter:extensions.bzl, and every `.bzl` beside this file declares
-`visibility(["//flutter"])` so Bazel rejects any other load, in this repository
-or a consumer's. Two mechanical exceptions need a label, and only those:
+//flutter:extensions.bzl. The `.bzl` files beside this file declare
+`visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
+allows it to be loaded from the ruleset's root MODULE.bazel only. Two
+mechanical exceptions need a label, and only those:
 
   * The Python helpers are attribute defaults of rules defined here. Bazel
     resolves an implicit dependency against the package of the `.bzl` that
@@ -13,13 +14,13 @@ or a consumer's. Two mechanical exceptions need a label, and only those:
     That guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
-`repo.bzl` carries no `visibility()` declaration: tests/consumer's
-`android/config.MODULE.bazel` uses its module extension directly, which is that
-fixture's only coverage of the explicit embedding debug and release labels.
+`repo.bzl` is loaded through the public module extension. The generated
+host-compatible registration points at the public static toolchain target.
 """
 
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
 load(":abis.bzl", "ABIS")
+load(":toolchain.bzl", "flutter_toolchain")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -43,6 +44,16 @@ exports_files(
         "rules.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
+)
+
+flutter_toolchain(
+    name = "flutter_toolchain",
+    visibility = ["//visibility:public"],
+)
+
+toolchain_type(
+    name = "flutter_toolchain_type",
+    visibility = ["//visibility:public"],
 )
 
 # The ABI table is implementation, so these assertions live beside it rather

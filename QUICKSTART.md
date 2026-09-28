@@ -240,8 +240,14 @@ local_path_override(
     path = "../rules_flutter",
 )
 
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.44.2")
+
 include("//android:config.MODULE.bazel")
 ```
+
+Bazel checks the host SDK when fetching it and fails with both versions if it
+does not match the declared version.
 
 Export the included file from `android/BUILD.bazel`:
 
@@ -689,6 +695,9 @@ local_path_override(
     module_name = "sameri11_rules_flutter",
     path = "../..",
 )
+
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.44.2")
 
 include("//packages/host_app/android:config.MODULE.bazel")
 ```

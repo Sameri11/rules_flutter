@@ -15,17 +15,18 @@ them apart is what lets a consumer load only the platforms they build.
 
 Sandboxing caveat
 -----------------
-`package_config.json` points at absolute paths in ~/.pub-cache and the Flutter
-SDK, neither of which is a declared Bazel input. These actions therefore run
-unsandboxed. Making them hermetic means modelling pub packages as Bazel repos
-(a pub -> MODULE.bazel resolver), which is the genuinely hard part of this
-problem and is not attempted here.
+`package_config.json` points at absolute paths in `~/.pub-cache` and the
+Flutter SDK's framework packages, which are not declared Bazel inputs. These
+actions therefore run unsandboxed so the compiler and Flutter tooling can read
+those packages. Modelling pub packages as Bazel repositories (a pub ->
+MODULE.bazel resolver) is the genuinely hard part of this problem and is not
+attempted here.
 """
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS", "aot_gen_snapshot", "aot_target_compatible_with", "check_abis")
+load(":abis.bzl", "ABIS", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
 visibility(["//flutter"])
@@ -144,6 +145,9 @@ _DEBUG_KERNEL_FLAGS = [
 # run time) and _debug_kernel_command (formatted with an analysis-time path).
 _REGISTRANT_SOURCE_ARGS = '--source "package:{pkg}/{registrant}" --source "package:flutter/src/dart_plugin_registrant.dart" "-Dflutter.dart_plugin_registrant=package:{pkg}/{registrant}"'
 
+def _flutter_toolchain(ctx):
+    return ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
+
 def _dart_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
     mode = ctx.attr._mode[BuildSettingInfo].value
@@ -151,16 +155,16 @@ def _dart_kernel_impl(ctx):
 
     # Release compiles against the product SDK; debug keeps asserts and the
     # service protocol, so it uses the non-product one.
-    platform = ctx.attr._platform_product if release else ctx.attr._platform_debug
-    platform_files = ctx.files._platform_product if release else ctx.files._platform_debug
+    toolchain = _flutter_toolchain(ctx)
+    platform_files = toolchain.platform_product if release else toolchain.platform_debug
 
     # --sdk-root wants the directory holding platform_strong.dill.
     sdk_root = _sdk_root_for(platform_files, mode)
 
     args = ctx.actions.args()
 
-    args.add(ctx.executable._dartaotruntime)
-    args.add(ctx.file._frontend_server)
+    args.add(toolchain.dartaotruntime)
+    args.add(toolchain.frontend_server)
     args.add("--sdk-root", sdk_root + "/")
     args.add("--target", "flutter")
 
@@ -240,7 +244,7 @@ fi
 exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
 """.format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT")),
         arguments = [scalars, args],
-        tools = [ctx.attr._dartaotruntime[DefaultInfo].files_to_run],
+        tools = [toolchain.dartaotruntime],
         # package_config.json is passed as --packages but deliberately NOT
         # declared. Its rootUri entries are absolute paths into ~/.pub-cache, so
         # declaring it would put machine-specific bytes in the action key and
@@ -260,8 +264,8 @@ exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
         # `srcs` or a shared cache can serve the wrong artifact.
         inputs = depset(
             direct = [
-                         ctx.file._frontend_server,
-                         ctx.file._sdk_version,
+                         toolchain.frontend_server,
+                         toolchain.sdk_version,
                          # The name alone, not pubspec.yaml: a version bump or an edit
                          # to the asset list must not invalidate the kernel.
                          pubspec.package_name,
@@ -271,7 +275,7 @@ exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
                          ctx.file.entrypoint,
                      ] + ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
                      ctx.files.pub_stamp + ctx.files.path_deps,
-            transitive = [platform.files, depset(ctx.files.srcs)],
+            transitive = [depset(platform_files), depset(ctx.files.srcs)],
         ),
         outputs = [dill],
         mnemonic = "DartKernel",
@@ -349,34 +353,6 @@ string in package_config.json changed. They cannot detect edits to framework
 or pub-cache sources made at an unchanged version — only real file inputs
 would.""",
         ),
-        "_dartaotruntime": attr.label(
-            default = "@flutter_sdk//:dartaotruntime",
-            executable = True,
-            cfg = "exec",
-            allow_single_file = True,
-        ),
-        "_frontend_server": attr.label(
-            default = "@flutter_sdk//:frontend_server.snapshot",
-            allow_single_file = True,
-        ),
-        "_sdk_version": attr.label(
-            default = "@flutter_sdk//:flutter.version.json",
-            allow_single_file = True,
-            doc = """Active SDK identity, content-hashed.
-
-Carries frameworkRevision (a git commit hash), so this action dirties on any
-framework commit — including framework-only commits where the engine artifacts
-are byte-identical and would not otherwise move. This is the framework-source
-half of the input set that is not declared file-by-file.""",
-        ),
-        "_platform_product": attr.label(
-            default = "@flutter_sdk//:platform_product",
-            allow_files = True,
-        ),
-        "_platform_debug": attr.label(
-            default = "@flutter_sdk//:platform_debug",
-            allow_files = True,
-        ),
         "_mode": attr.label(
             default = "//flutter:mode",
             providers = [BuildSettingInfo],
@@ -400,6 +376,7 @@ Release-only: flutter_tools passes it under `--aot` alone.
 """,
         ),
     },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
 def _dart_aot_elf_impl(ctx):
@@ -432,7 +409,10 @@ def _dart_aot_elf_impl(ctx):
     args.add(ctx.file.dill)
 
     ctx.actions.run(
-        executable = ctx.executable.gen_snapshot,
+        executable = _flutter_toolchain(ctx).gen_snapshots["{}_{}".format(
+            ctx.attr.abi,
+            ctx.attr._mode[BuildSettingInfo].value,
+        )],
         arguments = [args],
         inputs = [ctx.file.dill],
         outputs = [so],
@@ -454,12 +434,13 @@ dart_aot_elf = rule(
             default = True,
             doc = "Drop DWARF debug info from the ELF.",
         ),
-        "gen_snapshot": attr.label(
+        "abi": attr.string(
             mandatory = True,
-            executable = True,
-            cfg = "exec",
-            allow_single_file = True,
-            doc = "The ABI's gen_snapshot from the ABI table.",
+            values = sorted(ABIS.keys()),
+        ),
+        "_mode": attr.label(
+            default = "//flutter:mode",
+            providers = [BuildSettingInfo],
         ),
         "snapshot_flags": attr.string_list(
             doc = """Extra gen_snapshot flags for this ABI.
@@ -469,6 +450,7 @@ and omitting them yields a snapshot that installs and then executes an
 unsupported instruction.""",
         ),
     },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
 def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, **kwargs):
@@ -537,7 +519,7 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
         dart_aot_elf(
             name = "{}_{}".format(name, abi),
             dill = ":" + name + "_kernel",
-            gen_snapshot = aot_gen_snapshot(abi),
+            abi = abi,
             snapshot_flags = ABIS[abi].snapshot_flags,
             strip = strip,
             # AOT targets are incompatible with debug; retain caller constraints.
@@ -809,7 +791,7 @@ def _bundle_dir(out, abi, index):
         return "$EXECROOT/{}".format(out.path)
     return "$STAGE/bundles/{}".format(abi)
 
-def _bundle_command(ctx, out, abi, index):
+def _bundle_command(ctx, out, abi, index, toolchain):
     return """"$EXECROOT/{flutter}" build bundle \
     --{mode} \
     --no-pub \
@@ -820,13 +802,13 @@ def _bundle_command(ctx, out, abi, index):
 rm -f "{dir}/.last_build_id"
 rm -rf "{dir}/native_assets"
 """.format(
-        flutter = ctx.file._flutter.path,
+        flutter = toolchain.flutter.path,
         mode = ctx.attr._mode[BuildSettingInfo].value,
         platform = ABIS[abi].target_platform,
         dir = _bundle_dir(out, abi, index),
     )
 
-def _debug_kernel_command(ctx, out, project_dir, debug):
+def _debug_kernel_command(ctx, out, project_dir, debug, toolchain):
     """Shell recompiling the debug kernel with scheme-relative source URIs.
 
     Overwrites every ABI bundle's kernel_blob.bin with the result.
@@ -862,7 +844,7 @@ def _debug_kernel_command(ctx, out, project_dir, debug):
     if not debug:
         return ""
 
-    sdk_root = _sdk_root_for(ctx.files._platform_debug, "debug")
+    sdk_root = _sdk_root_for(toolchain.platform_debug, "debug")
     prefix = project_dir + "/" if project_dir else ""
     entrypoint_library = _library_path(ctx, ctx.file.entrypoint, "entrypoint")
 
@@ -888,8 +870,8 @@ def _debug_kernel_command(ctx, out, project_dir, debug):
 {overwrites}
 """.format(
         package_name = ctx.attr.pubspec[FlutterPubspecInfo].package_name.path,
-        dartaotruntime = ctx.file._dartaotruntime.path,
-        frontend_server = ctx.file._frontend_server.path,
+        dartaotruntime = toolchain.dartaotruntime.path,
+        frontend_server = toolchain.frontend_server.path,
         sdk_root = sdk_root,
         debug_flags = " ".join(_DEBUG_KERNEL_FLAGS),
         prefix = prefix,
@@ -906,7 +888,7 @@ def _flutter_assets_impl(ctx):
 
     mode = ctx.attr._mode[BuildSettingInfo].value
     debug = mode == "debug"
-
+    toolchain = _flutter_toolchain(ctx)
     entrypoint = _project_path(ctx, ctx.file.entrypoint, "entrypoint")
     args = ctx.actions.args()
     args.add(entrypoint)
@@ -990,8 +972,8 @@ python3 "$EXECROOT/{merger}" {merge_args}
         android_sdk = ctx.file._android_sdk.path,
         manifest = manifest.path,
         merger = ctx.file._merger.path,
-        bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
-        debug_kernel = _debug_kernel_command(ctx, out, project_dir, debug),
+        bundles = "\n".join([_bundle_command(ctx, out, abi, i, toolchain) for i, abi in enumerate(ctx.attr.abis)]),
+        debug_kernel = _debug_kernel_command(ctx, out, project_dir, debug, toolchain),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
             for i, abi in enumerate(ctx.attr.abis)
@@ -1003,17 +985,17 @@ python3 "$EXECROOT/{merger}" {merge_args}
     # gate -- see _debug_kernel_command's docstring.
     debug_kernel_inputs = (
         [
-            ctx.file._frontend_server,
+            toolchain.frontend_server,
             ctx.attr.pubspec[FlutterPubspecInfo].package_name,
-        ] + ctx.files._platform_debug
+        ] + toolchain.platform_debug
     ) if debug else []
 
     ctx.actions.run_shell(
         command = cmd,
         arguments = [args],
-        tools = [ctx.attr._dartaotruntime[DefaultInfo].files_to_run] if debug else [],
+        tools = [toolchain.dartaotruntime] if debug else [],
         inputs = depset(
-            direct = declared_project_files + [manifest, ctx.file._sdk_version, ctx.file._merger, ctx.file._flutter, ctx.file._android_sdk] + debug_kernel_inputs,
+            direct = declared_project_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, ctx.file._android_sdk] + debug_kernel_inputs,
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
@@ -1084,20 +1066,6 @@ bundle that started varying by architecture fails here rather than shipping.""",
             allow_single_file = True,
             cfg = "exec",
         ),
-        "_dartaotruntime": attr.label(
-            default = "@flutter_sdk//:dartaotruntime",
-            executable = True,
-            cfg = "exec",
-            allow_single_file = True,
-        ),
-        "_flutter": attr.label(
-            default = "@flutter_sdk//:flutter",
-            allow_single_file = True,
-        ),
-        "_frontend_server": attr.label(
-            default = "@flutter_sdk//:frontend_server.snapshot",
-            allow_single_file = True,
-        ),
         "_merger": attr.label(
             default = "//flutter/private:merge_native_assets.py",
             allow_single_file = True,
@@ -1107,16 +1075,8 @@ bundle that started varying by architecture fails here rather than shipping.""",
             providers = [BuildSettingInfo],
             doc = "See dart_kernel._mode. Debug bundles ship kernel_blob.bin.",
         ),
-        "_platform_debug": attr.label(
-            default = "@flutter_sdk//:platform_debug",
-            allow_files = True,
-            doc = "Non-product patched SDK; --sdk-root for the debug kernel recompile.",
-        ),
-        "_sdk_version": attr.label(
-            default = "@flutter_sdk//:flutter.version.json",
-            allow_single_file = True,
-        ),
     },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
 def _pub_path_deps_check_impl(ctx):

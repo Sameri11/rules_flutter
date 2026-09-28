@@ -111,8 +111,14 @@ local_path_override(
     path = "../rules_flutter",
 )
 
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.44.2")
+
 include("//android:config.MODULE.bazel")
 ```
+
+The Flutter SDK is checked when Bazel fetches it; a host SDK whose version
+differs from the declared version fails with both versions in the error.
 
 Export the platform configuration from `android/BUILD.bazel`:
 

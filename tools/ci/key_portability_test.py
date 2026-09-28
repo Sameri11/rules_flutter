@@ -201,6 +201,7 @@ class Checker:
         if action is None:
             self.fail("C", "_dart_kernel_impl must create its Dart action with ctx.actions.run_shell")
         else:
+            tools = _keyword(action, "tools")
             inputs = _keyword(action, "inputs")
             if (
                 _contains_attr(inputs, ["ctx", "file", "package_config"])
@@ -208,15 +209,12 @@ class Checker:
                 or _contains_name(inputs, "package_config")
             ):
                 self.fail("C", "package_config must not occur in the Dart action inputs")
-            tools = _keyword(action, "tools")
-            if not _contains_attr(tools, ["ctx", "attr", "_dartaotruntime"]):
-                self.fail("C", "Dart action must declare _dartaotruntime as a tool")
-            if not _contains_attr(inputs, ["ctx", "file", "_frontend_server"]):
-                self.fail("C", "Dart action inputs must declare _frontend_server")
-            if not _contains_attr(inputs, ["ctx", "file", "_sdk_version"]):
-                self.fail("C", "Dart action inputs must declare _sdk_version")
-            if not _contains_attr(inputs, ["platform", "files"]):
-                self.fail("C", "Dart action inputs must retain the selected platform files")
+            if not _contains_attr(tools, ["toolchain", "dartaotruntime"]):
+                self.fail("C", "Dart action must declare the toolchain's dartaotruntime as a tool")
+            if not _contains_attr(inputs, ["toolchain", "frontend_server"]):
+                self.fail("C", "Dart action inputs must declare the toolchain's frontend_server")
+            if not _contains_attr(inputs, ["toolchain", "sdk_version"]):
+                self.fail("C", "Dart action inputs must declare the toolchain's SDK identity")
 
         release = _named_value(tree, "_EXEC_RELEASE")
         release_values = _string_dict(release)
@@ -240,15 +238,29 @@ class Checker:
             if not (isinstance(execution, ast.Call) and _call_path(execution) == ["_exec_requirements"]):
                 self.fail("C", "Dart action must use _exec_requirements(mode)")
 
-        for target, expected in (
-            ("_dartaotruntime", "@flutter_sdk//:dartaotruntime"),
-            ("_frontend_server", "@flutter_sdk//:frontend_server.snapshot"),
-            ("_sdk_version", "@flutter_sdk//:flutter.version.json"),
-            ("_platform_product", "@flutter_sdk//:platform_product"),
-            ("_platform_debug", "@flutter_sdk//:platform_debug"),
+        aot_function = _function(tree, "_dart_aot_elf_impl")
+        if aot_function is None:
+            self.fail("C", "{} must define _dart_aot_elf_impl".format(FILES["defs"]))
+        else:
+            aot_action = _action_call(aot_function, "run")
+            if aot_action is None:
+                self.fail("C", "_dart_aot_elf_impl must create its AOT action with ctx.actions.run")
+            if not _rule_uses_toolchain(tree, "dart_aot_elf"):
+                self.fail("C", "dart_aot_elf must declare the Flutter toolchain type")
+
+        for target in (
+            "_dartaotruntime",
+            "_frontend_server",
+            "_sdk_version",
+            "_platform_product",
+            "_platform_debug",
         ):
-            if not _rule_attr_default(tree, "dart_kernel", target, expected):
-                self.fail("C", "dart_kernel must retain {} default {}".format(target, expected))
+            if _rule_has_attr(tree, "dart_kernel", target):
+                self.fail("C", "dart_kernel must not keep direct SDK attribute {}".format(target))
+        if _contains_string(tree, "@flutter_sdk//:"):
+            self.fail("C", "Dart rules must not contain direct @flutter_sdk label strings")
+        if not _rule_uses_toolchain(tree, "dart_kernel"):
+            self.fail("C", "dart_kernel must declare the Flutter toolchain type")
 
     def check_d(self):
         tree = self.tree("defs", "D")
@@ -274,10 +286,20 @@ class Checker:
             inputs = _keyword(action, "inputs")
             if not _contains_name(inputs, "manifest"):
                 self.fail("D", "FlutterAssets inputs must declare the generated stage manifest")
-            for name in ("_sdk_version", "_merger", "_flutter", "_android_sdk"):
+            for name in ("_merger", "_android_sdk"):
                 expected = ["ctx", "file", name]
                 if not _contains_attr(inputs, expected):
                     self.fail("D", "FlutterAssets inputs must declare ctx.file.{}".format(name))
+            for name in ("sdk_version", "flutter"):
+                if not _contains_attr(inputs, ["toolchain", name]):
+                    self.fail("D", "FlutterAssets inputs must declare toolchain.{}".format(name))
+            tools = _keyword(action, "tools")
+            if not _contains_attr(tools, ["toolchain", "dartaotruntime"]):
+                self.fail("D", "FlutterAssets debug action must declare the toolchain's dartaotruntime as a tool")
+            debug_inputs = _named_value(function, "debug_kernel_inputs")
+            for name in ("frontend_server", "platform_debug"):
+                if not _contains_attr(debug_inputs, ["toolchain", name]):
+                    self.fail("D", "FlutterAssets debug inputs must include toolchain.{}".format(name))
             execution = _keyword(action, "execution_requirements")
             if not (isinstance(execution, ast.Call) and _call_path(execution) == ["_exec_requirements"]):
                 self.fail("D", "FlutterAssets action must use release/debug execution requirements")
@@ -300,11 +322,16 @@ class Checker:
             if "realpath" not in command or "dirname" not in command:
                 self.fail("D", "FlutterAssets command must derive Android SDK root from the marker")
 
+        for target in ("_flutter", "_dartaotruntime", "_frontend_server", "_platform_debug", "_sdk_version"):
+            if _rule_has_attr(tree, "flutter_assets", target):
+                self.fail("D", "flutter_assets must not keep direct SDK attribute {}".format(target))
+        if _contains_string(tree, "@flutter_sdk//:"):
+            self.fail("D", "Flutter asset rules must not contain direct @flutter_sdk label strings")
+        if not _rule_uses_toolchain(tree, "flutter_assets"):
+            self.fail("D", "flutter_assets must declare the Flutter toolchain type")
         for target, expected in (
-            ("_flutter", "@flutter_sdk//:flutter"),
             ("_android_sdk", "//flutter/private:_android_sdk_marker"),
             ("_merger", "//flutter/private:merge_native_assets.py"),
-            ("_sdk_version", "@flutter_sdk//:flutter.version.json"),
         ):
             if not _rule_attr_default(tree, "flutter_assets", target, expected):
                 self.fail("D", "flutter_assets must retain {} default {}".format(target, expected))
@@ -624,7 +651,23 @@ def _rule_decl(tree, rule_name):
     value = _named_value(tree, rule_name)
     return value if isinstance(value, ast.Call) and _call_path(value) == ["rule"] else None
 
+def _rule_has_attr(tree, rule_name, attr_name):
+    rule = _rule_decl(tree, rule_name)
+    if rule is None:
+        return False
+    attrs = _keyword(rule, "attrs")
+    return (
+        isinstance(attrs, ast.Dict)
+        and any(_string(key) == attr_name for key in attrs.keys)
+    )
 
+
+def _rule_uses_toolchain(tree, rule_name):
+    rule = _rule_decl(tree, rule_name)
+    return (
+        rule is not None
+        and "//flutter/private:flutter_toolchain_type" in _string_list(_keyword(rule, "toolchains"))
+    )
 
 
 def _rule_attr_default(tree, rule_name, attr_name, expected):

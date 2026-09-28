@@ -143,8 +143,7 @@ plugins.project(
 )
 use_repo(plugins, "flutter_plugins")
 
-# The private SDK/engine extension is direct fixture-only internal coverage for
-# explicit embedding debug/release labels. It lives with the implementation
-# under //flutter/private and is intentionally absent from extensions.bzl.
-flutter = use_extension("@rules_flutter//flutter/private:repo.bzl", "flutter")
+# Public Flutter extension repositories used to test explicit embedding
+# debug/release labels in this fixture.
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")
