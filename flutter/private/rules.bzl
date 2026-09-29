@@ -13,14 +13,15 @@ directly.
 Half 2 is per-platform and is not loaded from here: see android.bzl. Keeping
 them apart is what lets a consumer load only the platforms they build.
 
-Sandboxing caveat
------------------
-`package_config.json` points at absolute paths in `~/.pub-cache` and the
-Flutter SDK's framework packages, which are not declared Bazel inputs. These
-actions therefore run unsandboxed so the compiler and Flutter tooling can read
-those packages. Modelling pub packages as Bazel repositories (a pub ->
-MODULE.bazel resolver) is the genuinely hard part of this problem and is not
-attempted here.
+Package resolution
+------------------
+Every package a compile or a bundle reads is a declared input. The `pub`
+module extension (pub_lock.bzl) turns the app's `pubspec.lock` into a hub
+repository holding a package config whose rootUris are all relative, hosted
+packages as sha256-pinned repositories, and the Flutter SDK's own packages as
+`toolchain.sdk_packages`. Nothing is read from `~/.pub-cache`, `.dart_tool/` or
+the SDK by absolute path, so these actions are sandboxed and their keys and
+outputs do not depend on the machine.
 """
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
@@ -31,31 +32,14 @@ load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
 visibility(["//flutter"])
 
-# Release actions may be shared through a remote cache.
-#
-# no-sandbox:     package_config.json reaches into ~/.pub-cache, which is not a
-#                 declared input, so a sandbox would hide it.
-# no-remote-exec: those same undeclared inputs would not exist on a remote
-#                 worker, so the action cannot be executed remotely.
-#
-# Deliberately absent: `local`. That tag forces the local strategy and disables
-# remote caching outright, which is stronger than needed here.
-_EXEC_RELEASE = {
-    "no-sandbox": "1",
-    "no-remote-exec": "1",
-}
-
-# Debug actions add `local`, which disables remote caching entirely.
-#
-# Debug kernels embed absolute source URIs (~800 in this demo app) and are
-# shipped verbatim as kernel_blob.bin. A cache hit would hand one machine's
-# artifact to another, carrying the producing machine's paths into stack traces
-# and breaking hot reload. Release output goes through `gen_snapshot --strip`,
-# which discards those paths, so release artifacts are safe to share.
-_EXEC_DEBUG = dict(_EXEC_RELEASE, **{"local": "1"})
-
-def _exec_requirements(mode):
-    return _EXEC_DEBUG if mode == "debug" else _EXEC_RELEASE
+# The bundle action runs `flutter build bundle`, and the flutter tool is still a
+# host input: it is found through the SDK symlinks, not declared, so a remote
+# worker would not have it. The action is otherwise sandboxed and cacheable,
+# debug included: the debug kernel it ships is compiled with package: and
+# org-dartlang-root: URIs only (see _debug_kernel_command), so its bytes do not
+# carry the producing machine's paths. Deliberately absent: `local`, which would
+# disable remote caching outright.
+_ASSETS_EXEC = {"no-remote-exec": "1"}
 
 def _repository_path(ctx, file, attribute):
     """A source file's path within the repository owning this rule."""
@@ -170,7 +154,7 @@ def _dart_kernel_impl(ctx):
 
     # frontend_server speaks its compiler-daemon protocol on every completion,
     # success included: one `+file:///...` line per source it read, absolute
-    # ~/.pub-cache and execroot paths included. That is 7340 lines for this
+    # host and execroot paths included. That is 7340 lines for this
     # repo's two apps, and it drowns anything real. The flag defaults to on;
     # turning it off leaves only the three-line `result <uuid>` handshake,
     # which is the protocol itself and has no flag.
@@ -190,7 +174,14 @@ def _dart_kernel_impl(ctx):
             args.add("--target-os", ctx.attr.target_os)
     else:
         args.add_all(_DEBUG_KERNEL_FLAGS)
-    args.add("--packages", ctx.file.package_config)
+
+    # The package config is the pub hub's: every rootUri is relative, so it is
+    # loaded through the virtual filesystem scheme rooted at the execroot. Source
+    # URIs in the kernel are then `org-dartlang-root:///...`, never absolute host
+    # paths, and nothing outside the action's declared inputs is readable.
+    args.add("--filesystem-root", ".")
+    args.add("--filesystem-scheme", "org-dartlang-root")
+    args.add("--packages", "org-dartlang-root:///" + ctx.file.package_config.path)
 
     # The Dart half of plugin registration. GeneratedPluginRegistrant.java
     # covers a plugin's native class; a federated plugin also declares a
@@ -245,27 +236,17 @@ exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
 """.format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT")),
         arguments = [scalars, args],
         tools = [toolchain.dartaotruntime],
-        # package_config.json is passed as --packages but deliberately NOT
-        # declared. Its rootUri entries are absolute paths into ~/.pub-cache, so
-        # declaring it would put machine-specific bytes in the action key and
-        # guarantee a miss on every other machine. Left undeclared, the key is
-        # machine-independent (verified: no other input contains an absolute
-        # path, and this action sets no env), so release artifacts can be shared
-        # through a remote cache.
-        #
-        # This relies on `no-sandbox`: the file is read through the execroot
-        # symlink forest. Under a sandbox it would be absent and the compile
-        # would fail.
-        #
-        # Correctness then rests on pub_stamp, and pubspec.lock in particular:
-        # its per-package sha256 is verified by pub on extraction, so for hosted
-        # dependencies identical keys imply identical package contents. Path
-        # dependencies carry no hash and are NOT covered -- list their sources in
-        # `srcs` or a shared cache can serve the wrong artifact.
+        # Every package the compile can read is declared: the hub's package
+        # config (relative roots only, so the key carries no host path), its
+        # hosted package files, and the SDK's packages through the toolchain.
+        # Hosted content is pinned by the lock's sha256 at fetch time. Path
+        # dependencies carry no hash and are covered only by what the caller
+        # lists in `srcs` or `path_deps`; see `path_deps`.
         inputs = depset(
             direct = [
                          toolchain.frontend_server,
                          toolchain.sdk_version,
+                         ctx.file.package_config,
                          # The name alone, not pubspec.yaml: a version bump or an edit
                          # to the asset list must not invalidate the kernel.
                          pubspec.package_name,
@@ -274,13 +255,17 @@ exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
                          # it changes rather than serving a stale kernel.
                          ctx.file.entrypoint,
                      ] + ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
-                     ctx.files.pub_stamp + ctx.files.path_deps,
-            transitive = [depset(platform_files), depset(ctx.files.srcs)],
+                     ctx.files.path_deps,
+            transitive = [
+                depset(platform_files),
+                depset(ctx.files.srcs),
+                depset(ctx.files.pub_srcs),
+                toolchain.sdk_packages,
+            ],
         ),
         outputs = [dill],
         mnemonic = "DartKernel",
         progress_message = "Compiling Dart kernel (%s) %%{label}" % mode,
-        execution_requirements = _exec_requirements(mode),
     )
 
     return [DefaultInfo(files = depset([dill]))]
@@ -318,16 +303,22 @@ for an app with no federated plugins.""",
         "package_config": attr.label(
             allow_single_file = True,
             mandatory = True,
-            doc = """The .dart_tool/package_config.json from `flutter pub get`.
+            doc = """The pub hub's `package_config.json`.
 
-Passed as --packages but intentionally not a declared input, to keep absolute
-pub-cache paths out of the action key. See the comment in _dart_kernel_impl.""",
+Every rootUri is relative to the hub, so the compile reads it through
+`--filesystem-root`. It is a declared input.""",
+        ),
+        "pub_srcs": attr.label_list(
+            allow_files = True,
+            allow_empty = False,
+            mandatory = True,
+            doc = "The pub hub's `:lib`: every hosted package's packageUri tree, and `package_config.json`.",
         ),
         "path_deps": attr.label_list(
             allow_files = True,
             doc = """Sources of `path:` dependencies from pubspec.yaml.
 
-Hosted packages are covered by pubspec.lock's per-package sha256. Path
+Hosted packages are covered by the pub hub's sha256-pinned repositories. Path
 dependencies have no hash and a version that nobody bumps, so nothing else in
 the action key observes their content -- editing one produces a silently stale
 artifact, and with a shared cache that artifact is served to everyone.
@@ -336,32 +327,14 @@ Point this at a filegroup in the dependency's own package, e.g.
 `path_deps = ["//packages/mylib:srcs"]`. Bazel globs cannot cross package
 boundaries, so the dependency needs its own BUILD file.""",
         ),
-        "pub_stamp": attr.label_list(
-            allow_files = True,
-            doc = """Extra .dart_tool metadata declared purely for invalidation.
-
-Declare pubspec.lock here too: it records a sha256 per *hosted* package, which
-pub verifies on extraction, so for hosted dependencies version identity implies
-content identity. Path dependencies carry no hash and no meaningful version,
-and are invisible to this mechanism -- declare their sources in `srcs`.
-
-These record *identity* rather than content: `version` holds the Flutter SDK
-version, and `package_graph.json` holds resolved package versions (which
-catches path dependencies, whose rootUri carries no version). Declaring them
-means an SDK or dependency upgrade dirties this action even when no path
-string in package_config.json changed. They cannot detect edits to framework
-or pub-cache sources made at an unchanged version — only real file inputs
-would.""",
-        ),
         "_mode": attr.label(
             default = "//flutter:mode",
             providers = [BuildSettingInfo],
-            doc = """Build mode, read from //flutter:mode. Governs both
-compiler flags and cache policy.
+            doc = """Build mode, read from //flutter:mode. Governs the compiler flags.
 
-Release output is stripped of absolute paths by gen_snapshot, so it is safe to
-share through a remote cache. Debug kernels embed source URIs and ship verbatim,
-so debug actions are tagged `local` and never cached remotely.
+Both modes are cacheable: release output is stripped of absolute paths by
+gen_snapshot, and the debug kernel's source URIs are `package:` and
+`org-dartlang-root:` only.
 
 Implicit rather than a public attribute: mode is one build-wide selection, not
 a per-target knob -- see docs_internal/build-modes-plan.md.""",
@@ -453,7 +426,24 @@ unsupported instruction.""",
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, pub_stamp = [], path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, **kwargs):
+def _pub_hub_labels(pub, who):
+    """The hub labels a Dart rule takes from `pub = "@<hub>"`.
+
+    Returns `(package_config, project_package_config, lib, all)`.
+    """
+    if not pub or not pub.startswith("@") or "//" in pub or ":" in pub:
+        fail((
+            "{}: `pub` must be the repository of a `pub.lock` hub, e.g. \"@pub\" " +
+            "(from `pub = use_extension(\"@rules_flutter//flutter:extensions.bzl\", \"pub\")`), got {}."
+        ).format(who, repr(pub)))
+    return (
+        pub + "//:package_config.json",
+        pub + "//:project_package_config.json",
+        pub + "//:lib",
+        pub + "//:all",
+    )
+
+def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, **kwargs):
     """Convenience wrapper: Dart sources straight through to libapp.so.
 
     Produces an AOT-shaped `.dill` and its `libapp.so` per ABI. `dart_kernel`'s
@@ -486,8 +476,8 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
       abis: Android ABIs to snapshot for. Required, always a list.
       pubspec: a flutter_pubspec target; supplies the package name.
       entrypoint: the app's entrypoint under lib/, as a label.
-      package_config: the .dart_tool/package_config.json from `pub get`.
-      pub_stamp: extra .dart_tool metadata declared for invalidation.
+      pub: the `pub.lock` hub repository, e.g. `"@pub"`: its package config and
+        hosted package files are the compile's package inputs.
       path_deps: sources of `path:` dependencies.
       dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
       target_os: OS the kernel is compiled for; see dart_kernel.
@@ -495,6 +485,7 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
       **kwargs: shared rule attributes.
     """
     check_abis(abis, "flutter_aot_library " + name)
+    package_config, _, pub_lib, _ = _pub_hub_labels(pub, "flutter_aot_library " + name)
 
     # Avoid passing target_compatible_with twice.
     caller_compatible_with = kwargs.pop("target_compatible_with", [])
@@ -505,7 +496,7 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
         pubspec = pubspec,
         entrypoint = entrypoint,
         package_config = package_config,
-        pub_stamp = pub_stamp,
+        pub_srcs = [pub_lib],
         path_deps = path_deps,
         dart_plugin_registrant = dart_plugin_registrant,
         target_os = target_os,
@@ -526,13 +517,6 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, package_config, p
             target_compatible_with = caller_compatible_with + aot_target_compatible_with(),
             **kwargs
         )
-
-# Files written by `flutter pub get`, used as invalidation stamps.
-_PUB_STAMP = [
-    ".dart_tool/version",
-    ".dart_tool/package_graph.json",
-    "pubspec.lock",
-]
 
 # Sentinel distinguishes the default from an explicit `None`.
 _DEFAULT_DART_PLUGIN_REGISTRANT = struct()
@@ -576,21 +560,30 @@ def flutter_app(
         assets = None,
         entrypoint = "lib/main.dart",
         dart_plugin_registrant = _DEFAULT_DART_PLUGIN_REGISTRANT,
-        pub_stamp = None,
+        pub = None,
         plugin_deps = "//:plugin_deps.MODULE.bazel",
         target_os = "android",
         **kwargs):
     """The Dart half of a Flutter app: one call, in the app's own package.
 
-    Everything a standard `flutter create` + `flutter pub get` layout fixes is a
-    default here -- the entrypoint, the package config, the pub stamp triple, the
-    source and asset globs, the committed Dart registrant, and pubspec.yaml.
-    What is left is what only the app knows:
+    Everything a standard `flutter create` layout fixes is a default here -- the
+    entrypoint, the source and asset globs, the committed Dart registrant, and
+    pubspec.yaml. What is left is what only the app knows:
 
         flutter_app(
             abis = ["arm64-v8a"],
             path_deps = ["//packages/mylib:srcs"],
+            pub = "@pub",
         )
+
+    `pub` is the hub of the app's `pubspec.lock`, declared in MODULE.bazel:
+
+        pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+        pub.lock(name = "pub", lock = "//:pubspec.lock")
+        use_repo(pub, "pub")
+
+    `flutter pub get` is only how the lock is updated: no action reads
+    `.dart_tool/` or `.flutter-plugins-dependencies`.
 
     Produces, in the calling package:
 
@@ -635,7 +628,9 @@ def flutter_app(
         compilation and `flutter build bundle --target`, so the snapshot and
         asset/code bundle cannot select different programs.
       dart_plugin_registrant: the committed Dart registrant, or None.
-      pub_stamp: invalidation stamps. Defaults to pub's own three files.
+      pub: the `pub.lock` hub repository, e.g. `"@pub"`. Required: it supplies
+        the package config and every hosted package, for the compile and the
+        bundle alike.
       plugin_deps: the committed Maven segment MODULE.bazel includes, which
         `:plugins_check` compares against the generated one. Repo-root by
         convention because that is where `include()` reads it from; `None` for a
@@ -660,23 +655,28 @@ def flutter_app(
     # This is deliberately a *standard-layout* macro. flutter_tools has no
     # `--pubspec` or `--package-config-path` option for `build bundle`: it reads
     # pubspec.yaml and .dart_tool/package_config.json from the staged project
-    # root. These used to look overridable here while only kernel compilation
-    # honoured the alternate paths, producing two halves from different project
-    # state. Name the unsupported knobs rather than forwarding them through
-    # **kwargs to an unrelated target and failing opaquely.
+    # root, where the action stages the pub hub's project config. Name the
+    # unsupported knobs rather than forwarding them through **kwargs to an
+    # unrelated target and failing opaquely.
     for unsupported in ("pubspec", "package_config"):
         if unsupported in kwargs:
             fail(
                 (
-                    "flutter_app: no `{}` override -- `flutter build bundle` " +
-                    "reads the standard-layout {} directly and exposes no " +
-                    "option to relocate it. Use the lower-level rules if the " +
-                    "Dart half alone has a nonstandard layout."
+                    "flutter_app: no `{}` override -- {}. Use the lower-level " +
+                    "rules if the Dart half alone has a nonstandard layout."
                 ).format(
                     unsupported,
-                    "pubspec.yaml" if unsupported == "pubspec" else ".dart_tool/package_config.json",
+                    "`flutter build bundle` reads the standard-layout pubspec.yaml " +
+                    "and exposes no option to relocate it" if unsupported == "pubspec" else "the package " +
+                                                                                            "config is the `pub` hub's, passed as `pub = \"@hub\"`",
                 ),
             )
+    if not pub:
+        fail(
+            "flutter_app: `pub` is required, the `pub.lock` hub of this app's pubspec.lock, " +
+            "e.g. pub = \"@pub\". See the flutter_app docstring for the MODULE.bazel lines.",
+        )
+    _, project_package_config, _, pub_all = _pub_hub_labels(pub, "flutter_app")
 
     if dart_plugin_registrant == _DEFAULT_DART_PLUGIN_REGISTRANT:
         dart_plugin_registrant = None if plugin_deps == None else "lib/dart_plugin_registrant.dart"
@@ -685,8 +685,6 @@ def flutter_app(
         srcs = native.glob(["lib/**/*.dart"])
     if assets == None:
         assets = native.glob(["assets/**"])
-    if pub_stamp == None:
-        pub_stamp = _PUB_STAMP
 
     flutter_pubspec(src = "pubspec.yaml", **kwargs)
 
@@ -696,8 +694,7 @@ def flutter_app(
         abis = abis,
         pubspec = ":pubspec",
         entrypoint = entrypoint,
-        package_config = ".dart_tool/package_config.json",
-        pub_stamp = pub_stamp,
+        pub = pub,
         path_deps = path_deps,
         dart_plugin_registrant = dart_plugin_registrant,
         target_os = target_os,
@@ -711,8 +708,8 @@ def flutter_app(
         assets = assets,
         pubspec = ":pubspec",
         entrypoint = entrypoint,
-        package_config = ".dart_tool/package_config.json",
-        pub_stamp = pub_stamp,
+        package_config = project_package_config,
+        pub_srcs = [pub_all],
         path_deps = path_deps,
         dart_plugin_registrant = dart_plugin_registrant,
         **kwargs
@@ -791,8 +788,12 @@ def _bundle_dir(out, abi, index):
         return "$EXECROOT/{}".format(out.path)
     return "$STAGE/bundles/{}".format(abi)
 
-def _bundle_command(ctx, out, abi, index, toolchain):
-    return """"$EXECROOT/{flutter}" build bundle \
+def _bundle_command(ctx, out, abi, index):
+    # `flutter_tool` is a shell function defined in the action preamble that runs
+    # the tool's snapshot directly. bin/flutter rewrites bin/cache/engine.stamp
+    # and engine.realm in the SDK on every invocation
+    # (bin/internal/update_engine_version.sh), which a sandbox forbids.
+    return """flutter_tool build bundle \
     --{mode} \
     --no-pub \
     --target="$ENTRYPOINT" \
@@ -802,7 +803,6 @@ def _bundle_command(ctx, out, abi, index, toolchain):
 rm -f "{dir}/.last_build_id"
 rm -rf "{dir}/native_assets"
 """.format(
-        flutter = toolchain.flutter.path,
         mode = ctx.attr._mode[BuildSettingInfo].value,
         platform = ABIS[abi].target_platform,
         dir = _bundle_dir(out, abi, index),
@@ -816,26 +816,20 @@ def _debug_kernel_command(ctx, out, project_dir, debug, toolchain):
     `flutter build bundle --debug` (via _bundle_command above) already
     produced a kernel_blob.bin per ABI bundle, but flutter_tools has no flag
     that stops its frontend_server invocation from recording absolute
-    `file://` URIs under the mktemp $STAGE -- see
-    .pi-flow/dependency-portability/issues/06-make-debug-kernel-blob-reproducible.md
-    and its prototype (branch prototype/06-debug-kernel-uris, commit
-    883987a). Two fresh debug builds with unchanged inputs therefore never
-    produce the same kernel_blob.bin, so debug APKs cannot be hash-gated even
-    on one host.
+    `file://` URIs under the mktemp $STAGE. Two fresh debug builds with
+    unchanged inputs would therefore never produce the same kernel_blob.bin.
 
     This recompiles once, calling frontend_server directly, mirroring
     _dart_kernel_impl's debug branch (mode flags, package: URIs for the
     entrypoint and plugin registrant) with two additions that make $STAGE's
     own path invisible to the kernel: --filesystem-root/--filesystem-scheme
     turn it into a virtual root, and --packages is a URI under that scheme
-    instead of a real path. package_config.json's rootUri for the project's
-    own package (and for a path dependency staged alongside it) is relative,
-    so it resolves under the same scheme; only the SDK and pub-cache packages
-    keep absolute rootUris.
-
-    Removing those remaining SDK/pub-cache paths -- extra filesystem roots
-    plus a rewritten package_config -- is scope B of the ticket and not done
-    here. Debug stays same-host-only (`local`, see _EXEC_DEBUG) until then.
+    instead of a real path. The staged package config is the pub hub's
+    project-relative one, so every rootUri -- the project, its path
+    dependencies, hosted packages and the SDK's packages, all staged as
+    declared inputs -- resolves under the same scheme. The kernel's source
+    URIs are `package:` and `org-dartlang-root:` only, which is what lets the
+    action be cached and shared like a release one.
 
     `debug` is the caller's single mode check, passed in rather than
     re-derived, so the command and its declared inputs never disagree on
@@ -893,6 +887,10 @@ def _flutter_assets_impl(ctx):
     args = ctx.actions.args()
     args.add(entrypoint)
 
+    # Every file the bundle can read is staged and declared: the hub's
+    # project-relative package config and package graph, every hosted package,
+    # and the SDK's packages.
+    package_graph = ctx.file.package_config.dirname + "/package_graph.json"
     stage_manifest_files = (
         [
             ctx.file.entrypoint,
@@ -900,18 +898,11 @@ def _flutter_assets_impl(ctx):
             ctx.attr.pubspec[FlutterPubspecInfo].src,
         ] +
         ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
-        ctx.files.assets + ctx.files.srcs + ctx.files.pub_stamp +
-        ctx.files.path_deps
+        ctx.files.assets + ctx.files.srcs +
+        ctx.files.path_deps +
+        ctx.files.pub_srcs +
+        toolchain.sdk_packages.to_list()
     )
-
-    # Keep package_config staged but undeclared: its pub-cache and SDK rootUris
-    # are machine-specific. Invalidation rests on pub_stamp, as in dart_kernel;
-    # reading it requires this rule's existing no-sandbox execution.
-    declared_project_files = [
-        f
-        for f in stage_manifest_files
-        if f != ctx.file.package_config
-    ]
 
     # The set of files to stage, one execroot-relative path per line. Written to
     # a file rather than passed as arguments so the command cannot overflow the
@@ -960,19 +951,33 @@ mkdir -p "$HOME"
 
 tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
-
+{place_config}
 cd "$STAGE/{project_dir}"
 mkdir -p "$STAGE/bundles"
+{flutter_tool}
 {bundles}
 {debug_kernel}
 # Keep the shell alive so its EXIT trap removes STAGE after the merger.
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         project_dir = project_dir,
+        flutter_tool = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/%s")"
+export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
+flutter_tool() {
+    "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot" "$@"
+}""" % toolchain.flutter.path,
         android_sdk = ctx.file._android_sdk.path,
         manifest = manifest.path,
+        place_config = (
+            'mkdir -p "$STAGE/{d}.dart_tool" && cp "$EXECROOT/{c}" "$STAGE/{d}.dart_tool/package_config.json"\n' +
+            'cp "$EXECROOT/{g}" "$STAGE/{d}.dart_tool/package_graph.json"\n'
+        ).format(
+            d = project_dir + "/" if project_dir else "",
+            c = ctx.file.package_config.path,
+            g = package_graph,
+        ),
         merger = ctx.file._merger.path,
-        bundles = "\n".join([_bundle_command(ctx, out, abi, i, toolchain) for i, abi in enumerate(ctx.attr.abis)]),
+        bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
         debug_kernel = _debug_kernel_command(ctx, out, project_dir, debug, toolchain),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
@@ -995,12 +1000,12 @@ python3 "$EXECROOT/{merger}" {merge_args}
         arguments = [args],
         tools = [toolchain.dartaotruntime] if debug else [],
         inputs = depset(
-            direct = declared_project_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, ctx.file._android_sdk] + debug_kernel_inputs,
+            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, ctx.file._android_sdk] + debug_kernel_inputs,
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
         progress_message = "Bundling Flutter assets (%s) %%{label}" % mode,
-        execution_requirements = _exec_requirements(mode),
+        execution_requirements = _ASSETS_EXEC,
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -1046,8 +1051,18 @@ _debug_kernel_command. Omit for an app with no federated plugins.""",
 uses-material-design all come from it -- so this rule stages the file rather
 than a fact read out of it.""",
         ),
-        "package_config": attr.label(allow_single_file = True, mandatory = True),
-        "pub_stamp": attr.label_list(allow_files = True),
+        "package_config": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = """The pub hub's `project_package_config.json`, staged as the project's
+`.dart_tool/package_config.json`. Its rootUris are relative to that directory.""",
+        ),
+        "pub_srcs": attr.label_list(
+            allow_files = True,
+            allow_empty = False,
+            mandatory = True,
+            doc = "The pub hub's `:all`: hosted package files and `package_graph.json`.",
+        ),
         "path_deps": attr.label_list(
             allow_files = True,
             doc = "See dart_kernel.path_deps.",

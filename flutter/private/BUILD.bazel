@@ -20,6 +20,7 @@ host-compatible registration points at the public static toolchain target.
 
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
 load(":abis.bzl", "ABIS")
+load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":toolchain.bzl", "flutter_toolchain")
 
 package(default_visibility = ["//visibility:private"])
@@ -95,3 +96,6 @@ alias(
     }),
     tags = ["manual"],
 )
+
+# What the pub lock reader accepts and, as importantly, refuses.
+pub_lock_parser_test_suite(name = "pub_lock_parser_test")

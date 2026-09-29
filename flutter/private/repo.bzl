@@ -8,6 +8,7 @@ download rule is a separate concern. See README for that tradeoff.
 """
 
 load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "embedding_repo", "engine_repo")
+load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
 
@@ -34,6 +35,16 @@ filegroup(
 filegroup(
     name = "platform_debug",
     srcs = glob(["flutter_patched_sdk/**"]),
+)
+
+# The SDK's own Dart packages, declared as files so a compile can list them as
+# inputs instead of reaching into the SDK by path. Each package contributes its
+# packageUri tree (lib/), its pubspec.yaml, and the license files the bundle's
+# NOTICES collector reads -- not the whole tree, so unrelated SDK edits (tests,
+# docs) do not enter an action key. The package list is discovered at fetch time.
+filegroup(
+    name = "sdk_packages",
+    srcs = glob({sdk_globs}, allow_empty = True),
 )
 """
 
@@ -88,6 +99,25 @@ def _resolve_flutter_root(ctx):
     # `flutter` on PATH is usually a shim (fvm, asdf) whose parent is
     # <sdk>/bin, so walk up one level from the resolved binary.
     return str(flutter.realpath.dirname.dirname)
+
+def _sdk_package_names(ctx, root):
+    """Names of the Dart packages this SDK ships, by the layout convention.
+
+    Every `packages/<name>` holding a pubspec.yaml, plus `sky_engine` from the
+    engine artifacts. Whichever a lock's `source: sdk` entry names must be among
+    them; the pub extension reports a missing one by name.
+    """
+    packages = ctx.path("{}/packages".format(root))
+    if not packages.exists:
+        fail("Flutter SDK at {} has no packages/ directory.".format(root))
+    names = [
+        child.basename
+        for child in packages.readdir()
+        if ctx.path("{}/{}/pubspec.yaml".format(root, sdk_package_root(child.basename))).exists
+    ]
+    if ctx.path("{}/{}/pubspec.yaml".format(root, sdk_package_root("sky_engine"))).exists:
+        names.append("sky_engine")
+    return sorted(names)
 
 def _flutter_sdk_impl(ctx):
     if not ctx.attr.version:
@@ -160,7 +190,23 @@ def _flutter_sdk_impl(ctx):
     # the project was scaffolded with and is never updated by ordinary SDK use.
     ctx.symlink(version_file, "flutter.version.json")
 
+    # Directory symlinks, so a package config can point at
+    # `<repo>/<sdk-relative root>/`. The SDK is only read; nothing is written
+    # through these links.
+    sdk_package_roots = [sdk_package_root(name) for name in _sdk_package_names(ctx, root)]
+    for pkg_root in sdk_package_roots:
+        ctx.symlink("{}/{}".format(root, pkg_root), pkg_root)
+
     ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
+        sdk_globs = repr(
+            ["{}/lib/**".format(r) for r in sdk_package_roots] +
+            ["{}/pubspec.yaml".format(r) for r in sdk_package_roots] +
+            # The bundle action's license collector reads `<root>/NOTICES` or
+            # `<root>/LICENSE` of every package (sky_engine's is 1.3 MB of engine
+            # third-party licenses). Absent, NOTICES.Z silently loses them.
+            ["{}/LICENSE*".format(r) for r in sdk_package_roots] +
+            ["{}/NOTICES*".format(r) for r in sdk_package_roots],
+        ),
         gen_snapshots = repr([
             "gen_snapshot_{}_{}".format(abi, mode)
             for abi in ABIS
