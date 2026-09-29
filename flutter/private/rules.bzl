@@ -794,7 +794,10 @@ def _bundle_command(ctx, out, abi, index):
     # the tool's snapshot directly. bin/flutter rewrites bin/cache/engine.stamp
     # and engine.realm in the SDK on every invocation
     # (bin/internal/update_engine_version.sh), which a sandbox forbids.
-    return """flutter_tool build bundle \
+    # `--no-version-check` stops the tool's update check, which runs `git fetch`
+    # in the SDK and writes bin/cache/flutter_version_check.stamp whenever the
+    # stamp is stale; the macOS sandbox rejects both.
+    return """flutter_tool --no-version-check build bundle \
     --{mode} \
     --no-pub \
     --target="$ENTRYPOINT" \
