@@ -58,7 +58,7 @@ dependencies:
   rive_common: ^0.4.15
 
   # Fourth: the *native assets* case, and not a Flutter plugin at all -- no
-  # android/ module, so nothing in .flutter-plugins-dependencies refers to it.
+  # android/ module, so nothing in the plugin metadata refers to it.
   # Its native half comes from a Dart build hook (hook/build.dart), which by
   # default downloads a prebuilt libsqlite3.so from a GitHub release. The Dart
   # VM then resolves it by *asset id* rather than by library name, through a

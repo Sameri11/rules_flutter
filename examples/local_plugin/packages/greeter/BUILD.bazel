@@ -6,8 +6,7 @@ package(default_visibility = ["//visibility:public"])
 # :path_deps_check fails the build if it is missing.
 #
 # Its *Android* half is not declared here at all. The generator stages that from
-# the absolute path .flutter-plugins-dependencies records and builds it inside
-# @flutter_plugins, exactly as it does for a plugin from pub. That a local plugin
+# the path pubspec.lock records and builds it inside @flutter_plugins, exactly as it does for a plugin from pub. That a local plugin
 # needs no Bazel wiring for its native side is the point of this module.
 filegroup(
     name = "srcs",

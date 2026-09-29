@@ -557,7 +557,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "PprVq6+pbNZ/HQqQH+Vq5zVcHlcEfSNGQkKeZPoj0TQ=",
+        "bzlTransitiveDigest": "99YcL7qPztoKlAOgN3zOOaC1qtJsEQt4QuZ4gThS0ns=",
         "usagesDigest": "c6Q7xXhVgobmcU8bDM+vxe4f5nLrPx8SVE7jZZJGerQ=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -597,7 +597,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "PprVq6+pbNZ/HQqQH+Vq5zVcHlcEfSNGQkKeZPoj0TQ=",
+        "bzlTransitiveDigest": "99YcL7qPztoKlAOgN3zOOaC1qtJsEQt4QuZ4gThS0ns=",
         "usagesDigest": "2eUs8qex32KwmOYM8y03o2VozFZFIaGA710/0rttj6w=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -683,10 +683,11 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "PprVq6+pbNZ/HQqQH+Vq5zVcHlcEfSNGQkKeZPoj0TQ=",
-        "usagesDigest": "ZniNXWl6OiVCASrWeGxNNsIQlgh4uDdHgYxug69NNWw=",
+        "bzlTransitiveDigest": "99YcL7qPztoKlAOgN3zOOaC1qtJsEQt4QuZ4gThS0ns=",
+        "usagesDigest": "vHLaXCbOkvIoW+/4voiihzCsEYlrQzHwVyuTNb9HQBE=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
+          "REPO_MAPPING:,pub sameri11_rules_flutter++pub+pub",
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
           "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
           "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
@@ -719,8 +720,8 @@
                 "arm64-v8a"
               ],
               "embedding": "'@@//packages/host_app/android/app:flutter_embedding'",
-              "metadata": "@@//packages/host_app:.flutter-plugins-dependencies",
-              "package_config": "@@//packages/host_app:.dart_tool/package_config.json",
+              "metadata": "@@sameri11_rules_flutter++pub+pub//:plugins_metadata.json",
+              "package_config": "@@sameri11_rules_flutter++pub+pub//:package_config.json",
               "coursier_options": [],
               "extra_artifacts": [],
               "maven_resolver": "coursier",

@@ -1,8 +1,7 @@
 # The standard `flutter create` layout, so `flutter_app()` can be called with
 # nothing but facts it refuses to guess. Everything here exists to *be* that
-# layout: pubspec.yaml, pubspec.lock,
-# .dart_tool/{version,package_graph.json,package_config.json}, lib/main.dart,
-# and one asset.
+# layout: pubspec.yaml, pubspec.lock, lib/main.dart, and one asset. Its
+# package config is the hub of that lock, declared in the consumer's MODULE.bazel.
 #
 # It selects a nondefault entrypoint permanently: analysis then covers the
 # parameter on `flutter_assets`, while smooth_app executes the same shape
@@ -24,4 +23,5 @@ flutter_app(
     ],
     entrypoint = "lib/alternate$release.dart",
     plugin_deps = None,
+    pub = "@standard_layout_pub",
 )

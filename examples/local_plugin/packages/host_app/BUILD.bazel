@@ -13,4 +13,5 @@ flutter_app(
     # because MODULE.bazel include()s it and MODULE.bazel is up there. This is
     # the one attribute the flat examples can leave to its default.
     plugin_deps = "//:plugin_deps.MODULE.bazel",
+    pub = "@pub",
 )

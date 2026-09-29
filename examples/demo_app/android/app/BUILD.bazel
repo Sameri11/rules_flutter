@@ -12,9 +12,9 @@ load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# Every plugin `pub get` reported as having an Android native build. The
-# aggregate is generated from .flutter-plugins-dependencies, so adding a plugin
-# to pubspec.yaml is the only step -- see @rules_flutter//flutter:extensions.bzl. Named
+# Every plugin in pubspec.lock with an Android native build. The aggregate is
+# generated from the pub hub's plugin metadata, so adding a plugin to
+# pubspec.yaml and updating the lock is the only step -- see @rules_flutter//flutter:extensions.bzl. Named
 # here only because :generated_plugin_registrant and :main_activity need it;
 # the APK derives it.
 PLUGINS = ["@flutter_plugins//:all"]
@@ -67,7 +67,7 @@ flutter_android_binary(
 # DWARF rather than saving it, so there is nothing here to upload to a
 # crash-reporting service yet. See docs/android-packaging.md.
 
-# The plugin registrant flutter_tools regenerates on every `pub get`, consumed
+# The plugin registrant flutter_tools regenerates when plugins change, consumed
 # in place from the Gradle module like the manifest and resources rather than
 # copied.
 #

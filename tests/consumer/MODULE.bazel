@@ -14,4 +14,18 @@ local_path_override(
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.44.2")
 
+# The hub every fixture target that needs a package config uses, and the hub of
+# the standard-layout app. Both locks list no packages, so a hub holds only its
+# own project.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//:pubspec.lock",
+)
+pub.lock(
+    name = "standard_layout_pub",
+    lock = "//standard_layout:pubspec.lock",
+)
+use_repo(pub, "pub", "standard_layout_pub")
+
 include("//android:config.MODULE.bazel")

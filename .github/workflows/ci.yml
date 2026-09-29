@@ -67,7 +67,6 @@ jobs:
           flutter-sha256: ${{ env.FLUTTER_SHA256_DARWIN_ARM64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
-          pub-get: ''
 
       - name: bazel test //...
         run: |
@@ -178,8 +177,6 @@ jobs:
           flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
-          # Only this example's app module; local_plugin's lives in a subdirectory.
-          pub-get: ${{ matrix.example.name == 'local_plugin' && 'examples/local_plugin/packages/host_app' || matrix.example.directory }}
           # Both demo_app modes share the module's remote cache.
           cache-mode: ${{ matrix.example.directory == 'examples/demo_app' && env.BAZEL_CACHE_MODE || '' }}
           cache-host: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_HOST || '' }}

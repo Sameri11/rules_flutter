@@ -14,4 +14,6 @@ flutter_app(
     ],
     # Declare sources of the local path dependency.
     path_deps = ["//packages/mylib:srcs"],
+    # The hub of pubspec.lock, declared in MODULE.bazel.
+    pub = "@pub",
 )

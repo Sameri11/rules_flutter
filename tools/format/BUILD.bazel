@@ -12,7 +12,6 @@ _EXCLUDE_PATTERNS = [
     "./bazel-*",
     "./tests/consumer/bazel-*",
     "./examples/*/bazel-*",
-    "./examples/*/.dart_tool/*",
     "./examples/*/.gradle/*",
     "./.git/*",
     # Last on purpose -- see above. Do not sort this list.

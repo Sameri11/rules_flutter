@@ -21,7 +21,7 @@ flutter_android_binary(
     deps = [":main_activity"],
 )
 
-# The registrant `pub get` regenerates on every plugin change, consumed in place
+# The registrant flutter_tools regenerates when plugins change, consumed in place
 # from the Gradle module rather than copied. Its deps *are* the plugin list:
 # registerWith() instantiates each plugin class.
 #

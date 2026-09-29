@@ -13,4 +13,12 @@ local_path_override(
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.44.2")
 
+# Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//:pubspec.lock",
+)
+use_repo(pub, "pub")
+
 include("//android:config.MODULE.bazel")

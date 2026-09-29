@@ -30,7 +30,7 @@ plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//:dynamic_embedding",
     maven_repo = "//:dynamic_maven",
-    metadata = "@dynamic_namespace_metadata//:.flutter-plugins-dependencies",
+    metadata = "@dynamic_namespace_metadata//:plugins_metadata.json",
     package_config = "@dynamic_namespace_metadata//:package_config.json",
 )
 use_repo(plugins, "flutter_plugins")
