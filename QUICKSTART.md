@@ -131,7 +131,8 @@ and plugin list generated from the pubspecs, with no absolute paths. No Dart
 build action reads `.dart_tool/` or `~/.pub-cache`. Bazel does not resolve
 versions: `flutter pub get` is how you update the lock after changing
 `pubspec.yaml`, and the updated `pubspec.lock` must be committed. `pubspec.yaml`
-must sit beside the lock in the main repository, git sources are rejected, hosted
+must sit in the same Bazel package as the lock label, `pub.lock` names must be
+unique across modules and may not contain `-`, git sources are rejected, hosted
 servers must use `https`, and path dependencies must be relative.
 
 `flutter pub get` also writes Flutter's gitignored Android
