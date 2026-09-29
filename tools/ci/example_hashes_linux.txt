@@ -2,6 +2,9 @@
 #
 #   <example> <target> apk=<unsigned APK sha256> entries=<canonical entry-listing sha256>
 #
+# Valid for Android NDK 28.2.13676358, CI's: another NDK changes every
+# NDK-compiled library. See the docstring of tools/ci/example_hashes.py.
+#
 # Regenerate with `tools/ci/example_hashes.py --record` and commit intentional byte changes.
 #
 # Linux-specific: gen_snapshot, the NDK's per-host clang, and the gzip encoder

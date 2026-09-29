@@ -5,6 +5,15 @@ Each module is queried before building: `EXAMPLES` must exactly name every
 `flutter_android_binary`-generated Android target. Each target records raw
 unsigned APK bytes and a canonical ZIP entry listing; together they distinguish
 bundle-content changes from ZIP-layout changes.
+
+The recorded rows hold for the toolchain CI records them with. The Android NDK
+is the input that matters: its clang and libc++ compile every CMake recipe
+library (demo_app's `librive_text.so`, pub_plugins' `libdartjni.so`), so any
+APK that packs one is valid only for `RECORDED_NDK`, and another NDK moves
+that entry and with it `apk=` and `entries=`. Rows packing no NDK-compiled
+library (no_plugins, local_plugin) also held under NDK 29.0.13113456. Measured
+inert on macOS: Xcode 16.4 versus 27, macOS 15 versus 27, the release-archive
+Flutter 3.44.2 SDK versus fvm's, `HOME` and `PUB_CACHE`.
 """
 
 from __future__ import annotations
@@ -12,6 +21,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -48,10 +58,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GOLDEN = REPO_ROOT / "tools" / "ci" / "example_hashes_macos.txt"
 DEFAULT_MANIFESTS = REPO_ROOT / "_ci_hashes"
 
+# The NDK CI records the rows with; keep equal to the one selected in
+# .github/actions/flutter-bazel/action.yml.
+RECORDED_NDK = "28.2.13676358"
+
 HEADER = """\
 # Recorded APK hashes, one line per declared APK:
 #
 #   <example> <target> apk=<unsigned APK sha256> entries=<canonical entry-listing sha256>
+#
+# Valid for Android NDK 28.2.13676358, CI's: another NDK changes every
+# NDK-compiled library. See the docstring of tools/ci/example_hashes.py.
 #
 # Regenerate with `tools/ci/example_hashes.py --record` and commit intentional byte changes.
 """
@@ -72,6 +89,22 @@ def run(argv: list[str], cwd: Path) -> str:
             )
         )
     return proc.stdout
+
+
+def ndk_revision() -> str | None:
+    """Return `Pkg.Revision` of the NDK at ANDROID_NDK_HOME, or None."""
+    home = os.environ.get("ANDROID_NDK_HOME")
+    if not home:
+        return None
+    try:
+        lines = (Path(home) / "source.properties").read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        key, _, value = line.partition("=")
+        if key.strip() == "Pkg.Revision":
+            return value.strip()
+    return None
 
 
 def entry_listing(apk: Path) -> str:
@@ -498,6 +531,17 @@ def main() -> int:
             n=0,
         )
     )
+    revision = ndk_revision()
+    if revision != RECORDED_NDK:
+        print(
+            "\nnote: ANDROID_NDK_HOME is NDK {}, but the rows are recorded with "
+            "NDK {}; a difference confined to NDK-compiled libraries "
+            "(librive_text.so, libdartjni.so) is expected. Re-run with the "
+            "recorded NDK before treating it as a regression.".format(
+                revision or "unknown", RECORDED_NDK
+            ),
+            file=sys.stderr,
+        )
     return 1
 
 
