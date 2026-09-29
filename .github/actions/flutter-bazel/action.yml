@@ -93,7 +93,7 @@ runs:
       run: |
         set -euo pipefail
         for d in ${{ inputs.pub-get }}; do
-          (cd "$d" && flutter pub get)
+          (cd "$d" && flutter pub get --enforce-lockfile)
         done
 
     - name: Install bazelisk

@@ -144,13 +144,16 @@ def _pub_hub_impl(rctx):
 
     for package in lock["path"]:
         # `../app_store/x` relative to the project dir, normalized to a workspace-relative
-        # segment list (a `..` above the workspace root would leave the checkout: refuse).
+        # segment list. A `..` may not climb above the lock's own repository: the
+        # main repository's root, or `external/<repo>` for another module's lock,
+        # whose parent is a sibling repository.
+        floor = 2 if lock_label.repo_name else 0
         dirsegs = list(project)
         for seg in package["path"].split("/"):
             if seg in ["", "."]:
                 continue
             if seg == "..":
-                if not dirsegs:
+                if len(dirsegs) <= floor:
                     fail("pub hub {}: path package {} escapes the workspace: {}".format(rctx.attr.name, package["name"], package["path"]))
                 dirsegs.pop()
             else:
@@ -297,6 +300,10 @@ def _pub_impl(mctx):
     hubs = {}
     for module in mctx.modules:
         for lock in module.tags.lock:
+            # Hosted repositories are `<hub>-<package>`; pub names cannot contain `-`,
+            # so a hub named `app_web` cannot collide with hub `app`'s package `web`.
+            if "-" in lock.name:
+                fail("pub.lock: hub name {} must not contain `-`".format(lock.name))
             if lock.name in hubs:
                 fail("pub.lock: hub {} declared twice".format(lock.name))
             hubs[lock.name] = True
@@ -305,7 +312,7 @@ def _pub_impl(mctx):
 
             hosted = {}
             for package in resolved["hosted"]:
-                repo = "{}_{}".format(lock.name, package["name"])
+                repo = "{}-{}".format(lock.name, package["name"])
                 _pub_archive(
                     name = repo,
                     urls = ["{server}/api/archives/{name}-{version}.tar.gz".format(

@@ -318,8 +318,8 @@ flutter_android_binary(
 
 # The three stub APKs above are `manual`: their `<name>_check_test` would make
 # `bazel test` build fixtures that cannot build -- a fake engine jar with no ELF
-# inside it, and a hub whose package config holds no package but the project. They are
-# analysis fixtures, and this filegroup is what keeps them in `//...` for
+# inside it -- and would fetch the lock's 24 hosted packages for a hub nothing
+# executes. They are analysis fixtures, and this filegroup is what keeps them in `//...` for
 # `--nobuild` while `--build_tests_only` leaves them alone. Every variant is
 # named: `manual` hides `:apk_x86_64` and friends too, and the per-ABI variants
 # are half of what the join is instantiated over two ABIs to exercise.

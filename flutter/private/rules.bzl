@@ -19,9 +19,10 @@ Every package a compile or a bundle reads is a declared input. The `pub`
 module extension (pub_lock.bzl) turns the app's `pubspec.lock` into a hub
 repository holding a package config whose rootUris are all relative, hosted
 packages as sha256-pinned repositories, and the Flutter SDK's own packages as
-`toolchain.sdk_packages`. Nothing is read from `~/.pub-cache`, `.dart_tool/` or
-the SDK by absolute path, so these actions are sandboxed and their keys and
-outputs do not depend on the machine.
+`toolchain.sdk_packages`. No package is resolved through `~/.pub-cache`,
+`.dart_tool/` or the SDK by absolute path, so these actions are sandboxed and
+their keys and outputs do not depend on where the packages sit. The flutter
+tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 """
 
 load("@bazel_skylib//lib:shell.bzl", "shell")

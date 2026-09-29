@@ -80,7 +80,6 @@ package(default_visibility = ["//visibility:public"])
 
 _PLUGIN_TEMPLATE = """
 # {name}, built from the Gradle module the pub package ships.
-# {path}
 {rule}(
     name = "{name}",
     srcs = {srcs} + select({{
@@ -1694,7 +1693,6 @@ def _flutter_plugins_impl(ctx):
             native +
             _PLUGIN_TEMPLATE.format(
                 name = name,
-                path = "<package>/android",
                 rule = "kt_android_library" if kotlin_srcs else "android_library",
                 exports_manifest = "1" if kotlin_srcs else "True",
                 srcs = repr(srcs),
