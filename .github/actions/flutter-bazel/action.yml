@@ -17,6 +17,12 @@ inputs:
   bazelisk-sha256:
     description: SHA-256 of the Bazelisk binary for the current runner platform.
     required: true
+  pub-get:
+    description: Space-separated directories for `flutter pub get`; empty skips it.
+    required: false
+    default: >-
+      examples/demo_app examples/no_plugins examples/pub_plugins
+      examples/local_plugin/packages/host_app
   cache-mode:
     description: >-
       Remote cache mode: `read`, `write`, or empty to disable.
@@ -78,6 +84,17 @@ runs:
       run: |
         flutter --version
         flutter precache --android
+
+    # Needed only for android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java,
+    # which the examples' generated_plugin_registrant reads; the Dart build reads nothing else pub writes.
+    - name: pub get
+      if: inputs.pub-get != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        for d in ${{ inputs.pub-get }}; do
+          (cd "$d" && flutter pub get)
+        done
 
     - name: Install bazelisk
       shell: bash
