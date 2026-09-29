@@ -28,11 +28,12 @@ plugin setup.
 ## Common prerequisites and conventions
 
 Before following a shape, account for these constraints: local Flutter, Android
-SDK, and NDK installations are non-hermetic; Dart and asset actions run
-unsandboxed with remote execution disabled, and Dart compilation is not
-incremental. Hosted pub dependencies are keyed by `pubspec.lock`, but path
-dependencies are not hashed and go stale unless the consumer declares their
-sources; Bazel emits unsigned APKs, so release signing happens outside Bazel,
+SDK, and NDK installations are non-hermetic; Dart compilation is not
+incremental. The Dart kernel and asset actions are sandboxed and cacheable in
+release and debug builds, and only the asset action disables remote execution.
+Hosted pub packages are fetched from the committed `pubspec.lock` and pinned by
+its sha256, git pub sources are rejected, and path dependencies are not hashed
+and go stale unless the consumer declares their sources; Bazel emits unsigned APKs, so release signing happens outside Bazel,
 and Dart native assets must come from declared consumer-owned inputs or recipes.
 Targets are Android-only—iOS, web, and desktop packaging are absent, with no
 dedicated diagnostic; see the [README](README.md) for the full limitations and
@@ -121,11 +122,22 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/<your 28+ version>"
 ```
 
-`flutter pub get` is required before the first Bazel build and after every pub
-change. It creates `.dart_tool/package_config.json`, which the Dart compiler
-uses; it also refreshes `.flutter-plugins-dependencies` and Flutter's Android
-`GeneratedPluginRegistrant.java` when a plugin graph exists. `.dart_tool` is
-bootstrap state rather than a tracked input.
+Bazel builds from the committed `pubspec.lock`. The `pub` module extension
+(declared in each `MODULE.bazel` below) turns it into a `@pub` repository:
+hosted packages downloaded through Bazel's downloader and pinned by the sha256
+the lock records (a wrong digest fails the fetch), Flutter SDK packages resolved
+from the SDK, path packages read as workspace directories, and a package config
+and plugin list generated from the pubspecs, with no absolute paths. No Dart
+build action reads `.dart_tool/` or `~/.pub-cache`. Bazel does not resolve
+versions: `flutter pub get` is how you update the lock after changing
+`pubspec.yaml`, and the updated `pubspec.lock` must be committed. `pubspec.yaml`
+must sit beside the lock in the main repository, git sources are rejected, hosted
+servers must use `https`, and path dependencies must be relative.
+
+`flutter pub get` also writes Flutter's gitignored Android
+`GeneratedPluginRegistrant.java`, which the Android target compiles as an
+ordinary source. Run it once after cloning and after every plugin change so
+that file exists and is current; Bazel does not generate it.
 
 For the first plugin graph, Bazel also needs two committed generated-state files
 to exist before their updater targets can run. They are not both plugin
@@ -190,7 +202,8 @@ The Android configuration enables the Android toolchain, selects Bazel's remote 
 - Add `/bazel-*` to the Flutter-generated `.gitignore`; do **not** ignore
   `MODULE.bazel.lock`. Commit the lockfile. The lock guard compares locks
   resolved with `ANDROID_NDK_HOME` set and unset on one machine; this does not
-  establish cross-host reproducibility. In a plugin graph, also commit the
+  establish cross-host reproducibility. Commit `pubspec.lock` too: it is the
+  input of the `@pub` repository. In a plugin graph, also commit the
   generated `plugin_deps.MODULE.bazel` and `lib/dart_plugin_registrant.dart`.
   Their guards intentionally fail when pub state changes.
 - If the project declares no assets, set `assets = []` in `flutter_app()`: the
@@ -213,18 +226,20 @@ The complete working fixture is
 
 ### Prepare the project
 
-From the existing Flutter project root, populate the pub-generated state that
-the Bazel build consumes:
+From the existing Flutter project root, make sure `pubspec.lock` exists and is
+current, and that Flutter has written its Android registrant:
 
 ```sh
 flutter pub get
 ```
 
-The module root should contain `pubspec.yaml`, `lib/`, and `android/`.
+The module root should contain `pubspec.yaml`, `pubspec.lock`, `lib/`, and
+`android/`. Commit `pubspec.lock`: the Bazel build reads it, not `.dart_tool/`.
 Flutter also writes an empty
-`android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`;
-compile it even though this app has no plugins so the engine does not report a
-misleading missing-registrant message.
+`android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`,
+which is gitignored; compile it even though this app has no plugins so the
+engine does not report a misleading missing-registrant message. Run
+`flutter pub get` again in a fresh clone to regenerate it.
 
 ### Add the module and Dart target
 
@@ -243,8 +258,19 @@ local_path_override(
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.44.2")
 
+# Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//:pubspec.lock",
+)
+use_repo(pub, "pub")
+
 include("//android:config.MODULE.bazel")
 ```
+
+The `pub.lock` tag names the hub repository (`@pub`) and the project's
+`pubspec.lock`; `pubspec.yaml` must sit in the same package.
 
 Bazel checks the host SDK when fetching it and fails with both versions if it
 does not match the declared version.
@@ -314,10 +340,12 @@ flutter_app(
     abis = ["arm64-v8a", "x86_64"],
     plugin_deps = None,
     assets = [],
+    pub = "@pub",
 )
 ```
 
-`plugin_deps = None` is the deliberate no-plugin-graph opt-out. It removes the
+`pub = "@pub"` is mandatory: it is the hub whose package config and hosted
+packages every compile and bundle action reads. `plugin_deps = None` is the deliberate no-plugin-graph opt-out. It removes the
 plugin repository and generated registrant guards; it is not appropriate once
 the app has a pub or path plugin.
 
@@ -427,7 +455,10 @@ release-only.
 | `no such target '@androidsdk//:aapt2'` | Set `ANDROID_HOME` to the Android SDK before the Android build. |
 | An empty `assets/` glob fails in a new app | Keep `assets = []` until `pubspec.yaml` declares real asset files. |
 | An error refers to an invalid empty target name | Use `app = "//:app"`, never `app = "//"`, for a root app. |
-| Package config, plugin metadata, or registrant files are absent | Run `flutter pub get` from the Flutter project root. |
+| `pubspec.yaml must sit beside //:pubspec.lock` | Put `pubspec.yaml` in the package of the label given to `pub.lock`. |
+| `pubspec.lock: ... git sources are not supported` | Depend on a hosted or path package; the lock records a git commit, not a content hash. |
+| A hosted package download fails its sha256 check | The lock is stale or was edited by hand. Regenerate it with `flutter pub get` and commit it. |
+| The Android target reports `GeneratedPluginRegistrant.java` as a missing source | Run `flutter pub get` from the Flutter project root; it writes the gitignored Android registrant. |
 
 ## Root app with pub plugins
 
@@ -441,7 +472,7 @@ name consistently.
 ### Add and exercise `path_provider`
 
 Starting from the plugin-free root app, add this under `dependencies:` in
-`pubspec.yaml` and regenerate pub state:
+`pubspec.yaml`, then update `pubspec.lock` and Flutter's Android registrant:
 
 ```yaml
   path_provider: ^2.1.6
@@ -449,11 +480,13 @@ Starting from the plugin-free root app, add this under `dependencies:` in
 
 ```sh
 flutter pub get
-grep -A3 '"android"' .flutter-plugins-dependencies
+grep -A2 'path_provider_android' pubspec.lock
 ```
 
+Commit the updated `pubspec.lock`.
+
 `path_provider` resolves `path_provider_android`, whose Android module is the
-native plugin part that the generator reads. Do not stop at registration: call
+native plugin part that the generator reads from the `@pub` hub. Do not stop at registration: call
 it from the application and display or log the resulting path. For example,
 add the import and invoke `_checkDocumentsDirectory()` from a state object's
 `initState()`:
@@ -488,7 +521,7 @@ not report `MissingPluginException`.
 
 ### Create generated state and wire the plugin graph
 
-After `flutter pub get`, create both generated-state files as zero-byte
+Create both generated-state files as zero-byte
 placeholders. The plugin guards require their committed files to exist, and
 `include()` requires its target file to exist while the module is evaluated:
 
@@ -507,14 +540,20 @@ use_repo(maven, "flutter_maven")
 plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a", "x86_64"],
-    metadata = "//:.flutter-plugins-dependencies",
     embedding = "//android/app:flutter_embedding",
     maven_repo = "@flutter_maven//:pin",
+    metadata = "@pub//:plugins_metadata.json",
+    package_config = "@pub//:package_config.json",
 )
 use_repo(plugins, "flutter_plugins")
 
 include("//:plugin_deps.MODULE.bazel")
 ```
+
+`metadata` and `package_config` are the `@pub` hub's files, generated from
+`pubspec.lock` and the pubspecs it names. The root `MODULE.bazel` already
+declares the hub (`pub.lock(name = "pub", ...)`) from the plugin-free
+walkthrough; the hub's name is the repository these labels use.
 
 The Consumer Module owns the Maven proxy and `use_repo(maven, "flutter_maven")`;
 the generated segment owns the single `maven.install`. The position of
@@ -536,6 +575,7 @@ committed plugin files and guards become active:
 flutter_app(
     abis = ["arm64-v8a", "x86_64"],
     assets = [],
+    pub = "@pub",
 )
 ```
 
@@ -615,8 +655,9 @@ If the app opens but the call throws that exception, the APK build and install
 succeeded but plugin registration is stale or missing; rerun the registrant
 guard and its printed updater, then rebuild.
 
-For every later pub plugin addition, removal, or upgrade, run `flutter pub get`.
-Flutter refreshes `GeneratedPluginRegistrant.java`; keep its BUILD target
+For every later pub plugin addition, removal, or upgrade, run `flutter pub get`
+and commit the updated `pubspec.lock`. Flutter refreshes
+`GeneratedPluginRegistrant.java`; keep its BUILD target
 dependent on `@flutter_plugins//:all`, rather than maintaining a per-plugin
 list. Run both guards; when a file drifts, use the updater command printed
 by its guard and commit the resulting files. Rebuild, install, and
@@ -656,7 +697,7 @@ packages/
     lib/
 ```
 
-From `packages/host_app`, declare and resolve the path dependency:
+From `packages/host_app`, declare the path dependency and update its lock:
 
 ```yaml
 dependencies:
@@ -669,6 +710,9 @@ cd packages/host_app
 flutter pub get
 cd ../..
 ```
+
+`pubspec.lock` records `greeter` with `source: path` and `path: "../greeter"`;
+commit it.
 
 Create both committed generated-state files as zero-byte placeholders from the
 module root:
@@ -698,6 +742,14 @@ local_path_override(
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.44.2")
+
+# Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//packages/host_app:pubspec.lock",
+)
+use_repo(pub, "pub")
 
 include("//packages/host_app/android:config.MODULE.bazel")
 ```
@@ -741,7 +793,8 @@ plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//packages/host_app/android/app:flutter_embedding",
     maven_repo = "@flutter_maven//:pin",
-    metadata = "//packages/host_app:.flutter-plugins-dependencies",
+    metadata = "@pub//:plugins_metadata.json",
+    package_config = "@pub//:package_config.json",
 )
 use_repo(plugins, "flutter_plugins")
 
@@ -765,7 +818,7 @@ exports_files(["plugin_deps.MODULE.bazel"])
 The app's `packages/host_app/BUILD.bazel` declares the Dart sources of the
 local path dependency. Pub locks do not hash the changing content of a `path:`
 dependency, so omitting `path_deps` would leave an undeclared input and make the
-path-dependency guard fail.
+path-dependency guard fail. `pub = "@pub"` is mandatory.
 
 ```python
 load("@rules_flutter//flutter:defs.bzl", "flutter_app")
@@ -777,6 +830,7 @@ flutter_app(
     assets = [],
     path_deps = ["//packages/greeter:srcs"],
     plugin_deps = "//:plugin_deps.MODULE.bazel",
+    pub = "@pub",
 )
 ```
 
@@ -793,10 +847,12 @@ filegroup(
 ```
 
 There is intentionally no separate hand-written Android target inside
-`packages/greeter`. `flutter pub get` records the plugin's absolute path in
-`packages/host_app/.flutter-plugins-dependencies`; the generator stages that
-package and builds its Android half in `@flutter_plugins`, just as it would for
-a pub plugin.
+`packages/greeter`. The plugin is a `path` dependency in
+`packages/host_app/pubspec.lock`, so the `@pub` hub lists it in its package
+config at a workspace-relative root. The generator finds it through that package
+config, stages the package, and builds its Android half in `@flutter_plugins`,
+just as it would for a pub plugin. No absolute path is involved, and a path
+outside the workspace is rejected.
 
 The app Android target uses named-package labels, and its generated registrant
 depends on the plugin aggregate:
@@ -846,8 +902,8 @@ bazel build //packages/host_app/android/app:host_app
 
 The guard prints this command because it owns the generated artifact's identity.
 
-Adapt all three label families together when your layout differs:
-`metadata = "//<app-package>:.flutter-plugins-dependencies"`,
+Adapt all the label families together when your layout differs:
+`pub.lock(lock = "//<app-package>:pubspec.lock")` (with `pubspec.yaml` beside it),
 `embedding = "//<app-package>/android/app:flutter_embedding"`,
 `path_deps = ["//<plugin-package>:srcs"]`, and
 `app = "//<app-package>"`. Keep the generated Maven segment at the module root
@@ -926,7 +982,7 @@ library filename.
 
 | Failure | Meaning and fix |
 | --- | --- |
-| The package name is absent from both plugin metadata and the pub package configuration | Use the exact pub package name and rerun `flutter pub get`. |
+| The package name is absent from both the hub's plugin metadata and its package configuration | Use the exact pub package name from `pubspec.lock`; if the dependency is new, run `flutter pub get` and commit the updated lock. |
 | The generator repeats its gated reason and asks for a recipe | Register `plugins.package(name = ..., bzl_file = ..., macro = ...)` for that package. |
 | The recipe macro or conventional package target cannot be loaded | Match `macro` to the exported function and create the target named by the supplied `name`. |
 | `<name>_flutter_native` is missing | Define `flutter_native_contribution(name = name + "_flutter_native", ...)`; the generated aggregate consumes that exact target. |
@@ -1085,9 +1141,10 @@ target device.
 For a new app, `assets = []` is correct until real asset files exist. When
 `pubspec.yaml` lists assets such as the demo's
 [`assets/images`](examples/demo_app/assets/images/), let `flutter_app()` use its
-`assets/**` default (or specify the exact matching inputs). Run `flutter pub get`
-after changing `pubspec.yaml`; assets and native-asset manifest contents are
-part of the bundle that the APK packages.
+`assets/**` default (or specify the exact matching inputs). Bazel reads
+`pubspec.yaml` and the asset files as declared inputs; run `flutter pub get` and
+commit `pubspec.lock` only when the edit also changes dependencies. Assets and
+native-asset manifest contents are part of the bundle that the APK packages.
 
 ### One ABI, many ABIs, fat APKs, and per-ABI APKs
 
@@ -1119,20 +1176,25 @@ bazel build //android/app:demo_app --@rules_flutter//flutter:mode=debug
 
 Debug bundles use a kernel blob rather than a release AOT snapshot. Therefore
 an AOT target such as `//:app_arm64-v8a` is intentionally incompatible with the
-debug setting; build the APK or assets target in debug mode instead.
+debug setting; build the APK or assets target in debug mode instead. The debug
+kernel and assets actions are sandboxed and cacheable like release ones; the
+assets action alone disables remote execution because it runs the host Flutter
+tool.
 
 ### Existing projects and generated-state changes
 
 An existing Android Flutter project follows the same recipe as a fresh one:
-start at `flutter pub get`, put `MODULE.bazel` at the Flutter project root (or
+start at `flutter pub get` so `pubspec.lock` is current and committed, put
+`MODULE.bazel` at the Flutter project root (or
 at the monorepo root for the subpackage shape), and map the real
 `MainActivity.kt` path and `applicationId` into the Android BUILD file. Preserve
 the explicit root-vs-named `app` label rule.
 
-After every pub resolution change, run `flutter pub get`. For any plugin graph,
-run `:plugins_check` and `:dart_registrant_check`; when either guard reports
-drift, run the updater command it prints and commit the generated files with
-the lockfile changes. For `path:` dependencies,
+After every pub resolution change, run `flutter pub get` and commit the updated
+`pubspec.lock`; Bazel builds from the lock and never resolves versions itself.
+For any plugin graph, run `:plugins_check` and `:dart_registrant_check`; when
+either guard reports drift, run the updater command it prints and commit the
+generated files with the lockfile changes. For `path:` dependencies,
 keep the local Dart filegroup in `path_deps`; its content is not represented by
 a pub lock hash.
 

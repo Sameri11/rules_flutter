@@ -41,11 +41,12 @@ These are the hard constraints; [Current constraints](#current-constraints) has 
 detail behind each one.
 
 - A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not hermetic: use `FLUTTER_ROOT` or `flutter` on `PATH`, `ANDROID_HOME`, and `ANDROID_NDK_HOME`. CI uses Flutter 3.44.2/Dart 3.12.2. The examples pin SDK platform 36 and build-tools 36.0.0; the consumer module chooses its own. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a no-toolchains stub and the build fails only when a target needs an Android toolchain.
-- Dart and asset actions run unsandboxed with remote execution disabled because they read the local Flutter SDK and `~/.pub-cache` by absolute path.
-- Hosted pub dependencies are keyed by `pubspec.lock`, path dependencies are not hashed and go stale unless the consumer declares their sources, `.dart_tool` state is a bootstrap prerequisite rather than a tracked input, and Dart compilation is not incremental.
+- `pubspec.lock` must be committed and current, with `pubspec.yaml` beside it. Hosted pub packages are downloaded and pinned by the sha256 the lock records, and Flutter SDK packages resolve from the SDK. Git pub sources are rejected, path dependencies are not hashed and go stale unless the consumer declares their sources with `path_deps`, and Dart compilation is not incremental.
+- The Dart kernel and asset actions are sandboxed and cacheable in release and debug builds; only the asset action disables remote execution, because it runs the host Flutter tool.
 - Bazel emits an unsigned APK; release signing happens outside Bazel, and custom release signing inside Bazel is not supported.
 - Native assets require consumer-written Package Recipes.
-- Before the first plugin graph, `flutter pub get` must produce the generated state and two zero-byte placeholders must be created by hand; this bootstrap path has no automated regression gate.
+- `flutter pub get` still produces the gitignored `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`, which the Android target compiles as a source: run it once after cloning and after plugin changes. The Dart build reads none of its other outputs.
+- Before the first plugin graph, two zero-byte placeholders must be created by hand; this bootstrap path has no automated regression gate.
 - The consumer module owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
 - Targets are Android-only; iOS, web, and desktop packaging are not implemented.
 
@@ -53,7 +54,7 @@ detail behind each one.
 
 This is the complete plugin-free path for a fresh Android-only Flutter
 project. For an existing project, skip only the `flutter create` command,
-run `flutter pub get`, then add the files below at the existing project root.
+make sure `pubspec.lock` is current and committed (`flutter pub get` updates it), then add the files below at the existing project root.
 The project root is also the Bazel module root, beside `pubspec.yaml`, `lib/`,
 and `android/`.
 For the expanded plugin-free walkthrough, pub plugins, local plugins in
@@ -76,10 +77,9 @@ resolves to this repository.
 cd ..
 flutter create --org com.example --platforms android hello_bazel
 cd hello_bazel
-flutter pub get
 ```
 
-`flutter pub get` is required: the build consumes its generated package config, plugin-dependencies state, and `GeneratedPluginRegistrant.java`.
+`flutter create` runs `flutter pub get`, which writes `pubspec.lock` and `GeneratedPluginRegistrant.java`. Commit `pubspec.lock`: Bazel builds from it, not from `.dart_tool/`. The Android target compiles the gitignored `GeneratedPluginRegistrant.java` as a source, so in a fresh clone run `flutter pub get` once to regenerate it. Run `flutter pub get` again after changing `pubspec.yaml` dependencies to update the lock.
 
 ### Bazel workspace files
 
@@ -114,8 +114,18 @@ local_path_override(
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.44.2")
 
+# Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//:pubspec.lock",
+)
+use_repo(pub, "pub")
+
 include("//android:config.MODULE.bazel")
 ```
+
+The `pub` extension turns the committed `pubspec.lock` into the `@pub` repository: hosted packages pinned by the lock's sha256, Flutter SDK packages, and a package config with no absolute paths. `pubspec.yaml` must sit beside the lock. Git sources in the lock are rejected.
 
 The Flutter SDK is checked when Bazel fetches it; a host SDK whose version
 differs from the declared version fails with both versions in the error.
@@ -183,8 +193,11 @@ flutter_app(
     abis = ["arm64-v8a", "x86_64"],
     plugin_deps = None,
     assets = [],
+    pub = "@pub",
 )
 ```
+
+`pub` is mandatory: it names the hub declared in `MODULE.bazel`.
 
 ### Android target
 
@@ -269,7 +282,7 @@ Do not apply debug mode to `//:app_arm64-v8a`; AOT is release-only.
 
 ### Adding plugins
 
-The first plugin setup generates and commits the Maven/plugin registrant state required by the plugin graph; its generated files and configuration are intentionally not inlined here.
+The first plugin setup generates and commits the Maven/plugin registrant state required by the plugin graph; its generated files and configuration are intentionally not inlined here. `plugins.project` reads the hub's `@pub//:plugins_metadata.json` and `@pub//:package_config.json`; see the [detailed quickstart](QUICKSTART.md#root-app-with-pub-plugins).
 
 ## Scope, limitations, and direction
 
@@ -280,9 +293,10 @@ Android release and debug packaging across the supported ABIs, including fat and
 ### Current constraints
 
 - The local Flutter 3.44.2/Dart 3.12.2 SDK, Android SDK, and Android NDK installations are not hermetic. The SDK is located through `FLUTTER_ROOT` or `flutter` on `PATH`; the consumer supplies `ANDROID_HOME` and Android SDK API 36/build-tools 36.0.0, and `ANDROID_NDK_HOME` must point to NDK 28 or newer. If `ANDROID_NDK_HOME` is unset, the NDK wrapper substitutes a stub declaring no toolchains, so failure surfaces only when a target needs an Android toolchain.
-- Dart and asset actions are unsandboxed with remote execution disabled because they read the local Flutter SDK and `~/.pub-cache` by absolute path.
-- Hosted pub dependencies are keyed by `pubspec.lock`; path dependencies are not hashed and go stale unless the consumer declares their sources. `.dart_tool` state is a bootstrap prerequisite, not a tracked input, and Dart compilation is not incremental.
-- Before a build, `flutter pub get` must have produced `.dart_tool/package_config.json` and `.flutter-plugins-dependencies`. The first plugin graph additionally needs two zero-byte placeholders created by hand: `plugin_deps.MODULE.bazel` because `include()` requires its target file to exist, and `lib/dart_plugin_registrant.dart` because the plugin guard's committed-file attribute is mandatory. This bootstrap path has no automated regression gate; follow the [public plugin-graph walkthrough](QUICKSTART.md#create-generated-state-and-wire-the-plugin-graph) by hand.
+- The Dart kernel and asset actions are sandboxed and cacheable in release and debug builds, and read no `~/.pub-cache` or `.dart_tool/` state. The asset action disables remote execution because it runs `flutter build bundle` with the host Flutter tool, which a remote worker would not have.
+- `pubspec.lock` must be committed and current, with `pubspec.yaml` beside it in the main repository; `flutter pub get` is how the lock is updated, and Bazel does not resolve versions. Hosted pub packages are downloaded through Bazel's downloader and pinned by the lock's sha256, so a wrong digest fails the fetch; hosted servers must use `https`. Flutter SDK packages resolve from the local SDK. Git pub sources are rejected because the lock records a commit rather than a content hash. Path dependencies are workspace directories, not hashed, and go stale unless the consumer declares their sources with `path_deps`. Dart compilation is not incremental.
+- `flutter pub get` still produces the gitignored `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`, an Android source the app's Android target compiles. Run it once after cloning and after plugin changes; no Dart action reads its other outputs.
+- The first plugin graph needs two zero-byte placeholders created by hand: `plugin_deps.MODULE.bazel` because `include()` requires its target file to exist, and `lib/dart_plugin_registrant.dart` because the plugin guard's committed-file attribute is mandatory. This bootstrap path has no automated regression gate; follow the [public plugin-graph walkthrough](QUICKSTART.md#create-generated-state-and-wire-the-plugin-graph) by hand.
 - Native assets from Dart build-hook packages require consumer-written Package Recipes. The consumer module also owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
 - Bazel emits an unsigned APK. Release signing happens outside the build so credentials never enter the action graph; custom release signing inside Bazel is not supported.
 - `ndk-build` plugins and prebuilt-JNI plugin shapes are not supported. Plugin Maven coordinates that cannot be read statically require `plugins.package(artifacts = ...)`.
