@@ -28,8 +28,6 @@ DEMO_APP_TARGETS = (
 )
 EXAMPLES = (
     ("demo_app", "examples/demo_app", DEMO_APP_TARGETS, ()),
-    # The debug kernel embeds the Flutter SDK and pub-cache paths, so these
-    # rows only hold for CI's runner layout: record them from CI output.
     (
         "demo_app_debug",
         "examples/demo_app",
