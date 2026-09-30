@@ -5,3 +5,4 @@ examples/pub_plugins
 examples/local_plugin
 tests/core_consumer
 tests/namespace_dynamic
+.github/diag/empty-tree-cache

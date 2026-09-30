@@ -1,0 +1,71 @@
+name: Diag - remote cache and zero-byte files in output trees
+
+# Repro for issue 15: the remote cache never serves an ActionResult whose output
+# Tree holds a zero-byte file. The job fails, with error annotations, while the bug lasts.
+on:
+  pull_request:
+    paths:
+      - .github/diag/empty-tree-cache/**
+      - .github/workflows/diag-empty-tree-cache.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .github/diag/empty-tree-cache
+    env:
+      CACHE_HOST: ${{ secrets.BAZEL_CACHE_HOST }}
+      CACHE_INSTANCE: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
+      CACHE_TOKEN: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
+      PROTO_ROOTS: ${{ github.workspace }}/../protos/remote-apis:${{ github.workspace }}/../protos/googleapis
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install grpcurl and the REAPI protos
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/grpcurl.tgz" \
+            https://github.com/fullstorydev/grpcurl/releases/download/v1.9.4/grpcurl_1.9.4_linux_x86_64.tar.gz
+          echo "97e13d58d2733a0e62cd2571d1d5f0c02823f0d25282f08bddedf1ad9c5d1736  $RUNNER_TEMP/grpcurl.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/grpcurl.tgz" -C "$RUNNER_TEMP" grpcurl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          fetch() {  # fetch DIR URL COMMIT PATHS...
+            local dir="$GITHUB_WORKSPACE/../protos/$1" url="$2" commit="$3"; shift 3
+            git init -q "$dir"
+            git -C "$dir" sparse-checkout set "$@"
+            git -C "$dir" fetch -q --depth 1 --filter=blob:none "$url" "$commit"
+            git -C "$dir" checkout -q FETCH_HEAD
+          }
+          fetch remote-apis https://github.com/bazelbuild/remote-apis adbf4a27c86fbea4a37637a6cbcacef372406fe7 build
+          fetch googleapis https://github.com/googleapis/googleapis d6ec9a598ecbcb3458b9e09ad7339af0ab8a71fe \
+            google/api google/longrunning google/rpc
+
+      - name: Point Bazel at the remote cache, uploads on
+        run: |
+          cat >> "$HOME/.bazelrc" <<RC
+          build --remote_cache=grpcs://${CACHE_HOST}
+          build --remote_instance_name=${CACHE_INSTANCE}
+          build --remote_cache_header='Authorization=Bearer ${CACHE_TOKEN}'
+          build --remote_upload_local_results=true
+          build --action_env=DIAG_SALT=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+          RC
+
+      - name: Build 1 (fresh action keys, so every action executes and uploads)
+        run: bazel build //... --execution_log_json_file="$RUNNER_TEMP/exec1.json"
+
+      - name: Build 2 (after clean --expunge, every action should be a remote cache hit)
+        run: |
+          bazel clean --expunge
+          bazel build //... --execution_log_json_file="$RUNNER_TEMP/exec2.json"
+
+      - name: Bazel actions vs the cache
+        run: ./probe.py bazel "$RUNNER_TEMP/exec1.json" "$RUNNER_TEMP/exec2.json"
+
+      - name: Raw REAPI calls, no Bazel
+        if: ${{ !cancelled() }}
+        run: ./probe.py raw

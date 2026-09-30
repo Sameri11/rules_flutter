@@ -1,0 +1,18 @@
+load(":defs.bzl", "diag_file", "diag_tree")
+
+# Tree artifact holding one zero-byte file: the case that never hits.
+diag_tree(
+    name = "tree_empty",
+    content = "",
+)
+
+# Controls.
+diag_tree(
+    name = "tree_one_byte",
+    content = "x",
+)
+
+diag_file(
+    name = "file_empty",
+    content = "",
+)
