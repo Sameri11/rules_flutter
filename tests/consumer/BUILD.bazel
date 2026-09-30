@@ -423,16 +423,19 @@ genrule(
     name = "build_config_plugin_jar_check",
     srcs = ["@flutter_plugins//build_config_plugin"],
     outs = ["build_config_plugin_jar.checked"],
+    # Listings are captured before grep: under genrule pipefail, `unzip -l | grep -q`
+    # fails whenever grep exits on a match while unzip is still writing (SIGPIPE).
     cmd = """set -eu
 found=false
 for archive in $(locations @flutter_plugins//build_config_plugin:build_config_plugin); do
-  if unzip -l "$$archive" | grep -q 'com/example/build_config_plugin/BuildConfig.class'; then
+  listing="$$(unzip -l "$$archive")"
+  if grep -q 'com/example/build_config_plugin/BuildConfig.class' <<<"$$listing"; then
     found=true
   fi
-  if unzip -l "$$archive" | grep -q 'classes.jar'; then
+  if grep -q 'classes.jar' <<<"$$listing"; then
     classes="$(@D)/build_config_plugin.classes.jar"
     unzip -p "$$archive" classes.jar > "$$classes"
-    if unzip -l "$$classes" | grep -q 'com/example/build_config_plugin/BuildConfig.class'; then
+    if grep -q 'com/example/build_config_plugin/BuildConfig.class' <<<"$$(unzip -l "$$classes")"; then
       found=true
     fi
   fi
