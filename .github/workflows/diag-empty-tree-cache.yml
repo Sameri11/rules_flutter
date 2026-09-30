@@ -55,13 +55,18 @@ jobs:
           build --action_env=DIAG_SALT=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
           RC
 
+      # Cache-only setups have no ExecuteResponse, so --remote_print_execution_messages
+      # prints nothing here. --remote_grpc_log records every cache call and its status.
       - name: Build 1 (fresh action keys, so every action executes and uploads)
-        run: bazel build //... --execution_log_json_file="$RUNNER_TEMP/exec1.json"
+        run: bazel build //... --execution_log_json_file="$RUNNER_TEMP/exec1.json" --remote_grpc_log="$RUNNER_TEMP/grpc1.log"
 
       - name: Build 2 (after clean --expunge, every action should be a remote cache hit)
         run: |
           bazel clean --expunge
-          bazel build //... --execution_log_json_file="$RUNNER_TEMP/exec2.json"
+          bazel build //... --execution_log_json_file="$RUNNER_TEMP/exec2.json" --remote_grpc_log="$RUNNER_TEMP/grpc2.log"
+
+      - name: Cache calls as Bazel recorded them (--remote_grpc_log)
+        run: ./probe.py grpclog "$RUNNER_TEMP/grpc1.log" "$RUNNER_TEMP/grpc2.log"
 
       - name: Bazel actions vs the cache
         run: ./probe.py bazel "$RUNNER_TEMP/exec1.json" "$RUNNER_TEMP/exec2.json"
@@ -69,3 +74,12 @@ jobs:
       - name: Raw REAPI calls, no Bazel
         if: ${{ !cancelled() }}
         run: ./probe.py raw
+
+      - name: Upload Bazel's execution and gRPC logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bazel-logs
+          path: |
+            ${{ runner.temp }}/exec*.json
+            ${{ runner.temp }}/grpc*.log

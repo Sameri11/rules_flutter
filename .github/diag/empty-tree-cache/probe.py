@@ -3,6 +3,8 @@
 
   probe.py bazel EXEC_LOG_1 EXEC_LOG_2   Bazel builds //... twice (upload, then after
                                          `clean --expunge`) and looks up each action.
+  probe.py grpclog GRPC_LOG...           Prints the cache calls Bazel itself recorded
+                                         (--remote_grpc_log) for the diag actions.
   probe.py raw                           Same check through raw REAPI calls, no Bazel.
 
 Env: CACHE_HOST (host[:port]), CACHE_INSTANCE, CACHE_TOKEN, PROTO_ROOTS (colon-separated
@@ -86,6 +88,60 @@ def bazel(log1, log2):
             )
 
 
+# Status codes from google/rpc/code.proto that this repro can meet.
+CODES = {0: "OK", 5: "NOT_FOUND", 9: "FAILED_PRECONDITION", 3: "INVALID_ARGUMENT", 8: "RESOURCE_EXHAUSTED"}
+
+
+def _read_varint(data, i):
+    n = shift = 0
+    while True:
+        byte = data[i]
+        i += 1
+        n |= (byte & 0x7F) << shift
+        shift += 7
+        if byte < 0x80:
+            return n, i
+
+
+def _fields(data):
+    """First occurrence of each field number in a serialized message; nested ones stay bytes."""
+    i, out = 0, {}
+    while i < len(data):
+        key, i = _read_varint(data, i)
+        wire = key & 7
+        if wire == 0:
+            value, i = _read_varint(data, i)
+        elif wire == 2:
+            size, i = _read_varint(data, i)
+            value, i = data[i:i + size], i + size
+        else:  # fixed64 / fixed32
+            size = 8 if wire == 1 else 4
+            value, i = data[i:i + size], i + size
+        out.setdefault(key >> 3, value)
+    return out
+
+
+def grpclog(*paths):
+    """Decodes Bazel's --remote_grpc_log: varint-delimited LogEntry messages
+    (src/main/protobuf/remote_execution_log.proto: metadata=1, status=2, method_name=3),
+    RequestMetadata (action_id=2, action_mnemonic=5, target_id=6), google.rpc.Status (code=1)."""
+    print(f"{'build':<6} {'target':<18} {'call':<20} {'status':<10} action digest")
+    for build, path in enumerate(paths, 1):
+        data, i = open(path, "rb").read(), 0
+        while i < len(data):
+            size, i = _read_varint(data, i)
+            entry, i = _fields(data[i:i + size]), i + size
+            metadata, status = _fields(entry.get(1, b"")), _fields(entry.get(2, b""))
+            if not metadata.get(5, b"").startswith(b"Diag"):
+                continue
+            code = status.get(1, 0)
+            print(
+                f"{build:<6} {metadata[6].decode():<18} {entry[3].decode().rsplit('/', 1)[-1]:<20} "
+                + f"{CODES.get(code, code):<10} {metadata.get(2, b'').decode()}",
+            )
+
+
+
 # --- Raw REAPI -----------------------------------------------------------------------------
 
 
@@ -156,5 +212,5 @@ def raw():
 
 
 if __name__ == "__main__":
-    {"bazel": lambda: bazel(*sys.argv[2:4]), "raw": raw}[sys.argv[1]]()
+    {"bazel": lambda: bazel(*sys.argv[2:4]), "grpclog": lambda: grpclog(*sys.argv[2:]), "raw": raw}[sys.argv[1]]()
     sys.exit(1 if failures else 0)
