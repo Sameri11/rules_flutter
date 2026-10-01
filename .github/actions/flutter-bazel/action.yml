@@ -85,8 +85,7 @@ runs:
         flutter --version
         flutter precache --android
 
-    # Needed only for android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java,
-    # which the examples' generated_plugin_registrant reads; the Dart build reads nothing else pub writes.
+    # Generate the Android plugin registrant; Dart inputs come from the pub hub.
     - name: pub get
       if: inputs.pub-get != ''
       shell: bash

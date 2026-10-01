@@ -1,10 +1,7 @@
-"""Synthesizes the pub hub files for the fake plugin and namespace fixtures.
+"""Generate pub hub metadata for checked-in plugin and namespace fixtures.
 
-The fixtures are plugin packages inside this repository rather than entries in a
-`pubspec.lock`, so no `pub.lock` hub describes them. This rule writes the two
-hub files `plugins.project` reads, `plugins_metadata.json` and
-`package_config.json`, in the hub's own shape: rootUris relative to the
-repository's directory, nothing absolute. The plugin sources remain checked in.
+These packages are not in pubspec.lock. Match the hub format with
+repository-relative rootUris for plugins.project.
 """
 
 def _root_uri(marker):

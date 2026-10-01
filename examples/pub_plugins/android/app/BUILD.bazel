@@ -21,14 +21,8 @@ flutter_android_binary(
     deps = [":main_activity"],
 )
 
-# The registrant flutter_tools regenerates when plugins change, consumed in place
-# from the Gradle module rather than copied. Its deps *are* the plugin list:
-# registerWith() instantiates each plugin class.
-#
-# `flutter_android_binary` derives `registrant = ":generated_plugin_registrant"`
-# whenever there is a plugin graph, so the name is a convention rather than an
-# argument -- but the target still has to exist here, because its sources and its
-# Maven dep belong to this project.
+# Compile Flutter's generated registrant with its plugin classes.
+# flutter_android_binary expects this target name for a plugin graph.
 android_library(
     name = "generated_plugin_registrant",
     srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],

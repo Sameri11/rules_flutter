@@ -52,10 +52,9 @@ filegroup(
 """
 
 def _pub_archive_impl(rctx):
-    # Not http_archive: a few published archives (hive_flutter-1.1.0) carry zero padding
-    # after the gzip stream, which Bazel's Java extractor rejects ("Garbage after a valid
-    # .gz stream"). The download stays downloader-mediated and sha256-pinned; only the
-    # unpack is ours.
+    # Not http_archive: some archives (hive_flutter-1.1.0) have zero padding after
+    # the gzip stream, which Bazel's extractor rejects. Download stays
+    # sha256-pinned; only the unpack is ours.
     #
     # `gzip -dc | tar -x` rather than `tar -xzf`: GNU tar fails such an archive
     # ("Child returned status 2", gzip's trailing-garbage warning), BSD tar does not.

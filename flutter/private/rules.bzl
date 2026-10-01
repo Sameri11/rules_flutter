@@ -155,10 +155,8 @@ def _dart_kernel_impl(ctx):
 
     # frontend_server speaks its compiler-daemon protocol on every completion,
     # success included: one `+file:///...` line per source it read, absolute
-    # host and execroot paths included. That is 7340 lines for this
-    # repo's two apps, and it drowns anything real. The flag defaults to on;
-    # turning it off leaves only the three-line `result <uuid>` handshake,
-    # which is the protocol itself and has no flag.
+    # host and execroot paths included, which drowns anything real. Turning the
+    # flag off leaves only the `result <uuid>` handshake, which has no flag.
     #
     # Deliberately not done by capturing stdout in the wrapper instead: the
     # kernel is byte-identical either way, but a wrapper has to re-raise the
@@ -237,12 +235,10 @@ exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
 """.format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT")),
         arguments = [scalars, args],
         tools = [toolchain.dartaotruntime],
-        # Every package the compile can read is declared: the hub's package
-        # config (relative roots only, so the key carries no host path), its
-        # hosted package files, and the SDK's packages through the toolchain.
-        # Hosted content is pinned by the lock's sha256 at fetch time. Path
-        # dependencies carry no hash and are covered only by what the caller
-        # lists in `srcs` or `path_deps`; see `path_deps`.
+        # Every readable package is declared: the hub's package config (relative
+        # roots only, so the key has no host path), hosted packages, and SDK
+        # packages. Hosted content is sha256-pinned; path dependencies are covered
+        # only by `srcs` / `path_deps`.
         inputs = depset(
             direct = [
                          toolchain.frontend_server,
@@ -790,13 +786,10 @@ def _bundle_dir(out, abi, index):
     return "$STAGE/bundles/{}".format(abi)
 
 def _bundle_command(ctx, out, abi, index):
-    # `flutter_tool` is a shell function defined in the action preamble that runs
-    # the tool's snapshot directly. bin/flutter rewrites bin/cache/engine.stamp
-    # and engine.realm in the SDK on every invocation
-    # (bin/internal/update_engine_version.sh), which a sandbox forbids.
-    # `--no-version-check` stops the tool's update check, which runs `git fetch`
-    # in the SDK and writes bin/cache/flutter_version_check.stamp whenever the
-    # stamp is stale; the macOS sandbox rejects both.
+    # `flutter_tool` (defined in the action preamble) runs the tool's snapshot
+    # directly: bin/flutter writes engine.stamp into the SDK, which a sandbox
+    # forbids. `--no-version-check` skips the update check, which runs `git fetch`
+    # and writes a stamp in the SDK.
     return """flutter_tool --no-version-check build bundle \
     --{mode} \
     --no-pub \
@@ -891,9 +884,7 @@ def _flutter_assets_impl(ctx):
     args = ctx.actions.args()
     args.add(entrypoint)
 
-    # Every file the bundle can read is staged and declared: the hub's
-    # project-relative package config and package graph, every hosted package,
-    # and the SDK's packages.
+    # Every file the bundle can read is staged and declared.
     package_graph = ctx.file.package_config.dirname + "/package_graph.json"
     stage_manifest_files = (
         [

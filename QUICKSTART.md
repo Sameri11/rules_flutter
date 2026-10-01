@@ -124,21 +124,20 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/<your 28+ version>"
 
 Bazel builds from the committed `pubspec.lock`. The `pub` module extension
 (declared in each `MODULE.bazel` below) turns it into a `@pub` repository:
-hosted packages downloaded through Bazel's downloader and pinned by the sha256
-the lock records (a wrong digest fails the fetch), Flutter SDK packages resolved
-from the SDK, path packages read as workspace directories, and a package config
-and plugin list generated from the pubspecs, with no absolute paths. No Dart
-build action reads `.dart_tool/` or `~/.pub-cache`. Bazel does not resolve
-versions: `flutter pub get` is how you update the lock after changing
-`pubspec.yaml`, and the updated `pubspec.lock` must be committed. `pubspec.yaml`
-must sit in the same Bazel package as the lock label, `pub.lock` names must be
-unique across modules and may not contain `-`, git sources are rejected, hosted
-servers must use `https`, and path dependencies must be relative.
+hosted packages downloaded through Bazel and pinned by the lock's sha256 (a
+wrong digest fails the fetch), Flutter SDK packages from the SDK, path packages
+as workspace directories, and a package config and plugin list with no absolute
+paths. No Dart build action reads `.dart_tool/` or `~/.pub-cache`. Bazel does
+not resolve versions: update the lock with `flutter pub get` after changing
+`pubspec.yaml`, and commit it. `pubspec.yaml` must sit in the same Bazel package
+as the lock label, `pub.lock` names must be unique across modules and may not
+contain `-`, git sources are rejected, hosted servers must use `https`, and path
+dependencies must be relative.
 
-`flutter pub get` also writes Flutter's gitignored Android
+`flutter pub get` also writes the gitignored Android
 `GeneratedPluginRegistrant.java`, which the Android target compiles as an
-ordinary source. Run it once after cloning and after every plugin change so
-that file exists and is current; Bazel does not generate it.
+ordinary source. Run it after cloning and after every plugin change; Bazel does
+not generate it.
 
 For the first plugin graph, Bazel also needs two committed generated-state files
 to exist before their updater targets can run. They are not both plugin
@@ -235,12 +234,11 @@ flutter pub get
 ```
 
 The module root should contain `pubspec.yaml`, `pubspec.lock`, `lib/`, and
-`android/`. Commit `pubspec.lock`: the Bazel build reads it, not `.dart_tool/`.
-Flutter also writes an empty
-`android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`,
-which is gitignored; compile it even though this app has no plugins so the
-engine does not report a misleading missing-registrant message. Run
-`flutter pub get` again in a fresh clone to regenerate it.
+`android/`. Commit `pubspec.lock`: Bazel reads it, not `.dart_tool/`. Flutter
+also writes the gitignored empty
+`android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`;
+compile it even without plugins so the engine does not report a misleading
+missing-registrant message. Re-run `flutter pub get` in a fresh clone.
 
 ### Add the module and Dart target
 
@@ -271,7 +269,7 @@ include("//android:config.MODULE.bazel")
 ```
 
 The `pub.lock` tag names the hub repository (`@pub`) and the project's
-`pubspec.lock`; `pubspec.yaml` must sit in the same package.
+`pubspec.lock`, with `pubspec.yaml` beside it.
 
 Bazel checks the host SDK when fetching it and fails with both versions if it
 does not match the declared version.
@@ -345,8 +343,8 @@ flutter_app(
 )
 ```
 
-`pub = "@pub"` is mandatory: it is the hub whose package config and hosted
-packages every compile and bundle action reads. `plugin_deps = None` is the deliberate no-plugin-graph opt-out. It removes the
+`pub = "@pub"` is mandatory: every compile and bundle action reads its package
+config and hosted packages. `plugin_deps = None` is the deliberate no-plugin-graph opt-out. It removes the
 plugin repository and generated registrant guards; it is not appropriate once
 the app has a pub or path plugin.
 
@@ -551,10 +549,8 @@ use_repo(plugins, "flutter_plugins")
 include("//:plugin_deps.MODULE.bazel")
 ```
 
-`metadata` and `package_config` are the `@pub` hub's files, generated from
-`pubspec.lock` and the pubspecs it names. The root `MODULE.bazel` already
-declares the hub (`pub.lock(name = "pub", ...)`) from the plugin-free
-walkthrough; the hub's name is the repository these labels use.
+`metadata` and `package_config` are files of the `@pub` hub declared in the
+plugin-free walkthrough; the labels use the hub's name.
 
 The Consumer Module owns the Maven proxy and `use_repo(maven, "flutter_maven")`;
 the generated segment owns the single `maven.install`. The position of
@@ -847,13 +843,11 @@ filegroup(
 )
 ```
 
-There is intentionally no separate hand-written Android target inside
-`packages/greeter`. The plugin is a `path` dependency in
-`packages/host_app/pubspec.lock`, so the `@pub` hub lists it in its package
-config at a workspace-relative root. The generator finds it through that package
-config, stages the package, and builds its Android half in `@flutter_plugins`,
-just as it would for a pub plugin. No absolute path is involved, and a path
-outside the workspace is rejected.
+There is intentionally no hand-written Android target inside `packages/greeter`.
+The plugin is a `path` dependency in `packages/host_app/pubspec.lock`, so the
+`@pub` hub lists it at a workspace-relative root; the generator stages it and
+builds its Android half in `@flutter_plugins` like a pub plugin. A path outside
+the workspace is rejected.
 
 The app Android target uses named-package labels, and its generated registrant
 depends on the plugin aggregate:
@@ -1177,10 +1171,9 @@ bazel build //android/app:demo_app --@rules_flutter//flutter:mode=debug
 
 Debug bundles use a kernel blob rather than a release AOT snapshot. Therefore
 an AOT target such as `//:app_arm64-v8a` is intentionally incompatible with the
-debug setting; build the APK or assets target in debug mode instead. The debug
-kernel and assets actions are sandboxed and cacheable like release ones; the
-assets action alone disables remote execution because it runs the host Flutter
-tool.
+debug setting; build the APK or assets target in debug mode instead. Debug
+kernel and assets actions are cacheable like release ones; only the assets
+action disables remote execution.
 
 ### Existing projects and generated-state changes
 

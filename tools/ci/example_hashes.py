@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
 """Build example APKs and gate on their recorded digests.
 
-Each module is queried before building: `EXAMPLES` must exactly name every
-`flutter_android_binary`-generated Android target. Each target records raw
-unsigned APK bytes and a canonical ZIP entry listing; together they distinguish
-bundle-content changes from ZIP-layout changes.
-
-The recorded rows hold for the toolchain CI records them with. The Android NDK
-is the input that matters: its clang and libc++ compile every CMake recipe
-library (demo_app's `librive_text.so`, pub_plugins' `libdartjni.so`), so any
-APK that packs one is valid only for `RECORDED_NDK`, and another NDK moves
-that entry and with it `apk=` and `entries=`. Rows packing no NDK-compiled
-library (no_plugins, local_plugin) also held under NDK 29.0.13113456. Measured
-inert on macOS: Xcode 16.4 versus 27, macOS 15 versus 27, the release-archive
-Flutter 3.44.2 SDK versus fvm's, `HOME` and `PUB_CACHE`.
+EXAMPLES must cover every flutter_android_binary target. Record unsigned APK
+hashes and canonical ZIP entry hashes to distinguish layout from content changes.
+Baselines require the CI toolchain, including RECORDED_NDK for native libraries.
 """
 
 from __future__ import annotations

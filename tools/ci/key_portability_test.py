@@ -184,9 +184,7 @@ class Checker:
             self.fail("C", "{} must define _dart_kernel_impl".format(FILES["defs"]))
             return
 
-        # The package config is the hub's, every rootUri relative to it, so the
-        # compile loads it through the virtual filesystem rooted at the execroot:
-        # kernel source URIs stay `org-dartlang-root:`/`package:`.
+        # Execroot-relative package roots keep kernel URIs host-independent.
         added = {}
         for node in ast.walk(function):
             if not isinstance(node, ast.Call) or _call_path(node) != ["args", "add"]:
@@ -218,8 +216,7 @@ class Checker:
             if not _contains_attr(inputs, ["toolchain", "sdk_version"]):
                 self.fail("C", "Dart action inputs must declare the toolchain's SDK identity")
 
-        # Sandboxed and cacheable, debug included: no execution requirements at
-        # all. `no-sandbox` and `local` are what an undeclared input needed.
+        # Dart actions remain sandboxed and cacheable, including debug builds.
         if action is not None and _keyword(action, "execution_requirements") is not None:
             self.fail("C", "the Dart action must not set execution_requirements: it is sandboxed and cacheable")
         for token in ("no-sandbox", "local"):
@@ -259,8 +256,7 @@ class Checker:
             self.fail("D", "{} must define _flutter_assets_impl".format(FILES["defs"]))
             return
 
-        # Everything staged is declared: the action inputs are stage_manifest_files
-        # itself, not a subset of it.
+        # Declare every staged file as an action input.
         stage = _named_value(function, "stage_manifest_files")
         for path, description in (
             (["ctx", "file", "package_config"], "the project package config"),

@@ -32,9 +32,7 @@ __pycache__/
 /examples/*/.config/
 /examples/*/packages/*/.config/
 
-# Each generated Flutter project ignores its own build output, `.dart_tool` and
-# `.flutter-plugins-dependencies`. `flutter pub get` writes them; no Bazel action
-# reads them.
+# Flutter projects ignore their build output and pub-generated tool state.
 
 # Local output of tools/ci/example_hashes.py.
 /_ci_hashes/

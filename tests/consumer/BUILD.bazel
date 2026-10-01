@@ -316,13 +316,8 @@ flutter_android_binary(
     deps = [":fake_registrant"],
 )
 
-# The three stub APKs above are `manual`: their `<name>_check_test` would make
-# `bazel test` build fixtures that cannot build -- a fake engine jar with no ELF
-# inside it -- and would fetch the lock's 24 hosted packages for a hub nothing
-# executes. They are analysis fixtures, and this filegroup is what keeps them in `//...` for
-# `--nobuild` while `--build_tests_only` leaves them alone. Every variant is
-# named: `manual` hides `:apk_x86_64` and friends too, and the per-ABI variants
-# are half of what the join is instantiated over two ABIs to exercise.
+# Stub APKs are analysis-only: their fake engine cannot build.
+# List all manual variants here for //... --nobuild coverage.
 filegroup(
     name = "analysis_only",
     srcs = [
@@ -423,8 +418,7 @@ genrule(
     name = "build_config_plugin_jar_check",
     srcs = ["@flutter_plugins//build_config_plugin"],
     outs = ["build_config_plugin_jar.checked"],
-    # Listings are captured before grep: under genrule pipefail, `unzip -l | grep -q`
-    # fails whenever grep exits on a match while unzip is still writing (SIGPIPE).
+    # Capture listings to avoid unzip's SIGPIPE when grep -q exits under pipefail.
     cmd = """set -eu
 found=false
 for archive in $(locations @flutter_plugins//build_config_plugin:build_config_plugin); do

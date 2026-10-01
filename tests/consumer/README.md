@@ -104,9 +104,8 @@ Attributes are named explicitly rather than left to defaults — `target_os`,
 
 `flutter_app` is instantiated in **`//standard_layout`**, a second package whose
 contents are the layout `flutter create` leaves behind: `pubspec.yaml`,
-`pubspec.lock`, `lib/main.dart`, and one asset. Its package config is
-`@standard_layout_pub`, the `pub.lock` hub of that lock, so no `.dart_tool` is
-checked in. It permanently selects `lib/alternate$release.dart`; execution
+`pubspec.lock`, `lib/main.dart`, and one asset. Its package config is the
+`@standard_layout_pub` hub of that lock. It permanently selects `lib/alternate$release.dart`; execution
 covers the nondefault `flutter_assets.entrypoint` without shell expansion, and
 smooth_app executes the same nondefault-entrypoint shape.
 
@@ -121,12 +120,11 @@ with the complete embedding coordinate list, and imports it with
 
 `fixtures/fake_plugin` is an external Flutter plugin layout, and the four
 `fixtures/namespace_*` directories are plugin layouts dedicated to namespace
-syntax coverage. Unlike the fixtures above, they are not entries in a
-`pubspec.lock`, so no `pub.lock` hub describes them. `fixtures/plugin_fixture.bzl`
-is a small repository rule that writes the two hub files `plugins.project`
-reads (`plugins_metadata.json` and `package_config.json`) for this combined
-fake-plugin and four-namespace fixture set, with rootUris relative to the
-repository, so the pair is the same on any checkout. This proves two
+syntax coverage. They are not in any `pubspec.lock`, so no `pub.lock` hub
+describes them. `fixtures/plugin_fixture.bzl` is a small repository rule that
+writes the two hub files `plugins.project` reads (`plugins_metadata.json`,
+`package_config.json`) for this fixture set, with repository-relative rootUris.
+This proves two
 things nothing else here can, because this module reaches `rules_flutter` the
 same way `hello_bazel` and `smooth-app` do and those two are external to this
 repository:
