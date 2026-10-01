@@ -10,9 +10,6 @@
 # Python bytecode from the CI helper scripts.
 __pycache__/
 
-# Keep fixture `.dart_tool` files; ignore generated extension metadata.
-/tests/consumer/**/.dart_tool/extension_discovery/
-
 # Internal project notes.
 /docs_internal/
 
@@ -35,8 +32,7 @@ __pycache__/
 /examples/*/.config/
 /examples/*/packages/*/.config/
 
-# Each generated Flutter project ignores its own build output and `.dart_tool`.
-# Run `flutter pub get` before Bazel; it creates the generated Bazel inputs.
+# Flutter projects ignore their build output and pub-generated tool state.
 
 # Local output of tools/ci/example_hashes.py.
 /_ci_hashes/

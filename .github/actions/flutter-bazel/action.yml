@@ -85,13 +85,14 @@ runs:
         flutter --version
         flutter precache --android
 
+    # Generate the Android plugin registrant; Dart inputs come from the pub hub.
     - name: pub get
       if: inputs.pub-get != ''
       shell: bash
       run: |
         set -euo pipefail
         for d in ${{ inputs.pub-get }}; do
-          (cd "$d" && flutter pub get)
+          (cd "$d" && flutter pub get --enforce-lockfile)
         done
 
     - name: Install bazelisk

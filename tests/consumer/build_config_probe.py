@@ -106,7 +106,6 @@ def run_case(name: str, declarations: list[str], expected: str) -> None:
                 "bazel-*",
                 "MODULE.bazel.lock",
                 "*.checked",
-                ".dart_tool",
             ),
         )
         module = workspace / "MODULE.bazel"

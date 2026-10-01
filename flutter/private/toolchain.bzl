@@ -13,6 +13,7 @@ FlutterToolchainInfo = provider(
         "sdk_version": "Flutter SDK identity JSON file.",
         "platform_product": "Product patched SDK files.",
         "platform_debug": "Debug patched SDK files.",
+        "sdk_packages": "Depset of the SDK's Dart package files: every `packages/<name>` package plus sky_engine, as lib/, pubspec.yaml and license files.",
         "gen_snapshots": "ABI and AOT mode to gen_snapshot executable file mapping.",
     },
 )
@@ -34,6 +35,7 @@ def _flutter_toolchain_impl(ctx):
         platform_product = ctx.files._platform_product,
         platform_debug = ctx.files._platform_debug,
         gen_snapshots = gen_snapshots,
+        sdk_packages = depset(ctx.files._sdk_packages),
     ))]
 
 def _toolchain_attrs():
@@ -62,6 +64,10 @@ def _toolchain_attrs():
         ),
         "_platform_debug": attr.label(
             default = "@flutter_sdk//:platform_debug",
+            allow_files = True,
+        ),
+        "_sdk_packages": attr.label(
+            default = "@flutter_sdk//:sdk_packages",
             allow_files = True,
         ),
     }

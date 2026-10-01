@@ -103,10 +103,9 @@ Attributes are named explicitly rather than left to defaults — `target_os`,
 `strip`, `abi`, `slice` — for the same reason.
 
 `flutter_app` is instantiated in **`//standard_layout`**, a second package whose
-contents are the layout `flutter create` and `flutter pub get` leave behind:
-`pubspec.yaml`, `pubspec.lock`,
-`.dart_tool/{version,package_graph.json,package_config.json}`, `lib/main.dart`,
-and one asset. It permanently selects `lib/alternate$release.dart`; execution
+contents are the layout `flutter create` leaves behind: `pubspec.yaml`,
+`pubspec.lock`, `lib/main.dart`, and one asset. Its package config is the
+`@standard_layout_pub` hub of that lock. It permanently selects `lib/alternate$release.dart`; execution
 covers the nondefault `flutter_assets.entrypoint` without shell expansion, and
 smooth_app executes the same nondefault-entrypoint shape.
 
@@ -121,13 +120,11 @@ with the complete embedding coordinate list, and imports it with
 
 `fixtures/fake_plugin` is an external Flutter plugin layout, and the four
 `fixtures/namespace_*` directories are plugin layouts dedicated to namespace
-syntax coverage. Unlike the fixtures above, their two pub-written inputs
-(`.flutter-plugins-dependencies`/`package_config.json`) cannot be checked in
-verbatim — both carry **absolute** `file://` paths into `~/.pub-cache`, unique
-to whichever machine ran `pub get`. `fixtures/plugin_fixture.bzl` is a small
-repository rule that synthesizes the metadata for this combined fake-plugin and
-four-namespace fixture set at fetch time from each layout's real on-disk
-location, so the pair stays correct on any checkout. This proves two
+syntax coverage. They are not in any `pubspec.lock`, so no `pub.lock` hub
+describes them. `fixtures/plugin_fixture.bzl` is a small repository rule that
+writes the two hub files `plugins.project` reads (`plugins_metadata.json`,
+`package_config.json`) for this fixture set, with repository-relative rootUris.
+This proves two
 things nothing else here can, because this module reaches `rules_flutter` the
 same way `hello_bazel` and `smooth-app` do and those two are external to this
 repository:

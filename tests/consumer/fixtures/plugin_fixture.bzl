@@ -1,9 +1,13 @@
-"""Synthesizes portable metadata for the fake plugin and namespace fixtures.
+"""Generate pub hub metadata for checked-in plugin and namespace fixtures.
 
-Pub writes absolute package paths into both metadata files, so checked-in copies
-are machine-specific. Resolve each marker at fetch time and generate only those
-files; the plugin sources remain checked in.
+These packages are not in pubspec.lock. Match the hub format with
+repository-relative rootUris for plugins.project.
 """
+
+def _root_uri(marker):
+    """The marker's directory as a rootUri relative to `external/<repository>/`."""
+    directory = marker.package + "/" + marker.name.rpartition("/")[0]
+    return "../../" + "/".join([s for s in directory.split("/") if s]) + "/"
 
 def _namespace_plugin_metadata_impl(ctx):
     """Generate pub metadata for namespace and BuildConfig fixtures."""
@@ -16,20 +20,22 @@ def _namespace_plugin_metadata_impl(ctx):
         ("fake_plugin", ctx.attr.fake_marker),
         ("build_config_plugin", ctx.attr.build_config_marker),
     ]:
-        root = str(ctx.path(marker).dirname)
         plugins.append({
             "name": name,
-            "path": root + "/",
+            "rootUri": _root_uri(marker),
             "native_build": True,
             "dependencies": [],
             "dev_dependency": False,
         })
 
     ctx.file(
-        ".flutter-plugins-dependencies",
+        "plugins_metadata.json",
         json.encode({
             "info": "Generated namespace parser fixture metadata.",
-            "plugins": {"android": plugins},
+            "plugins": {"android": [
+                {key: plugin[key] for key in ["name", "native_build", "dependencies", "dev_dependency"]}
+                for plugin in plugins
+            ]},
         }),
     )
     ctx.file(
@@ -39,7 +45,7 @@ def _namespace_plugin_metadata_impl(ctx):
             "packages": [
                 {
                     "name": plugin["name"],
-                    "rootUri": "file://" + plugin["path"].rstrip("/"),
+                    "rootUri": plugin["rootUri"],
                     "packageUri": "lib/",
                     "languageVersion": "3.0",
                 }
@@ -49,7 +55,7 @@ def _namespace_plugin_metadata_impl(ctx):
     )
     ctx.file(
         "BUILD.bazel",
-        "exports_files([\".flutter-plugins-dependencies\", \"package_config.json\"])\n",
+        "exports_files([\"plugins_metadata.json\", \"package_config.json\"])\n",
     )
 
 namespace_plugin_metadata = repository_rule(

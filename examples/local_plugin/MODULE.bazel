@@ -14,4 +14,12 @@ local_path_override(
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.44.2")
 
+# Fetch hosted dependencies from the lock.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//packages/host_app:pubspec.lock",
+)
+use_repo(pub, "pub")
+
 include("//packages/host_app/android:config.MODULE.bazel")

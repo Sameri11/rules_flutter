@@ -8,4 +8,5 @@ flutter_app(
     abis = ["arm64-v8a"],
     # flutter create declares no assets.
     assets = [],
+    pub = "@pub",
 )

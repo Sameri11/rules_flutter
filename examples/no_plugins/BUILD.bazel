@@ -10,4 +10,5 @@ flutter_app(
     # flutter create declares no assets.
     assets = [],
     plugin_deps = None,
+    pub = "@pub",
 )

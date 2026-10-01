@@ -30,7 +30,8 @@ plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//packages/host_app/android/app:flutter_embedding",
     maven_repo = "@flutter_maven//:pin",
-    metadata = "//packages/host_app:.flutter-plugins-dependencies",
+    metadata = "@pub//:plugins_metadata.json",
+    package_config = "@pub//:package_config.json",
 )
 use_repo(plugins, "flutter_plugins")
 

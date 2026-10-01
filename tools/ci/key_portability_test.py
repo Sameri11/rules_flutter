@@ -184,18 +184,17 @@ class Checker:
             self.fail("C", "{} must define _dart_kernel_impl".format(FILES["defs"]))
             return
 
-        package_add = False
+        # Execroot-relative package roots keep kernel URIs host-independent.
+        added = {}
         for node in ast.walk(function):
             if not isinstance(node, ast.Call) or _call_path(node) != ["args", "add"]:
                 continue
-            if node.args and _string(node.args[0]) == "--packages":
-                if len(node.args) >= 2 and _attr_path(node.args[1]) in (
-                    ["ctx", "file", "package_config"],
-                    ["ctx", "files", "package_config"],
-                ):
-                    package_add = True
-        if not package_add:
+            if node.args and _string(node.args[0]) is not None:
+                added[_string(node.args[0])] = node.args[1:]
+        if not (added.get("--packages") and _contains_attr(added["--packages"][0], ["ctx", "file", "package_config"])):
             self.fail("C", "_dart_kernel_impl must pass ctx.file.package_config to --packages")
+        if "--filesystem-root" not in added or "--filesystem-scheme" not in added:
+            self.fail("C", "_dart_kernel_impl must load the package config through --filesystem-root/--filesystem-scheme")
 
         action = _action_call(function, "run_shell")
         if action is None:
@@ -203,12 +202,13 @@ class Checker:
         else:
             tools = _keyword(action, "tools")
             inputs = _keyword(action, "inputs")
-            if (
-                _contains_attr(inputs, ["ctx", "file", "package_config"])
-                or _contains_attr(inputs, ["ctx", "files", "package_config"])
-                or _contains_name(inputs, "package_config")
+            for path, description in (
+                (["ctx", "file", "package_config"], "the package config"),
+                (["ctx", "files", "pub_srcs"], "the hub's package files (pub_srcs)"),
+                (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
             ):
-                self.fail("C", "package_config must not occur in the Dart action inputs")
+                if not _contains_attr(inputs, path):
+                    self.fail("C", "Dart action inputs must declare {}".format(description))
             if not _contains_attr(tools, ["toolchain", "dartaotruntime"]):
                 self.fail("C", "Dart action must declare the toolchain's dartaotruntime as a tool")
             if not _contains_attr(inputs, ["toolchain", "frontend_server"]):
@@ -216,27 +216,12 @@ class Checker:
             if not _contains_attr(inputs, ["toolchain", "sdk_version"]):
                 self.fail("C", "Dart action inputs must declare the toolchain's SDK identity")
 
-        release = _named_value(tree, "_EXEC_RELEASE")
-        release_values = _string_dict(release)
-        if release_values != {"no-sandbox": "1", "no-remote-exec": "1"}:
-            self.fail("C", "_EXEC_RELEASE must require only no-sandbox and no-remote-exec")
-
-        debug = _named_value(tree, "_EXEC_DEBUG")
-        if not (
-            isinstance(debug, ast.Call)
-            and _call_path(debug) == ["dict"]
-            and debug.args
-            and _name(debug.args[0]) == "_EXEC_RELEASE"
-            and _string_dict(_double_star_dict(debug)) == {"local": "1"}
-        ):
-            self.fail("C", "_EXEC_DEBUG must add local to the release execution requirements")
-        requirements = _function(tree, "_exec_requirements")
-        if requirements is None or not _function_returns_name(requirements, "_EXEC_DEBUG") or not _function_returns_name(requirements, "_EXEC_RELEASE"):
-            self.fail("C", "_exec_requirements must select debug or release cache policy")
-        elif action is not None:
-            execution = _keyword(action, "execution_requirements")
-            if not (isinstance(execution, ast.Call) and _call_path(execution) == ["_exec_requirements"]):
-                self.fail("C", "Dart action must use _exec_requirements(mode)")
+        # Dart actions remain sandboxed and cacheable, including debug builds.
+        if action is not None and _keyword(action, "execution_requirements") is not None:
+            self.fail("C", "the Dart action must not set execution_requirements: it is sandboxed and cacheable")
+        for token in ("no-sandbox", "local"):
+            if _contains_string(tree, token):
+                self.fail("C", "rules.bzl must not use the {} execution requirement".format(token))
 
         aot_function = _function(tree, "_dart_aot_elf_impl")
         if aot_function is None:
@@ -271,13 +256,17 @@ class Checker:
             self.fail("D", "{} must define _flutter_assets_impl".format(FILES["defs"]))
             return
 
+        # Declare every staged file as an action input.
         stage = _named_value(function, "stage_manifest_files")
-        if not _contains_attr(stage, ["ctx", "file", "package_config"]):
-            self.fail("D", "stage_manifest_files must include package_config")
-
-        declared = _named_value(function, "declared_project_files")
-        if not _excludes_package_config(declared):
-            self.fail("D", "declared_project_files must structurally exclude package_config")
+        for path, description in (
+            (["ctx", "file", "package_config"], "the project package config"),
+            (["ctx", "files", "pub_srcs"], "the hub's package files (pub_srcs)"),
+            (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
+        ):
+            if not _contains_attr(stage, path):
+                self.fail("D", "stage_manifest_files must include {}".format(description))
+        if _named_value(function, "declared_project_files") is not None:
+            self.fail("D", "every staged file must be declared: no declared_project_files subset")
 
         action = _action_call(function, "run_shell")
         if action is None:
@@ -286,6 +275,8 @@ class Checker:
             inputs = _keyword(action, "inputs")
             if not _contains_name(inputs, "manifest"):
                 self.fail("D", "FlutterAssets inputs must declare the generated stage manifest")
+            if not _contains_name(inputs, "stage_manifest_files"):
+                self.fail("D", "FlutterAssets inputs must declare every staged file (stage_manifest_files)")
             for name in ("_merger", "_android_sdk"):
                 expected = ["ctx", "file", name]
                 if not _contains_attr(inputs, expected):
@@ -301,8 +292,10 @@ class Checker:
                 if not _contains_attr(debug_inputs, ["toolchain", name]):
                     self.fail("D", "FlutterAssets debug inputs must include toolchain.{}".format(name))
             execution = _keyword(action, "execution_requirements")
-            if not (isinstance(execution, ast.Call) and _call_path(execution) == ["_exec_requirements"]):
-                self.fail("D", "FlutterAssets action must use release/debug execution requirements")
+            if _name(execution) != "_ASSETS_EXEC":
+                self.fail("D", "FlutterAssets action must use _ASSETS_EXEC")
+        if _string_dict(_named_value(tree, "_ASSETS_EXEC")) != {"no-remote-exec": "1"}:
+            self.fail("D", "_ASSETS_EXEC must require only no-remote-exec: the action is sandboxed and cacheable")
 
         command = _assets_command(function)
         if command is None:
@@ -322,6 +315,12 @@ class Checker:
             if "realpath" not in command or "dirname" not in command:
                 self.fail("D", "FlutterAssets command must derive Android SDK root from the marker")
 
+        debug_command = _function(tree, "_debug_kernel_command")
+        if debug_command is None or not (
+            _contains_string_part(debug_command, "--filesystem-root")
+            and _contains_string_part(debug_command, "--filesystem-scheme")
+        ):
+            self.fail("D", "_debug_kernel_command must compile through --filesystem-root/--filesystem-scheme")
         for target in ("_flutter", "_dartaotruntime", "_frontend_server", "_platform_debug", "_sdk_version"):
             if _rule_has_attr(tree, "flutter_assets", target):
                 self.fail("D", "flutter_assets must not keep direct SDK attribute {}".format(target))
@@ -608,13 +607,6 @@ def _string_dict(node):
     return result
 
 
-def _double_star_dict(call):
-    for keyword in call.keywords:
-        if keyword.arg is None and isinstance(keyword.value, ast.Dict):
-            return keyword.value
-    return None
-
-
 def _contains_attr(node, path):
     if node is None:
         return False
@@ -629,23 +621,19 @@ def _contains_string(node, value):
     return any(isinstance(child, ast.Constant) and child.value == value for child in ast.walk(node))
 
 
+def _contains_string_part(node, part):
+    return any(
+        isinstance(child, ast.Constant) and isinstance(child.value, str) and part in child.value
+        for child in ast.walk(node)
+    )
+
+
 def _action_call(function, action_name):
     for node in ast.walk(function):
         if isinstance(node, ast.Call) and _call_path(node) == ["ctx", "actions", action_name]:
             return node
     return None
 
-
-def _function_returns_name(function, name):
-    for node in ast.walk(function):
-        if not isinstance(node, ast.Return):
-            continue
-        value = node.value
-        if _name(value) == name:
-            return True
-        if isinstance(value, ast.IfExp) and (_name(value.body) == name or _name(value.orelse) == name):
-            return True
-    return False
 
 def _rule_decl(tree, rule_name):
     value = _named_value(tree, rule_name)
@@ -758,26 +746,6 @@ def _returns_platform_attr(function):
             if _string(key) == "//command_line_option:platforms":
                 if isinstance(value, ast.List) and len(value.elts) == 1 and _attr_path(value.elts[0]) == ["attr", "platform"]:
                     return True
-    return False
-
-
-def _excludes_package_config(node):
-    if not isinstance(node, ast.ListComp):
-        return False
-    for generator in node.generators:
-        if _name(generator.target) != "f" or _name(generator.iter) != "stage_manifest_files":
-            continue
-        for condition in generator.ifs:
-            if not isinstance(condition, ast.Compare) or len(condition.ops) != 1 or not isinstance(condition.ops[0], ast.NotEq):
-                continue
-            if _name(condition.left) == "f" and any(
-                _attr_path(comparator) in (
-                    ["ctx", "file", "package_config"],
-                    ["ctx", "files", "package_config"],
-                )
-                for comparator in condition.comparators
-            ):
-                return True
     return False
 
 

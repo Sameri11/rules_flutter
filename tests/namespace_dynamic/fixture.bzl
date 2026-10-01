@@ -1,14 +1,19 @@
-"""Generates pub metadata for the isolated dynamic namespace fixture."""
+"""Generates pub hub files for the isolated dynamic namespace fixture.
+
+Same shape as tests/consumer/fixtures/plugin_fixture.bzl: `plugins_metadata.json`
+and a `package_config.json` whose rootUri is relative to the repository.
+"""
 
 def _dynamic_namespace_metadata_impl(ctx):
-    root = str(ctx.path(ctx.attr.marker).dirname)
+    marker = ctx.attr.marker
+    directory = marker.package + "/" + marker.name.rpartition("/")[0]
+    root = "../../" + "/".join([s for s in directory.split("/") if s]) + "/"
     ctx.file(
-        ".flutter-plugins-dependencies",
+        "plugins_metadata.json",
         json.encode({
             "info": "Generated dynamic namespace parser fixture metadata.",
             "plugins": {"android": [{
                 "name": "namespace_dynamic",
-                "path": root + "/",
                 "native_build": True,
                 "dependencies": [],
                 "dev_dependency": False,
@@ -21,7 +26,7 @@ def _dynamic_namespace_metadata_impl(ctx):
             "configVersion": 2,
             "packages": [{
                 "name": "namespace_dynamic",
-                "rootUri": "file://" + root,
+                "rootUri": root,
                 "packageUri": "lib/",
                 "languageVersion": "3.0",
             }],
@@ -29,7 +34,7 @@ def _dynamic_namespace_metadata_impl(ctx):
     )
     ctx.file(
         "BUILD.bazel",
-        "exports_files([\".flutter-plugins-dependencies\", \"package_config.json\"])\n",
+        "exports_files([\"plugins_metadata.json\", \"package_config.json\"])\n",
     )
 
 dynamic_namespace_metadata = repository_rule(
