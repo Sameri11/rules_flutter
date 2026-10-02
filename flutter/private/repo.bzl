@@ -21,6 +21,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "dartaotruntime",
     "flutter",
+    "flutter_tools.snapshot",
     "frontend_server.snapshot",
     "flutter.version.json",
 ] + {gen_snapshots})
@@ -154,6 +155,13 @@ def _flutter_sdk_impl(ctx):
     ctx.symlink(
         "{}/bin/flutter".format(root),
         "flutter",
+    )
+
+    # The assets action executes this snapshot from here, so its content keys
+    # the action even when the SDK version (flutter.version.json) is unchanged.
+    ctx.symlink(
+        "{}/flutter_tools.snapshot".format(cache),
+        "flutter_tools.snapshot",
     )
     ctx.symlink(
         "{}/dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot".format(cache),

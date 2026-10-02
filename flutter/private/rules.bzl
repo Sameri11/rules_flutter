@@ -956,11 +956,11 @@ mkdir -p "$STAGE/bundles"
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         project_dir = project_dir,
-        flutter_tool = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/%s")"
+        flutter_tool = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{launcher}")"
 export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
-flutter_tool() {
-    "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot" "$@"
-}""" % toolchain.flutter.path,
+flutter_tool() {{
+    "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{snapshot}" "$@"
+}}""".format(launcher = toolchain.flutter.path, snapshot = toolchain.tools_snapshot.path),
         android_sdk = ctx.file._android_sdk.path,
         manifest = manifest.path,
         place_config = (
@@ -995,7 +995,7 @@ flutter_tool() {
         arguments = [args],
         tools = [toolchain.dartaotruntime] if debug else [],
         inputs = depset(
-            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, ctx.file._android_sdk] + debug_kernel_inputs,
+            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk] + debug_kernel_inputs,
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
