@@ -8,6 +8,7 @@ FlutterToolchainInfo = provider(
     doc = "Flutter SDK files used by compiler, AOT, and asset rules.",
     fields = {
         "flutter": "Flutter command launcher file.",
+        "tools_snapshot": "flutter_tools snapshot file that the assets action executes.",
         "dartaotruntime": "Dart AOT runtime executable file.",
         "frontend_server": "Frontend server snapshot file.",
         "sdk_version": "Flutter SDK identity JSON file.",
@@ -29,6 +30,7 @@ def _flutter_toolchain_impl(ctx):
             gen_snapshots["{}_{}".format(abi, mode)] = getattr(ctx.executable, attr_name)
     return [platform_common.ToolchainInfo(flutter = FlutterToolchainInfo(
         flutter = ctx.file._flutter,
+        tools_snapshot = ctx.file._tools_snapshot,
         dartaotruntime = ctx.executable._dartaotruntime,
         frontend_server = ctx.file._frontend_server,
         sdk_version = ctx.file._sdk_version,
@@ -42,6 +44,10 @@ def _toolchain_attrs():
     attrs = {
         "_flutter": attr.label(
             default = "@flutter_sdk//:flutter",
+            allow_single_file = True,
+        ),
+        "_tools_snapshot": attr.label(
+            default = "@flutter_sdk//:flutter_tools.snapshot",
             allow_single_file = True,
         ),
         "_dartaotruntime": attr.label(
