@@ -45,8 +45,8 @@ CI currently tests:
 
 | Tool | Tested version or setup | Why it is load-bearing |
 | --- | --- | --- |
-| Flutter SDK | Flutter **3.47.3** / Dart **3.13.3**; locate it with `FLUTTER_ROOT` or `flutter` on `PATH` | The rules invoke this SDK's frontend server, `gen_snapshot`, and bundle tooling; the SDK is not downloaded. |
-| Bazel | **9.2.0**, Bzlmod only; no `WORKSPACE` path | The module extension and generated repositories use Bzlmod. |
+| Flutter SDK | The version pinned as `FLUTTER_VERSION` in `.github/workflows/ci.yml`; locate it with `FLUTTER_ROOT` or `flutter` on `PATH` | The rules invoke this SDK's frontend server, `gen_snapshot`, and bundle tooling; the SDK is not downloaded. |
+| Bazel | The version in `.bazelversion`, Bzlmod only; no `WORKSPACE` path | The module extension and generated repositories use Bzlmod. |
 | Hosts | macOS 15 arm64 or Ubuntu (Linux x64); other hosts fail the CI setup check | `gen_snapshot`, the NDK's clang, and the gzip encoder are not byte-reproducible across hosts; APK hash goldens are recorded per host. |
 | Android SDK | API level **36** and build-tools **36.0.0**, configured by the consumer module; set `ANDROID_HOME` | `rules_android` discovers Android build tools and `aapt2` through the consumer's SDK. |
 | Android NDK | **28 or newer** with `ANDROID_NDK_HOME` set | The ruleset enforces revision 28+ because its native build must support 16 KB-page Android devices; the NDK wrapper rejects lower revisions, and this is not a device-compatibility guarantee. |
@@ -116,7 +116,7 @@ Either set `FLUTTER_ROOT` or put `flutter` on `PATH`; set the Android locations
 before building an APK:
 
 ```sh
-export FLUTTER_ROOT=/path/to/flutter-3.47.3
+export FLUTTER_ROOT=/path/to/flutter
 export PATH="$FLUTTER_ROOT/bin:$PATH"
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/<your 28+ version>"
