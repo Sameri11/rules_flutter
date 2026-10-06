@@ -23,7 +23,7 @@ flutter_assets ─────────────────────�
 CI currently tests the configurations below. Other versions may work, but are
 not verified; add a configuration here after it passes CI.
 
-- Flutter 3.44.2 / Dart 3.12.2, using Flutter's bundled Dart toolchain.
+- Flutter 3.47.3 / Dart 3.13.3, using Flutter's bundled Dart toolchain.
 - Bazel 9.2.0 with Bzlmod; no WORKSPACE path is implemented.
 - macOS 15 arm64 and Ubuntu Linux x64; the CI setup action rejects other hosts.
 
@@ -40,7 +40,7 @@ not verified; add a configuration here after it passes CI.
 These are the hard constraints; [Current constraints](#current-constraints) has the
 detail behind each one.
 
-- A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not hermetic: use `FLUTTER_ROOT` or `flutter` on `PATH`, `ANDROID_HOME`, and `ANDROID_NDK_HOME`. CI uses Flutter 3.44.2/Dart 3.12.2. The examples pin SDK platform 36 and build-tools 36.0.0; the consumer module chooses its own. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a no-toolchains stub and the build fails only when a target needs an Android toolchain.
+- A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not hermetic: use `FLUTTER_ROOT` or `flutter` on `PATH`, `ANDROID_HOME`, and `ANDROID_NDK_HOME`. CI uses Flutter 3.47.3/Dart 3.13.3. The examples pin SDK platform 36 and build-tools 36.0.0; the consumer module chooses its own. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a no-toolchains stub and the build fails only when a target needs an Android toolchain.
 - Commit `pubspec.lock` with `pubspec.yaml` beside it; Bazel pins packages from it. Git pub sources are rejected, path dependencies need `path_deps`, and Dart compilation is not incremental.
 - Dart kernel and asset actions are sandboxed and cacheable; only the asset action disables remote execution.
 - Bazel emits an unsigned APK; release signing happens outside Bazel, and custom release signing inside Bazel is not supported.
@@ -63,7 +63,7 @@ monorepos, and consumer recipes/native assets, see the
 
 ### Prerequisites
 
-Start with the CI-tested Flutter 3.44.2 (Dart 3.12.2), Bazel 9.2.0 with Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The documented `.bazelrc` selects Bazel's remote JDK 17 toolchain, so no local JDK installation is required.
+Start with the CI-tested Flutter 3.47.3 (Dart 3.13.3), Bazel 9.2.0 with Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The documented `.bazelrc` selects Bazel's remote JDK 17 toolchain, so no local JDK installation is required.
 
 Without `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed. A consumer module must explicitly register NDK toolchains in its `MODULE.bazel` and inherit the stable repositories from `rules_flutter`'s NDK extension. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a stub declaring no toolchains; the failure surfaces only when a target needs an Android toolchain.
 
@@ -112,7 +112,7 @@ local_path_override(
 )
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
-flutter.sdk(version = "3.44.2")
+flutter.sdk(version = "3.47.3")
 
 # Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
 pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
@@ -292,7 +292,7 @@ Android release and debug packaging across the supported ABIs, including fat and
 
 ### Current constraints
 
-- The local Flutter 3.44.2/Dart 3.12.2 SDK, Android SDK, and Android NDK installations are not hermetic. The SDK is located through `FLUTTER_ROOT` or `flutter` on `PATH`; the consumer supplies `ANDROID_HOME` and Android SDK API 36/build-tools 36.0.0, and `ANDROID_NDK_HOME` must point to NDK 28 or newer. If `ANDROID_NDK_HOME` is unset, the NDK wrapper substitutes a stub declaring no toolchains, so failure surfaces only when a target needs an Android toolchain.
+- The local Flutter 3.47.3/Dart 3.13.3 SDK, Android SDK, and Android NDK installations are not hermetic. The SDK is located through `FLUTTER_ROOT` or `flutter` on `PATH`; the consumer supplies `ANDROID_HOME` and Android SDK API 36/build-tools 36.0.0, and `ANDROID_NDK_HOME` must point to NDK 28 or newer. If `ANDROID_NDK_HOME` is unset, the NDK wrapper substitutes a stub declaring no toolchains, so failure surfaces only when a target needs an Android toolchain.
 - The Dart kernel and asset actions are sandboxed and cacheable in release and debug builds and read no `~/.pub-cache` or `.dart_tool/`. Only the asset action disables remote execution, because it runs the host Flutter tool.
 - `pubspec.lock` must be committed and current, with `pubspec.yaml` in the same Bazel package as the lock label. `pub.lock` names are unique across modules and contain no `-`. Update the lock with `flutter pub get`; Bazel never resolves versions.
 - Hosted packages are pinned by the lock's sha256 (a wrong digest fails the fetch) and must use `https`. Flutter SDK packages come from the local SDK. Git sources are rejected. Path dependencies are not hashed and go stale unless declared with `path_deps`. Dart compilation is not incremental.
