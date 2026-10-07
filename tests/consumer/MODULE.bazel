@@ -12,7 +12,7 @@ local_path_override(
 )
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
-flutter.sdk(version = "3.44.2")
+flutter.sdk(version = "3.47.3")
 
 # Separate pub hubs for the root fixtures and standard-layout app.
 pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")

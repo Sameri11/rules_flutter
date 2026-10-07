@@ -301,7 +301,7 @@
     "//flutter:extensions.bzl%flutter": {
       "general": {
         "bzlTransitiveDigest": "KxHtunSOU1xLrRlGT4MZarxbqxYNPA1ABmgvsm53G20=",
-        "usagesDigest": "KGsoIb4QJBOnE1uBRa8rnPh+WdNjblAhtwA8ooeGMUE=",
+        "usagesDigest": "l2s/+a1uG8SnjBS3HPA+pioDgtoWaM6VxYd/UsNTuMc=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",
           "REPO_MAPPING:,platforms platforms",
@@ -330,7 +330,7 @@
           "flutter_sdk": {
             "repoRuleId": "@@//flutter/private:repo.bzl%flutter_sdk",
             "attributes": {
-              "version": "3.44.2"
+              "version": "3.47.3"
             }
           },
           "flutter_embedding_release": {
