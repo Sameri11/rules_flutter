@@ -2,8 +2,16 @@ module(
     name = "sameri11_rules_flutter",
 )
 
+# The rules' own .bzl files name @flutter_sdk and the engine repositories, so
+# this module imports them. Which SDK version they hold is the root module's
+# choice: the extension reads flutter.sdk only from the root module.
 flutter = use_extension("//flutter:extensions.bzl", "flutter")
-flutter.sdk(version = "3.47.3")
+
+# Pin for developing this repository as the root module. A dev dependency, so
+# consumers ignore it and their MODULE.bazel.lock does not change when it does.
+flutter_dev = use_extension("//flutter:extensions.bzl", "flutter", dev_dependency = True)
+flutter_dev.sdk(version = "3.47.3")
+
 use_repo(
     flutter,
     "flutter_embedding_debug",

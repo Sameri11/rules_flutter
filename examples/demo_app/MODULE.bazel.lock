@@ -598,7 +598,7 @@
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter": {
       "general": {
         "bzlTransitiveDigest": "VBGY6c0ndQTmvbdMJ4XJ/tzMqvC0x1sc9VMkwkjlAAU=",
-        "usagesDigest": "SkRtaL84/zX4pUrRrF4lqg5LHTgQXV0dr8NEvkcaLII=",
+        "usagesDigest": "JihY+ta+bTW4a0T0Fu8yqlqH65TbM+73vrKl3ittDKI=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
           "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
