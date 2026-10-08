@@ -1,7 +1,6 @@
 # The Android half, beside the Gradle module it mirrors so both read the same
 # manifest, resources and sources.
 
-load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
@@ -19,21 +18,6 @@ flutter_android_binary(
     app = "//:app",
     manifest_values = {"applicationId": "com.example.pub_plugins"},
     deps = [":main_activity"],
-)
-
-# Compile Flutter's generated registrant with its plugin classes.
-# flutter_android_binary expects this target name for a plugin graph.
-android_library(
-    name = "generated_plugin_registrant",
-    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
-    deps = [
-        ":flutter_embedding",
-        "@flutter_plugins//:all",
-        # @Keep / @NonNull. java_import deps are not re-exported to a compile
-        # classpath, and it is the _jvm artifact: androidx.annotation became a KMP
-        # module at 1.7, so the bare coordinate carries no class files.
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-    ],
 )
 
 kt_android_library(

@@ -260,7 +260,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "KxHtunSOU1xLrRlGT4MZarxbqxYNPA1ABmgvsm53G20=",
+        "bzlTransitiveDigest": "Dj7PgL8QbO8bFwfi0Wz1acJH0g6xNYGo/NF/jr4LxDw=",
         "usagesDigest": "u+HEkcGg21uv1v1Y5n7OFzVXl5/8Fi8W5y561YLsmWA=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",
@@ -300,7 +300,7 @@
     },
     "//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "KxHtunSOU1xLrRlGT4MZarxbqxYNPA1ABmgvsm53G20=",
+        "bzlTransitiveDigest": "Dj7PgL8QbO8bFwfi0Wz1acJH0g6xNYGo/NF/jr4LxDw=",
         "usagesDigest": "l2s/+a1uG8SnjBS3HPA+pioDgtoWaM6VxYd/UsNTuMc=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",

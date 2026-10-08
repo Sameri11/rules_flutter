@@ -1,0 +1,6 @@
+name: registrant_parity_no_plugins
+description: Registrant parity fixture - app with no plugin dependencies.
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'

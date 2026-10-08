@@ -1,0 +1,12 @@
+name: registrant_parity_federated_default
+description: Registrant parity fixture - federated plugin; default_package wins over transitive implementation.
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  fed:
+    path: ../packages/fed
+  other_plugin:
+    path: ../packages/other_plugin

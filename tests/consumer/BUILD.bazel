@@ -334,9 +334,10 @@ filegroup(
 # The complete no-plugin-graph shape. The Dart package sets
 # `plugin_deps = None`; the Android half sets `plugins = None`. That one value
 # suppresses every derived @flutter_plugins label: Java/Kotlin plugin classes,
-# recipe libraries, native plugin libraries and the registrant are each emitted
-# as a deliberately empty contribution, while AOT, engine, embedding and assets
-# remain structural. The embedding still needs @flutter_maven's AndroidX graph.
+# recipe libraries and native plugin libraries are each emitted as a
+# deliberately empty contribution, and the registrant is the ruleset's empty one,
+# while AOT, engine, embedding and assets remain structural. The embedding still
+# needs @flutter_maven's AndroidX graph.
 flutter_android_binary(
     name = "apk_no_plugin_graph",
     abis = [

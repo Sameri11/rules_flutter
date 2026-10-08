@@ -14,6 +14,8 @@ The `pub` module extension reads a consumer's `pubspec.lock` and creates
         bundle action copies this one there inside its stage.
       - `package_graph.json`, the other file `flutter build bundle` reads there.
       - `plugins_metadata.json`, the Android plugin list `plugins.project` reads.
+      - `android/{debug,release}/GeneratedPluginRegistrant.java`, the Android
+        registrant flutter_tools would write for each mode (registrant.bzl).
       - filegroups `:lib` (every hosted package's packageUri tree and pubspec) and
         `:all` (every hosted package file, for the bundle).
 
@@ -28,7 +30,8 @@ are workspace directories. `flutter pub get` remains how a user updates
 Bazel cannot verify a content hash for them.
 """
 
-load(":pub_lock_parser.bzl", "language_version", "pubspec_android_plugin", "pubspec_dependencies", "pubspec_version", "resolve_lock")
+load(":pub_lock_parser.bzl", "language_version", "pubspec_dependencies", "pubspec_flutter_plugin", "pubspec_version", "resolve_lock")
+load(":registrant.bzl", "android_plugin", "main_class_candidates", "render_android_registrant", "resolve_android_plugins", "supports_embedding_v2")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
@@ -112,13 +115,15 @@ def _pub_hub_impl(rctx):
     hub_base = ["external", hub_dir.basename]
     project_base = project + [".dart_tool"]
 
-    # name -> {"dir": execroot-relative segments, "language": "3.4", "pubspec": text}
+    # name -> {"dir": execroot-relative segments, "root": package directory,
+    #          "language": "3.4", "pubspec": text}
     entries = {}
 
     for label, name in rctx.attr.hosted.items():
         text = rctx.read(label)
         entries[name] = {
             "dir": ["external"] + _segments(rctx.path(label).dirname)[len(external):],
+            "root": rctx.path(label).dirname,
             "language": language_version(text),
             "pubspec": text,
         }
@@ -137,6 +142,7 @@ def _pub_hub_impl(rctx):
         text = rctx.read(pubspec)
         entries[name] = {
             "dir": ["external"] + _segments(pubspec.dirname)[len(external):],
+            "root": pubspec.dirname,
             "language": language_version(text),
             "pubspec": text,
         }
@@ -164,13 +170,14 @@ def _pub_hub_impl(rctx):
         text = rctx.read(pubspec)
         entries[package["name"]] = {
             "dir": dirsegs,
+            "root": pubspec.dirname,
             "language": language_version(text),
             "pubspec": text,
         }
 
     root_pubspec = rctx.read(rctx.attr.pubspec)
     root_name = _root_package_name(root_pubspec)
-    entries[root_name] = {"dir": project, "language": language_version(root_pubspec), "pubspec": root_pubspec}
+    entries[root_name] = {"dir": project, "root": project_dir, "language": language_version(root_pubspec), "pubspec": root_pubspec}
 
     expected = len(lock["hosted"]) + len(lock["sdk"]) + len(lock["path"])
     if len(entries) != expected + 1:
@@ -230,13 +237,15 @@ def _pub_hub_impl(rctx):
         frontier = nxt
         if not frontier:
             break
+    flutter_plugins = {}
     android = {}
     for name in sorted(entries.keys()):
         if name == root_name:
             continue
-        info = pubspec_android_plugin(entries[name]["pubspec"])
+        implements, info = pubspec_flutter_plugin(entries[name]["pubspec"])
         if info == None:
             continue
+        flutter_plugins[name] = (implements, info)
         if info.get("pluginClass") or info.get("dartPluginClass") or info.get("ffiPlugin") == "true":
             android[name] = info
     plugin_list = []
@@ -253,6 +262,8 @@ def _pub_hub_impl(rctx):
         "plugins": {"android": plugin_list},
     }, indent = "  ") + "\n")
 
+    _write_android_registrants(rctx, entries, flutter_plugins, deps[root_name], reached)
+
     hosted_names = sorted(rctx.attr.hosted.values())
     repo_of = {name: label.repo_name for label, name in rctx.attr.hosted.items()}
 
@@ -265,7 +276,14 @@ def _pub_hub_impl(rctx):
     all_srcs = ['"@@{}//:all"'.format(repo_of[n]) for n in hosted_names] + ['"package_graph.json"']
     rctx.file("BUILD.bazel", """package(default_visibility = ["//visibility:public"])
 
-exports_files(["package_config.json", "project_package_config.json", "package_graph.json", "plugins_metadata.json"])
+exports_files([
+    "package_config.json",
+    "project_package_config.json",
+    "package_graph.json",
+    "plugins_metadata.json",
+    "android/debug/GeneratedPluginRegistrant.java",
+    "android/release/GeneratedPluginRegistrant.java",
+])
 
 filegroup(
     name = "lib",
@@ -277,6 +295,50 @@ filegroup(
     srcs = [{all}],
 )
 """.format(lib = ", ".join(lib_srcs), all = ", ".join(all_srcs)))
+
+def _write_android_registrants(rctx, entries, flutter_plugins, direct, non_dev):
+    """`android/<mode>/GeneratedPluginRegistrant.java`, as flutter_tools writes it.
+
+    Debug is what `flutter pub get` writes, release what a release `flutter build`
+    rewrites it to. Each is generated from the hub's own pubspecs, so the Android
+    build reads nothing `flutter pub get` leaves behind.
+    """
+    plugins = []
+    for name in sorted(flutter_plugins.keys()):
+        implements, info = flutter_plugins[name]
+        plugins.append(android_plugin(name, implements, info, name in direct, name not in non_dev))
+
+    # Read once, only for plugins some mode registers -- flutter_tools reads the
+    # main class only then, and fails only then when it is missing.
+    v2 = {}
+    for mode in ["debug", "release"]:
+        entries_for_mode = []
+        for plugin in resolve_android_plugins(plugins, release = mode == "release"):
+            # `hasMethodChannel`, then `_getSupportedEmbeddings` (nothing without a package).
+            if plugin["plugin_class"] == None or plugin["package"] == None:
+                continue
+            name = plugin["name"]
+            if name not in v2:
+                v2[name] = _supports_v2(rctx, entries[name]["root"], plugin)
+            if v2[name]:
+                entries_for_mode.append((name, plugin["package"] + "." + plugin["plugin_class"]))
+        rctx.file(
+            "android/{}/GeneratedPluginRegistrant.java".format(mode),
+            render_android_registrant(entries_for_mode),
+        )
+
+def _supports_v2(rctx, root, plugin):
+    candidates = main_class_candidates(plugin["package"], plugin["plugin_class"])
+    for candidate in candidates:
+        path = root.get_child(*candidate.split("/"))
+        if path.exists:
+            return supports_embedding_v2(rctx.read(path))
+    fail(("The plugin `{}` doesn't have a main class defined in {}. This is likely due to an " +
+          "incorrect `package: {}` or `pluginClass` entry in the plugin's pubspec.yaml.").format(
+        plugin["name"],
+        " or ".join([str(root) + "/" + c for c in candidates]),
+        plugin["package"],
+    ))
 
 def _root_package_name(pubspec_text):
     for raw in pubspec_text.split("\n"):

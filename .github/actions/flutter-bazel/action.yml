@@ -1,8 +1,7 @@
 name: Flutter and Bazel environment
 description: >
   Installs a checksum-verified Flutter SDK and Bazelisk, prefetches Android
-  engine artifacts, resolves requested pub packages, and configures Bazel and
-  the NDK.
+  engine artifacts, and configures Bazel and the NDK.
 
 inputs:
   flutter-version:
@@ -17,12 +16,6 @@ inputs:
   bazelisk-sha256:
     description: SHA-256 of the Bazelisk binary for the current runner platform.
     required: true
-  pub-get:
-    description: Space-separated directories for `flutter pub get`; empty skips it.
-    required: false
-    default: >-
-      examples/demo_app examples/no_plugins examples/pub_plugins
-      examples/local_plugin/packages/host_app
   cache-mode:
     description: >-
       Remote cache mode: `read`, `write`, or empty to disable.
@@ -84,16 +77,6 @@ runs:
       run: |
         flutter --version
         flutter precache --android
-
-    # Generate the Android plugin registrant; Dart inputs come from the pub hub.
-    - name: pub get
-      if: inputs.pub-get != ''
-      shell: bash
-      run: |
-        set -euo pipefail
-        for d in ${{ inputs.pub-get }}; do
-          (cd "$d" && flutter pub get --enforce-lockfile)
-        done
 
     - name: Install bazelisk
       shell: bash

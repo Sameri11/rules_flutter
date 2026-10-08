@@ -91,9 +91,10 @@ point is that it costs under two seconds and fetches nothing.
 - `:apk_no_plugin_graph` derives its Dart targets from `//standard_layout`,
   passes `plugins = None`, and uses the production
   `flutter_embedding_library`. Analysis proves that this suppresses every
-  `@flutter_plugins` edge — classes, recipe libraries, native plugin libraries
-  and registrant — while retaining the engine embedding's real AndroidX graph
-  from this fixture's `@flutter_maven` install.
+  `@flutter_plugins` edge — classes, recipe libraries and native plugin
+  libraries; the registrant is the ruleset's empty one — while retaining the
+  engine embedding's real AndroidX graph from this fixture's `@flutter_maven`
+  install.
 - `:apk_external_app` derives every Dart target from
   `@external_app//app`; its generated bundle check and
   `:apk_external_app_contents_test` build the signed APK and inspect the

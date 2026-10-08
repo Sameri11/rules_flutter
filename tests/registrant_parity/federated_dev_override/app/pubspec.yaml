@@ -1,0 +1,14 @@
+name: registrant_parity_federated_dev_override
+description: Registrant parity fixture - alternative implementation reachable only through a dev dependency.
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  fed:
+    path: ../packages/fed
+
+dev_dependencies:
+  fed_alt:
+    path: ../packages/fed_alt

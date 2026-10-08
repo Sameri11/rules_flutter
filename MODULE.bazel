@@ -95,3 +95,36 @@ android_sdk_repository_extension = use_extension(
     "android_sdk_repository_extension",
 )
 use_repo(android_sdk_repository_extension, "androidsdk")
+
+# Registrant parity fixtures: one pub hub per //tests/registrant_parity case,
+# whose generated GeneratedPluginRegistrant.java is diffed against what
+# flutter_tools writes. Path-only locks, so nothing is downloaded.
+pub_dev = use_extension("//flutter:extensions.bzl", "pub", dev_dependency = True)
+pub_dev.lock(
+    name = "registrant_parity_no_plugins",
+    lock = "//tests/registrant_parity:no_plugins/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_mixed",
+    lock = "//tests/registrant_parity:mixed/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_federated_default",
+    lock = "//tests/registrant_parity:federated_default/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_federated_direct",
+    lock = "//tests/registrant_parity:federated_direct/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_federated_dev_override",
+    lock = "//tests/registrant_parity:federated_dev_override/app/pubspec.lock",
+)
+use_repo(
+    pub_dev,
+    "registrant_parity_federated_default",
+    "registrant_parity_federated_dev_override",
+    "registrant_parity_federated_direct",
+    "registrant_parity_mixed",
+    "registrant_parity_no_plugins",
+)

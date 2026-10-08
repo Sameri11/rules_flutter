@@ -1,0 +1,14 @@
+name: registrant_parity_federated_direct
+description: Registrant parity fixture - app lists the alternative implementation directly; direct dependency wins.
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  fed:
+    path: ../packages/fed
+  fed_alt:
+    path: ../packages/fed_alt
+  other_plugin:
+    path: ../packages/other_plugin

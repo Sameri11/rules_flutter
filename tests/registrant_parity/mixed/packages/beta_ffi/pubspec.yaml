@@ -1,0 +1,13 @@
+name: beta_ffi
+description: Registrant parity fixture - FFI-only plugin (no method channel).
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true

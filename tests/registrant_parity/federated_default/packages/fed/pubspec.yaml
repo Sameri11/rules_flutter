@@ -1,0 +1,17 @@
+name: fed
+description: Registrant parity fixture - app-facing federated plugin with default_package.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  fed_android:
+    path: ../fed_android
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        default_package: fed_android

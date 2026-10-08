@@ -303,8 +303,7 @@ _NATIVE_LIBS_TEMPLATE = """
 flutter_native_libs(
     name = "{target}_jar",
     slice = "{abi}",
-    deps = [{deps}
-    ],
+    deps = {deps},
 )
 
 java_import(
@@ -317,8 +316,7 @@ java_import(
 _PLUGIN_LIBS_TEMPLATE = """
 java_import(
     name = "{target}",
-    jars = [{deps}
-    ],
+    jars = {jars},
 )
 """
 
@@ -327,6 +325,28 @@ java_import(
 _PLUGIN_LIBS_EMPTY_TEMPLATE = """
 java_library(
     name = "{target}",
+)
+"""
+
+_MODE_ALIAS_TEMPLATE = """
+alias(
+    name = "{target}",
+    actual = select({{
+        "{debug}": ":{target}_debug",
+        "{release}": ":{target}_release",
+    }}),
+)
+"""
+
+# GeneratedPluginRegistrant.java for the build's mode, written by the pub hub
+# (registrant.bzl). flutter_android_binary compiles it against `:all`.
+_REGISTRANT_SRC_TEMPLATE = """
+filegroup(
+    name = "generated_plugin_registrant_src",
+    srcs = select({{
+        "{debug}": ["{debug_src}"],
+        "{release}": ["{release_src}"],
+    }}),
 )
 """
 
@@ -1398,19 +1418,49 @@ def _write_recipe(ctx, name, recipe, info, gate_note = ""):
     )
     ctx.file("{}/package_info.bzl".format(name), _PACKAGE_INFO_TEMPLATE.format(**info))
 
-def _plugin_native_libs_target(manifest, abi):
+def _mode_list(labels, dev, ctx):
+    """A BUILD list expression: `labels` minus dev-only ones, which debug adds back.
+
+    `labels` is (package name, label) pairs. Release leaves dev-only plugins out
+    of the APK, as Gradle's PluginHandler does; without any, the plain list.
+    """
+    regular = "".join(["\n        \"{}\",".format(label) for name, label in labels if not dev.get(name)])
+    debug_only = "".join(["\n            \"{}\",".format(label) for name, label in labels if dev.get(name)])
+    if not debug_only:
+        return "[{}\n    ]".format(regular)
+    return "[{regular}\n    ] + select({{\n        \"{debug}\": [{debug_only}\n        ],\n        \"{release}\": [],\n    }})".format(
+        regular = regular,
+        debug_only = debug_only,
+        debug = ctx.attr.mode_debug,
+        release = ctx.attr.mode_release,
+    )
+
+def _plugin_native_libs_target(ctx, manifest, abi, dev):
     """Return this ABI's aggregate of source-built plugin libraries."""
-    jars = "".join([
-        "\n        \"//{n}:{n}_native_jar_{a}\",".format(n = p["name"], a = abi)
+    jars = [
+        (p["name"], "//{n}:{n}_native_jar_{a}".format(n = p["name"], a = abi))
         for p in manifest
         if p["strategy"] == "source+cmake"
-    ])
+    ]
 
     # Keep this derived name aligned with flutter_android_binary.
     target = plugin_repo_target("plugin_native_libraries", abi)
     if not jars:
         return _PLUGIN_LIBS_EMPTY_TEMPLATE.format(target = target)
-    return _PLUGIN_LIBS_TEMPLATE.format(target = target, deps = jars)
+    if [n for n, _ in jars if not dev.get(n)]:
+        return _PLUGIN_LIBS_TEMPLATE.format(target = target, jars = _mode_list(jars, dev, ctx))
+
+    # Every native plugin is dev-only: release has no jar, and java_import
+    # rejects an empty `jars`.
+    return (
+        _PLUGIN_LIBS_TEMPLATE.format(target = target + "_debug", jars = _mode_list(jars, {}, ctx)) +
+        _PLUGIN_LIBS_EMPTY_TEMPLATE.format(target = target + "_release") +
+        _MODE_ALIAS_TEMPLATE.format(
+            target = target,
+            debug = ctx.attr.mode_debug,
+            release = ctx.attr.mode_release,
+        )
+    )
 
 def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
@@ -1867,24 +1917,38 @@ def _flutter_plugins_impl(ctx):
 
     # Three aggregates, so the app names "every plugin", "every library a recipe
     # contributed" and "every library a plugin built" rather than keeping lists
-    # in lockstep with pubspec.yaml. The last two are per ABI.
+    # in lockstep with pubspec.yaml. The last two are per ABI. Dev-only plugins
+    # are in all three under debug only.
     #
     # They are separate because their members differ: `:all` is an
     # android_library and can only export Java/Kotlin targets, while a recipe for
     # a non-plugin package -- sqlite3 -- has no such target to export and
     # contributes only a .so.
+    dev = {p["name"]: p.get("dev_dependency", False) for p in plugins}
+    registrant = {
+        mode: str(ctx.attr.package_config.same_package_label(
+            "android/{}/GeneratedPluginRegistrant.java".format(mode),
+        ))
+        for mode in ["debug", "release"]
+    }
     ctx.file(
         "BUILD.bazel",
         _BUILD_LOADS +
         _NATIVE_LIBS_LOADS.format(recipe = ctx.attr.recipe_bzl) +
         _BUILD_PACKAGE +
         "exports_files([\"plugin_deps.MODULE.bazel\", \"plugins.json\", \"dart_plugin_registrant.dart\"])\n\n" +
-        "android_library(\n    name = \"all\",\n    exports = [{}\n    ],\n)\n".format(
-            "".join([
-                "\n        \"//{n}:{n}\",".format(n = p["name"])
+        "android_library(\n    name = \"all\",\n    exports = {},\n)\n".format(
+            _mode_list([
+                (p["name"], "//{n}:{n}".format(n = p["name"]))
                 for p in manifest
                 if p["is_plugin"]
-            ]),
+            ], dev, ctx),
+        ) +
+        _REGISTRANT_SRC_TEMPLATE.format(
+            debug = ctx.attr.mode_debug,
+            release = ctx.attr.mode_release,
+            debug_src = registrant["debug"],
+            release_src = registrant["release"],
         ) +
         "".join([
             _NATIVE_LIBS_TEMPLATE.format(
@@ -1893,12 +1957,12 @@ def _flutter_plugins_impl(ctx):
                 # halves read it from plugin_repo_target, so neither file can
                 # rename it alone.
                 target = plugin_repo_target("recipe_libraries", abi),
-                deps = "".join([
-                    "\n        \"//{n}:{n}_flutter_native\",".format(n = p["name"])
+                deps = _mode_list([
+                    (p["name"], "//{n}:{n}_flutter_native".format(n = p["name"]))
                     for p in manifest
                     if p["strategy"].startswith("recipe:")
-                ]),
-            ) + _plugin_native_libs_target(manifest, abi)
+                ], dev, ctx),
+            ) + _plugin_native_libs_target(ctx, manifest, abi, dev)
             for abi in ctx.attr.abis
         ]),
     )

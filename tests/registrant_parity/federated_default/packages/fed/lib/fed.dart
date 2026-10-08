@@ -1,0 +1,1 @@
+// Registrant parity fixture stub.
