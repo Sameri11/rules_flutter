@@ -132,8 +132,16 @@ runs:
         RC
 
     # NDK 28+ avoids 4 KB-aligned .so segments that fail on 16 KB-page devices.
+    # Pinned: the NDK changes the native library bytes the example hashes record.
+    # Runner images rotate NDKs (ubuntu24 20261004 dropped 28.2), so install it
+    # when the image lacks it.
     - name: Select the NDK
       shell: bash
       run: |
+        set -euo pipefail
+        ndk=28.2.13676358
+        if [[ ! -d "$ANDROID_SDK_ROOT/ndk/$ndk/toolchains" ]]; then
+          (yes || true) | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" >/dev/null
+        fi
         echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-        echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+        echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$ndk" >> "$GITHUB_ENV"
