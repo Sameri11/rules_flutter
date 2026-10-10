@@ -1,0 +1,14 @@
+name: dev_only_delta
+description: Registrant parity fixture - Java plugin reached only through dev_dependencies.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.example.parity.delta
+        pluginClass: DevOnlyDeltaPlugin

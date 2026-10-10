@@ -54,7 +54,9 @@ FLUTTER_EMBEDDING_ARTIFACTS = [
 # pom points at annotation-jvm) but not a strict compile classpath, and @NonNull
 # is on essentially every FlutterPlugin method, so anything compiling against
 # the embedding needs the jvm artifact.
-_TRANSITIVE_DEPS = ["//:androidx_annotation_annotation_jvm"]
+ANNOTATION_JVM = "//:androidx_annotation_annotation_jvm"
+
+_TRANSITIVE_DEPS = [ANNOTATION_JVM]
 
 def flutter_embedding_deps(maven_repo = "@flutter_maven"):
     """Labels of the embedding's AndroidX dependencies in `maven_repo`.

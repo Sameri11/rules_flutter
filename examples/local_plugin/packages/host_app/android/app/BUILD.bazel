@@ -1,4 +1,3 @@
-load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
@@ -15,16 +14,6 @@ flutter_android_binary(
     app = "//packages/host_app",
     manifest_values = {"applicationId": "com.example.host_app"},
     deps = [":main_activity"],
-)
-
-android_library(
-    name = "generated_plugin_registrant",
-    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
-    deps = [
-        ":flutter_embedding",
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-        "@flutter_plugins//:all",
-    ],
 )
 
 kt_android_library(

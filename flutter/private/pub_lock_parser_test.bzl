@@ -7,7 +7,7 @@ producing a repository that fetches something unverified.
 """
 
 load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
-load(":pub_lock_parser.bzl", "language_version", "pubspec_android_plugin", "pubspec_dependencies", "resolve_lock")
+load(":pub_lock_parser.bzl", "language_version", "pubspec_dependencies", "pubspec_flutter_plugin", "resolve_lock")
 
 visibility(["//flutter"])
 
@@ -82,10 +82,22 @@ def _pubspec_readers_impl(ctx):
     asserts.equals(env, ["a", "b"], pubspec_dependencies("dependencies:\n  b: ^1.0.0\n  a:\n    sdk: flutter\ndev_dependencies:\n  c: any\n"))
     asserts.equals(
         env,
-        {"package": "com.example.p", "pluginClass": "P"},
-        pubspec_android_plugin("flutter:\n  plugin:\n    platforms:\n      android:\n        package: com.example.p\n        pluginClass: P\n      ios:\n        pluginClass: Q\n"),
+        ("", {"package": "com.example.p", "pluginClass": "P"}),
+        pubspec_flutter_plugin("flutter:\n  plugin:\n    platforms:\n      android:\n        package: com.example.p\n        pluginClass: P\n      ios:\n        pluginClass: Q\n"),
     )
-    asserts.equals(env, None, pubspec_android_plugin("flutter:\n  plugin:\n    platforms:\n      ios:\n        pluginClass: Q\n"))
+    asserts.equals(env, ("", None), pubspec_flutter_plugin("flutter:\n  plugin:\n    platforms:\n      ios:\n        pluginClass: Q\n"))
+
+    # `implements` sits beside `platforms`; one under a platform block is not it.
+    asserts.equals(
+        env,
+        ("fed", {"package": "com.example.alt", "pluginClass": "Alt"}),
+        pubspec_flutter_plugin("flutter:\n  plugin:\n    implements: fed\n    platforms:\n      android:\n        package: com.example.alt\n        pluginClass: Alt\n"),
+    )
+    asserts.equals(
+        env,
+        ("", {"default_package": "fed_android"}),
+        pubspec_flutter_plugin("flutter:\n  plugin:\n    platforms:\n      android:\n        default_package: fed_android\n      web:\n        implements: other\n"),
+    )
     return unittest.end(env)
 
 _pubspec_readers_test = unittest.make(_pubspec_readers_impl)

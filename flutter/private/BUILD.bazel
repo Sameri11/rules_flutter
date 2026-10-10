@@ -47,6 +47,13 @@ exports_files(
     visibility = ["//tools/ci:__pkg__"],
 )
 
+# The empty registrant flutter_android_binary compiles for a plugin-free app.
+# The macro expands in the consumer's package, so the file must be public.
+exports_files(
+    ["registrant/GeneratedPluginRegistrant.java"],
+    visibility = ["//visibility:public"],
+)
+
 flutter_toolchain(
     name = "flutter_toolchain",
     visibility = ["//visibility:public"],

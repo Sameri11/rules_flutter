@@ -134,10 +134,12 @@ as the lock label, `pub.lock` names must be unique across modules and may not
 contain `-`, git sources are rejected, hosted servers must use `https`, and path
 dependencies must be relative.
 
-`flutter pub get` also writes the gitignored Android
-`GeneratedPluginRegistrant.java`, which the Android target compiles as an
-ordinary source. Run it after cloning and after every plugin change; Bazel does
-not generate it.
+From the lock, the pub hub writes the Android registrant for each mode:
+`android/debug/GeneratedPluginRegistrant.java` and
+`android/release/GeneratedPluginRegistrant.java`, byte-identical to what
+flutter_tools 3.47.3 writes. Debug includes dev-only plugins, as `flutter pub get`
+does; release drops them, as a release `flutter build` does. Building needs no
+`flutter pub get`.
 
 For the first plugin graph, Bazel also needs two committed generated-state files
 to exist before their updater targets can run. They are not both plugin
@@ -227,18 +229,16 @@ The complete working fixture is
 ### Prepare the project
 
 From the existing Flutter project root, make sure `pubspec.lock` exists and is
-current, and that Flutter has written its Android registrant:
+current:
 
 ```sh
 flutter pub get
 ```
 
 The module root should contain `pubspec.yaml`, `pubspec.lock`, `lib/`, and
-`android/`. Commit `pubspec.lock`: Bazel reads it, not `.dart_tool/`. Flutter
-also writes the gitignored empty
-`android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`;
-compile it even without plugins so the engine does not report a misleading
-missing-registrant message. Re-run `flutter pub get` in a fresh clone.
+`android/`. Commit `pubspec.lock`: Bazel reads it, not `.dart_tool/`. Bazel
+generates the Android registrant from the lock, so a fresh clone needs no
+`flutter pub get` before building.
 
 ### Add the module and Dart target
 
@@ -361,7 +361,6 @@ Create `android/app/BUILD.bazel`, replacing the application ID and Kotlin source
 path with the ones Flutter generated for your app:
 
 ```python
-load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
@@ -375,17 +374,7 @@ flutter_android_binary(
     app = "//:app",
     manifest_values = {"applicationId": "com.example.hello_bazel"},
     plugins = None,
-    registrant = ":generated_plugin_registrant",
     deps = [":main_activity"],
-)
-
-android_library(
-    name = "generated_plugin_registrant",
-    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
-    deps = [
-        ":flutter_embedding",
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-    ],
 )
 
 kt_android_library(
@@ -395,8 +384,7 @@ kt_android_library(
 )
 ```
 
-The explicit annotation dependency is needed because the embedding's imported
-Java dependencies are not re-exported to this registrant's compile classpath.
+`plugins = None` compiles the ruleset's empty registrant, as stock Flutter does for a plugin-free app; no registrant target is needed.
 
 ### Build, install, and run
 
@@ -457,7 +445,6 @@ release-only.
 | `pubspec.yaml must sit beside //:pubspec.lock` | Put `pubspec.yaml` in the package of the label given to `pub.lock`. |
 | `pubspec.lock: ... git sources are not supported` | Depend on a hosted or path package; the lock records a git commit, not a content hash. |
 | A hosted package download fails its sha256 check | The lock is stale or was edited by hand. Regenerate it with `flutter pub get` and commit it. |
-| The Android target reports `GeneratedPluginRegistrant.java` as a missing source | Run `flutter pub get` from the Flutter project root; it writes the gitignored Android registrant. |
 
 ## Root app with pub plugins
 
@@ -471,7 +458,7 @@ name consistently.
 ### Add and exercise `path_provider`
 
 Starting from the plugin-free root app, add this under `dependencies:` in
-`pubspec.yaml`, then update `pubspec.lock` and Flutter's Android registrant:
+`pubspec.yaml`, then update `pubspec.lock`:
 
 ```yaml
   path_provider: ^2.1.6
@@ -577,23 +564,14 @@ flutter_app(
 ```
 
 This BUILD edit and the module wiring above are one transition; apply both
-before running a guard. With a graph, `flutter_android_binary` derives the
-conventional registrant target.
+before running a guard. With a graph, `flutter_android_binary` compiles the
+registrant from `@flutter_plugins` by default.
 
 In `android/app/BUILD.bazel`, retain the existing imports, embedding, and
 `main_activity`, then replace the opt-out Android setup with the plugin-aware
-form. Find the fixed Flutter-generated registrant source before writing the target:
-
-```sh
-find android/app/src/main/java -name GeneratedPluginRegistrant.java
-```
-
-The generated Android registrant needs both the generated plugin aggregate and
-the annotation JAR:
+form. The registrant needs no target of its own:
 
 ```python
-PLUGINS = ["@flutter_plugins//:all"]
-
 flutter_android_binary(
     name = "hello_bazel",
     abis = ["arm64-v8a", "x86_64"],
@@ -601,20 +579,10 @@ flutter_android_binary(
     manifest_values = {"applicationId": "com.example.hello_bazel"},
     deps = [":main_activity"],
 )
-
-android_library(
-    name = "generated_plugin_registrant",
-    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
-    deps = PLUGINS + [
-        ":flutter_embedding",
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-    ],
-)
 ```
 
-Do not pass `plugins = None` or the explicit empty-graph `registrant` argument
-in this shape. With a graph, `flutter_android_binary` derives the conventional
-registrant target.
+Do not pass `plugins = None` in this shape. With a graph, `flutter_android_binary`
+compiles the registrant from `@flutter_plugins` for the build's mode.
 
 ### Generate, commit, build, and prove the transition
 
@@ -653,10 +621,9 @@ succeeded but plugin registration is stale or missing; rerun the registrant
 guard and its printed updater, then rebuild.
 
 For every later pub plugin addition, removal, or upgrade, run `flutter pub get`
-and commit the updated `pubspec.lock`. Flutter refreshes
-`GeneratedPluginRegistrant.java`; keep its BUILD target
-dependent on `@flutter_plugins//:all`, rather than maintaining a per-plugin
-list. Run both guards; when a file drifts, use the updater command printed
+and commit the updated `pubspec.lock`. The build regenerates the Android
+registrant from that lock and compiles it from `@flutter_plugins`, so no
+per-plugin list is maintained. Run both guards; when a file drifts, use the updater command printed
 by its guard and commit the resulting files. Rebuild, install, and
 exercise the changed plugin. Standard CMake-backed plugins are generated
 automatically. If a plugin's Maven coordinate cannot be read statically,
@@ -849,8 +816,7 @@ The plugin is a `path` dependency in `packages/host_app/pubspec.lock`, so the
 builds its Android half in `@flutter_plugins` like a pub plugin. A path outside
 the workspace is rejected.
 
-The app Android target uses named-package labels, and its generated registrant
-depends on the plugin aggregate:
+The app Android target uses named-package labels. With a plugin graph, `flutter_android_binary` compiles the registrant from `@flutter_plugins` itself:
 
 ```python
 flutter_embedding_library(name = "flutter_embedding")
@@ -861,16 +827,6 @@ flutter_android_binary(
     app = "//packages/host_app",
     manifest_values = {"applicationId": "com.example.host_app"},
     deps = [":main_activity"],
-)
-
-android_library(
-    name = "generated_plugin_registrant",
-    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
-    deps = [
-        ":flutter_embedding",
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-        "@flutter_plugins//:all",
-    ],
 )
 ```
 

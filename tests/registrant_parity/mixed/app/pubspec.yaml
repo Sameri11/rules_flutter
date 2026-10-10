@@ -1,0 +1,24 @@
+name: registrant_parity_mixed
+description: Registrant parity fixture - mixed plugin kinds, dev-only and transitive reachability.
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  zeta_java:
+    path: ../packages/zeta_java
+  alpha_kotlin:
+    path: ../packages/alpha_kotlin
+  mid_dart:
+    path: ../packages/mid_dart
+  beta_ffi:
+    path: ../packages/beta_ffi
+  omega_v1:
+    path: ../packages/omega_v1
+
+dev_dependencies:
+  dev_only_delta:
+    path: ../packages/dev_only_delta
+  shared_gamma:
+    path: ../packages/shared_gamma

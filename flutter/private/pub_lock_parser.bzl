@@ -358,22 +358,26 @@ def _yaml_scalar(value):
         value = value[1:-1]
     return value
 
-def pubspec_android_plugin(pubspec_text):
-    """`flutter: plugin: platforms: android:` of a pubspec.yaml, or None.
+def pubspec_flutter_plugin(pubspec_text):
+    """`flutter: plugin:` facts of a pubspec.yaml: `(implements, android)`.
 
-    Mirrors what `flutter pub get` reads to write the android list of
-    `.flutter-plugins-dependencies`. Returns the scalar keys of the android block
-    (`package`, `pluginClass`, `dartPluginClass`, `ffiPlugin`, `default_package`,
-    `dartFileName`). Block style and the one-line `{k: v, ...}` flow form are supported.
+    `implements` is `flutter.plugin.implements` -- the app-facing package a
+    federated implementation serves -- or "". `android` is the scalar keys of
+    `flutter.plugin.platforms.android` (`package`, `pluginClass`,
+    `dartPluginClass`, `ffiPlugin`, `default_package`, `dartFileName`), or None
+    when there is no such block: what `flutter pub get` reads for the android
+    list of `.flutter-plugins-dependencies` and for GeneratedPluginRegistrant.
+    Block style and the one-line `{k: v, ...}` flow form are supported.
 
     Args:
       pubspec_text: contents of a pubspec.yaml.
 
     Returns:
-      The android platform's keys, or None.
+      `(implements, android)`.
     """
     stack = []  # [(indent, key)]
     found = None
+    implements = ""
     for raw in pubspec_text.split("\n"):
         line = raw.rstrip()
         stripped = line.lstrip(" ")
@@ -389,7 +393,9 @@ def pubspec_android_plugin(pubspec_text):
             if stack and stack[-1][0] >= indent:
                 stack.pop()
         path = [s[1] for s in stack]
-        if path == ["flutter", "plugin", "platforms"] and key == "android":
+        if path == ["flutter", "plugin"] and key == "implements" and value != "":
+            implements = _yaml_scalar(value)
+        elif path == ["flutter", "plugin", "platforms"] and key == "android":
             found = found or {}
             if value.startswith("{"):
                 if not value.endswith("}"):
@@ -402,4 +408,4 @@ def pubspec_android_plugin(pubspec_text):
             found[key] = _yaml_scalar(value)
         if value == "" or value.startswith("#"):
             stack.append((indent, key))
-    return found
+    return implements, found

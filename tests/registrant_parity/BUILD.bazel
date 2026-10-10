@@ -1,0 +1,37 @@
+# The pub hub's GeneratedPluginRegistrant.java against flutter_tools' own, per
+# case and mode. The goldens are recaptured with capture.py (see README.md); CI
+# runs `capture.py --check`, so a Flutter template change fails there rather
+# than silently here.
+
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+
+CASES = [
+    "federated_default",
+    "federated_dev_override",
+    "federated_direct",
+    "mixed",
+    "no_plugins",
+]
+
+# The hubs read each case's lock and pubspec; path packages are read by path.
+exports_files(glob(["*/app/pubspec.*"]))
+
+[
+    diff_test(
+        name = "{}_{}_test".format(case, mode),
+        file1 = "{}/expected/{}/GeneratedPluginRegistrant.java".format(case, mode),
+        file2 = "@registrant_parity_{}//:android/{}/GeneratedPluginRegistrant.java".format(case, mode),
+    )
+    for case in CASES
+    for mode in [
+        "debug",
+        "release",
+    ]
+]
+
+# What flutter_android_binary compiles when `plugins = None`.
+diff_test(
+    name = "empty_registrant_test",
+    file1 = "no_plugins/expected/release/GeneratedPluginRegistrant.java",
+    file2 = "//flutter/private:registrant/GeneratedPluginRegistrant.java",
+)

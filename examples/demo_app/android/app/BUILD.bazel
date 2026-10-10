@@ -6,15 +6,10 @@
 # `flutter migrate` rewrite files under app/android/. They do not delete unknown
 # files, so this BUILD survives, but keep that in mind when upgrading templates.
 
-load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
-
-# Android plugins from the pub hub, shared by the registrant and MainActivity.
-# The APK derives this aggregate automatically.
-PLUGINS = ["@flutter_plugins//:all"]
 
 # Must be covered by both //:app and plugins.project; the bundle check enforces it.
 ABIS = [
@@ -36,22 +31,6 @@ flutter_android_binary(
     manifest_values = {"applicationId": "com.example.demo_app"},
     # Keep dependency order stable: native library order affects ZIP alignment.
     deps = [":main_activity"],
-)
-
-# Stripping discards engine DWARF; no separate debug-symbol artifact is produced.
-
-# Compile Flutter's generated registrant with the plugin classes it instantiates.
-# FlutterEngine loads it reflectively; verify its definition in the dex, not
-# merely a successful launch or a matching string. Shrinking must preserve @Keep.
-android_library(
-    name = "generated_plugin_registrant",
-    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
-    deps = PLUGINS + [
-        ":flutter_embedding",
-        # Explicit compile dependency for @Keep/@NonNull: java_import does not
-        # re-export it, and the non-JVM annotation artifact contains no classes.
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-    ],
 )
 
 # The generated manifest names ".MainActivity".

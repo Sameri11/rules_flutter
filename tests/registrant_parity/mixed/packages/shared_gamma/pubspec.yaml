@@ -1,0 +1,14 @@
+name: shared_gamma
+description: Registrant parity fixture - plugin reached through a dev dependency AND a regular transitive dependency.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.example.parity.gamma
+        pluginClass: SharedGammaPlugin

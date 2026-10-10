@@ -45,7 +45,7 @@ detail behind each one.
 - Dart kernel and asset actions are sandboxed and cacheable; only the asset action disables remote execution.
 - Bazel emits an unsigned APK; release signing happens outside Bazel, and custom release signing inside Bazel is not supported.
 - Native assets require consumer-written Package Recipes.
-- Run `flutter pub get` after cloning and after plugin changes to write the gitignored `GeneratedPluginRegistrant.java`.
+- Building needs no `flutter pub get`; run it only to update `pubspec.lock` after dependency changes.
 - The first plugin graph needs two hand-created zero-byte placeholders; this path has no automated regression gate.
 - The consumer module owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
 - Targets are Android-only; iOS, web, and desktop packaging are not implemented.
@@ -79,7 +79,7 @@ flutter create --org com.example --platforms android hello_bazel
 cd hello_bazel
 ```
 
-`flutter create` runs `flutter pub get`, which writes `pubspec.lock` and the gitignored `GeneratedPluginRegistrant.java` that the Android target compiles. Commit `pubspec.lock` (Bazel builds from it, not `.dart_tool/`); in a fresh clone, re-run `flutter pub get` to regenerate the registrant, and after changing dependencies to update the lock.
+`flutter create` runs `flutter pub get`, which writes `pubspec.lock`. Commit it (Bazel builds from it, not `.dart_tool/`). Bazel generates the Android registrant from the lock, so building needs no `flutter pub get`; after changing dependencies, run `flutter pub get` to update the lock.
 
 ### Bazel workspace files
 
@@ -210,7 +210,6 @@ find android/app/src/main/kotlin -name MainActivity.kt
 Create `android/app/BUILD.bazel`, replacing `com.example.hello_bazel`, `hello_bazel`, and the `MainActivity.kt` path when your project differs:
 
 ```python
-load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
@@ -224,17 +223,7 @@ flutter_android_binary(
     app = "//:app",  # NOT "//"
     manifest_values = {"applicationId": "com.example.hello_bazel"},
     plugins = None,
-    registrant = ":generated_plugin_registrant",
     deps = [":main_activity"],
-)
-
-android_library(
-    name = "generated_plugin_registrant",
-    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
-    deps = [
-        ":flutter_embedding",
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-    ],
 )
 
 kt_android_library(
@@ -245,6 +234,8 @@ kt_android_library(
 ```
 
 The root application label must be `//:app`, not `//`. Keep the explicit ABI list in both rules.
+
+`plugins = None` compiles the ruleset's empty registrant, as stock Flutter does for a plugin-free app; no registrant target is needed. With a plugin graph, `flutter_android_binary` compiles the registrant from `@flutter_plugins`. Pass `registrant = <label>` only to replace it.
 
 ### Build, install, and check
 
@@ -282,7 +273,7 @@ Do not apply debug mode to `//:app_arm64-v8a`; AOT is release-only.
 
 ### Adding plugins
 
-The first plugin setup generates and commits the Maven/plugin registrant state; see the [detailed quickstart](QUICKSTART.md#root-app-with-pub-plugins). `plugins.project` reads the hub's `@pub//:plugins_metadata.json` and `@pub//:package_config.json`.
+The first plugin setup generates and commits the Maven segment and the Dart registrant state; see the [detailed quickstart](QUICKSTART.md#root-app-with-pub-plugins). `plugins.project` reads the hub's `@pub//:plugins_metadata.json` and `@pub//:package_config.json`.
 
 ## Scope, limitations, and direction
 
@@ -296,7 +287,7 @@ Android release and debug packaging across the supported ABIs, including fat and
 - The Dart kernel and asset actions are sandboxed and cacheable in release and debug builds and read no `~/.pub-cache` or `.dart_tool/`. Only the asset action disables remote execution, because it runs the host Flutter tool.
 - `pubspec.lock` must be committed and current, with `pubspec.yaml` in the same Bazel package as the lock label. `pub.lock` names are unique across modules and contain no `-`. Update the lock with `flutter pub get`; Bazel never resolves versions.
 - Hosted packages are pinned by the lock's sha256 (a wrong digest fails the fetch) and must use `https`. Flutter SDK packages come from the local SDK. Git sources are rejected. Path dependencies are not hashed and go stale unless declared with `path_deps`. Dart compilation is not incremental.
-- `flutter pub get` writes the gitignored `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`, which the Android target compiles. Run it after cloning and after plugin changes.
+- The Android registrant is generated from `pubspec.lock` at build time, per mode: `android/debug/GeneratedPluginRegistrant.java` (dev-only plugins included, as `flutter pub get` writes it) and `android/release/GeneratedPluginRegistrant.java` (dev-only plugins dropped, as a release `flutter build` writes it).
 - The first plugin graph needs two hand-created zero-byte placeholders: `plugin_deps.MODULE.bazel` (`include()` requires the file) and `lib/dart_plugin_registrant.dart` (the plugin guard requires its committed file). This path has no automated regression gate; follow the [plugin-graph walkthrough](QUICKSTART.md#create-generated-state-and-wire-the-plugin-graph).
 - Native assets from Dart build-hook packages require consumer-written Package Recipes. The consumer module also owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
 - Bazel emits an unsigned APK. Release signing happens outside the build so credentials never enter the action graph; custom release signing inside Bazel is not supported.

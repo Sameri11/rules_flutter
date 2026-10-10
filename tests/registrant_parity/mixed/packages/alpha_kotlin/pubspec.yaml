@@ -1,0 +1,18 @@
+name: alpha_kotlin
+description: Registrant parity fixture - Kotlin V2 plugin.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  transitive_eta:
+    path: ../transitive_eta
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.example.parity.alpha
+        pluginClass: AlphaKotlinPlugin

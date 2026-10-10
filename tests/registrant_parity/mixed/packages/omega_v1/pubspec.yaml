@@ -1,0 +1,14 @@
+name: omega_v1
+description: Registrant parity fixture - V1-embedding-only plugin.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.example.parity.omega
+        pluginClass: OmegaV1Plugin
