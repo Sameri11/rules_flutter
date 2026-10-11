@@ -43,12 +43,42 @@ detail behind each one.
 - A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not hermetic: use `FLUTTER_ROOT` or `flutter` on `PATH`, `ANDROID_HOME`, and `ANDROID_NDK_HOME`. The examples pin SDK platform 36 and build-tools 36.0.0; the consumer module chooses its own. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a no-toolchains stub and the build fails only when a target needs an Android toolchain.
 - Commit `pubspec.lock` with `pubspec.yaml` beside it; Bazel pins packages from it. Git pub sources are rejected, path dependencies need `path_deps`, and Dart compilation is not incremental.
 - Dart kernel and asset actions are sandboxed and cacheable; only the asset action disables remote execution.
-- Bazel emits an unsigned APK; release signing happens outside Bazel, and custom release signing inside Bazel is not supported.
+- Bazel emits a debug-key-signed `<name>.apk` and an unsigned `<name>_unsigned.apk`. Sign the unsigned output outside Bazel for release; custom release signing inside Bazel is not supported.
 - Native assets require consumer-written Package Recipes.
 - Building needs no `flutter pub get`; run it only to update `pubspec.lock` after dependency changes.
 - The first plugin graph needs two hand-created zero-byte placeholders; this path has no automated regression gate.
 - The consumer module owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
 - Targets are Android-only; iOS, web, and desktop packaging are not implemented.
+
+## Compatibility with flutter_tools
+
+Compared with the stock [`flutter` CLI](https://docs.flutter.dev/reference/flutter-cli).
+**Implemented** = supported by the rules; **Partial** = limited support or extra
+configuration/tooling; **Not implemented** = no public Bazel workflow.
+Standalone Flutter commands and prototypes do not count as Bazel support.
+
+| Feature | Stock Flutter | rules_flutter | Notes |
+| --- | --- | --- | --- |
+| Android release builds | `flutter build apk --release` | Implemented | Default build mode. |
+| Android debug builds | `flutter build apk --debug` | Implemented | Select `--@rules_flutter//flutter:mode=debug`. |
+| Android profile builds | `flutter build apk --profile` | Not implemented | Debug and release only. |
+| Split APKs by architecture | `--split-per-abi` | Implemented | Supports ARM64, ARM32, and x86-64. Unlike Flutter, all APK variants share one version code. |
+| Android App Bundles (AAB) | `flutter build appbundle` | Not implemented | APKs only. |
+| iOS, web, and desktop builds | Platform-specific builds | Not implemented | Android only. |
+| Dart defines | `--dart-define`, `--dart-define-from-file` | Not implemented | No equivalent build option. |
+| Icon-font tree shaking | Default in release APKs | Not implemented | Full icon fonts are bundled. |
+| Android plugins and native packages | Standard Flutter/Gradle workflow | Partial | Common Java/Kotlin and CMake plugins work. Custom build logic and native-asset packages need extra configuration or [Package Recipes](QUICKSTART.md#consumer-recipes-and-native-assets). |
+| Release signing | Gradle signing configuration | Not implemented | Development APKs are debug-key signed; sign the unsigned APK externally for distribution. |
+| Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |
+| Dart obfuscation / split debug info | `--obfuscate`, `--split-debug-info` | Not implemented | No equivalent build options. |
+| Run, hot reload / restart, DevTools | `flutter run` / `flutter attach` | Partial | Use Flutter with the Bazel-built debug APK, without Gradle. Packaging changes require a rebuild; see the [development workflow](QUICKSTART.md#hot-reload-with-flutter-run). |
+| Unit, widget, and golden tests | `flutter test` | Not implemented | Run Flutter separately; no Bazel Flutter-test rule. |
+| On-device integration tests | `flutter test integration_test` | Not implemented | No Bazel device-test rule; standard `integration_test/` entrypoints are unsupported. |
+| Localization generation | `flutter gen-l10n` | Not implemented | Generate Dart sources under `lib/` before building; regenerate after translation changes. |
+
+“Implemented” is not a claim of full CLI flag parity, byte-identical output to
+Gradle, or support for every plugin. The [CI-tested toolchains](#ci-tested-toolchains)
+and [current constraints](#current-constraints) still apply.
 
 ## Quickstart
 
@@ -290,7 +320,7 @@ Android release and debug packaging across the supported ABIs, including fat and
 - The Android registrant is generated from `pubspec.lock` at build time, per mode: `android/debug/GeneratedPluginRegistrant.java` (dev-only plugins included, as `flutter pub get` writes it) and `android/release/GeneratedPluginRegistrant.java` (dev-only plugins dropped, as a release `flutter build` writes it).
 - The first plugin graph needs two hand-created zero-byte placeholders: `plugin_deps.MODULE.bazel` (`include()` requires the file) and `lib/dart_plugin_registrant.dart` (the plugin guard requires its committed file). This path has no automated regression gate; follow the [plugin-graph walkthrough](QUICKSTART.md#create-generated-state-and-wire-the-plugin-graph).
 - Native assets from Dart build-hook packages require consumer-written Package Recipes. The consumer module also owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
-- Bazel emits an unsigned APK. Release signing happens outside the build so credentials never enter the action graph; custom release signing inside Bazel is not supported.
+- Bazel emits both a debug-key-signed `<name>.apk` and an unsigned `<name>_unsigned.apk`. Use the signed output for development, not distribution. Release signing happens outside the build so credentials never enter the action graph; custom release signing inside Bazel is not supported.
 - `ndk-build` plugins and prebuilt-JNI plugin shapes are not supported. Plugin Maven coordinates that cannot be read statically require `plugins.package(artifacts = ...)`.
 - iOS, web, and desktop packaging are not implemented; targets are Android-only.
 - A cold analysis with an empty `HOME` may leave the `Analyzing` count unchanged for minutes while Maven/Coursier, JDK, Flutter engine, Kotlin, NDK, and tool repositories are fetched; continued download or process activity indicates network-bound setup, not proof of a deadlock. When intentionally perturbing `HOME`, pin `BAZELISK_HOME` and Bazel's startup `--output_user_root` to isolate launcher and download caches from rules behavior.

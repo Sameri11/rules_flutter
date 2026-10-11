@@ -33,8 +33,10 @@ incremental. The Dart kernel and asset actions are sandboxed and cacheable in
 release and debug builds, and only the asset action disables remote execution.
 Hosted pub packages are fetched from the committed `pubspec.lock` and pinned by
 its sha256, git pub sources are rejected, and path dependencies are not hashed
-and go stale unless the consumer declares their sources; Bazel emits unsigned APKs, so release signing happens outside Bazel,
-and Dart native assets must come from declared consumer-owned inputs or recipes.
+and go stale unless the consumer declares their sources. Bazel emits a debug-key-signed
+`<name>.apk` for development and an unsigned `<name>_unsigned.apk`; sign the unsigned
+output outside Bazel for release. Dart native assets must come from declared
+consumer-owned inputs or recipes.
 Targets are Android-only—iOS, web, and desktop packaging are absent, with no
 dedicated diagnostic; see the [README](README.md) for the full limitations and
 support boundaries.
