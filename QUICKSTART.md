@@ -170,12 +170,23 @@ Until `rules_flutter` is published to the Bazel Central Registry, create a
 consumer as a sibling of a checkout and retain a development override:
 
 ```python
+bazel_dep(name = "apple_support", version = "1.24.5")
+
 bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
 local_path_override(
     module_name = "sameri11_rules_flutter",
     path = "../rules_flutter",
 )
 ```
+
+On macOS, every Android build compiles host C/C++ tools, such as `protoc` for
+`rules_android`. Xcode 27's clang lists the SDK's `SDKSettings.json` in each
+dependency file. Bazel rejects that path under rules_cc's autoconfigured
+toolchain but accepts it under apple_support's toolchain. Bazel registers
+toolchains in `bazel_dep` order, so declare `apple_support` first, ahead of any
+module that brings `rules_cc`, and use version 1.24.3 or newer, because older
+versions break rules_foreign_cc's `make` bootstrap. The dependency has no effect
+on Linux.
 
 The `path = "../.."` spelling in the in-repository fixtures is specific to their
 location two levels below this checkout. An outside sibling consumer normally

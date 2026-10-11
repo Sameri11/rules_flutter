@@ -3,6 +3,13 @@ module(
     version = "0.0.1",
 )
 
+# macOS host C/C++ (protoc) must use apple_support's toolchain: Xcode 27 clang
+# records the SDK's SDKSettings.json in every dependency file, which only
+# apple_support's builtin include directories allow. Toolchains register in
+# bazel_dep order, so declare it before anything that brings rules_cc's
+# toolchain.
+bazel_dep(name = "apple_support", version = "1.24.5")
+
 # Copyable flat app: pub plugins, one ABI, no recipes or path dependencies.
 bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
 local_path_override(
