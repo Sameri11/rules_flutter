@@ -677,6 +677,63 @@ def flutter_assets_dir(assets):
         if component
     ])
 
+# The debug overlay's copy step. Internal: flutter_android_binary declares one
+# per variant under mode=debug, as `<target>_debug_assets`. The flutter_assets bundle
+# is copied and the three debug-only files are added, so a Dart edit reruns the
+# kernel and this copy but never flutter_assets. Release never builds it.
+_OVERLAY_COMMAND = """set -euo pipefail
+OUT="$1"
+mkdir -p "$OUT"
+cp -R "$2/." "$OUT/"
+cp "$3" "$OUT/kernel_blob.bin"
+cp "$4" "$OUT/vm_snapshot_data"
+cp "$5" "$OUT/isolate_snapshot_data"
+chmod -R u+w "$OUT"
+"""
+
+def _flutter_debug_assets_impl(ctx):
+    # Named flutter_assets, as flutter_assets' own tree is: flutter_assets_dir
+    # derives the in-APK path from the artifact path.
+    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+    flutter = ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
+    ctx.actions.run_shell(
+        command = _OVERLAY_COMMAND,
+        arguments = [
+            out.path,
+            ctx.file.assets.path,
+            ctx.file.kernel.path,
+            flutter.vm_isolate_snapshot.path,
+            flutter.isolate_snapshot.path,
+        ],
+        inputs = [ctx.file.assets, ctx.file.kernel, flutter.vm_isolate_snapshot, flutter.isolate_snapshot],
+        outputs = [out],
+        mnemonic = "FlutterDebugAssets",
+        progress_message = "Overlaying debug assets %{label}",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+_flutter_debug_assets = rule(
+    implementation = _flutter_debug_assets_impl,
+    doc = """Copies a flutter_assets tree and adds the debug-only files, for a debug APK.
+
+It writes `kernel_blob.bin` from the app's debug kernel, and `vm_snapshot_data`
+and `isolate_snapshot_data` from the host engine's debug snapshots. Those are the
+files flutter_tools' debug bundle carries and the release bundle does not.""",
+    attrs = {
+        "assets": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The flutter_assets tree of the app's bundle.",
+        ),
+        "kernel": attr.label(
+            allow_single_file = [".dill"],
+            mandatory = True,
+            doc = "The app's debug kernel, `<aot>_jit_kernel`, shipped as kernel_blob.bin.",
+        ),
+    },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
+
 # The repository these rules generate for a project's plugins. Its name is
 # hardcoded by the extension (plugins.bzl), and every consumer imports it under
 # that apparent name -- they have to, because they name `@flutter_plugins//:all`
@@ -1274,7 +1331,9 @@ def flutter_android_binary(
         which land the library at a filename this wrapper does not derive
         from either target's label.
       aot: the flutter_aot_library prefix; see flutter_android_libs.
-      assets: a flutter_assets tree artifact.
+      assets: a flutter_assets tree artifact. Under `mode=debug` the APK packages
+        an internal overlay of it, with the debug kernel and the host engine's debug
+        snapshots added; release packages the tree as it is.
       pubspec: the app's flutter_pubspec target, whose `version:` becomes
         versionCode and versionName. Required -- an APK with neither cannot be
         published, and a default of "unset" is how one gets shipped by accident.
@@ -1478,6 +1537,16 @@ def flutter_android_binary(
             tags = internal_tags,
         )
 
+        # The debug overlay: the flutter_assets bundle plus the debug-only files. Only
+        # mode=debug builds declare it. Internal, like the APK's own targets.
+        overlay = target + "_debug_assets"
+        _flutter_debug_assets(
+            name = overlay,
+            assets = assets,
+            kernel = "{}_jit_kernel".format(aot),
+            tags = internal_tags,
+        )
+
         packaging_kwargs = dict(kwargs)
         wrapper_visibility = packaging_kwargs.pop("visibility", None)
         packaging_kwargs.pop("tags", None)
@@ -1485,8 +1554,14 @@ def flutter_android_binary(
         packaged = target + "_apk"
         android_binary(
             name = packaged,
-            assets = [assets],
-            assets_dir = flutter_assets_dir(assets = assets),
+            assets = select({
+                _MODE_DEBUG: [":" + overlay],
+                _MODE_RELEASE: [assets],
+            }),
+            assets_dir = select({
+                _MODE_DEBUG: flutter_assets_dir(assets = ":" + overlay),
+                _MODE_RELEASE: flutter_assets_dir(assets = assets),
+            }),
             manifest = ":" + versioned_manifest,
             manifest_values = values,
             resource_files = resource_files,

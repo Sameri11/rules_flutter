@@ -327,13 +327,20 @@ class Checker:
             for name in ("sdk_version", "flutter"):
                 if not _contains_attr(inputs, ["toolchain", name]):
                     self.fail("D", "FlutterAssets inputs must declare toolchain.{}".format(name))
-            tools = _keyword(action, "tools")
-            if not _contains_attr(tools, ["toolchain", "dartaotruntime"]):
-                self.fail("D", "FlutterAssets debug action must declare the toolchain's dartaotruntime as a tool")
-            debug_inputs = _named_value(function, "debug_bundle_inputs")
-            for name in ("frontend_server", "platform_debug"):
-                if not _contains_attr(debug_inputs, ["toolchain", name]):
-                    self.fail("D", "FlutterAssets debug inputs must include toolchain.{}".format(name))
+            if _keyword(action, "tools") is not None:
+                self.fail("D", "FlutterAssets must not declare tools: it runs the host flutter tool, an undeclared input (see _ASSETS_EXEC)")
+            for path in (
+                ["toolchain", "frontend_server"],
+                ["toolchain", "platform_product"],
+                ["toolchain", "platform_debug"],
+                ["toolchain", "dartaotruntime"],
+                ["ctx", "files", "srcs"],
+                ["ctx", "file", "entrypoint"],
+                ["ctx", "file", "kernel"],
+                ["ctx", "file", "dart_plugin_registrant"],
+            ):
+                if _contains_attr(function, path):
+                    self.fail("D", "FlutterAssets must not reference {}: the bundle takes no kernel or entrypoint".format(".".join(path)))
             execution = _keyword(action, "execution_requirements")
             if _name(execution) != "_ASSETS_EXEC":
                 self.fail("D", "FlutterAssets action must use _ASSETS_EXEC")
@@ -351,6 +358,7 @@ class Checker:
                 ('export ANDROID_SDK_ROOT="$ANDROID_HOME"', "ANDROID_SDK_ROOT export"),
                 ('export FLUTTER_ALREADY_LOCKED="true"', "FLUTTER_ALREADY_LOCKED export"),
                 ('export HOME="$STAGE/home"', "stage-local HOME"),
+                ('$EXECROOT/{bundle_guard}', "the pubspec guard invocation"),
             )
             for token, description in required:
                 if token not in command:
@@ -358,25 +366,27 @@ class Checker:
             if "realpath" not in command or "dirname" not in command:
                 self.fail("D", "FlutterAssets command must derive Android SDK root from the marker")
 
-        kernel_blob = _function(tree, "_kernel_blob_command")
-        if kernel_blob is None or not _contains_string_part(kernel_blob, "kernel_blob.bin"):
-            self.fail("D", "_kernel_blob_command must copy the app's kernel over each bundle's kernel_blob.bin")
+        if _function(tree, "_kernel_blob_command") is not None:
+            self.fail("D", "_kernel_blob_command must not exist: the overlay adds kernel_blob.bin, flutter_assets does not")
         if _function(tree, "_debug_kernel_command") is not None:
             self.fail("D", "_debug_kernel_command must not exist: dart_jit_kernel compiles the debug kernel")
-        if not _rule_has_attr(tree, "_flutter_assets", "kernel"):
-            self.fail("D", "flutter_assets must declare the kernel attribute that carries dart_jit_kernel")
-        for target in ("_flutter", "_dartaotruntime", "_frontend_server", "_platform_debug", "_sdk_version"):
-            if _rule_has_attr(tree, "_flutter_assets", target):
-                self.fail("D", "flutter_assets must not keep direct SDK attribute {}".format(target))
+        if _rule_decl(tree, "flutter_assets") is None:
+            self.fail("D", "flutter_assets must be a plain rule(...), not a macro over a private rule")
+        if _named_value(tree, "_flutter_assets") is not None:
+            self.fail("D", "_flutter_assets must not exist: flutter_assets is the rule")
+        for target in ("srcs", "entrypoint", "dart_plugin_registrant", "kernel", "_mode", "_flutter", "_dartaotruntime", "_frontend_server", "_platform_debug", "_sdk_version"):
+            if _rule_has_attr(tree, "flutter_assets", target):
+                self.fail("D", "flutter_assets must not declare {}: it takes no app sources, entrypoint or kernel".format(target))
         if _contains_string(tree, "@flutter_sdk//:"):
             self.fail("D", "Flutter asset rules must not contain direct @flutter_sdk label strings")
-        if not _rule_uses_toolchain(tree, "_flutter_assets"):
+        if not _rule_uses_toolchain(tree, "flutter_assets"):
             self.fail("D", "flutter_assets must declare the Flutter toolchain type")
         for target, expected in (
             ("_android_sdk", "//flutter/private:_android_sdk_marker"),
             ("_merger", "//flutter/private:merge_native_assets.py"),
+            ("_bundle_guard", "//flutter/private:check_bundle_pubspec.py"),
         ):
-            if not _rule_attr_default(tree, "_flutter_assets", target, expected):
+            if not _rule_attr_default(tree, "flutter_assets", target, expected):
                 self.fail("D", "flutter_assets must retain {} default {}".format(target, expected))
 
     def check_e(self):
@@ -401,6 +411,9 @@ class Checker:
 
         if _contains_string(tree, "ANDROID_NDK_HOME"):
             self.fail("E", "Android action source must not use an NDK environment path")
+
+        if not _rule_uses_toolchain(tree, "_flutter_debug_assets"):
+            self.fail("E", "_flutter_debug_assets must declare the Flutter toolchain type: it reads the host engine snapshots through it")
 
     def check_f(self):
         tree = self.tree("plugins", "F")

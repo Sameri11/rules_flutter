@@ -1127,11 +1127,13 @@ For the debug-shaped APK, select debug on the Android target:
 bazel build //android/app:demo_app --@rules_flutter//flutter:mode=debug
 ```
 
-Debug bundles use a kernel blob rather than a release AOT snapshot. Therefore
-an AOT target such as `//:app_arm64-v8a` is intentionally incompatible with the
-debug setting; build the APK or assets target in debug mode instead. Debug
-kernel and assets actions are cacheable like release ones; only the assets
-action disables remote execution.
+Debug APKs add the debug kernel and the host engine's debug snapshots to the
+same assets bundle that release builds use, in an overlay only `mode=debug`
+builds. Therefore an AOT target such as `//:app_arm64-v8a` is intentionally
+incompatible with the debug setting; build the APK in debug mode instead
+(`:assets` is the same tree in every mode). The debug kernel and overlay actions
+are cacheable like release ones; only the assets action disables remote
+execution.
 
 ### Existing projects and generated-state changes
 
