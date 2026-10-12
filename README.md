@@ -65,7 +65,7 @@ Standalone Flutter commands and prototypes do not count as Bazel support.
 | Split APKs by architecture | `--split-per-abi` | Implemented | Supports ARM64, ARM32, and x86-64. Unlike Flutter, all APK variants share one version code. |
 | Android App Bundles (AAB) | `flutter build appbundle` | Not implemented | APKs only. |
 | iOS, web, and desktop builds | Platform-specific builds | Not implemented | Android only. |
-| Dart defines | `--dart-define`, `--dart-define-from-file` | Not implemented | No equivalent build option. |
+| Dart defines | `--dart-define`, `--dart-define-from-file` | Partial | `flutter_app(dart_defines = {...})`; read through `const String.fromEnvironment(...)`. No `--dart-define-from-file`. |
 | Icon-font tree shaking | Default in release APKs | Not implemented | Full icon fonts are bundled. |
 | Android plugins and native packages | Standard Flutter/Gradle workflow | Partial | Common Java/Kotlin and CMake plugins work. Custom build logic and native-asset packages need extra configuration or [Package Recipes](QUICKSTART.md#consumer-recipes-and-native-assets). |
 | Release signing | Gradle signing configuration | Not implemented | Development APKs are debug-key signed; sign the unsigned APK externally for distribution. |

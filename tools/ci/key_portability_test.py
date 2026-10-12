@@ -179,9 +179,9 @@ class Checker:
         tree = self.tree("defs", "C")
         if tree is None:
             return
-        function = _function(tree, "_dart_kernel_impl")
+        function = _function(tree, "_dart_aot_kernel_impl")
         if function is None:
-            self.fail("C", "{} must define _dart_kernel_impl".format(FILES["defs"]))
+            self.fail("C", "{} must define _dart_aot_kernel_impl".format(FILES["defs"]))
             return
 
         # Execroot-relative package roots keep kernel URIs host-independent.
@@ -192,13 +192,13 @@ class Checker:
             if node.args and _string(node.args[0]) is not None:
                 added[_string(node.args[0])] = node.args[1:]
         if not (added.get("--packages") and _contains_attr(added["--packages"][0], ["ctx", "file", "package_config"])):
-            self.fail("C", "_dart_kernel_impl must pass ctx.file.package_config to --packages")
+            self.fail("C", "_dart_aot_kernel_impl must pass ctx.file.package_config to --packages")
         if "--filesystem-root" not in added or "--filesystem-scheme" not in added:
-            self.fail("C", "_dart_kernel_impl must load the package config through --filesystem-root/--filesystem-scheme")
+            self.fail("C", "_dart_aot_kernel_impl must load the package config through --filesystem-root/--filesystem-scheme")
 
         action = _action_call(function, "run_shell")
         if action is None:
-            self.fail("C", "_dart_kernel_impl must create its Dart action with ctx.actions.run_shell")
+            self.fail("C", "_dart_aot_kernel_impl must create its Dart action with ctx.actions.run_shell")
         else:
             tools = _keyword(action, "tools")
             inputs = _keyword(action, "inputs")
@@ -240,12 +240,55 @@ class Checker:
             "_platform_product",
             "_platform_debug",
         ):
-            if _rule_has_attr(tree, "dart_kernel", target):
-                self.fail("C", "dart_kernel must not keep direct SDK attribute {}".format(target))
+            if _rule_has_attr(tree, "dart_aot_kernel", target):
+                self.fail("C", "dart_aot_kernel must not keep direct SDK attribute {}".format(target))
         if _contains_string(tree, "@flutter_sdk//:"):
             self.fail("C", "Dart rules must not contain direct @flutter_sdk label strings")
-        if not _rule_uses_toolchain(tree, "dart_kernel"):
-            self.fail("C", "dart_kernel must declare the Flutter toolchain type")
+        if not _rule_uses_toolchain(tree, "dart_aot_kernel"):
+            self.fail("C", "dart_aot_kernel must declare the Flutter toolchain type")
+        if _rule_has_attr(tree, "dart_aot_kernel", "_mode"):
+            self.fail("C", "dart_aot_kernel must not read //flutter:mode: it is AOT-only")
+
+        jit = _function(tree, "_dart_jit_kernel_impl")
+        if jit is None:
+            self.fail("C", "{} must define _dart_jit_kernel_impl".format(FILES["defs"]))
+        else:
+            if _contains_attr(jit, ["ctx", "attr", "_mode"]):
+                self.fail("C", "_dart_jit_kernel_impl must not read //flutter:mode: the debug kernel is mode-independent")
+            for flag in ("--filesystem-root", "--filesystem-scheme", "--packages"):
+                if not _contains_string(jit, flag):
+                    self.fail("C", "_dart_jit_kernel_impl must pass {}".format(flag))
+            if not _contains_attr(jit, ["ctx", "file", "package_config"]):
+                self.fail("C", "_dart_jit_kernel_impl must pass ctx.file.package_config")
+            jit_action = _action_call(jit, "run_shell")
+            if jit_action is None:
+                self.fail("C", "_dart_jit_kernel_impl must create its action with ctx.actions.run_shell")
+            else:
+                jit_inputs = _keyword(jit_action, "inputs")
+                for path, description in (
+                    (["ctx", "file", "package_config"], "the package config"),
+                    (["ctx", "files", "pub_srcs"], "the hub's package files (pub_srcs)"),
+                    (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
+                    (["toolchain", "frontend_server"], "the toolchain's frontend_server"),
+                    (["toolchain", "sdk_version"], "the toolchain's SDK identity"),
+                ):
+                    if not _contains_attr(jit_inputs, path):
+                        self.fail("C", "DartJitKernel inputs must declare {}".format(description))
+                if not _contains_attr(_keyword(jit_action, "tools"), ["toolchain", "dartaotruntime"]):
+                    self.fail("C", "DartJitKernel must declare the toolchain's dartaotruntime as a tool")
+                if _keyword(jit_action, "execution_requirements") is not None:
+                    self.fail("C", "DartJitKernel must not set execution_requirements: it is sandboxed and cacheable")
+        for target in (
+            "_dartaotruntime",
+            "_frontend_server",
+            "_sdk_version",
+            "_platform_debug",
+            "_mode",
+        ):
+            if _rule_has_attr(tree, "dart_jit_kernel", target):
+                self.fail("C", "dart_jit_kernel must not keep direct attribute {}".format(target))
+        if not _rule_uses_toolchain(tree, "dart_jit_kernel"):
+            self.fail("C", "dart_jit_kernel must declare the Flutter toolchain type")
 
     def check_d(self):
         tree = self.tree("defs", "D")
@@ -287,7 +330,7 @@ class Checker:
             tools = _keyword(action, "tools")
             if not _contains_attr(tools, ["toolchain", "dartaotruntime"]):
                 self.fail("D", "FlutterAssets debug action must declare the toolchain's dartaotruntime as a tool")
-            debug_inputs = _named_value(function, "debug_kernel_inputs")
+            debug_inputs = _named_value(function, "debug_bundle_inputs")
             for name in ("frontend_server", "platform_debug"):
                 if not _contains_attr(debug_inputs, ["toolchain", name]):
                     self.fail("D", "FlutterAssets debug inputs must include toolchain.{}".format(name))
@@ -315,24 +358,25 @@ class Checker:
             if "realpath" not in command or "dirname" not in command:
                 self.fail("D", "FlutterAssets command must derive Android SDK root from the marker")
 
-        debug_command = _function(tree, "_debug_kernel_command")
-        if debug_command is None or not (
-            _contains_string_part(debug_command, "--filesystem-root")
-            and _contains_string_part(debug_command, "--filesystem-scheme")
-        ):
-            self.fail("D", "_debug_kernel_command must compile through --filesystem-root/--filesystem-scheme")
+        kernel_blob = _function(tree, "_kernel_blob_command")
+        if kernel_blob is None or not _contains_string_part(kernel_blob, "kernel_blob.bin"):
+            self.fail("D", "_kernel_blob_command must copy the app's kernel over each bundle's kernel_blob.bin")
+        if _function(tree, "_debug_kernel_command") is not None:
+            self.fail("D", "_debug_kernel_command must not exist: dart_jit_kernel compiles the debug kernel")
+        if not _rule_has_attr(tree, "_flutter_assets", "kernel"):
+            self.fail("D", "flutter_assets must declare the kernel attribute that carries dart_jit_kernel")
         for target in ("_flutter", "_dartaotruntime", "_frontend_server", "_platform_debug", "_sdk_version"):
-            if _rule_has_attr(tree, "flutter_assets", target):
+            if _rule_has_attr(tree, "_flutter_assets", target):
                 self.fail("D", "flutter_assets must not keep direct SDK attribute {}".format(target))
         if _contains_string(tree, "@flutter_sdk//:"):
             self.fail("D", "Flutter asset rules must not contain direct @flutter_sdk label strings")
-        if not _rule_uses_toolchain(tree, "flutter_assets"):
+        if not _rule_uses_toolchain(tree, "_flutter_assets"):
             self.fail("D", "flutter_assets must declare the Flutter toolchain type")
         for target, expected in (
             ("_android_sdk", "//flutter/private:_android_sdk_marker"),
             ("_merger", "//flutter/private:merge_native_assets.py"),
         ):
-            if not _rule_attr_default(tree, "flutter_assets", target, expected):
+            if not _rule_attr_default(tree, "_flutter_assets", target, expected):
                 self.fail("D", "flutter_assets must retain {} default {}".format(target, expected))
 
     def check_e(self):
