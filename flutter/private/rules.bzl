@@ -36,8 +36,8 @@ visibility(["//flutter"])
 # The bundle action runs `flutter build bundle`, and the flutter tool is still a
 # host input: it is found through the SDK symlinks, not declared, so a remote
 # worker would not have it. The action is otherwise sandboxed and cacheable,
-# debug included: the debug kernel it ships is compiled with package: and
-# org-dartlang-root: URIs only (see _debug_kernel_command), so its bytes do not
+# debug included: the kernel it ships comes from dart_jit_kernel, whose URIs are
+# package: and org-dartlang-root: only (see there), so its bytes do not
 # carry the producing machine's paths. Deliberately absent: `local`, which would
 # disable remote caching outright.
 _ASSETS_EXEC = {"no-remote-exec": "1"}
@@ -83,6 +83,40 @@ def _library_path(ctx, file, attribute):
         ))
     return path[len(prefix):]
 
+def _execroot_path(file):
+    """A file's path from the execroot, which is also its path under the virtual root.
+
+    A file in another repository has a `../<repo>/` short_path and lives at
+    `external/<repo>/` in the execroot.
+    """
+    if file.short_path.startswith("../"):
+        return "external/" + file.short_path[len("../"):]
+    return file.short_path
+
+def _dart_entry_uri(ctx, file):
+    """A debug entrypoint's frontend_server URI, as a `(scheme, path)` pair.
+
+    A file under this package's lib/ is a `package:` library, which is how the
+    engine and the plugin registrant address it in release too. Any other .dart
+    file -- an integration_test/ or test/ file, or a bootstrap generated into
+    bin_dir -- is addressed by its execroot path under org-dartlang-root, which
+    resolves through whichever virtual root holds it. The URI never names bin_dir,
+    so the kernel does not depend on the configuration that built it.
+    """
+    root = "../{}/".format(ctx.label.repo_name) if ctx.label.repo_name else ""
+    lib = root + (ctx.label.package + "/" if ctx.label.package else "") + "lib/"
+    if file.short_path.startswith(lib):
+        return ("package", file.short_path[len(lib):])
+    return ("org-dartlang-root", _execroot_path(file))
+
+def _dart_define_flags(defines):
+    """`-D<name>=<value>` flags for frontend_server, sorted by name.
+
+    Sorted rather than in dict order, so equal dart_defines written in a different
+    order produce the same action key. An empty dict adds no flags.
+    """
+    return ["-D{}={}".format(name, defines[name]) for name in sorted(defines)]
+
 def _project_path(ctx, file, attribute):
     """A file's path relative to the calling package/project root.
 
@@ -111,9 +145,8 @@ def _sdk_root_for(platform_files, mode):
             return f.dirname
     fail("platform_strong.dill not found for mode '{}'".format(mode))
 
-# frontend_server flags for a debug (JIT) kernel. Shared, verbatim, by
-# dart_kernel (via args.add_all) and _debug_kernel_command (joined into a
-# shell template), so an SDK-driven flag change is made once.
+# frontend_server flags for a debug (JIT) kernel. Used by dart_jit_kernel alone,
+# so the debug flags have one definition.
 _DEBUG_KERNEL_FLAGS = [
     "-Ddart.vm.profile=false",
     "-Ddart.vm.product=false",
@@ -126,25 +159,23 @@ _DEBUG_KERNEL_FLAGS = [
 # registrant into the kernel and makes the engine's `dart_plugin_registrant`
 # lookup match the exact package: URI frontend_server recorded for it -- see
 # the comment on `pubspec` below for why it must be a package: URI. Shared,
-# verbatim, by dart_kernel (formatted with shell variable names, resolved at
-# run time) and _debug_kernel_command (formatted with an analysis-time path).
+# verbatim, by dart_aot_kernel and dart_jit_kernel (formatted with shell variable
+# names, resolved at run time).
 _REGISTRANT_SOURCE_ARGS = '--source "package:{pkg}/{registrant}" --source "package:flutter/src/dart_plugin_registrant.dart" "-Dflutter.dart_plugin_registrant=package:{pkg}/{registrant}"'
 
 def _flutter_toolchain(ctx):
     return ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
 
-def _dart_kernel_impl(ctx):
+def _dart_aot_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
-    mode = ctx.attr._mode[BuildSettingInfo].value
-    release = mode != "debug"
 
-    # Release compiles against the product SDK; debug keeps asserts and the
-    # service protocol, so it uses the non-product one.
+    # The product SDK: this kernel is only ever gen_snapshot's input. Debug
+    # kernels are dart_jit_kernel's.
     toolchain = _flutter_toolchain(ctx)
-    platform_files = toolchain.platform_product if release else toolchain.platform_debug
+    platform_files = toolchain.platform_product
 
     # --sdk-root wants the directory holding platform_strong.dill.
-    sdk_root = _sdk_root_for(platform_files, mode)
+    sdk_root = _sdk_root_for(platform_files, "release")
 
     args = ctx.actions.args()
 
@@ -164,15 +195,13 @@ def _dart_kernel_impl(ctx):
     # discards whatever the CFE prints on a *successful* compile, where
     # --verbosity defaults to `all`.
     args.add("--no-print-incremental-dependencies")
-    if release:
-        args.add("--aot")
-        args.add("--tfa")
-        args.add("-Ddart.vm.product=true")
+    args.add("--aot")
+    args.add("--tfa")
+    args.add("-Ddart.vm.product=true")
 
-        if ctx.attr.target_os:
-            args.add("--target-os", ctx.attr.target_os)
-    else:
-        args.add_all(_DEBUG_KERNEL_FLAGS)
+    if ctx.attr.target_os:
+        args.add("--target-os", ctx.attr.target_os)
+    args.add_all(_dart_define_flags(ctx.attr.dart_defines))
 
     # The package config is the pub hub's: every rootUri is relative, so it is
     # loaded through the virtual filesystem scheme rooted at the execroot. Source
@@ -261,15 +290,15 @@ exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
             ],
         ),
         outputs = [dill],
-        mnemonic = "DartKernel",
-        progress_message = "Compiling Dart kernel (%s) %%{label}" % mode,
+        mnemonic = "DartAotKernel",
+        progress_message = "Compiling Dart AOT kernel %{label}",
     )
 
     return [DefaultInfo(files = depset([dill]))]
 
-dart_kernel = rule(
-    implementation = _dart_kernel_impl,
-    doc = "Compiles Dart sources to a kernel (.dill) via frontend_server.",
+dart_aot_kernel = rule(
+    implementation = _dart_aot_kernel_impl,
+    doc = "Compiles Dart sources to an AOT kernel (.dill) for gen_snapshot. Release only; debug uses dart_jit_kernel.",
     attrs = {
         "srcs": attr.label_list(
             allow_files = [".dart"],
@@ -324,18 +353,6 @@ Point this at a filegroup in the dependency's own package, e.g.
 `path_deps = ["//packages/mylib:srcs"]`. Bazel globs cannot cross package
 boundaries, so the dependency needs its own BUILD file.""",
         ),
-        "_mode": attr.label(
-            default = "//flutter:mode",
-            providers = [BuildSettingInfo],
-            doc = """Build mode, read from //flutter:mode. Governs the compiler flags.
-
-Both modes are cacheable: release output is stripped of absolute paths by
-gen_snapshot, and the debug kernel's source URIs are `package:` and
-`org-dartlang-root:` only.
-
-Implicit rather than a public attribute: mode is one build-wide selection, not
-a per-target knob -- see docs_internal/build-modes-plan.md.""",
-        ),
         "target_os": attr.string(
             default = "android",
             values = ["android", "ios", "macos", "linux", "windows", "fuchsia", ""],
@@ -344,6 +361,164 @@ a per-target knob -- see docs_internal/build-modes-plan.md.""",
 Release-only: flutter_tools passes it under `--aot` alone.
 
 """,
+        ),
+        "dart_defines": attr.string_dict(
+            doc = """Compile-time constants, passed as `-D<name>=<value>`.
+
+Only const-evaluated reads see them: `const String.fromEnvironment("FOO")` (likewise
+`bool`/`int.fromEnvironment`). A non-const call is evaluated by the VM, which does
+not get these values, and returns the default. They are in the action key, so
+changing a value recompiles the kernel; an empty dict adds no flags, so existing
+keys are unchanged.""",
+        ),
+    },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
+
+def _dart_jit_kernel_impl(ctx):
+    dill = ctx.actions.declare_file(ctx.label.name + ".dill")
+    toolchain = _flutter_toolchain(ctx)
+
+    # Always debug: this action never reads //flutter:mode, so both modes ask
+    # for the same action and get the same kernel. Debug keeps asserts and the
+    # service protocol, so it uses the non-product platform.
+    sdk_root = _sdk_root_for(toolchain.platform_debug, "debug")
+
+    args = ctx.actions.args()
+
+    args.add(toolchain.dartaotruntime)
+    args.add(toolchain.frontend_server)
+    args.add("--sdk-root", sdk_root + "/")
+    args.add("--target", "flutter")
+    args.add("--no-print-incremental-dependencies")
+    args.add_all(_DEBUG_KERNEL_FLAGS)
+    args.add_all(_dart_define_flags(ctx.attr.dart_defines))
+
+    # Two virtual roots, so that generated and source files resolve the same
+    # way: sources from the execroot, generated files from bin_dir. The package
+    # config is the pub hub's, read in place as dart_aot_kernel reads it.
+    args.add("--filesystem-root", ".")
+    args.add("--filesystem-root", ctx.bin_dir.path)
+    args.add("--filesystem-scheme", "org-dartlang-root")
+    args.add("--packages", "org-dartlang-root:///" + ctx.file.package_config.path)
+
+    # The package name is file content, so the entrypoint URI is assembled by
+    # the wrapper below, like dart_aot_kernel's.
+    pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
+    scheme, path = _dart_entry_uri(ctx, ctx.file.entrypoint)
+
+    scalars = ctx.actions.args()
+    scalars.add(pubspec.package_name)
+    scalars.add(scheme)
+    scalars.add(path)
+    scalars.add(
+        _library_path(ctx, ctx.file.dart_plugin_registrant, "dart_plugin_registrant") if ctx.file.dart_plugin_registrant else "",
+    )
+    scalars.add(dill)
+
+    ctx.actions.run_shell(
+        command = """set -euo pipefail
+PKG="$(cat "$1")"; shift
+SCHEME="$1"; shift
+ENTRYPOINT="$1"; shift
+REGISTRANT="$1"; shift
+DILL="$1"; shift
+
+if [ "$SCHEME" = package ]; then
+    ENTRY="package:$PKG/$ENTRYPOINT"
+else
+    ENTRY="org-dartlang-root:///$ENTRYPOINT"
+fi
+
+if [ -n "$REGISTRANT" ]; then
+    set -- "$@" {registrant_args}
+fi
+
+exec "$@" --output-dill "$DILL" "$ENTRY"
+""".format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT")),
+        arguments = [scalars, args],
+        tools = [toolchain.dartaotruntime],
+        # Every readable package is declared, as for dart_aot_kernel: the hub's
+        # package config, hosted packages, path dependencies, and SDK packages.
+        inputs = depset(
+            direct = [
+                         toolchain.frontend_server,
+                         toolchain.sdk_version,
+                         ctx.file.package_config,
+                         pubspec.package_name,
+                         ctx.file.entrypoint,
+                     ] + ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
+                     ctx.files.path_deps,
+            transitive = [
+                depset(toolchain.platform_debug),
+                depset(ctx.files.srcs),
+                depset(ctx.files.pub_srcs),
+                toolchain.sdk_packages,
+            ],
+        ),
+        outputs = [dill],
+        mnemonic = "DartJitKernel",
+        progress_message = "Compiling Dart JIT kernel %{label}",
+    )
+
+    return [DefaultInfo(files = depset([dill]))]
+
+dart_jit_kernel = rule(
+    implementation = _dart_jit_kernel_impl,
+    doc = """Compiles Dart sources to a debug (JIT) kernel (.dill) via frontend_server.
+
+Never reads //flutter:mode: the action is the same under both modes, so one
+kernel serves a debug app and a debug test alike. Its entrypoint may be any .dart
+file in the package; see _dart_entry_uri.""",
+    attrs = {
+        "srcs": attr.label_list(
+            allow_files = [".dart"],
+            doc = "Dart sources. Used for change detection, not passed directly.",
+        ),
+        "pubspec": attr.label(
+            mandatory = True,
+            providers = [FlutterPubspecInfo],
+            doc = "A flutter_pubspec target; supplies the package name.",
+        ),
+        "entrypoint": attr.label(
+            allow_single_file = [".dart"],
+            mandatory = True,
+            doc = """The entrypoint, e.g. `lib/main.dart` or `integration_test/app_test.dart`.
+
+A file under lib/ is compiled as `package:`. Any other .dart file -- in the
+package, generated into bin_dir, or in another repository -- is compiled by its
+execroot path under `org-dartlang-root:`.""",
+        ),
+        "dart_plugin_registrant": attr.label(
+            allow_single_file = [".dart"],
+            doc = """The generated Dart plugin registrant, e.g. `lib/dart_plugin_registrant.dart`.
+
+See dart_aot_kernel.dart_plugin_registrant. Omit for an app with no federated plugins.""",
+        ),
+        "package_config": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = """The pub hub's `package_config.json`, read in place.
+
+Every rootUri is relative to the hub, so the compile reads it through
+`--filesystem-root`. It is a declared input.""",
+        ),
+        "pub_srcs": attr.label_list(
+            allow_files = True,
+            allow_empty = False,
+            mandatory = True,
+            doc = "The pub hub's `:lib`: every hosted package's packageUri tree, and `package_config.json`.",
+        ),
+        "path_deps": attr.label_list(
+            allow_files = True,
+            doc = "Sources of `path:` dependencies. See dart_aot_kernel.path_deps.",
+        ),
+        "dart_defines": attr.string_dict(
+            doc = """Compile-time constants, passed as `-D<name>=<value>`.
+
+Only const-evaluated reads see them; see dart_aot_kernel.dart_defines. They are in
+the action key, so changing a value recompiles the kernel; an empty dict adds no
+flags, so existing keys are unchanged.""",
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
@@ -440,17 +615,15 @@ def _pub_hub_labels(pub, who):
         pub + "//:all",
     )
 
-def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, **kwargs):
+def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, dart_defines = {}, **kwargs):
     """Convenience wrapper: Dart sources straight through to libapp.so.
 
-    Produces an AOT-shaped `.dill` and its `libapp.so` per ABI. `dart_kernel`'s
-    `--aot`/`--tfa` branch is what gen_snapshot needs; it is selected by the
-    ambient `//flutter:mode`, not pinned here. Under `mode=debug` this
-    target's kernel compiles without them, so each `dart_aot_elf` here is
-    `target_compatible_with` only the modes `AOT_MODES` lists -- an explicit
-    debug build, or a `//...` sweep under debug, reports incompatibility
-    rather than reaching gen_snapshot with a kernel it rejects (see
-    docs_internal/build-modes-plan.md).
+    Produces an AOT-shaped `.dill` and its `libapp.so` per ABI. The kernel is
+    `dart_aot_kernel`, which compiles `--aot --tfa` only. Both it and each
+    `dart_aot_elf` are `target_compatible_with` only the modes `AOT_MODES` lists,
+    so under `mode=debug` this target reports incompatibility rather than
+    building a kernel gen_snapshot rejects. The debug kernel is `flutter_app`'s
+    `:jit_kernel` (see docs_internal/build-modes-plan.md).
 
     Every rule-specific attribute is a named parameter here, and **kwargs
     carries only what both targets should share -- visibility, tags,
@@ -477,8 +650,9 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = 
         hosted package files are the compile's package inputs.
       path_deps: sources of `path:` dependencies.
       dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
-      target_os: OS the kernel is compiled for; see dart_kernel.
+      target_os: OS the kernel is compiled for; see dart_aot_kernel.
       strip: drop DWARF from each ELF.
+      dart_defines: `-D` constants the kernel compiles with; see dart_aot_kernel.dart_defines.
       **kwargs: shared rule attributes.
     """
     check_abis(abis, "flutter_aot_library " + name)
@@ -487,7 +661,7 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = 
     # Avoid passing target_compatible_with twice.
     caller_compatible_with = kwargs.pop("target_compatible_with", [])
 
-    dart_kernel(
+    dart_aot_kernel(
         name = name + "_kernel",
         srcs = srcs,
         pubspec = pubspec,
@@ -497,12 +671,13 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = 
         path_deps = path_deps,
         dart_plugin_registrant = dart_plugin_registrant,
         target_os = target_os,
-        target_compatible_with = caller_compatible_with,
+        dart_defines = dart_defines,
+        target_compatible_with = caller_compatible_with + aot_target_compatible_with(),
         **kwargs
     )
 
     # One kernel feeds every ABI: the kernel is architecture-independent, and
-    # only the platform axis fans it out (see dart_kernel's target_os).
+    # only the platform axis fans it out (see dart_aot_kernel's target_os).
     for abi in abis:
         dart_aot_elf(
             name = "{}_{}".format(name, abi),
@@ -560,6 +735,7 @@ def flutter_app(
         pub = None,
         plugin_deps = "//:plugin_deps.MODULE.bazel",
         target_os = "android",
+        dart_defines = {},
         **kwargs):
     """The Dart half of a Flutter app: one call, in the app's own package.
 
@@ -587,7 +763,8 @@ def flutter_app(
     | target | what |
     | --- | --- |
     | `:pubspec` | the package name and version, read once from pubspec.yaml |
-    | `:app_<abi>` | the AOT snapshot per ABI |
+    | `:app_<abi>` | the AOT snapshot per ABI; release only |
+    | `:jit_kernel` | the debug kernel, shipped as `kernel_blob.bin` under mode=debug; manual |
     | `:assets` | the asset bundle, built for every ABI |
     | `:path_deps_check` | fails if a `path:` dependency is undeclared |
     | `:plugins_check` | fails if the committed Maven coordinates drifted |
@@ -596,8 +773,8 @@ def flutter_app(
     | `:dart_registrant_update` | writes the generated registrant into the workspace |
     | `:guards_test` | the guards, under `bazel test` |
 
-    `:app_<abi>` and `:assets` compile to their debug shape under
-    `--@rules_flutter//flutter:mode=debug`; see
+    Under `--@rules_flutter//flutter:mode=debug`, `:app_<abi>` reports
+    incompatibility and `:assets` ships `:jit_kernel` as its kernel; see
     docs_internal/build-modes-plan.md.
 
     The names are fixed rather than derived from a `name` parameter: the Android
@@ -632,7 +809,10 @@ def flutter_app(
         `:plugins_check` compares against the generated one. Repo-root by
         convention because that is where `include()` reads it from; `None` for a
         project with no plugin graph, which drops the two guards over it.
-      target_os: OS the kernel is compiled for; see dart_kernel.
+      target_os: OS the kernel is compiled for; see dart_aot_kernel.
+      dart_defines: `-D` constants both kernels compile with, e.g. {"FOO": "bar"}.
+        Read only through `const String.fromEnvironment(...)`; see
+        dart_aot_kernel.dart_defines.
       **kwargs: visibility, tags -- passed to every target declared here.
     """
     check_abis(abis, "flutter_app")
@@ -673,7 +853,7 @@ def flutter_app(
             "flutter_app: `pub` is required, the `pub.lock` hub of this app's pubspec.lock, " +
             "e.g. pub = \"@pub\". See the flutter_app docstring for the MODULE.bazel lines.",
         )
-    _, project_package_config, _, pub_all = _pub_hub_labels(pub, "flutter_app")
+    package_config, project_package_config, pub_lib, pub_all = _pub_hub_labels(pub, "flutter_app")
 
     if dart_plugin_registrant == _DEFAULT_DART_PLUGIN_REGISTRANT:
         dart_plugin_registrant = None if plugin_deps == None else "lib/dart_plugin_registrant.dart"
@@ -695,7 +875,23 @@ def flutter_app(
         path_deps = path_deps,
         dart_plugin_registrant = dart_plugin_registrant,
         target_os = target_os,
+        dart_defines = dart_defines,
         **kwargs
+    )
+
+    # The debug kernel. Tagged manual by _internal_kwargs, so a release `//...`
+    # sweep does not build it; under mode=debug flutter_assets selects it below.
+    dart_jit_kernel(
+        name = "jit_kernel",
+        srcs = srcs,
+        pubspec = ":pubspec",
+        entrypoint = entrypoint,
+        package_config = package_config,
+        pub_srcs = [pub_lib],
+        path_deps = path_deps,
+        dart_plugin_registrant = dart_plugin_registrant,
+        dart_defines = dart_defines,
+        **_internal_kwargs(kwargs)
     )
 
     flutter_assets(
@@ -709,6 +905,10 @@ def flutter_app(
         pub_srcs = [pub_all],
         path_deps = path_deps,
         dart_plugin_registrant = dart_plugin_registrant,
+        kernel = select({
+            Label("//flutter:mode_debug"): ":jit_kernel",
+            "//conditions:default": None,
+        }),
         **kwargs
     )
 
@@ -805,71 +1005,24 @@ rm -rf "{dir}/native_assets"
         dir = _bundle_dir(out, abi, index),
     )
 
-def _debug_kernel_command(ctx, out, project_dir, debug, toolchain):
-    """Shell recompiling the debug kernel with scheme-relative source URIs.
+def _kernel_blob_command(ctx, out):
+    """Shell copying the app's kernel over each bundle's kernel_blob.bin.
 
-    Overwrites every ABI bundle's kernel_blob.bin with the result.
-
-    `flutter build bundle --debug` (via _bundle_command above) already
-    produced a kernel_blob.bin per ABI bundle, but flutter_tools has no flag
-    that stops its frontend_server invocation from recording absolute
-    `file://` URIs under the mktemp $STAGE. Two fresh debug builds with
-    unchanged inputs would therefore never produce the same kernel_blob.bin.
-
-    This recompiles once, calling frontend_server directly, mirroring
-    _dart_kernel_impl's debug branch (mode flags, package: URIs for the
-    entrypoint and plugin registrant) with two additions that make $STAGE's
-    own path invisible to the kernel: --filesystem-root/--filesystem-scheme
-    turn it into a virtual root, and --packages is a URI under that scheme
-    instead of a real path. The staged package config is the pub hub's
-    project-relative one, so every rootUri -- the project, its path
-    dependencies, hosted packages and the SDK's packages, all staged as
-    declared inputs -- resolves under the same scheme. The kernel's source
-    URIs are `package:` and `org-dartlang-root:` only, which is what lets the
-    action be cached and shared like a release one.
-
-    `debug` is the caller's single mode check, passed in rather than
-    re-derived, so the command and its declared inputs never disagree on
-    whether this build is a debug build.
+    Under debug, `flutter build bundle --debug` (see _bundle_command) writes its
+    own kernel_blob.bin, compiled against the staging directory, so two fresh
+    builds would never agree. dart_jit_kernel compiles the kernel that ships, and
+    this overwrites every ABI bundle with it. Release has no kernel, so the
+    command is empty.
     """
-    if not debug:
+    if not ctx.file.kernel:
         return ""
-
-    sdk_root = _sdk_root_for(toolchain.platform_debug, "debug")
-    prefix = project_dir + "/" if project_dir else ""
-    entrypoint_library = _library_path(ctx, ctx.file.entrypoint, "entrypoint")
-
-    registrant = ""
-    if ctx.file.dart_plugin_registrant:
-        registrant_library = _library_path(ctx, ctx.file.dart_plugin_registrant, "dart_plugin_registrant")
-        registrant = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = registrant_library) + " "
-
-    overwrites = "\n".join([
-        'cp "$STAGE/kernel_blob.dill" "{dir}/kernel_blob.bin"'.format(dir = _bundle_dir(out, abi, i))
+    return "\n".join([
+        'cp "$EXECROOT/{kernel}" "{dir}/kernel_blob.bin"'.format(
+            kernel = ctx.file.kernel.path,
+            dir = _bundle_dir(out, abi, i),
+        )
         for i, abi in enumerate(ctx.attr.abis)
     ])
-
-    return """PKG="$(cat "$EXECROOT/{package_name}")"
-"$EXECROOT/{dartaotruntime}" "$EXECROOT/{frontend_server}" \
-    --sdk-root "$EXECROOT/{sdk_root}/" \
-    --target=flutter --no-print-incremental-dependencies \
-    {debug_flags} \
-    --filesystem-root "$STAGE" --filesystem-scheme org-dartlang-root \
-    --packages "org-dartlang-root:///{prefix}.dart_tool/package_config.json" \
-    --output-dill "$STAGE/kernel_blob.dill" \
-    {registrant}--verbosity=error "package:$PKG/{entrypoint}"
-{overwrites}
-""".format(
-        package_name = ctx.attr.pubspec[FlutterPubspecInfo].package_name.path,
-        dartaotruntime = toolchain.dartaotruntime.path,
-        frontend_server = toolchain.frontend_server.path,
-        sdk_root = sdk_root,
-        debug_flags = " ".join(_DEBUG_KERNEL_FLAGS),
-        prefix = prefix,
-        registrant = registrant,
-        entrypoint = entrypoint_library,
-        overwrites = overwrites,
-    )
 
 def _flutter_assets_impl(ctx):
     # The directory must be named flutter_assets: android_binary derives the
@@ -879,6 +1032,13 @@ def _flutter_assets_impl(ctx):
 
     mode = ctx.attr._mode[BuildSettingInfo].value
     debug = mode == "debug"
+    if debug and not ctx.file.kernel:
+        fail((
+            "{}: mode=debug needs a debug kernel, and this package_config is not a pub hub's " +
+            "project_package_config.json, so flutter_assets cannot build one. Pass `kernel`."
+        ).format(ctx.label))
+    if not debug and ctx.file.kernel:
+        fail("{}: `kernel` is the debug kernel; select it under mode=debug only".format(ctx.label))
     toolchain = _flutter_toolchain(ctx)
     entrypoint = _project_path(ctx, ctx.file.entrypoint, "entrypoint")
     args = ctx.actions.args()
@@ -951,7 +1111,7 @@ cd "$STAGE/{project_dir}"
 mkdir -p "$STAGE/bundles"
 {flutter_tool}
 {bundles}
-{debug_kernel}
+{kernel_blobs}
 # Keep the shell alive so its EXIT trap removes STAGE after the merger.
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
@@ -973,29 +1133,25 @@ flutter_tool() {{
         ),
         merger = ctx.file._merger.path,
         bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
-        debug_kernel = _debug_kernel_command(ctx, out, project_dir, debug, toolchain),
+        kernel_blobs = _kernel_blob_command(ctx, out),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
             for i, abi in enumerate(ctx.attr.abis)
         ]),
     )
 
-    # Declared and passed as a tool only for a debug build: release never
-    # calls _debug_kernel_command. `debug`, not a second `_mode` read, is the
-    # gate -- see _debug_kernel_command's docstring.
-    debug_kernel_inputs = (
-        [
-            toolchain.frontend_server,
-            ctx.attr.pubspec[FlutterPubspecInfo].package_name,
-        ] + toolchain.platform_debug
-    ) if debug else []
+    # `flutter build bundle --debug` still compiles its own kernel, through
+    # frontend_server and the debug platform, so debug declares those inputs for
+    # that compile. Release compiles nothing here, so both lists are empty.
+    debug_bundle_inputs = ([toolchain.frontend_server] + toolchain.platform_debug) if debug else []
+    kernel_inputs = [ctx.file.kernel] if ctx.file.kernel else []
 
     ctx.actions.run_shell(
         command = cmd,
         arguments = [args],
         tools = [toolchain.dartaotruntime] if debug else [],
         inputs = depset(
-            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk] + debug_kernel_inputs,
+            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk] + debug_bundle_inputs + kernel_inputs,
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
@@ -1005,7 +1161,7 @@ flutter_tool() {{
 
     return [DefaultInfo(files = depset([out]))]
 
-flutter_assets = rule(
+_flutter_assets = rule(
     implementation = _flutter_assets_impl,
     doc = """Produces a flutter_assets/ tree (AssetManifest.bin, FontManifest.json,
 NOTICES.Z, fonts, shaders, declared assets) for packaging into an APK.
@@ -1021,17 +1177,24 @@ documented entry points for driving it from another build system.""",
             mandatory = True,
             doc = """The Dart entrypoint `flutter build bundle --target` uses.
 
-Must be the same file dart_kernel compiles. Flutter defaults the command to
+Must be the same file the app's kernel compiles. Flutter defaults the command to
 lib/main.dart when omitted, which silently combines a snapshot for one program
 with an asset/code bundle for another when an app overrides its entrypoint.""",
         ),
         "dart_plugin_registrant": attr.label(
             allow_single_file = [".dart"],
             doc = """The generated Dart plugin registrant, e.g.
-`lib/dart_plugin_registrant.dart`. See dart_kernel.dart_plugin_registrant.
+`lib/dart_plugin_registrant.dart`. See dart_aot_kernel.dart_plugin_registrant.
 
-Used to recompile the debug kernel with scheme-relative source URIs; see
-_debug_kernel_command. Omit for an app with no federated plugins.""",
+Staged for `flutter build bundle`, which compiles it. Omit for an app with no
+federated plugins.""",
+        ),
+        "kernel": attr.label(
+            allow_single_file = [".dill"],
+            doc = """The debug kernel shipped as each ABI bundle's kernel_blob.bin.
+
+Internal: flutter_app passes its `:jit_kernel`. Otherwise the flutter_assets macro
+declares `<name>_jit_kernel` and selects it under mode=debug only; release has none.""",
         ),
         "assets": attr.label_list(
             allow_files = True,
@@ -1060,7 +1223,7 @@ than a fact read out of it.""",
         ),
         "path_deps": attr.label_list(
             allow_files = True,
-            doc = "See dart_kernel.path_deps.",
+            doc = "See dart_jit_kernel.path_deps.",
         ),
         "abis": attr.string_list(
             mandatory = True,
@@ -1083,11 +1246,60 @@ bundle that started varying by architecture fails here rather than shipping.""",
         "_mode": attr.label(
             default = "//flutter:mode",
             providers = [BuildSettingInfo],
-            doc = "See dart_kernel._mode. Debug bundles ship kernel_blob.bin.",
+            doc = "Build mode, read from //flutter:mode. Selects `flutter build bundle --debug` or `--release`.",
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
+
+def _hub_labels_from_project_config(project_package_config):
+    """The hub's `package_config.json` and `:lib`, from its `project_package_config.json`.
+
+    flutter_assets takes the project file, whose rootUris are relative to
+    `.dart_tool/`, so a kernel action cannot read it. The hub's own files sit in
+    the same repository, so the kernel's labels are derived from it. Returns None
+    when the label is not a hub's project file.
+    """
+    label = str(project_package_config)
+    suffix = "//:project_package_config.json"
+    if not label.endswith(suffix) or label == suffix:
+        return None
+    hub = label[:-len(suffix)]
+    return hub + "//:package_config.json", hub + "//:lib"
+
+def flutter_assets(name, kernel = None, **kwargs):
+    """Produces a flutter_assets/ tree for packaging into an APK; see `_flutter_assets`.
+
+    Args:
+      name: The target name. Also prefixes `<name>_jit_kernel`, the kernel this declares.
+      kernel: Internal. flutter_app passes its own `:jit_kernel`. When unset, the
+        macro declares `<name>_jit_kernel` from the same sources and selects it under
+        mode=debug, if `package_config` is a pub hub's project file. Otherwise debug
+        analysis fails: pass a kernel.
+      **kwargs: The attributes of `_flutter_assets`.
+    """
+    if kernel == None:
+        hub = _hub_labels_from_project_config(kwargs["package_config"])
+        if hub:
+            package_config, pub_lib = hub
+            dart_jit_kernel(
+                name = name + "_jit_kernel",
+                srcs = kwargs.get("srcs", []),
+                pubspec = kwargs["pubspec"],
+                entrypoint = kwargs["entrypoint"],
+                package_config = package_config,
+                pub_srcs = [pub_lib],
+                path_deps = kwargs.get("path_deps", []),
+                dart_plugin_registrant = kwargs.get("dart_plugin_registrant"),
+                tags = _internal_tags(kwargs),
+                **{k: kwargs[k] for k in ("testonly", "target_compatible_with", "exec_compatible_with") if k in kwargs}
+            )
+            kernel = select({
+                Label("//flutter:mode_debug"): ":" + name + "_jit_kernel",
+                "//conditions:default": None,
+            })
+
+    _flutter_assets(name = name, kernel = kernel, **kwargs)
 
 def _pub_path_deps_check_impl(ctx):
     marker = ctx.actions.declare_file(ctx.label.name + ".checked")

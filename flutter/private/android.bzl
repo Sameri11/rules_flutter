@@ -7,7 +7,7 @@ uses to pick up native libraries, the NDK strip, and the guard that ties the
 asset bundle's code assets to the libraries a recipe supplied.
 
 Kept apart from rules.bzl so a consumer building for another platform does not
-load Android rules to get `dart_kernel`. The cc toolchain dependency lives
+load Android rules to get `dart_aot_kernel`. The cc toolchain dependency lives
 entirely on this side.
 """
 

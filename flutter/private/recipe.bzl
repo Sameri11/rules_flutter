@@ -44,7 +44,7 @@ load(":archive.bzl", "ZIPPER_ATTRS", "deterministic_jar")
 
 visibility(["//flutter"])
 
-# `dart_kernel`'s `target_os` names, not a second vocabulary. The list grows
+# `dart_aot_kernel`'s `target_os` names, not a second vocabulary. The list grows
 # with the platform table; macOS is absent until there is something to build for
 # it, and is named separately rather than folded into an `apple` -- flutter_tools
 # keys the native-assets manifest that way, and the two resolve a code asset by

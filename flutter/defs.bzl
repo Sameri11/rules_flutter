@@ -4,9 +4,10 @@ Consumer BUILD files load this one entrypoint rather than the implementation
 under ``//flutter/private``. Every name here is either written by hand in a
 Consumer Module or named by a BUILD file these rules generate; nothing is
 exported merely because it exists. Rules composed by the macros below --
-``dart_kernel``, ``flutter_android_libs``, ``jni_lib_jar``,
-``strip_native_libs`` -- and the ``ABIS`` table stay private, so their
-attributes remain free to change without a consumer migration.
+``dart_aot_kernel``, ``dart_jit_kernel``, ``flutter_android_libs``,
+``jni_lib_jar``, ``strip_native_libs`` -- and the ``ABIS`` table stay
+private, so their attributes remain free to change without a consumer
+migration.
 """
 
 load(
