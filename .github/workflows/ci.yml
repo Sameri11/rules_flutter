@@ -193,7 +193,15 @@ jobs:
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+          bazel test //... --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} ${{ matrix.example.name == 'demo_app_debug' && matrix.os == 'ubuntu-latest' && format('--execution_log_json_file={0}/exec_log.json', runner.temp) || '' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+
+      - name: Upload execution log
+        if: always() && matrix.example.name == 'demo_app_debug' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: exec-log-${{ matrix.os }}-${{ matrix.example.name }}
+          path: ${{ runner.temp }}/exec_log.json
+          if-no-files-found: error
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout
