@@ -25,6 +25,8 @@ exports_files([
     "frontend_server.snapshot",
     "vm_isolate_snapshot.bin",
     "isolate_snapshot.bin",
+    "flutter_tester",
+    "icudtl.dat",
     "flutter.version.json",
 ] + {gen_snapshots})
 
@@ -78,7 +80,16 @@ def _host_platform_name(ctx):
     return "{}-{}".format(host_os, arch)
 
 def _host_engine_dir(ctx):
-    """Host directory of the engine artifacts: the Android gen_snapshot and the debug snapshots."""
+    """Host directory of the universal engine artifacts: debug snapshots, flutter_tester and icudtl.dat.
+
+    flutter_cache.dart:267-282 unpacks `darwin-$arch/artifacts.zip` into
+    `darwin-x64` on macOS whatever the arch, and `linux-$arch` on Linux.
+    """
+    host = _host_platform_name(ctx)
+    return "darwin-x64" if host.startswith("darwin-") else host
+
+def _gen_snapshot_host_dir(ctx):
+    """Host directory of the Android gen_snapshot executables."""
 
     # TODO(flutter/flutter#152281): delete the collapse and return
     # _host_platform_name(ctx) directly, once the engine ships an arm64-native
@@ -182,7 +193,7 @@ def _flutter_sdk_impl(ctx):
     )
 
     # Create a snapshot symlink for each ABI and AOT mode.
-    host = _host_engine_dir(ctx)
+    host = _gen_snapshot_host_dir(ctx)
     for abi, info in ABIS.items():
         for mode in AOT_MODES:
             gen_snapshot = "{}/{}/{}/gen_snapshot".format(engine, info.engine_dir[mode], host)
@@ -194,12 +205,13 @@ def _flutter_sdk_impl(ctx):
                 )
             ctx.symlink(gen_snapshot, "gen_snapshot_{}_{}".format(abi, mode))
 
-    # The debug snapshots the debug overlay ships as vm_snapshot_data and
-    # isolate_snapshot_data. They come from the same host engine directory as
-    # gen_snapshot and are declared here, so the overlay reads them as files of
-    # this repository rather than through FLUTTER_ROOT.
-    for name in ("vm_isolate_snapshot.bin", "isolate_snapshot.bin"):
-        path = "{}/{}/{}".format(engine, host, name)
+    # The host-engine files: the debug snapshots the debug overlay ships as
+    # vm_snapshot_data and isolate_snapshot_data, and the test runtime
+    # flutter_tester with its ICU data. They are declared as files of this
+    # repository so consumers never reach the SDK through FLUTTER_ROOT.
+    host_engine = _host_engine_dir(ctx)
+    for name in ("vm_isolate_snapshot.bin", "isolate_snapshot.bin", "flutter_tester", "icudtl.dat"):
+        path = "{}/{}/{}".format(engine, host_engine, name)
         if not ctx.path(path).exists:
             fail(
                 "{} missing at {}.\n".format(name, path) +
