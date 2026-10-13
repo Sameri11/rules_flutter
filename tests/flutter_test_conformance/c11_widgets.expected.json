@@ -1,0 +1,22 @@
+{
+  "fixture": "c11_widgets",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "all target platform variants (variant: TargetPlatform.android)": "pass",
+        "all target platform variants (variant: TargetPlatform.fuchsia)": "pass",
+        "all target platform variants (variant: TargetPlatform.iOS)": "pass",
+        "all target platform variants (variant: TargetPlatform.linux)": "pass",
+        "all target platform variants (variant: TargetPlatform.macOS)": "pass",
+        "all target platform variants (variant: TargetPlatform.windows)": "pass",
+        "pending timer at test end": "error",
+        "runAsync": "pass",
+        "exception in build": "error"
+      }
+    }
+  ]
+}

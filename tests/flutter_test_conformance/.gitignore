@@ -1,0 +1,3 @@
+# flutter test writes its assets here when rebaseline.py runs the fixtures.
+/build/
+.dart_tool/

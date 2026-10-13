@@ -1,0 +1,15 @@
+{
+  "fixture": "c5_expect_async",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "expectAsync1 called": "pass",
+        "expectAsync1 not called": "error"
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "fixture": "c12_retry",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "flaky retry": "pass"
+      }
+    }
+  ]
+}

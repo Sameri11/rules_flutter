@@ -1,0 +1,65 @@
+# Conformance gate for the host test driver. Each fixture runs through its
+# host_test launcher and is checked against <fixture>.expected.json, which
+# rebaseline.py derives from `flutter test` (c15_late_declare is hand-written).
+#
+# The fixture's pub hub is declared in the root MODULE.bazel. Launchers are
+# manual and run only through their checking wrapper.
+
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//flutter:defs.bzl", "flutter_pubspec")
+load("//flutter/private:host_test.bzl", "host_test")
+
+exports_files(["pubspec.lock"])
+
+flutter_pubspec(name = "pubspec")
+
+FIXTURES = [
+    "c1_lifecycle",
+    "c2_skip",
+    "c3_timeout",
+    "c4_names",
+    "c5_expect_async",
+    "c6_async_errors",
+    "c7_teardown",
+    "c8_config",
+    "c9_platform_tags",
+    "c10_reporting",
+    "c11_widgets",
+    "c12_retry",
+    "c13_filter",
+    "c14_async_main",
+    "c15_late_declare",
+]
+
+[
+    host_test(
+        name = fixture + "_launcher",
+        src = "test/" + fixture + "_test.dart",
+        srcs = [
+            "test/flutter_test_config.dart",
+            "test/" + fixture + "_test.dart",
+        ],
+        pub = "@flutter_test_conformance",
+        pubspec = ":pubspec",
+        tags = ["manual"],
+    )
+    for fixture in FIXTURES
+]
+
+[
+    sh_test(
+        name = fixture,
+        srcs = ["conformance.sh"],
+        args = [
+            "$(rlocationpath :{}_launcher)".format(fixture),
+            "$(rlocationpath {}.expected.json)".format(fixture),
+            "$(rlocationpath check.py)",
+        ],
+        data = [
+            ":{}_launcher".format(fixture),
+            "{}.expected.json".format(fixture),
+            "check.py",
+        ],
+    )
+    for fixture in FIXTURES
+]
