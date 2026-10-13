@@ -107,7 +107,7 @@ Attributes are named explicitly rather than left to defaults — `target_os`,
 contents are the layout `flutter create` leaves behind: `pubspec.yaml`,
 `pubspec.lock`, `lib/main.dart`, and one asset. Its package config is the
 `@standard_layout_pub` hub of that lock. It permanently selects `lib/alternate$release.dart`; execution
-covers the nondefault `flutter_assets.entrypoint` without shell expansion, and
+covers the nondefault `entrypoint` (the app kernel's: `flutter_assets` takes none) without shell expansion, and
 smooth_app executes the same nondefault-entrypoint shape.
 
 It passes `plugin_deps = None`, the Dart half of a project that never calls

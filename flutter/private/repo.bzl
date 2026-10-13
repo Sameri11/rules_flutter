@@ -23,6 +23,8 @@ exports_files([
     "flutter",
     "flutter_tools.snapshot",
     "frontend_server.snapshot",
+    "vm_isolate_snapshot.bin",
+    "isolate_snapshot.bin",
     "flutter.version.json",
 ] + {gen_snapshots})
 
@@ -75,8 +77,8 @@ def _host_platform_name(ctx):
 
     return "{}-{}".format(host_os, arch)
 
-def _gen_snapshot_host_dir(ctx):
-    """Host directory holding the Android gen_snapshot."""
+def _host_engine_dir(ctx):
+    """Host directory of the engine artifacts: the Android gen_snapshot and the debug snapshots."""
 
     # TODO(flutter/flutter#152281): delete the collapse and return
     # _host_platform_name(ctx) directly, once the engine ships an arm64-native
@@ -180,7 +182,7 @@ def _flutter_sdk_impl(ctx):
     )
 
     # Create a snapshot symlink for each ABI and AOT mode.
-    host = _gen_snapshot_host_dir(ctx)
+    host = _host_engine_dir(ctx)
     for abi, info in ABIS.items():
         for mode in AOT_MODES:
             gen_snapshot = "{}/{}/{}/gen_snapshot".format(engine, info.engine_dir[mode], host)
@@ -191,6 +193,19 @@ def _flutter_sdk_impl(ctx):
                     "Run `flutter precache --android` on this host.",
                 )
             ctx.symlink(gen_snapshot, "gen_snapshot_{}_{}".format(abi, mode))
+
+    # The debug snapshots the debug overlay ships as vm_snapshot_data and
+    # isolate_snapshot_data. They come from the same host engine directory as
+    # gen_snapshot and are declared here, so the overlay reads them as files of
+    # this repository rather than through FLUTTER_ROOT.
+    for name in ("vm_isolate_snapshot.bin", "isolate_snapshot.bin"):
+        path = "{}/{}/{}".format(engine, host, name)
+        if not ctx.path(path).exists:
+            fail(
+                "{} missing at {}.\n".format(name, path) +
+                "Run `flutter precache --android` on this host.",
+            )
+        ctx.symlink(path, name)
 
     # Identity of the *active* SDK: frameworkRevision is a git commit hash, so
     # it moves on framework-only commits that leave engine artifacts identical.

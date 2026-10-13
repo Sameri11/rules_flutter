@@ -11,6 +11,8 @@ FlutterToolchainInfo = provider(
         "tools_snapshot": "flutter_tools snapshot file that the assets action executes.",
         "dartaotruntime": "Dart AOT runtime executable file.",
         "frontend_server": "Frontend server snapshot file.",
+        "vm_isolate_snapshot": "Host engine's debug VM isolate snapshot file, shipped as the debug overlay's vm_snapshot_data.",
+        "isolate_snapshot": "Host engine's debug isolate snapshot file, shipped as the debug overlay's isolate_snapshot_data.",
         "sdk_version": "Flutter SDK identity JSON file.",
         "platform_product": "Product patched SDK files.",
         "platform_debug": "Debug patched SDK files.",
@@ -33,6 +35,8 @@ def _flutter_toolchain_impl(ctx):
         tools_snapshot = ctx.file._tools_snapshot,
         dartaotruntime = ctx.executable._dartaotruntime,
         frontend_server = ctx.file._frontend_server,
+        vm_isolate_snapshot = ctx.file._vm_isolate_snapshot,
+        isolate_snapshot = ctx.file._isolate_snapshot,
         sdk_version = ctx.file._sdk_version,
         platform_product = ctx.files._platform_product,
         platform_debug = ctx.files._platform_debug,
@@ -58,6 +62,14 @@ def _toolchain_attrs():
         ),
         "_frontend_server": attr.label(
             default = "@flutter_sdk//:frontend_server.snapshot",
+            allow_single_file = True,
+        ),
+        "_vm_isolate_snapshot": attr.label(
+            default = "@flutter_sdk//:vm_isolate_snapshot.bin",
+            allow_single_file = True,
+        ),
+        "_isolate_snapshot": attr.label(
+            default = "@flutter_sdk//:isolate_snapshot.bin",
             allow_single_file = True,
         ),
         "_sdk_version": attr.label(

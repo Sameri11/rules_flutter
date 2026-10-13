@@ -27,6 +27,7 @@ package(default_visibility = ["//visibility:private"])
 
 exports_files(
     [
+        "check_bundle_pubspec.py",
         "check_path_deps.py",
         "check_native_assets.py",
         "inject_version.py",

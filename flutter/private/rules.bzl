@@ -35,11 +35,10 @@ visibility(["//flutter"])
 
 # The bundle action runs `flutter build bundle`, and the flutter tool is still a
 # host input: it is found through the SDK symlinks, not declared, so a remote
-# worker would not have it. The action is otherwise sandboxed and cacheable,
-# debug included: the kernel it ships comes from dart_jit_kernel, whose URIs are
-# package: and org-dartlang-root: only (see there), so its bytes do not
-# carry the producing machine's paths. Deliberately absent: `local`, which would
-# disable remote caching outright.
+# worker would not have it. The action is otherwise sandboxed and cacheable. It
+# takes no mode and compiles only the stub's closure for record-use (no app lib/), so its
+# key is the same in every build mode and a `lib/` edit never reruns it. Deliberately
+# absent: `local`, which would disable remote caching outright.
 _ASSETS_EXEC = {"no-remote-exec": "1"}
 
 def _repository_path(ctx, file, attribute):
@@ -116,24 +115,6 @@ def _dart_define_flags(defines):
     order produce the same action key. An empty dict adds no flags.
     """
     return ["-D{}={}".format(name, defines[name]) for name in sorted(defines)]
-
-def _project_path(ctx, file, attribute):
-    """A file's path relative to the calling package/project root.
-
-    Unlike `_library_path`, this keeps the leading `lib/`: flutter_tools'
-    `--target` accepts a project-relative filesystem path, not a `package:` URI
-    suffix.
-    """
-    path = _repository_path(ctx, file, attribute)
-    prefix = ctx.label.package + "/" if ctx.label.package else ""
-    if not path.startswith(prefix):
-        fail("{}: {} must be inside package {}, got {}.".format(
-            ctx.label,
-            attribute,
-            ctx.label.package,
-            path,
-        ))
-    return path[len(prefix):]
 
 def _sdk_root_for(platform_files, mode):
     """Directory holding platform_strong.dill, for a patched-SDK filegroup.
@@ -622,8 +603,13 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = 
     `dart_aot_kernel`, which compiles `--aot --tfa` only. Both it and each
     `dart_aot_elf` are `target_compatible_with` only the modes `AOT_MODES` lists,
     so under `mode=debug` this target reports incompatibility rather than
-    building a kernel gen_snapshot rejects. The debug kernel is `flutter_app`'s
-    `:jit_kernel` (see docs_internal/build-modes-plan.md).
+    building a kernel gen_snapshot rejects.
+
+    Also declares `<name>_jit_kernel`, the debug (JIT) kernel: a manual
+    `dart_jit_kernel` over the same sources, which the debug overlay in
+    `flutter_android_binary` ships as `kernel_blob.bin`. It is mode-independent
+    and so not restricted by `target_compatible_with`. See
+    docs_internal/build-modes-plan.md.
 
     Every rule-specific attribute is a named parameter here, and **kwargs
     carries only what both targets should share -- visibility, tags,
@@ -674,6 +660,22 @@ def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = 
         dart_defines = dart_defines,
         target_compatible_with = caller_compatible_with + aot_target_compatible_with(),
         **kwargs
+    )
+
+    # The debug kernel. It reads no mode, so it is the same action under either
+    # one; manual keeps it out of `//...`. Only the debug overlay reaches it.
+    dart_jit_kernel(
+        name = name + "_jit_kernel",
+        srcs = srcs,
+        pubspec = pubspec,
+        entrypoint = entrypoint,
+        package_config = package_config,
+        pub_srcs = [pub_lib],
+        path_deps = path_deps,
+        dart_plugin_registrant = dart_plugin_registrant,
+        dart_defines = dart_defines,
+        target_compatible_with = caller_compatible_with,
+        **_internal_kwargs(kwargs)
     )
 
     # One kernel feeds every ABI: the kernel is architecture-independent, and
@@ -764,8 +766,8 @@ def flutter_app(
     | --- | --- |
     | `:pubspec` | the package name and version, read once from pubspec.yaml |
     | `:app_<abi>` | the AOT snapshot per ABI; release only |
-    | `:jit_kernel` | the debug kernel, shipped as `kernel_blob.bin` under mode=debug; manual |
-    | `:assets` | the asset bundle, built for every ABI |
+    | `:app_jit_kernel` | the debug kernel, from flutter_aot_library; manual, shipped as `kernel_blob.bin` by the debug overlay |
+    | `:assets` | the flutter_assets bundle, built for every ABI; no app Dart inputs, the same under every mode |
     | `:path_deps_check` | fails if a `path:` dependency is undeclared |
     | `:plugins_check` | fails if the committed Maven coordinates drifted |
     | `:plugins_update` | writes the generated Maven segment into the workspace |
@@ -774,7 +776,8 @@ def flutter_app(
     | `:guards_test` | the guards, under `bazel test` |
 
     Under `--@rules_flutter//flutter:mode=debug`, `:app_<abi>` reports
-    incompatibility and `:assets` ships `:jit_kernel` as its kernel; see
+    incompatibility. The debug overlay in `flutter_android_binary` ships
+    `:app_jit_kernel` and the host-engine snapshots next to `:assets`; see
     docs_internal/build-modes-plan.md.
 
     The names are fixed rather than derived from a `name` parameter: the Android
@@ -798,9 +801,9 @@ def flutter_app(
         observes, which is why `:path_deps_check` exists.
       srcs: Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
       assets: declared assets. Defaults to `glob(["assets/**"])`.
-      entrypoint: the app's entrypoint under lib/. It drives both kernel
-        compilation and `flutter build bundle --target`, so the snapshot and
-        asset/code bundle cannot select different programs.
+      entrypoint: the app's entrypoint under lib/. It drives the app's kernels
+        (`:app_<abi>`, `:app_jit_kernel`) only. `:assets` compiles nothing, so
+        it does not depend on the entrypoint.
       dart_plugin_registrant: the committed Dart registrant, or None.
       pub: the `pub.lock` hub repository, e.g. `"@pub"`. Required: it supplies
         the package config and every hosted package, for the compile and the
@@ -853,7 +856,7 @@ def flutter_app(
             "flutter_app: `pub` is required, the `pub.lock` hub of this app's pubspec.lock, " +
             "e.g. pub = \"@pub\". See the flutter_app docstring for the MODULE.bazel lines.",
         )
-    package_config, project_package_config, pub_lib, pub_all = _pub_hub_labels(pub, "flutter_app")
+    _, project_package_config, _, pub_all = _pub_hub_labels(pub, "flutter_app")
 
     if dart_plugin_registrant == _DEFAULT_DART_PLUGIN_REGISTRANT:
         dart_plugin_registrant = None if plugin_deps == None else "lib/dart_plugin_registrant.dart"
@@ -879,36 +882,14 @@ def flutter_app(
         **kwargs
     )
 
-    # The debug kernel. Tagged manual by _internal_kwargs, so a release `//...`
-    # sweep does not build it; under mode=debug flutter_assets selects it below.
-    dart_jit_kernel(
-        name = "jit_kernel",
-        srcs = srcs,
-        pubspec = ":pubspec",
-        entrypoint = entrypoint,
-        package_config = package_config,
-        pub_srcs = [pub_lib],
-        path_deps = path_deps,
-        dart_plugin_registrant = dart_plugin_registrant,
-        dart_defines = dart_defines,
-        **_internal_kwargs(kwargs)
-    )
-
     flutter_assets(
         name = "assets",
-        srcs = srcs,
         abis = abis,
         assets = assets,
         pubspec = ":pubspec",
-        entrypoint = entrypoint,
         package_config = project_package_config,
         pub_srcs = [pub_all],
         path_deps = path_deps,
-        dart_plugin_registrant = dart_plugin_registrant,
-        kernel = select({
-            Label("//flutter:mode_debug"): ":jit_kernel",
-            "//conditions:default": None,
-        }),
         **kwargs
     )
 
@@ -985,44 +966,28 @@ def _bundle_dir(out, abi, index):
         return "$EXECROOT/{}".format(out.path)
     return "$STAGE/bundles/{}".format(abi)
 
-def _bundle_command(ctx, out, abi, index):
+def _bundle_command(out, abi, index):
     # `flutter_tool` (defined in the action preamble) runs the tool's snapshot
     # directly: bin/flutter writes engine.stamp into the SDK, which a sandbox
     # forbids. `--no-version-check` skips the update check, which runs `git fetch`
     # and writes a stamp in the SDK.
+    #
+    # Always --release, whatever //flutter:mode says: the stub fixes the project
+    # directory, and record-use compiles only its closure (no app lib/), so the
+    # bundle is the same under every mode.
     return """flutter_tool --no-version-check build bundle \
-    --{mode} \
+    --release \
     --no-pub \
-    --target="$ENTRYPOINT" \
+    --target="$STUB" \
     --target-platform={platform} \
     --asset-dir="{dir}" \
     --suppress-analytics >/dev/null
 rm -f "{dir}/.last_build_id"
 rm -rf "{dir}/native_assets"
 """.format(
-        mode = ctx.attr._mode[BuildSettingInfo].value,
         platform = ABIS[abi].target_platform,
         dir = _bundle_dir(out, abi, index),
     )
-
-def _kernel_blob_command(ctx, out):
-    """Shell copying the app's kernel over each bundle's kernel_blob.bin.
-
-    Under debug, `flutter build bundle --debug` (see _bundle_command) writes its
-    own kernel_blob.bin, compiled against the staging directory, so two fresh
-    builds would never agree. dart_jit_kernel compiles the kernel that ships, and
-    this overwrites every ABI bundle with it. Release has no kernel, so the
-    command is empty.
-    """
-    if not ctx.file.kernel:
-        return ""
-    return "\n".join([
-        'cp "$EXECROOT/{kernel}" "{dir}/kernel_blob.bin"'.format(
-            kernel = ctx.file.kernel.path,
-            dir = _bundle_dir(out, abi, i),
-        )
-        for i, abi in enumerate(ctx.attr.abis)
-    ])
 
 def _flutter_assets_impl(ctx):
     # The directory must be named flutter_assets: android_binary derives the
@@ -1030,33 +995,18 @@ def _flutter_assets_impl(ctx):
     # requires the bundle at assets/flutter_assets/ at runtime.
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
 
-    mode = ctx.attr._mode[BuildSettingInfo].value
-    debug = mode == "debug"
-    if debug and not ctx.file.kernel:
-        fail((
-            "{}: mode=debug needs a debug kernel, and this package_config is not a pub hub's " +
-            "project_package_config.json, so flutter_assets cannot build one. Pass `kernel`."
-        ).format(ctx.label))
-    if not debug and ctx.file.kernel:
-        fail("{}: `kernel` is the debug kernel; select it under mode=debug only".format(ctx.label))
     toolchain = _flutter_toolchain(ctx)
-    entrypoint = _project_path(ctx, ctx.file.entrypoint, "entrypoint")
-    args = ctx.actions.args()
-    args.add(entrypoint)
+
+    package_graph = ctx.file.package_config.dirname + "/package_graph.json"
 
     # Every file the bundle can read is staged and declared.
-    package_graph = ctx.file.package_config.dirname + "/package_graph.json"
     stage_manifest_files = (
         [
-            ctx.file.entrypoint,
             ctx.file.package_config,
             ctx.attr.pubspec[FlutterPubspecInfo].src,
         ] +
-        ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
-        ctx.files.assets + ctx.files.srcs +
-        ctx.files.path_deps +
-        ctx.files.pub_srcs +
-        toolchain.sdk_packages.to_list()
+        ctx.files.assets +
+        ctx.files.path_deps + ctx.files.pub_srcs + toolchain.sdk_packages.to_list()
     )
 
     # The set of files to stage, one execroot-relative path per line. Written to
@@ -1090,13 +1040,14 @@ def _flutter_assets_impl(ctx):
         if component
     ])
 
-    cmd = """ENTRYPOINT="$1"; shift
-set -euo pipefail
+    cmd = """set -euo pipefail
 EXECROOT="$PWD"
 export PATH="/usr/bin:/bin"
 export ANDROID_HOME="$(python3 -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' "$EXECROOT/{android_sdk}")"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export FLUTTER_ALREADY_LOCKED="true"
+# Refuse what this bundle does not model, before any flutter_tools work.
+python3 "$EXECROOT/{bundle_guard}" --pubspec "$EXECROOT/{pubspec}"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 # flutter_tools needs writable state; use a stage-local HOME so the host HOME
@@ -1108,14 +1059,21 @@ tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
 chmod -R u+w "$STAGE"
 {place_config}
 cd "$STAGE/{project_dir}"
+# flutter_tools takes the project directory as two levels above --target, so
+# the stub sits in its own directory. It is compiled only for record-use and
+# imports nothing.
+mkdir -p .flutter_bazel
+printf 'void main() {{}}\\n' > .flutter_bazel/stub.dart
+STUB=".flutter_bazel/stub.dart"
 mkdir -p "$STAGE/bundles"
 {flutter_tool}
 {bundles}
-{kernel_blobs}
 # Keep the shell alive so its EXIT trap removes STAGE after the merger.
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         project_dir = project_dir,
+        bundle_guard = ctx.file._bundle_guard.path,
+        pubspec = ctx.attr.pubspec[FlutterPubspecInfo].src.path,
         flutter_tool = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{launcher}")"
 export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
 flutter_tool() {{
@@ -1132,70 +1090,45 @@ flutter_tool() {{
             g = package_graph,
         ),
         merger = ctx.file._merger.path,
-        bundles = "\n".join([_bundle_command(ctx, out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
-        kernel_blobs = _kernel_blob_command(ctx, out),
+        bundles = "\n".join([_bundle_command(out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
             for i, abi in enumerate(ctx.attr.abis)
         ]),
     )
 
-    # `flutter build bundle --debug` still compiles its own kernel, through
-    # frontend_server and the debug platform, so debug declares those inputs for
-    # that compile. Release compiles nothing here, so both lists are empty.
-    debug_bundle_inputs = ([toolchain.frontend_server] + toolchain.platform_debug) if debug else []
-    kernel_inputs = [ctx.file.kernel] if ctx.file.kernel else []
-
     ctx.actions.run_shell(
         command = cmd,
-        arguments = [args],
-        tools = [toolchain.dartaotruntime] if debug else [],
         inputs = depset(
-            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk] + debug_bundle_inputs + kernel_inputs,
+            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk],
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
-        progress_message = "Bundling Flutter assets (%s) %%{label}" % mode,
+        progress_message = "Bundling Flutter assets %{label}",
         execution_requirements = _ASSETS_EXEC,
     )
 
     return [DefaultInfo(files = depset([out]))]
 
-_flutter_assets = rule(
+flutter_assets = rule(
     implementation = _flutter_assets_impl,
     doc = """Produces a flutter_assets/ tree (AssetManifest.bin, FontManifest.json,
 NOTICES.Z, fonts, shaders, declared assets) for packaging into an APK.
 
-Unlike the Dart half, this shells out to `flutter build bundle`. There is no
-standalone asset-bundler binary: asset resolution, font manifests and license
-aggregation all live inside flutter_tools. `--asset-dir` and `--target` are the
-documented entry points for driving it from another build system.""",
+Mode-independent, and free of app Dart: it takes no sources, entrypoint or kernel, and
+its action key is the same under every `//flutter:mode`. flutter_tools still compiles the
+stub's package closure for record-use, so SDK and pub/path `.dart` are inputs; app `lib/`
+is not. The debug kernel and snapshots are not part of it: the debug overlay in
+flutter_android_binary adds them.
+
+It fails, when the action runs, on a pubspec with `deferred-components:` or an
+asset `transformers:`: rules_flutter supports neither.
+
+The action runs `flutter build bundle --release` against a generated stub
+entrypoint, because flutter_tools derives the project directory from `--target`.
+That is an interim mechanism: the standalone-asset-bundle epic replaces the
+action's internals, not this interface.""",
     attrs = {
-        "srcs": attr.label_list(allow_files = [".dart"]),
-        "entrypoint": attr.label(
-            allow_single_file = [".dart"],
-            mandatory = True,
-            doc = """The Dart entrypoint `flutter build bundle --target` uses.
-
-Must be the same file the app's kernel compiles. Flutter defaults the command to
-lib/main.dart when omitted, which silently combines a snapshot for one program
-with an asset/code bundle for another when an app overrides its entrypoint.""",
-        ),
-        "dart_plugin_registrant": attr.label(
-            allow_single_file = [".dart"],
-            doc = """The generated Dart plugin registrant, e.g.
-`lib/dart_plugin_registrant.dart`. See dart_aot_kernel.dart_plugin_registrant.
-
-Staged for `flutter build bundle`, which compiles it. Omit for an app with no
-federated plugins.""",
-        ),
-        "kernel": attr.label(
-            allow_single_file = [".dill"],
-            doc = """The debug kernel shipped as each ABI bundle's kernel_blob.bin.
-
-Internal: flutter_app passes its `:jit_kernel`. Otherwise the flutter_assets macro
-declares `<name>_jit_kernel` and selects it under mode=debug only; release has none.""",
-        ),
         "assets": attr.label_list(
             allow_files = True,
             doc = "Files declared under `assets:` in pubspec.yaml.",
@@ -1223,7 +1156,7 @@ than a fact read out of it.""",
         ),
         "path_deps": attr.label_list(
             allow_files = True,
-            doc = "See dart_jit_kernel.path_deps.",
+            doc = "Sources of `path:` dependencies, staged and declared. See dart_aot_kernel.path_deps.",
         ),
         "abis": attr.string_list(
             mandatory = True,
@@ -1243,63 +1176,13 @@ bundle that started varying by architecture fails here rather than shipping.""",
             default = "//flutter/private:merge_native_assets.py",
             allow_single_file = True,
         ),
-        "_mode": attr.label(
-            default = "//flutter:mode",
-            providers = [BuildSettingInfo],
-            doc = "Build mode, read from //flutter:mode. Selects `flutter build bundle --debug` or `--release`.",
+        "_bundle_guard": attr.label(
+            default = "//flutter/private:check_bundle_pubspec.py",
+            allow_single_file = True,
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
-
-def _hub_labels_from_project_config(project_package_config):
-    """The hub's `package_config.json` and `:lib`, from its `project_package_config.json`.
-
-    flutter_assets takes the project file, whose rootUris are relative to
-    `.dart_tool/`, so a kernel action cannot read it. The hub's own files sit in
-    the same repository, so the kernel's labels are derived from it. Returns None
-    when the label is not a hub's project file.
-    """
-    label = str(project_package_config)
-    suffix = "//:project_package_config.json"
-    if not label.endswith(suffix) or label == suffix:
-        return None
-    hub = label[:-len(suffix)]
-    return hub + "//:package_config.json", hub + "//:lib"
-
-def flutter_assets(name, kernel = None, **kwargs):
-    """Produces a flutter_assets/ tree for packaging into an APK; see `_flutter_assets`.
-
-    Args:
-      name: The target name. Also prefixes `<name>_jit_kernel`, the kernel this declares.
-      kernel: Internal. flutter_app passes its own `:jit_kernel`. When unset, the
-        macro declares `<name>_jit_kernel` from the same sources and selects it under
-        mode=debug, if `package_config` is a pub hub's project file. Otherwise debug
-        analysis fails: pass a kernel.
-      **kwargs: The attributes of `_flutter_assets`.
-    """
-    if kernel == None:
-        hub = _hub_labels_from_project_config(kwargs["package_config"])
-        if hub:
-            package_config, pub_lib = hub
-            dart_jit_kernel(
-                name = name + "_jit_kernel",
-                srcs = kwargs.get("srcs", []),
-                pubspec = kwargs["pubspec"],
-                entrypoint = kwargs["entrypoint"],
-                package_config = package_config,
-                pub_srcs = [pub_lib],
-                path_deps = kwargs.get("path_deps", []),
-                dart_plugin_registrant = kwargs.get("dart_plugin_registrant"),
-                tags = _internal_tags(kwargs),
-                **{k: kwargs[k] for k in ("testonly", "target_compatible_with", "exec_compatible_with") if k in kwargs}
-            )
-            kernel = select({
-                Label("//flutter:mode_debug"): ":" + name + "_jit_kernel",
-                "//conditions:default": None,
-            })
-
-    _flutter_assets(name = name, kernel = kernel, **kwargs)
 
 def _pub_path_deps_check_impl(ctx):
     marker = ctx.actions.declare_file(ctx.label.name + ".checked")
