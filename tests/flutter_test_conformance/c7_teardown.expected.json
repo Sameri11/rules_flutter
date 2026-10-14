@@ -1,0 +1,22 @@
+{
+  "fixture": "c7_teardown",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "addTearDown": "pass",
+        "failing setup group (setUpAll)": "error",
+        "failing teardown group teardown all": "pass",
+        "failing teardown group (tearDownAll)": "error",
+        "failing tearDown tearDown body": "error",
+        "outer inner (setUpAll)": "error",
+        "outer teardown inner teardown nested teardown test": "pass",
+        "outer teardown inner teardown (tearDownAll)": "error",
+        "(tearDownAll)": "error"
+      }
+    }
+  ]
+}

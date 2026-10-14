@@ -1,0 +1,15 @@
+{
+  "fixture": "c3_timeout",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "explicit timeout": "error",
+        "default timeout documented": "pass"
+      }
+    }
+  ]
+}

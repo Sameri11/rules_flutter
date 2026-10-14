@@ -1,0 +1,106 @@
+{
+  "fixture": "c13_filter",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "filter alpha": "pass",
+        "filter beta": "pass",
+        "filter gamma": "pass"
+      }
+    },
+    {
+      "name": "name_beta",
+      "env": {
+        "TESTBRIDGE_TEST_ONLY": "filter beta"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter beta": "pass"
+      }
+    },
+    {
+      "name": "shard_0_of_2",
+      "env": {
+        "TEST_TOTAL_SHARDS": "2",
+        "TEST_SHARD_INDEX": "0"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter alpha": "pass",
+        "filter beta": "pass"
+      }
+    },
+    {
+      "name": "shard_1_of_2",
+      "env": {
+        "TEST_TOTAL_SHARDS": "2",
+        "TEST_SHARD_INDEX": "1"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter gamma": "pass"
+      }
+    },
+    {
+      "name": "shard_0_of_3",
+      "env": {
+        "TEST_TOTAL_SHARDS": "3",
+        "TEST_SHARD_INDEX": "0"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter alpha": "pass"
+      }
+    },
+    {
+      "name": "shard_1_of_3",
+      "env": {
+        "TEST_TOTAL_SHARDS": "3",
+        "TEST_SHARD_INDEX": "1"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter beta": "pass"
+      }
+    },
+    {
+      "name": "shard_2_of_3",
+      "env": {
+        "TEST_TOTAL_SHARDS": "3",
+        "TEST_SHARD_INDEX": "2"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter gamma": "pass"
+      }
+    },
+    {
+      "name": "name_alpha_gamma_shard_0_of_2",
+      "env": {
+        "TEST_TOTAL_SHARDS": "2",
+        "TEST_SHARD_INDEX": "0",
+        "TESTBRIDGE_TEST_ONLY": "filter (alpha|gamma)"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter alpha": "pass"
+      }
+    },
+    {
+      "name": "name_alpha_gamma_shard_1_of_2",
+      "env": {
+        "TEST_TOTAL_SHARDS": "2",
+        "TEST_SHARD_INDEX": "1",
+        "TESTBRIDGE_TEST_ONLY": "filter (alpha|gamma)"
+      },
+      "exit_code": 0,
+      "cases": {
+        "filter gamma": "pass"
+      }
+    }
+  ]
+}

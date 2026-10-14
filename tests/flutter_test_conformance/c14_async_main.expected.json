@@ -1,0 +1,14 @@
+{
+  "fixture": "c14_async_main",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "declared after an await": "pass"
+      }
+    }
+  ]
+}

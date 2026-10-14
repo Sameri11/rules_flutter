@@ -1,0 +1,13 @@
+# Dart driver sources for host tests. They are kernel inputs of every host
+# test, so they are exported as sources; the rules that use them are in
+# //flutter/private.
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(
+    [
+        "bootstrap.dart.tmpl",
+        "core.dart",
+        "host.dart",
+    ],
+)

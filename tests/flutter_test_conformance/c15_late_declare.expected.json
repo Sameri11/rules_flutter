@@ -1,0 +1,15 @@
+{
+  "fixture": "c15_late_declare",
+  "source": "hand-written: driver behaviour, no CLI oracle (see CONFORMANCE.md)",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "declared in time": "pass",
+        "load": "error"
+      }
+    }
+  ]
+}

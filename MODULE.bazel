@@ -40,6 +40,8 @@ bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = Tr
 # declares it for this purpose themselves.
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
 
+bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
+
 # --- Android ---------------------------------------------------------------
 # The public embedding rule wraps the selected SDK-derived jar with
 # rules_java's java_import, so rules_java must be a ruleset dependency.
@@ -128,3 +130,10 @@ use_repo(
     "registrant_parity_mixed",
     "registrant_parity_no_plugins",
 )
+
+# Pub hub for the conformance fixture (//tests/flutter_test_conformance).
+pub_dev.lock(
+    name = "flutter_test_conformance",
+    lock = "//tests/flutter_test_conformance:pubspec.lock",
+)
+use_repo(pub_dev, "flutter_test_conformance")

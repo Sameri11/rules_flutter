@@ -1,0 +1,15 @@
+{
+  "fixture": "c6_async_errors",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "uncaught future error before completion": "error",
+        "error after test completion": "pass"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "fixture": "c1_lifecycle",
+  "flutter": "3.47.3",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "outer first": "pass",
+        "outer second": "pass",
+        "lifecycle order": "pass"
+      }
+    }
+  ]
+}
