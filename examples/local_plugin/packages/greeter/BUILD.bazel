@@ -1,4 +1,24 @@
+load("@rules_flutter//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")
+
 package(default_visibility = ["//visibility:public"])
+
+flutter_pubspec(name = "pubspec")
+
+# The package's own flutter_package. Its dependencies come from the host app's hub,
+# which resolves greeter as a path dependency.
+flutter_package(
+    name = "greeter",
+    pub = "@pub",
+    pubspec = ":pubspec",
+)
+
+flutter_test(
+    name = "greeter_test",
+    src = "test/greeter_test.dart",
+    app = ":greeter",
+    # CI does not run example tests yet.
+    tags = ["manual"],
+)
 
 # Declare path-dependency sources explicitly: pubspec.lock does not hash them.
 # The plugin generator builds the Android half in @flutter_plugins.

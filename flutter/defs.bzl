@@ -4,7 +4,7 @@ Consumer BUILD files load this one entrypoint rather than the implementation
 under ``//flutter/private``. Every name here is either written by hand in a
 Consumer Module or named by a BUILD file these rules generate; nothing is
 exported merely because it exists. Rules composed by the macros below --
-``dart_aot_kernel``, ``dart_jit_kernel``, ``flutter_android_libs``,
+``dart_aot_kernel``, ``dart_jit_kernel``, ``dart_test_kernel``, ``flutter_android_libs``,
 ``jni_lib_jar``, ``strip_native_libs`` -- and the ``ABIS`` table stay
 private, so their attributes remain free to change without a consumer
 migration.
@@ -19,6 +19,10 @@ load(
     "//flutter/private:embedding.bzl",
     _flutter_embedding_library = "flutter_embedding_library",
 )
+load(
+    "//flutter/private:flutter_test.bzl",
+    _flutter_test = "flutter_test",
+)
 load("//flutter/private:pubspec.bzl", _flutter_pubspec = "flutter_pubspec")
 load(
     "//flutter/private:recipe.bzl",
@@ -30,6 +34,7 @@ load(
     _flutter_aot_library = "flutter_aot_library",
     _flutter_app = "flutter_app",
     _flutter_assets = "flutter_assets",
+    _flutter_package = "flutter_package",
     _pub_path_deps_check = "pub_path_deps_check",
     _pub_plugins_check = "pub_plugins_check",
 )
@@ -39,6 +44,8 @@ load(
 #
 # Written by hand in a Consumer Module.
 flutter_app = _flutter_app
+flutter_package = _flutter_package
+flutter_test = _flutter_test
 flutter_android_binary = _flutter_android_binary
 flutter_embedding_library = _flutter_embedding_library
 flutter_native_contribution = _flutter_native_contribution

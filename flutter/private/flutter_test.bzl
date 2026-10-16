@@ -1,11 +1,12 @@
 """Host test: one Dart test file, run in-process on flutter_tester.
 
-A host test is three targets:
+A flutter_test is three targets:
 
   <name>_bootstrap  expand_template of bootstrap.dart.tmpl: imports the test,
                     its flutter_test_config.dart (if any) and the driver.
-  <name>_kernel     dart_jit_kernel over the bootstrap, the test sources and the
-                    driver. Always debug: tests never read //flutter:mode.
+  <name>_kernel     dart_test_kernel over the bootstrap, the test sources, the
+                    driver and the package. Always debug: tests never read
+                    //flutter:mode.
   <name>            the launcher test, which runs the toolchain's flutter_tester
                     on the kernel.
 
@@ -13,10 +14,9 @@ The launcher is a test so that Bazel sets TEST_SRCDIR, TEST_TMPDIR and the
 filter/shard variables for it.
 """
 
-load(":pubspec.bzl", "FlutterPubspecInfo")
-load(":rules.bzl", "dart_jit_kernel")
+load(":rules.bzl", "FlutterPackageInfo", "dart_test_kernel")
 
-visibility(["//flutter", "//tests/flutter_test_conformance"])
+visibility(["//flutter"])
 
 _DRIVER_SRCS = [
     Label("//flutter/private/test/driver:core.dart"),
@@ -61,9 +61,9 @@ def _find_config(test_path, pkg_dir, known):
         dir = _parent(dir)
     return None
 
-def _host_test_bootstrap_impl(ctx):
+def _flutter_test_bootstrap_impl(ctx):
     test = ctx.file.src
-    pubspec = ctx.attr.pubspec[FlutterPubspecInfo].src
+    pubspec = ctx.attr.app[FlutterPackageInfo].pubspec.src
     pkg_dir = _parent(pubspec.short_path)
     known = {f.short_path: f for f in ctx.files.srcs}
     config = _find_config(test.short_path, pkg_dir, known)
@@ -91,7 +91,7 @@ def _host_test_bootstrap_impl(ctx):
         substitutions = {
             "{{CONFIG_IMPORT}}": config_import,
             "{{DRIVER_URI}}": uri(ctx.file._driver),
-            "{{PACKAGE_ROOT}}": _execroot_path(pubspec).rpartition("/")[0],
+            "{{PACKAGE_ROOT}}": _parent(_execroot_path(pubspec)),
             "{{TEST_FILE}}": _runfile(ctx, test),
             "{{TEST_MAIN}}": test_main,
             "{{TEST_URI}}": uri(test),
@@ -99,9 +99,9 @@ def _host_test_bootstrap_impl(ctx):
     )
     return [DefaultInfo(files = depset([out]))]
 
-_host_test_bootstrap = rule(
-    implementation = _host_test_bootstrap_impl,
-    doc = "Generates the bootstrap that a host test compiles as its entrypoint.",
+_flutter_test_bootstrap = rule(
+    implementation = _flutter_test_bootstrap_impl,
+    doc = "Generates the bootstrap that a flutter_test compiles as its entrypoint.",
     attrs = {
         "src": attr.label(
             allow_single_file = [".dart"],
@@ -112,10 +112,10 @@ _host_test_bootstrap = rule(
             allow_files = [".dart"],
             doc = "The test's sources. Searched for flutter_test_config.dart.",
         ),
-        "pubspec": attr.label(
+        "app": attr.label(
             mandatory = True,
-            providers = [FlutterPubspecInfo],
-            doc = "The flutter_pubspec target of the package the test belongs to.",
+            providers = [FlutterPackageInfo],
+            doc = "The flutter_package the test belongs to.",
         ),
         "_template": attr.label(
             allow_single_file = True,
@@ -128,19 +128,18 @@ _host_test_bootstrap = rule(
     },
 )
 
-def _host_test_launcher_impl(ctx):
+def _tester_test_impl(ctx):
     toolchain = ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
-    pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
+    package = ctx.attr.app[FlutterPackageInfo]
+    pubspec = package.pubspec
     pkg_dir = _parent(_runfile(ctx, pubspec.src))
 
     assets_flag = ""
     assets_export = ""
     assets_files = []
-    if ctx.attr.assets:
-        assets_files = ctx.attr.assets[DefaultInfo].files.to_list()
-        if len(assets_files) != 1:
-            fail("{}: assets must be one directory, got {} files".format(ctx.label, len(assets_files)))
-        assets_path = _runfile(ctx, assets_files[0])
+    if package.assets:
+        assets_files = [package.assets]
+        assets_path = _runfile(ctx, package.assets)
         assets_export = 'export UNIT_TEST_ASSETS="$ROOT/{}"'.format(assets_path)
         assets_flag = '--flutter-assets-dir="$ROOT/{}"'.format(assets_path)
 
@@ -148,7 +147,7 @@ def _host_test_launcher_impl(ctx):
     ctx.actions.write(
         runner,
         """#!/bin/bash
-# Host test launcher generated from flutter/private/host_test.bzl.
+# Host test launcher generated from flutter/private/flutter_test.bzl.
 set -euo pipefail
 ROOT="${{TEST_SRCDIR:-${{RUNFILES_DIR:-}}}}"
 if [[ -z "$ROOT" ]]; then
@@ -189,20 +188,20 @@ exec "$ROOT/{tester}" --disable-vm-service --non-interactive --enable-checked-mo
     )
     return [DefaultInfo(executable = runner, runfiles = runfiles)]
 
-_host_launcher_test = rule(
-    implementation = _host_test_launcher_impl,
+_tester_test = rule(
+    implementation = _tester_test_impl,
     test = True,
-    doc = "Runs a host test kernel on the toolchain's flutter_tester.",
+    doc = "Runs a flutter_test kernel on the toolchain's flutter_tester.",
     attrs = {
         "dill": attr.label(
             allow_single_file = [".dill"],
             mandatory = True,
-            doc = "The debug kernel from dart_jit_kernel.",
+            doc = "The debug kernel from dart_test_kernel.",
         ),
-        "pubspec": attr.label(
+        "app": attr.label(
             mandatory = True,
-            providers = [FlutterPubspecInfo],
-            doc = "The flutter_pubspec target: the package name and the working directory.",
+            providers = [FlutterPackageInfo],
+            doc = "The flutter_package the test belongs to: the package name, the working directory and the assets.",
         ),
         "srcs": attr.label_list(
             allow_files = True,
@@ -212,50 +211,57 @@ _host_launcher_test = rule(
             allow_files = True,
             doc = "Runtime data the test reads.",
         ),
-        "assets": attr.label(
-            doc = "A flutter_assets directory. Sets --flutter-assets-dir and UNIT_TEST_ASSETS.",
-        ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def host_test(name, src, pubspec, pub, srcs = [], data = [], path_deps = [], assets = None, **kwargs):
+def flutter_test(name, app, src, srcs = [], data = [], dart_defines = {}, **kwargs):
     """Runs one Dart test file in-process on flutter_tester.
+
+    The package's inputs come from `app`, a flutter_package target: its pubspec,
+    libraries, dependencies and assets. The test's own inputs are `src` and `srcs`.
+    Plugins' host-platform Dart implementations are not registered.
+
+        flutter_test(
+            name = "widget_test",
+            app = ":app",
+            src = "test/widget_test.dart",
+        )
 
     Args:
       name: the launcher's name. Also prefixes the bootstrap and kernel targets.
+      app: the flutter_package target of the package the test belongs to.
       src: the test file, relative to the package.
-      pubspec: the package's flutter_pubspec target.
-      pub: the pub hub repository, e.g. "@flutter_test_conformance".
-      srcs: the package's test sources, including any flutter_test_config.dart.
+      srcs: the test's other sources, including any flutter_test_config.dart.
+        A test importing a file not listed here fails to compile.
       data: runtime files the test reads.
-      path_deps: path-dependency packages the test imports.
-      assets: a flutter_assets directory. Sets --flutter-assets-dir and UNIT_TEST_ASSETS.
+      dart_defines: `-D` constants this test compiles with. Not the app's.
       **kwargs: forwarded to the launcher test rule.
     """
+    tags = kwargs.pop("tags", [])
     bootstrap = name + "_bootstrap"
-    _host_test_bootstrap(
+    _flutter_test_bootstrap(
         name = bootstrap,
+        app = app,
         src = src,
         srcs = srcs,
-        pubspec = pubspec,
+        tags = ["manual"],
     )
     all_srcs = srcs if src in srcs else [src] + srcs
-    dart_jit_kernel(
+    dart_test_kernel(
         name = name + "_kernel",
+        app = app,
         srcs = all_srcs + _DRIVER_SRCS,
         entrypoint = ":" + bootstrap,
-        pubspec = pubspec,
-        package_config = pub + "//:package_config.json",
-        pub_srcs = [pub + "//:lib"],
-        path_deps = path_deps,
+        dart_defines = dart_defines,
+        tags = ["manual"],
     )
-    _host_launcher_test(
+    _tester_test(
         name = name,
         dill = ":" + name + "_kernel",
-        pubspec = pubspec,
+        app = app,
         srcs = srcs,
         data = data,
-        assets = assets,
+        tags = tags,
         **kwargs
     )

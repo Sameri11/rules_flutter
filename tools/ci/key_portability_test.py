@@ -250,24 +250,25 @@ class Checker:
             self.fail("C", "dart_aot_kernel must not read //flutter:mode: it is AOT-only")
 
         jit = _function(tree, "_dart_jit_kernel_impl")
-        if jit is None:
-            self.fail("C", "{} must define _dart_jit_kernel_impl".format(FILES["defs"]))
+        action_fn = _function(tree, "_jit_kernel_action")
+        if jit is None or action_fn is None:
+            self.fail("C", "{} must define _dart_jit_kernel_impl and _jit_kernel_action".format(FILES["defs"]))
         else:
-            if _contains_attr(jit, ["ctx", "attr", "_mode"]):
-                self.fail("C", "_dart_jit_kernel_impl must not read //flutter:mode: the debug kernel is mode-independent")
+            if _contains_attr(jit, ["ctx", "attr", "_mode"]) or _contains_attr(action_fn, ["ctx", "attr", "_mode"]):
+                self.fail("C", "_jit_kernel_action must not read //flutter:mode: the debug kernel is mode-independent")
             for flag in ("--filesystem-root", "--filesystem-scheme", "--packages"):
-                if not _contains_string(jit, flag):
-                    self.fail("C", "_dart_jit_kernel_impl must pass {}".format(flag))
+                if not _contains_string(action_fn, flag):
+                    self.fail("C", "_jit_kernel_action must pass {}".format(flag))
             if not _contains_attr(jit, ["ctx", "file", "package_config"]):
                 self.fail("C", "_dart_jit_kernel_impl must pass ctx.file.package_config")
-            jit_action = _action_call(jit, "run_shell")
+            jit_action = _action_call(action_fn, "run_shell")
             if jit_action is None:
-                self.fail("C", "_dart_jit_kernel_impl must create its action with ctx.actions.run_shell")
+                self.fail("C", "_jit_kernel_action must create its action with ctx.actions.run_shell")
             else:
                 jit_inputs = _keyword(jit_action, "inputs")
                 for path, description in (
-                    (["ctx", "file", "package_config"], "the package config"),
-                    (["ctx", "files", "pub_srcs"], "the hub's package files (pub_srcs)"),
+                    (["pkg", "package_config"], "the package config"),
+                    (["pkg", "pub_srcs"], "the hub's package files (pub_srcs)"),
                     (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
                     (["toolchain", "frontend_server"], "the toolchain's frontend_server"),
                     (["toolchain", "sdk_version"], "the toolchain's SDK identity"),
