@@ -4,7 +4,7 @@
 For each fixture, runs `flutter test --reporter json` in this package (the
 pubspec directory) and writes `<fixture>.expected.json`: per run, the exit code
 and each case's outcome, in run order. Bazel does not run this; `bazel test`
-checks the host_test launcher against these files (check.py).
+checks the flutter_test launcher against these files (check.py).
 
     python3 tests/flutter_test_conformance/rebaseline.py          # rewrite
     python3 tests/flutter_test_conformance/rebaseline.py --check  # exit 1 on drift

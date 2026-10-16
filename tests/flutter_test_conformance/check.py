@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks the host_test launcher against one fixture's expected file.
+"""Checks the flutter_test launcher against one fixture's expected file.
 
 For each run in <fixture>.expected.json, sets the run's env, runs the launcher,
 and checks that:

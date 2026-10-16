@@ -63,7 +63,7 @@ Loading and analysis — `--nobuild` — of every supported BUILD symbol through
 
 | entry point | symbols |
 | --- | --- |
-| `defs.bzl` | `flutter_app`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs`, `flutter_pubspec`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
+| `defs.bzl` | `flutter_app`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
 | `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`/`plugins.build_config_field()`) over real, checked-in external plugin graphs — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test`, `:build_config_plugin_jar_test`, `:build_config_plugin_values_test` |
 
 Remaining implementation rules and helpers are covered indirectly by the

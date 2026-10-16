@@ -13,7 +13,9 @@ load(
     "flutter_embedding_library",
     "flutter_native_contribution",
     "flutter_native_libs",
+    "flutter_package",
     "flutter_pubspec",
+    "flutter_test",
     "pub_path_deps_check",
     "pub_plugins_check",
 )
@@ -32,6 +34,20 @@ exports_files(["build_config_probe.py"])
 flutter_pubspec(
     name = "pubspec",
     src = "pubspec.yaml",
+)
+
+flutter_package(
+    name = "package",
+    pub = "@pub",
+    pubspec = ":pubspec",
+)
+
+flutter_test(
+    name = "package_test",
+    src = "test/package_test.dart",
+    app = ":package",
+    # Manual: CI's --build_tests_only skips it. Analysed via :analysis_only.
+    tags = ["manual"],
 )
 
 # The macro, with every named parameter supplied -- it is the public entry point
@@ -318,6 +334,7 @@ flutter_android_binary(
 # List all manual variants here for //... --nobuild coverage.
 filegroup(
     name = "analysis_only",
+    testonly = True,
     srcs = [
         ":apk",
         ":apk_arm64-v8a",
@@ -326,6 +343,7 @@ filegroup(
         ":apk_derived_x86_64",
         ":apk_no_plugin_natives",
         ":apk_x86_64",
+        ":package_test",
     ],
 )
 

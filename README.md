@@ -72,7 +72,7 @@ Standalone Flutter commands and prototypes do not count as Bazel support.
 | Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |
 | Dart obfuscation / split debug info | `--obfuscate`, `--split-debug-info` | Not implemented | No equivalent build options. |
 | Run, hot reload / restart, DevTools | `flutter run` / `flutter attach` | Partial | Use Flutter with the Bazel-built debug APK, without Gradle. Packaging changes require a rebuild; see the [development workflow](QUICKSTART.md#hot-reload-with-flutter-run). |
-| Unit, widget, and golden tests | `flutter test` | Not implemented | Run Flutter separately; no Bazel Flutter-test rule. |
+| Unit and widget tests | `flutter test` | Partial | `flutter_test(app = ":app", src = "test/x_test.dart")` runs host tests against a `flutter_app`'s `:app` or a `flutter_package`. Test-local imports go in `srcs`. No devices, no integration tests. |
 | On-device integration tests | `flutter test integration_test` | Not implemented | No Bazel device-test rule; standard `integration_test/` entrypoints are unsupported. |
 | Localization generation | `flutter gen-l10n` | Not implemented | Generate Dart sources under `lib/` before building; regenerate after translation changes. |
 

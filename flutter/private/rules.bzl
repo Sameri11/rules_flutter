@@ -356,8 +356,16 @@ keys are unchanged.""",
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def _dart_jit_kernel_impl(ctx):
-    dill = ctx.actions.declare_file(ctx.label.name + ".dill")
+# A test kernel's undeclared import is absent from the sandbox, so the frontend
+# reports it as not found. The hint says where the file has to be declared.
+_TEST_IMPORT_HINT = "hint: declare test-local imports in `srcs`"
+
+def _jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint):
+    """Declares the debug kernel action of dart_jit_kernel and dart_test_kernel.
+
+    `pkg` is a struct of the package's inputs: package_name, package_config,
+    pub_srcs, path_deps, srcs, registrant and registrant_path.
+    """
     toolchain = _flutter_toolchain(ctx)
 
     # Always debug: this action never reads //flutter:mode, so both modes ask
@@ -373,7 +381,7 @@ def _dart_jit_kernel_impl(ctx):
     args.add("--target", "flutter")
     args.add("--no-print-incremental-dependencies")
     args.add_all(_DEBUG_KERNEL_FLAGS)
-    args.add_all(_dart_define_flags(ctx.attr.dart_defines))
+    args.add_all(_dart_define_flags(dart_defines))
 
     # Two virtual roots, so that generated and source files resolve the same
     # way: sources from the execroot, generated files from bin_dir. The package
@@ -381,21 +389,22 @@ def _dart_jit_kernel_impl(ctx):
     args.add("--filesystem-root", ".")
     args.add("--filesystem-root", ctx.bin_dir.path)
     args.add("--filesystem-scheme", "org-dartlang-root")
-    args.add("--packages", "org-dartlang-root:///" + ctx.file.package_config.path)
+    args.add("--packages", "org-dartlang-root:///" + pkg.package_config.path)
 
     # The package name is file content, so the entrypoint URI is assembled by
     # the wrapper below, like dart_aot_kernel's.
-    pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
-    scheme, path = _dart_entry_uri(ctx, ctx.file.entrypoint)
+    scheme, path = _dart_entry_uri(ctx, entrypoint)
 
     scalars = ctx.actions.args()
-    scalars.add(pubspec.package_name)
+    scalars.add(pkg.package_name)
     scalars.add(scheme)
     scalars.add(path)
-    scalars.add(
-        _library_path(ctx, ctx.file.dart_plugin_registrant, "dart_plugin_registrant") if ctx.file.dart_plugin_registrant else "",
-    )
+    scalars.add(pkg.registrant_path)
     scalars.add(dill)
+
+    run = 'exec "$@" --output-dill "$DILL" "$ENTRY"'
+    if hint:
+        run = '"$@" --output-dill "$DILL" "$ENTRY" || {\n    status=$?\n    echo \'' + hint + '\' >&2\n    exit "$status"\n}'
 
     ctx.actions.run_shell(
         command = """set -euo pipefail
@@ -415,8 +424,11 @@ if [ -n "$REGISTRANT" ]; then
     set -- "$@" {registrant_args}
 fi
 
-exec "$@" --output-dill "$DILL" "$ENTRY"
-""".format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT")),
+{run}
+""".format(
+            registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT"),
+            run = run,
+        ),
         arguments = [scalars, args],
         tools = [toolchain.dartaotruntime],
         # Every readable package is declared, as for dart_aot_kernel: the hub's
@@ -425,15 +437,15 @@ exec "$@" --output-dill "$DILL" "$ENTRY"
             direct = [
                          toolchain.frontend_server,
                          toolchain.sdk_version,
-                         ctx.file.package_config,
-                         pubspec.package_name,
-                         ctx.file.entrypoint,
-                     ] + ([ctx.file.dart_plugin_registrant] if ctx.file.dart_plugin_registrant else []) +
-                     ctx.files.path_deps,
+                         pkg.package_config,
+                         pkg.package_name,
+                         entrypoint,
+                     ] + ([pkg.registrant] if pkg.registrant else []) +
+                     pkg.path_deps,
             transitive = [
                 depset(toolchain.platform_debug),
-                depset(ctx.files.srcs),
-                depset(ctx.files.pub_srcs),
+                depset(pkg.srcs),
+                depset(pkg.pub_srcs),
                 toolchain.sdk_packages,
             ],
         ),
@@ -442,7 +454,91 @@ exec "$@" --output-dill "$DILL" "$ENTRY"
         progress_message = "Compiling Dart JIT kernel %{label}",
     )
 
+def _dart_jit_kernel_impl(ctx):
+    dill = ctx.actions.declare_file(ctx.label.name + ".dill")
+    pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
+    registrant = ctx.file.dart_plugin_registrant
+
+    _jit_kernel_action(
+        ctx,
+        dill = dill,
+        pkg = struct(
+            package_name = pubspec.package_name,
+            package_config = ctx.file.package_config,
+            pub_srcs = ctx.files.pub_srcs,
+            path_deps = ctx.files.path_deps,
+            srcs = ctx.files.srcs,
+            registrant = registrant,
+            registrant_path = _library_path(ctx, registrant, "dart_plugin_registrant") if registrant else "",
+        ),
+        entrypoint = ctx.file.entrypoint,
+        dart_defines = ctx.attr.dart_defines,
+        hint = "",
+    )
     return [DefaultInfo(files = depset([dill]))]
+
+def _dart_test_kernel_impl(ctx):
+    dill = ctx.actions.declare_file(ctx.label.name + ".dill")
+    package = ctx.attr.app[FlutterPackageInfo]
+
+    _jit_kernel_action(
+        ctx,
+        dill = dill,
+        pkg = struct(
+            package_name = package.pubspec.package_name,
+            package_config = package.package_config,
+            pub_srcs = package.pub_srcs,
+            path_deps = package.path_deps,
+            srcs = ctx.files.srcs + package.srcs,
+            registrant = None,
+            registrant_path = "",
+        ),
+        entrypoint = ctx.file.entrypoint,
+        dart_defines = ctx.attr.dart_defines,
+        hint = _TEST_IMPORT_HINT,
+    )
+    return [DefaultInfo(files = depset([dill]))]
+
+FlutterPackageInfo = provider(
+    doc = "A Dart package's inputs to host tests. Built by flutter_package.",
+    fields = {
+        "pubspec": "The package's FlutterPubspecInfo.",
+        "srcs": "The package's lib/ Dart sources, as a list.",
+        "package_config": "The pub hub's package_config.json.",
+        "pub_srcs": "The pub hub's lib tree, as a list.",
+        "path_deps": "Sources of path dependencies, as a list.",
+        "assets": "The flutter_assets directory, or None.",
+    },
+)
+
+dart_test_kernel = rule(
+    implementation = _dart_test_kernel_impl,
+    doc = """The debug kernel of one flutter_test.
+
+Compiles dart_jit_kernel's action over the package inputs its `app` provides.
+It takes the test's own dart_defines and none of the app's: `flutter test` reads
+defines from its command line only, so an app's defines never reach a test.""",
+    attrs = {
+        "app": attr.label(
+            mandatory = True,
+            providers = [FlutterPackageInfo],
+            doc = "The flutter_package the test belongs to.",
+        ),
+        "srcs": attr.label_list(
+            allow_files = [".dart"],
+            doc = "The test's own sources: the test file, flutter_test_config.dart and the driver. The package's sources come from `app`.",
+        ),
+        "entrypoint": attr.label(
+            allow_single_file = [".dart"],
+            mandatory = True,
+            doc = "The bootstrap generated by flutter_test.",
+        ),
+        "dart_defines": attr.string_dict(
+            doc = "Compile-time constants of this test; see dart_aot_kernel.dart_defines.",
+        ),
+    },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
 
 dart_jit_kernel = rule(
     implementation = _dart_jit_kernel_impl,
@@ -725,6 +821,88 @@ def _workspace_label(label):
         )
     return label
 
+def _flutter_package_impl(ctx):
+    assets = ctx.attr.assets[DefaultInfo].files.to_list() if ctx.attr.assets else []
+    if len(assets) > 1:
+        fail("{}: assets must be one flutter_assets directory, got {} files".format(ctx.label, len(assets)))
+    return [FlutterPackageInfo(
+        pubspec = ctx.attr.pubspec[FlutterPubspecInfo],
+        srcs = ctx.files.srcs,
+        package_config = ctx.file.package_config,
+        pub_srcs = ctx.files.pub_srcs,
+        path_deps = ctx.files.path_deps,
+        assets = assets[0] if assets else None,
+    )]
+
+_flutter_package = rule(
+    implementation = _flutter_package_impl,
+    doc = "Declares a Dart package's inputs to host tests. See flutter_package.",
+    attrs = {
+        "pubspec": attr.label(
+            mandatory = True,
+            providers = [FlutterPubspecInfo],
+            doc = "The package's flutter_pubspec target.",
+        ),
+        "srcs": attr.label_list(
+            allow_files = [".dart"],
+            doc = "The package's lib/ Dart sources.",
+        ),
+        "package_config": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The pub hub's `package_config.json`.",
+        ),
+        "pub_srcs": attr.label_list(
+            allow_files = True,
+            allow_empty = False,
+            mandatory = True,
+            doc = "The pub hub's `:lib`.",
+        ),
+        "path_deps": attr.label_list(
+            allow_files = True,
+            doc = "Sources of `path:` dependencies. See dart_aot_kernel.path_deps.",
+        ),
+        "assets": attr.label(
+            doc = "A flutter_assets directory, passed to tests as --flutter-assets-dir.",
+        ),
+    },
+)
+
+def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = None, **kwargs):
+    """The inputs a host test reads from a Dart package, with no app build.
+
+    Declares no action. `flutter_app` declares one as `:app`; a package without
+    an app declares one by hand, as the conformance suite does:
+
+        flutter_pubspec(name = "pubspec")
+        flutter_package(name = "pkg", pub = "@pub", pubspec = ":pubspec")
+
+    `pub` is the `pub.lock` hub of the package's dependencies, as for flutter_app.
+
+    Args:
+      name: the target's name.
+      pub: the `pub.lock` hub repository, e.g. `"@pub"`.
+      pubspec: the package's flutter_pubspec target.
+      srcs: the package's lib/ Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
+      path_deps: sources of `path:` dependencies.
+      assets: a flutter_assets target, passed to tests as --flutter-assets-dir.
+      **kwargs: visibility, tags.
+    """
+    package_config, _, pub_lib, _ = _pub_hub_labels(pub, "flutter_package " + name)
+    if srcs == None:
+        srcs = native.glob(["lib/**/*.dart"])
+
+    _flutter_package(
+        name = name,
+        pubspec = pubspec,
+        srcs = srcs,
+        package_config = package_config,
+        pub_srcs = [pub_lib],
+        path_deps = path_deps,
+        assets = assets,
+        **kwargs
+    )
+
 # buildifier: disable=unnamed-macro
 # Target names are fixed: Android packaging derives them from the package.
 def flutter_app(
@@ -765,6 +943,7 @@ def flutter_app(
     | target | what |
     | --- | --- |
     | `:pubspec` | the package name and version, read once from pubspec.yaml |
+    | `:app` | the package inputs `flutter_test(app = ...)` reads: pubspec, `lib/` sources, pub hub, `path_deps`, and `:assets` |
     | `:app_<abi>` | the AOT snapshot per ABI; release only |
     | `:app_jit_kernel` | the debug kernel, from flutter_aot_library; manual, shipped as `kernel_blob.bin` by the debug overlay |
     | `:assets` | the flutter_assets bundle, built for every ABI; no app Dart inputs, the same under every mode |
@@ -890,6 +1069,16 @@ def flutter_app(
         package_config = project_package_config,
         pub_srcs = [pub_all],
         path_deps = path_deps,
+        **kwargs
+    )
+
+    flutter_package(
+        name = "app",
+        pub = pub,
+        pubspec = ":pubspec",
+        srcs = srcs,
+        path_deps = path_deps,
+        assets = ":assets",
         **kwargs
     )
 

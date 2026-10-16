@@ -1,6 +1,6 @@
 # Dart targets for a plugin-free app.
 
-load("@rules_flutter//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,4 +11,12 @@ flutter_app(
     assets = [],
     plugin_deps = None,
     pub = "@pub",
+)
+
+flutter_test(
+    name = "widget_test",
+    src = "test/widget_test.dart",
+    app = "//:app",
+    # CI does not run example tests yet.
+    tags = ["manual"],
 )
