@@ -199,6 +199,15 @@ jobs:
           set -o pipefail
           bazel test //... --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
+      # The update target is manual, so bazel test never builds it. Building it
+      # keeps its launcher compiling without writing goldens.
+      - name: bazel build golden update target
+        if: matrix.example.directory == 'examples/demo_app'
+        working-directory: ${{ matrix.example.directory }}
+        run: |
+          set -o pipefail
+          bazel build //:golden_test_update_goldens --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_golden_${{ matrix.example.name }}.log
+
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout
       # changes. gen_snapshot, the NDK's per-host clang, and the gzip encoder

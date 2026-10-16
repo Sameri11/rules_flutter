@@ -1,0 +1,13 @@
+{
+  "fixture": "c18_exit_mid_suite",
+  "source": "hand-written: driver behaviour, no CLI oracle (see CONFORMANCE.md)",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "junit": "absent",
+      "premature_exit_file": "present"
+    }
+  ]
+}

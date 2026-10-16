@@ -35,6 +35,10 @@ FIXTURES = [
     "c13_filter",
     "c14_async_main",
     "c15_late_declare",
+    "c16_unknown_channel",
+    "c17_sigterm",
+    "c18_exit_mid_suite",
+    "c19_utc",
 ]
 
 [

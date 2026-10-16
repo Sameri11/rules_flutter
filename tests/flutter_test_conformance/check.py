@@ -5,9 +5,15 @@ For each run in <fixture>.expected.json, sets the run's env, runs the launcher,
 and checks that:
   * the exit code matches;
   * the JUnit cases match, in order, by name and outcome (pass, fail, skip,
-    error), where `load` is the suite-load case;
+    error), where `load` is the suite-load case. A run whose expected
+    `junit` is `absent` must write no JUnit;
+  * TEST_PREMATURE_EXIT_FILE is left behind only when the expected
+    `premature_exit_file` is `present`;
   * stdout and the JUnit contain no `org-dartlang-root:` URI;
   * a sharded run touched TEST_SHARD_STATUS_FILE.
+
+A run with `sigterm_after_line` is sent SIGTERM once that line appears on
+stdout. The launcher must exit within 30 seconds of the signal.
 
 conformance.sh invokes this after clearing the Bazel test variables.
 
@@ -17,9 +23,14 @@ conformance.sh invokes this after clearing the Bazel test variables.
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
+
+SIGTERM_EXIT_WAIT = 30
+MARKER_WAIT = 120
 
 
 def junit_cases(path):
@@ -41,52 +52,111 @@ def junit_cases(path):
     return cases
 
 
+def read(path):
+    with open(path) as f:
+        return f.read()
+
+
+def wait_for_line(path, line, proc, deadline):
+    """Waits until stdout at [path] has a line equal to [line]. False if the
+    process exits first or the deadline passes."""
+    while time.monotonic() < deadline:
+        if line in read(path).splitlines():
+            return True
+        if proc.poll() is not None:
+            return False
+        time.sleep(0.05)
+    return False
+
+
 def check_run(launcher, fixture, run, tmp):
+    name = run["name"]
+    label = "{}/{}".format(fixture, name)
+    xml_path = os.path.join(tmp, "{}_{}.xml".format(fixture, name))
+    premature_path = os.path.join(tmp, "{}_{}.premature".format(fixture, name))
+    status_path = os.path.join(tmp, "{}_{}.status".format(fixture, name))
+    stdout_path = os.path.join(tmp, "{}_{}.stdout".format(fixture, name))
+    stderr_path = os.path.join(tmp, "{}_{}.stderr".format(fixture, name))
+    for path in (xml_path, xml_path + ".tmp", premature_path):
+        if os.path.exists(path):
+            os.remove(path)
+
     env = dict(os.environ)
     env.update(run["env"])
-    label = "{}/{}".format(fixture, run["name"])
-    xml_path = os.path.join(tmp, "{}_{}.xml".format(fixture, run["name"]))
     env["XML_OUTPUT_FILE"] = xml_path
-    status_path = None
+    env["TEST_PREMATURE_EXIT_FILE"] = premature_path
     if "TEST_TOTAL_SHARDS" in run["env"]:
-        status_path = os.path.join(tmp, "{}_{}.status".format(fixture, run["name"]))
         env["TEST_SHARD_STATUS_FILE"] = status_path
 
-    proc = subprocess.run([launcher], env=env, capture_output=True, text=True)
     problems = []
+    with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
+        proc = subprocess.Popen([launcher], env=env, stdout=out, stderr=err)
+        marker = run.get("sigterm_after_line")
+        if marker is not None:
+            if wait_for_line(stdout_path, marker, proc, time.monotonic() + MARKER_WAIT):
+                proc.send_signal(signal.SIGTERM)
+            else:
+                proc.kill()
+                problems.append("never printed {!r}".format(marker))
+        try:
+            proc.wait(timeout=SIGTERM_EXIT_WAIT if marker is not None else None)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            problems.append(
+                "did not exit within {}s of SIGTERM".format(SIGTERM_EXIT_WAIT)
+            )
+    stdout_text = read(stdout_path)
+    stderr_text = read(stderr_path)
+
     if proc.returncode != run["exit_code"]:
         problems.append(
             "exit code {}, expected {}".format(proc.returncode, run["exit_code"])
         )
-    if not os.path.exists(xml_path):
+
+    xml_text = ""
+    actual = []
+    expect_junit = run.get("junit", "present") == "present"
+    if not expect_junit:
+        if os.path.exists(xml_path):
+            problems.append("JUnit written but expected none")
+    elif not os.path.exists(xml_path):
         problems.append("no JUnit written to XML_OUTPUT_FILE")
-        actual = []
-        xml_text = ""
     else:
         actual = junit_cases(xml_path)
-        with open(xml_path) as f:
-            xml_text = f.read()
-    expected = list(run["cases"].items())
-    if actual != expected:
+        xml_text = read(xml_path)
+        expected = list(run["cases"].items())
+        if actual != expected:
+            problems.append(
+                "cases differ:\n  expected {}\n  actual   {}".format(expected, actual)
+            )
+    expect_premature = run.get("premature_exit_file", "absent") == "present"
+    exists = os.path.exists(premature_path)
+    if exists != expect_premature:
         problems.append(
-            "cases differ:\n  expected {}\n  actual   {}".format(expected, actual)
+            "premature-exit file {}, expected {}".format(
+                "present" if exists else "absent",
+                "present" if expect_premature else "absent",
+            )
         )
-    for name, text in (("stdout", proc.stdout), ("junit", xml_text)):
+
+    for name, text in (("stdout", stdout_text), ("junit", xml_text)):
         if "org-dartlang-root:" in text:
             problems.append("{} shows an org-dartlang-root URI".format(name))
-    if status_path is not None and not os.path.exists(status_path):
+    if "TEST_TOTAL_SHARDS" in run["env"] and not os.path.exists(status_path):
         problems.append("TEST_SHARD_STATUS_FILE was not touched")
 
+    expected_count = len(run["cases"]) if expect_junit else 0
     if problems:
         print("FAIL {}".format(label))
         for problem in problems:
             print("  " + problem)
         print("--- stdout ---")
-        print(proc.stdout)
+        print(stdout_text)
         print("--- stderr ---")
-        print(proc.stderr)
+        print(stderr_text)
         return False
-    print("ok {} ({} cases, exit {})".format(label, len(expected), proc.returncode))
+    print("ok {} ({} cases, exit {})".format(label, expected_count, proc.returncode))
     return True
 
 

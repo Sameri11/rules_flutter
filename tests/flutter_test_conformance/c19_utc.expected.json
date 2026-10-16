@@ -1,0 +1,14 @@
+{
+  "fixture": "c19_utc",
+  "source": "hand-written: Bazel sets TZ=UTC; flutter test inherits the shell's zone",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "timezone is UTC": "pass"
+      }
+    }
+  ]
+}
