@@ -1,4 +1,4 @@
-# Host test driver conformance (C1–C15)
+# Host test driver conformance (C1–C19)
 
 The host driver (`flutter/private/test/driver/`) runs each fixture through `flutter_tester` and must report the same per-case outcomes as `flutter test --reporter json` on the same SDK.
 
@@ -32,9 +32,14 @@ python3 tests/flutter_test_conformance/rebaseline.py          # rewrite after an
 | C13 | `c13_filter` | 0 | default, `--name`, and shard selections match the CLI (test_core's slice formula) |
 | C14 | `c14_async_main` | 0 | test declared after an `await` in `main`: pass |
 | C15 | `c15_late_declare` | 1 | hand-written: `declared in time` pass; late `test()`: load error |
+| C16 | `c16_unknown_channel` | 1 | hand-written: a message of an unknown type on the test channel: error for the running test; the next test: pass |
+| C17 | `c17_sigterm` | 143 | hand-written: SIGTERM mid-test writes a JUnit with the running test as error, and exits 143 |
+| C18 | `c18_exit_mid_suite` | 0 | hand-written: `exit(0)` mid-suite writes no JUnit and leaves `TEST_PREMATURE_EXIT_FILE` |
+| C19 | `c19_utc` | 0 | hand-written: the test sees UTC (Bazel sets `TZ=UTC`) |
 
 ## Known divergences
 - **C15.** The CLI attributes a `test()` called after the tests have begun to the running test, or with none running reports "No tests were found" and exits 0. The driver reports a `load` error and exits 1, so `c15_late_declare.expected.json` is hand-written and `rebaseline.py` does not write it.
+- **C16–C19.** Hand-written driver behaviour with no CLI oracle, so `rebaseline.py` does not write them. The CLI has no equivalent for a test-channel message of unknown type, a SIGTERM, or a process exit mid-suite, and C19 depends on the shell's zone.
 - **`suiteChannel`.** test_api 0.7.12 has no public route through `openChannelCallback`, so `spawn-hybrid-uri` cases fail at once. Hybrid-channel suites are unsupported.
 - **Library annotations.** Library-level annotations such as `@Skip` are unsupported. C2's library-level `@Skip` line was removed.
 - **`--packages` omitted.** The pub hub's `package_config.json` uses execroot-relative `rootUri`s, which do not resolve in runfiles. The kernel already holds every imported library.

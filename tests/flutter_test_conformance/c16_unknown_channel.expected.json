@@ -1,0 +1,15 @@
+{
+  "fixture": "c16_unknown_channel",
+  "source": "hand-written: driver behaviour, no CLI oracle (see CONFORMANCE.md)",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "unknown channel message": "error",
+        "after the unknown message": "pass"
+      }
+    }
+  ]
+}

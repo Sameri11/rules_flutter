@@ -1,0 +1,15 @@
+{
+  "fixture": "c17_sigterm",
+  "source": "hand-written: driver behaviour, no CLI oracle (see CONFORMANCE.md)",
+  "runs": [
+    {
+      "name": "sigterm",
+      "env": {},
+      "sigterm_after_line": "READY",
+      "exit_code": 143,
+      "cases": {
+        "forever": "error"
+      }
+    }
+  ]
+}

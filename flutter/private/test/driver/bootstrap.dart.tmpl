@@ -7,6 +7,8 @@ void main() {
   driver.hostMain(
     testFile: '{{TEST_FILE}}',
     packageRoot: '{{PACKAGE_ROOT}}',
+    testLabel: '{{TEST_LABEL}}',
+    goldensDeclared: {{GOLDENS_DECLARED}},
     testMain: () async {
       {{TEST_MAIN}}
     },

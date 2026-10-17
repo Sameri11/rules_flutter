@@ -3,7 +3,9 @@
 ///
 /// The bootstrap (bootstrap.dart.tmpl) calls [hostMain]. Filters and shards
 /// come from `TESTBRIDGE_TEST_ONLY` and `TEST_TOTAL_SHARDS`/`TEST_SHARD_INDEX`.
-/// Goldens are compared, never updated.
+/// Goldens are compared under `bazel test`. The update target sets
+/// `FLUTTER_TEST_UPDATE_GOLDENS` to the test file's source path, and goldens
+/// are written there instead.
 library;
 
 import 'dart:async';
@@ -13,19 +15,23 @@ import 'dart:typed_data';
 import 'package:async/async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:test_api/backend.dart';
+import 'package:test_api/hooks.dart' show TestFailure;
 
 import 'core.dart';
 
 /// Runs [testMain] in-process and exits: 0 when every case passed or was
-/// skipped, 1 otherwise.
+/// skipped, 1 otherwise. On SIGTERM it writes the report so far and exits 143.
 ///
 /// [testFile] is the test's path under the runfiles root, which is also the
-/// suite's path and the golden comparator's base. [packageRoot] is the
-/// execroot path of the pubspec directory. Stack paths under it are shown
-/// relative to it.
+/// suite's path. [packageRoot] is the execroot path of the pubspec directory.
+/// Stack paths under it are shown relative to it. [testLabel] is the test's
+/// Bazel label, named in golden hints.
+/// [goldensDeclared] is whether the test passes `goldens`, which picks the hint.
 void hostMain({
   required String testFile,
   required String packageRoot,
+  required String testLabel,
+  required bool goldensDeclared,
   required Future<void> Function() testMain,
 }) {
   final env = Platform.environment;
@@ -33,10 +39,20 @@ void hostMain({
   if (runfiles == null) {
     throw StateError('TEST_SRCDIR or RUNFILES_DIR must be set');
   }
+  // Bazel fails a test that exits 0 while this file exists. Only the driver's
+  // own exits remove it, so a call to exit() in user code leaves it behind.
+  final prematureExit = env['TEST_PREMATURE_EXIT_FILE'];
+  if (prematureExit != null) File(prematureExit).writeAsStringSync('');
+
+  final updateSource = env['FLUTTER_TEST_UPDATE_GOLDENS'];
   goldenFileComparator = _HostComparator(
-    Uri.file('$runfiles/$testFile'),
+    Uri.file(updateSource ?? '$runfiles/$testFile'),
     env['TEST_UNDECLARED_OUTPUTS_DIR'],
+    testLabel,
+    goldensDeclared: goldensDeclared,
+    workspace: updateSource == null ? null : env['BUILD_WORKSPACE_DIRECTORY'],
   );
+  autoUpdateGoldenFiles = updateSource != null;
 
   final only = env['TESTBRIDGE_TEST_ONLY'];
   final filter = only == null || only.isEmpty ? null : RegExp(only);
@@ -55,6 +71,7 @@ void hostMain({
   }
 
   final sink = _HostSink(packageRoot);
+  final xmlPath = env['XML_OUTPUT_FILE'];
   // Errors raised after declaration, e.g. from a callback that outlives main.
   // The listener sends them after `success`, which the core ignores.
   final lateErrors = <CaseResult>[];
@@ -63,6 +80,26 @@ void hostMain({
         () => _guarded(testMain, lateErrors),
   );
   final os = _operatingSystem();
+
+  // Set once the report is being written, so a SIGTERM during the final flush
+  // cannot replace a complete report with an interrupted one.
+  var finishing = false;
+  // Handled only when the isolate yields. A busy loop is not interrupted.
+  ProcessSignal.sigterm.watch().listen((_) {
+    if (finishing) return;
+    finishing = true;
+    final running = sink.running ?? 'suite';
+    _writeReport(xmlPath, testFile, [
+      ...sink.results,
+      CaseResult(
+        running,
+        Outcome.error,
+        'interrupted by SIGTERM during $running',
+      ),
+    ], packageRoot);
+    _exitAfterFlush(143);
+  });
+
   unawaited(
     runCore(
       channel,
@@ -80,21 +117,41 @@ void hostMain({
         shard: shard,
       ),
       onComplete: (completed) {
+        finishing = true;
         final cases = [...completed, ...lateErrors];
         for (final late in lateErrors) {
           sink.caseDone(late);
         }
-        final xmlPath = env['XML_OUTPUT_FILE'];
-        if (xmlPath != null) {
-          File(xmlPath).writeAsStringSync(_junit(testFile, cases, packageRoot));
-        }
+        _writeReport(xmlPath, testFile, cases, packageRoot);
         final failed = cases.any(
           (c) => c.outcome == Outcome.fail || c.outcome == Outcome.error,
         );
-        stdout.flush().whenComplete(() => exit(failed ? 1 : 0));
+        _exitAfterFlush(failed ? 1 : 0);
       },
     ),
   );
+}
+
+/// Writes the JUnit report to [path] through a temporary file, so that a
+/// reader never sees a partial report.
+void _writeReport(
+  String? path,
+  String suite,
+  List<CaseResult> cases,
+  String packageRoot,
+) {
+  if (path == null) return;
+  final temp = File('$path.tmp')
+    ..writeAsStringSync(_junit(suite, cases, packageRoot));
+  temp.renameSync(path);
+}
+
+/// Removes the premature-exit file, which marks this exit as deliberate, then
+/// exits once stdout is flushed.
+void _exitAfterFlush(int code) {
+  final marker = Platform.environment['TEST_PREMATURE_EXIT_FILE'];
+  if (marker != null && File(marker).existsSync()) File(marker).deleteSync();
+  stdout.flush().whenComplete(() => exit(code));
 }
 
 /// Runs [body] in a zone. Errors while main is declaring go to the listener's
@@ -140,11 +197,22 @@ final class _HostSink implements EventSink {
 
   final String _packageRoot;
 
+  /// Every finished case, in run order.
+  final List<CaseResult> results = [];
+
+  /// The case or hook running now. `load` until the suite has loaded.
+  String? running = 'load';
+
   @override
   void message(String text) => stdout.writeln(_display(text, _packageRoot));
 
   @override
+  void setRunning(String? name) => running = name;
+
+  @override
   void caseDone(CaseResult result) {
+    running = null;
+    results.add(result);
     final label = switch (result.outcome) {
       Outcome.pass => 'PASS',
       Outcome.fail => 'FAIL',
@@ -206,11 +274,22 @@ String _xml(String value) => value
     .replaceAll("'", '&apos;');
 
 /// Compares goldens against the test's runfiles. Failure images go under the
-/// test's undeclared outputs.
+/// test's undeclared outputs. Updates are allowed only under the update target.
 final class _HostComparator extends LocalFileComparator {
-  _HostComparator(super.testFile, this._outputsDir);
+  _HostComparator(
+    super.testFile,
+    this._outputsDir,
+    this._testLabel, {
+    required bool goldensDeclared,
+    required this.workspace,
+  }) : _goldensDeclared = goldensDeclared;
 
   final String? _outputsDir;
+  final String _testLabel;
+  final bool _goldensDeclared;
+
+  /// The workspace that updates are confined to. Null outside the update target.
+  final String? workspace;
 
   @override
   File getFailureFile(String failure, Uri golden, Uri basedir) {
@@ -225,8 +304,34 @@ final class _HostComparator extends LocalFileComparator {
   }
 
   @override
-  Future<void> update(Uri golden, Uint8List imageBytes) =>
+  Future<List<int>> getGoldenBytes(Uri golden) async {
+    try {
+      return await super.getGoldenBytes(golden);
+    } on TestFailure catch (failure) {
+      final hint = _goldensDeclared
+          ? 'declare it in `goldens` of $_testLabel and run '
+                '`bazel run ${_testLabel}_update_goldens`'
+          : 'declare it in `goldens` of $_testLabel (add `goldens = glob([...], '
+                'allow_empty = True)` to create `${_testLabel}_update_goldens`)';
+      throw TestFailure('$failure; $hint');
+    }
+  }
+
+  @override
+  Future<void> update(Uri golden, Uint8List imageBytes) {
+    final root = workspace;
+    if (root == null) {
       throw UnsupportedError(
-        'Golden updates are not supported by the test driver: $golden',
+        'Goldens are updated by `bazel run ${_testLabel}_update_goldens`: '
+        '$golden',
       );
+    }
+    final target = basedir.resolveUri(golden);
+    if (!target.path.startsWith(Directory(root).uri.path)) {
+      throw UnsupportedError(
+        'golden $golden resolves outside the workspace: $target',
+      );
+    }
+    return super.update(golden, imageBytes);
+  }
 }

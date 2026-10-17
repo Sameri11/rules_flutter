@@ -4,6 +4,8 @@
 /// callback.
 library;
 
+import 'dart:async';
+
 import 'package:async/async.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test_api/backend.dart';
@@ -25,6 +27,9 @@ enum Outcome { pass, fail, skip, error }
 abstract interface class EventSink {
   /// Text from a test or from the suite load, in the order it was printed.
   void message(String text);
+
+  /// The case or hook named [name] starts running, or nothing does when null.
+  void setRunning(String? name);
 
   /// A case has finished. Called in run order.
   void caseDone(CaseResult result);
@@ -85,6 +90,9 @@ final class _Core {
   final SuitePlatform _suitePlatform;
   final cases = <CaseResult>[];
 
+  /// Root-channel messages that arrive during a run. They fail the running case.
+  final _strays = StreamController<Object?>.broadcast(sync: true);
+
   /// The leaves that run, by identity. Filled once the suite has loaded.
   Set<Map> _chosen = Set.identity();
 
@@ -132,6 +140,13 @@ final class _Core {
     } else {
       final root = response['root'] as Map;
       _choose(root);
+      input.rest.listen((message) {
+        if (message is Map &&
+            message['type'] != 'print' &&
+            message['type'] != 'error') {
+          _strays.add(message);
+        }
+      });
       await _visit(root, parentSkipped: false);
     }
   }
@@ -229,9 +244,13 @@ final class _Core {
     final name = hook['name'] as String;
     final tests = _multi.virtualChannel((hook['channel'] as num).toInt());
     final run = tests.virtualChannel();
+    options.sink.setRunning(name);
     tests.sink.add({'command': 'run', 'channel': run.id});
     final outcome = await _drain(run.stream, name);
-    if (outcome.result == 'success') return true;
+    if (outcome.result == 'success') {
+      options.sink.setRunning(null);
+      return true;
+    }
     _finish(CaseResult(name, _outcomeOf(outcome.result), outcome.detail));
     return false;
   }
@@ -247,6 +266,7 @@ final class _Core {
     // The listener owns retries (test_api's Invoker runs metadata.retry extra
     // attempts and prints `Retry:`), as the CLI does. One run per case here.
     final run = tests.virtualChannel();
+    options.sink.setRunning(name);
     tests.sink.add({'command': 'run', 'channel': run.id});
     final outcome = await _drain(run.stream, name);
     switch (outcome.result) {
@@ -260,11 +280,16 @@ final class _Core {
   }
 
   /// Reads one run to completion. Stops at `spawnHybridUri`, which the tester
-  /// cannot serve, so the case fails now instead of waiting forever.
+  /// cannot serve, so the case fails now instead of waiting forever. A message
+  /// of an unknown type fails the case, and the run is still read to `complete`
+  /// so that the next case starts only after this one ends.
   Future<_Drained> _drain(Stream<Object?> stream, String name) async {
-    final queue = StreamQueue<Object?>(stream);
+    final queue = StreamQueue<Object?>(
+      StreamGroup.merge<Object?>([stream, _strays.stream]),
+    );
     final detail = StringBuffer();
     var result = 'success';
+    var unsupported = false;
     try {
       while (await queue.hasNext) {
         final message = await queue.next as Map;
@@ -282,10 +307,15 @@ final class _Core {
             );
             return _Drained(_spawnHybrid, detail.toString());
           case 'complete':
-            return _Drained(result, detail.toString());
+            return _Drained(unsupported ? 'error' : result, detail.toString());
+          default:
+            unsupported = true;
+            detail.writeln(
+              'unsupported test channel message: ${message['type']}',
+            );
         }
       }
-      return _Drained(result, detail.toString());
+      return _Drained(unsupported ? 'error' : result, detail.toString());
     } finally {
       await queue.cancel();
     }
