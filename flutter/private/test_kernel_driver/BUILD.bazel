@@ -1,0 +1,5 @@
+package(default_visibility = ["//flutter/private:__pkg__"])
+
+# driver.dart is the source of the test-kernel driver; pins.bzl holds its closure pins. The
+# repository that builds them is test_kernel_driver.bzl.
+exports_files(["driver.dart", "pins.bzl"])

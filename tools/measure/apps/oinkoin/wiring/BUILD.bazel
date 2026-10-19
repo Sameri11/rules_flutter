@@ -1,0 +1,803 @@
+load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_test")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_app(
+    abis = ["arm64-v8a"],
+    pub = "@pub",
+)
+
+# BEGIN generated flutter_test targets; do not edit
+# Helper sources: every non-_test.dart under test/. Data: every non-.dart file under test/.
+_TEST_HELPERS = glob(["test/**/*.dart"], exclude = ["test/**/*_test.dart"], allow_empty = True) + []
+_TEST_DATA = glob(["test/**"], exclude = ["test/**/*.dart"], allow_empty = True)
+
+flutter_test(
+    name = "test_announcement_dialog_test",
+    app = ":app",
+    src = "test/announcement_dialog_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_background_image_test",
+    app = ":app",
+    src = "test/background_image_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_backup_directory_service_test",
+    app = ":app",
+    src = "test/backup/backup_directory_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_backup_saf_backup_service_test",
+    app = ":app",
+    src = "test/backup/backup_saf_backup_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_backup_service_test",
+    app = ":app",
+    src = "test/backup/backup_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_import_tag_association_bug_test",
+    app = ":app",
+    src = "test/backup/import_tag_association_bug_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_null_category_backup_integration_test",
+    app = ":app",
+    src = "test/backup/null_category_backup_integration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_preferences_backup_integration_test",
+    app = ":app",
+    src = "test/backup/preferences_backup_integration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_preferences_backup_service_test",
+    app = ":app",
+    src = "test/backup/preferences_backup_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_restore_tag_integrity_test",
+    app = ":app",
+    src = "test/backup/restore_tag_integrity_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_user_data_import_verification_test",
+    app = ":app",
+    src = "test/backup/user_data_import_verification_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_import_tag_bug_test",
+    app = ":app",
+    src = "test/backup_import_tag_bug_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_balance_relevant_records_test",
+    app = ":app",
+    src = "test/balance_relevant_records_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_batch_records_operations_test",
+    app = ":app",
+    src = "test/batch_records_operations_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_budgets_page_test",
+    app = ":app",
+    src = "test/budgets_page_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_budgets_refresh_on_data_change_test",
+    app = ":app",
+    src = "test/budgets_refresh_on_data_change_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_build_amount_with_currency_widget_test",
+    app = ":app",
+    src = "test/build_amount_with_currency_widget_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_chart_ticks_test",
+    app = ":app",
+    src = "test/chart_ticks_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_communication_service_test",
+    app = ":app",
+    src = "test/communication_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_communications_ui_test",
+    app = ":app",
+    src = "test/communications_ui_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_compute_number_of_intervals_test",
+    app = ":app",
+    src = "test/compute_number_of_intervals_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_convert_amount_test",
+    app = ":app",
+    src = "test/convert_amount_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_csv_import_integration_test",
+    app = ":app",
+    src = "test/csv_import_integration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_csv_import_service_test",
+    app = ":app",
+    src = "test/csv_import_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_csv_service_test",
+    app = ":app",
+    src = "test/csv_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_custom_currency_test",
+    app = ":app",
+    src = "test/custom_currency_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_database_location_test",
+    app = ":app",
+    src = "test/database_location_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_datetime_utility_functions_locale_test",
+    app = ":app",
+    src = "test/datetime_utility_functions_locale_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_datetime_utility_functions_test",
+    app = ":app",
+    src = "test/datetime_utility_functions_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_days_summary_box_privacy_test",
+    app = ":app",
+    src = "test/days_summary_box_privacy_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_edit_record_custom_interval_widget_test",
+    app = ":app",
+    src = "test/edit_record_custom_interval_widget_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_edit_record_time_picker_test",
+    app = ":app",
+    src = "test/edit_record_time_picker_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_font_family_fallback_test",
+    app = ":app",
+    src = "test/font_family_fallback_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_format_currency_amount_test",
+    app = ":app",
+    src = "test/format_currency_amount_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_formatter_auto_decimal_shift_formatter_test",
+    app = ":app",
+    src = "test/formatter/auto_decimal_shift_formatter_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_formatter_decimal_digits_resolution_test",
+    app = ":app",
+    src = "test/formatter/decimal_digits_resolution_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_formatter_eight_decimal_digits_test",
+    app = ":app",
+    src = "test/formatter/eight_decimal_digits_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_formatter_formatter_integration_test",
+    app = ":app",
+    src = "test/formatter/formatter_integration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_formatter_max_decimal_digits_formatter_test",
+    app = ":app",
+    src = "test/formatter/max_decimal_digits_formatter_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_formatter_per_currency_decimal_digits_test",
+    app = ":app",
+    src = "test/formatter/per_currency_decimal_digits_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_formatter_unlimited_decimals_test",
+    app = ":app",
+    src = "test/formatter/unlimited_decimals_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_future_records_integration_test",
+    app = ":app",
+    src = "test/future_records_integration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_future_recurrent_records_test",
+    app = ":app",
+    src = "test/future_recurrent_records_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_get_record_amount_color_test",
+    app = ":app",
+    src = "test/get_record_amount_color_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_group_records_by_day_test",
+    app = ":app",
+    src = "test/group_records_by_day_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_helpers_alert_dialog_builder_test",
+    app = ":app",
+    src = "test/helpers/alert_dialog_builder_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_helpers_list_utility_functions_test",
+    app = ":app",
+    src = "test/helpers/list_utility_functions_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_home_widget_views_test",
+    app = ":app",
+    src = "test/home_widget_views_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_inapp_keyboard_desktop_test",
+    app = ":app",
+    src = "test/inapp_keyboard_desktop_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_locale_debug_test",
+    app = ":app",
+    src = "test/locale_debug_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_markup_text_test",
+    app = ":app",
+    src = "test/markup_text_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_models_budget_test",
+    app = ":app",
+    src = "test/models/budget_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_models_recurrent_period_test",
+    app = ":app",
+    src = "test/models/recurrent_period_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_monthly_banner_reverse_test",
+    app = ":app",
+    src = "test/monthly_banner_reverse_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_overview_card_calculations_test",
+    app = ":app",
+    src = "test/overview_card_calculations_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_overview_card_selection_currency_test",
+    app = ":app",
+    src = "test/overview_card_selection_currency_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_pdf_export_sections_dialog_test",
+    app = ":app",
+    src = "test/pdf_export_sections_dialog_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_pdf_service_test",
+    app = ":app",
+    src = "test/pdf_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_premium_license_store_test",
+    app = ":app",
+    src = "test/premium_license_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_premium_splash_screen_test",
+    app = ":app",
+    src = "test/premium_splash_screen_test.dart",
+    srcs = _TEST_HELPERS + ["test/purchase_service_test.dart"],
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_profiles_profile_backup_test",
+    app = ":app",
+    src = "test/profiles/profile_backup_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_profiles_profile_db_test",
+    app = ":app",
+    src = "test/profiles/profile_db_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_profiles_profile_migration_test",
+    app = ":app",
+    src = "test/profiles/profile_migration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_profiles_profile_model_test",
+    app = ":app",
+    src = "test/profiles/profile_model_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_profiles_profile_sort_order_migration_test",
+    app = ":app",
+    src = "test/profiles/profile_sort_order_migration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_purchase_service_test",
+    app = ":app",
+    src = "test/purchase_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_record_filters_test",
+    app = ":app",
+    src = "test/record_filters_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_records_day_header_tap_test",
+    app = ":app",
+    src = "test/records_day_header_tap_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_recurrent_pattern_custom_interval_migration_test",
+    app = ":app",
+    src = "test/recurrent_pattern_custom_interval_migration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_recurrent_pattern_edit_test",
+    app = ":app",
+    src = "test/recurrent_pattern_edit_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_recurrent_pattern_tags_integration_test",
+    app = ":app",
+    src = "test/recurrent_pattern_tags_integration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_recurrent_record_test",
+    app = ":app",
+    src = "test/recurrent_record_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_review_prompt_service_test",
+    app = ":app",
+    src = "test/review_prompt_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_service_config_privacy_mode_test",
+    app = ":app",
+    src = "test/service_config_privacy_mode_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_service_config_show_homepage_image_test",
+    app = ":app",
+    src = "test/service_config_show_homepage_image_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_service_config_wallets_test",
+    app = ":app",
+    src = "test/service_config_wallets_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_settings_delete_all_data_test",
+    app = ":app",
+    src = "test/settings/delete_all_data_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_settings_dropdown_customization_item_widget_test",
+    app = ":app",
+    src = "test/settings/dropdown_customization_item_widget_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_settings_preferences_options_decimal_digits_test",
+    app = ":app",
+    src = "test/settings/preferences_options_decimal_digits_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_show_future_records_preference_test",
+    app = ":app",
+    src = "test/show_future_records_preference_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_statistics_aggregation_currency_test",
+    app = ":app",
+    src = "test/statistics_aggregation_currency_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_statistics_drilldown_label_test",
+    app = ":app",
+    src = "test/statistics_drilldown_label_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_statistics_summary_card_category_totals_test",
+    app = ":app",
+    src = "test/statistics_summary_card_category_totals_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_styled_popup_menu_button_test",
+    app = ":app",
+    src = "test/styled_popup_menu_button_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_summary_rows_colorize_test",
+    app = ":app",
+    src = "test/summary_rows_colorize_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tab_records_controller_test",
+    app = ":app",
+    src = "test/tab_records_controller_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tag_management_test",
+    app = ":app",
+    src = "test/tag_management_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_timezone_iana_fix_test",
+    app = ":app",
+    src = "test/timezone_iana_fix_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_transfer_icon_service_test",
+    app = ":app",
+    src = "test/transfer_icon_service_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_transfer_wallet_instruction_test",
+    app = ":app",
+    src = "test/transfer_wallet_instruction_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallet_balance_future_records_test",
+    app = ":app",
+    src = "test/wallet_balance_future_records_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallets_record_delete_restore_test",
+    app = ":app",
+    src = "test/wallets/record_delete_restore_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallets_wallet_backup_order_test",
+    app = ":app",
+    src = "test/wallets/wallet_backup_order_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallets_wallet_backup_test",
+    app = ":app",
+    src = "test/wallets/wallet_backup_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallets_wallet_balance_as_of_test",
+    app = ":app",
+    src = "test/wallets/wallet_balance_as_of_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallets_wallet_balance_test",
+    app = ":app",
+    src = "test/wallets/wallet_balance_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallets_wallet_crud_test",
+    app = ":app",
+    src = "test/wallets/wallet_crud_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_wallets_wallet_migration_test",
+    app = ":app",
+    src = "test/wallets/wallet_migration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+test_suite(
+    name = "flutter_tests",
+    tests = ["test_announcement_dialog_test", "test_background_image_test", "test_backup_backup_directory_service_test", "test_backup_backup_saf_backup_service_test", "test_backup_backup_service_test", "test_backup_import_tag_association_bug_test", "test_backup_null_category_backup_integration_test", "test_backup_preferences_backup_integration_test", "test_backup_preferences_backup_service_test", "test_backup_restore_tag_integrity_test", "test_backup_user_data_import_verification_test", "test_backup_import_tag_bug_test", "test_balance_relevant_records_test", "test_batch_records_operations_test", "test_budgets_page_test", "test_budgets_refresh_on_data_change_test", "test_build_amount_with_currency_widget_test", "test_chart_ticks_test", "test_communication_service_test", "test_communications_ui_test", "test_compute_number_of_intervals_test", "test_convert_amount_test", "test_csv_import_integration_test", "test_csv_import_service_test", "test_csv_service_test", "test_custom_currency_test", "test_database_location_test", "test_datetime_utility_functions_locale_test", "test_datetime_utility_functions_test", "test_days_summary_box_privacy_test", "test_edit_record_custom_interval_widget_test", "test_edit_record_time_picker_test", "test_font_family_fallback_test", "test_format_currency_amount_test", "test_formatter_auto_decimal_shift_formatter_test", "test_formatter_decimal_digits_resolution_test", "test_formatter_eight_decimal_digits_test", "test_formatter_formatter_integration_test", "test_formatter_max_decimal_digits_formatter_test", "test_formatter_per_currency_decimal_digits_test", "test_formatter_unlimited_decimals_test", "test_future_records_integration_test", "test_future_recurrent_records_test", "test_get_record_amount_color_test", "test_group_records_by_day_test", "test_helpers_alert_dialog_builder_test", "test_helpers_list_utility_functions_test", "test_home_widget_views_test", "test_inapp_keyboard_desktop_test", "test_locale_debug_test", "test_markup_text_test", "test_models_budget_test", "test_models_recurrent_period_test", "test_monthly_banner_reverse_test", "test_overview_card_calculations_test", "test_overview_card_selection_currency_test", "test_pdf_export_sections_dialog_test", "test_pdf_service_test", "test_premium_license_store_test", "test_premium_splash_screen_test", "test_profiles_profile_backup_test", "test_profiles_profile_db_test", "test_profiles_profile_migration_test", "test_profiles_profile_model_test", "test_profiles_profile_sort_order_migration_test", "test_purchase_service_test", "test_record_filters_test", "test_records_day_header_tap_test", "test_recurrent_pattern_custom_interval_migration_test", "test_recurrent_pattern_edit_test", "test_recurrent_pattern_tags_integration_test", "test_recurrent_record_test", "test_review_prompt_service_test", "test_service_config_privacy_mode_test", "test_service_config_show_homepage_image_test", "test_service_config_wallets_test", "test_settings_delete_all_data_test", "test_settings_dropdown_customization_item_widget_test", "test_settings_preferences_options_decimal_digits_test", "test_show_future_records_preference_test", "test_statistics_aggregation_currency_test", "test_statistics_drilldown_label_test", "test_statistics_summary_card_category_totals_test", "test_styled_popup_menu_button_test", "test_summary_rows_colorize_test", "test_tab_records_controller_test", "test_tag_management_test", "test_timezone_iana_fix_test", "test_transfer_icon_service_test", "test_transfer_wallet_instruction_test", "test_wallet_balance_future_records_test", "test_wallets_record_delete_restore_test", "test_wallets_wallet_backup_order_test", "test_wallets_wallet_backup_test", "test_wallets_wallet_balance_as_of_test", "test_wallets_wallet_balance_test", "test_wallets_wallet_crud_test", "test_wallets_wallet_migration_test"],
+)
+# END generated flutter_test targets

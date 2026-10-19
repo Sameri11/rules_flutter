@@ -1,0 +1,15 @@
+.bazelrc
+.bazelversion
+BUILD.bazel
+MODULE.bazel
+MODULE.bazel.lock
+android/BUILD.bazel
+android/app/BUILD.bazel
+android/app/src/bazel/AndroidManifest.xml
+android/app/src/bazel/res/values/app_name.xml
+android/config.MODULE.bazel
+bazel/flutter/BUILD.bazel
+bazel/flutter/oinkoin_fixes.bzl
+bundle/stub.dart
+lib/dart_plugin_registrant.dart
+plugin_deps.MODULE.bazel

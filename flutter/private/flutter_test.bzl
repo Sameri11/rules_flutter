@@ -17,7 +17,7 @@ The launcher is a test so that Bazel sets TEST_SRCDIR, TEST_TMPDIR and the
 filter/shard variables for it.
 """
 
-load(":rules.bzl", "FlutterPackageInfo", "dart_test_kernel")
+load(":rules.bzl", "FlutterPackageInfo", "dart_test_kernel", "test_kernel_imports")
 
 visibility(["//flutter"])
 
@@ -55,12 +55,13 @@ export APP_NAME="$(cat "$ROOT/{package_name}")"
 {assets_export}
 # The package root is the working directory, as for `flutter test`. --packages
 # is omitted: pub's package_config rootUris are execroot-relative and do not
-# resolve in runfiles. The kernel already holds every imported library.
+# resolve in runfiles. The kernels already hold every imported library.
 {workdir}
-exec "$ROOT/{tester}" --disable-vm-service --non-interactive --enable-checked-mode \\
+{kernel}
+{run} --disable-vm-service --non-interactive --enable-checked-mode \\
   --verify-entry-points --enable-software-rendering --skia-deterministic-rendering \\
   --use-test-fonts --disable-asset-fonts --icu-data-file-path="$ROOT/{icu}" \\
-  {assets_flag} "$ROOT/{dill}"
+  {assets_flag} "$KERNEL"
 """
 
 _MATERIALIZE_COPY = """materialize() {
@@ -105,6 +106,36 @@ def _runfile(ctx, file):
 
 def _shell_quote(value):
     return "'" + value.replace("'", "'\"'\"'") + "'"
+
+def _kernel_block(test_dill, deps_dills, update):
+    """Shell that joins the test kernel and the deps kernels into $KERNEL.
+
+    flutter_tester loads one dill, so the kernels are concatenated, test first: the first
+    component with a main is the one that runs, and each deps kernel has one too. A
+    missing kernel fails here, with its name. Under `bazel test` the joined file lives
+    in TEST_TMPDIR; under `bazel run` it is in a temporary directory removed on exit.
+    """
+    lines = []
+    for path in [test_dill] + deps_dills:
+        lines += [
+            'if [[ ! -f "$ROOT/{}" ]]; then'.format(path),
+            '  echo "flutter_test: kernel $ROOT/{} is missing" >&2'.format(path),
+            "  exit 1",
+            "fi",
+        ]
+    if update:
+        lines += [
+            'KERNEL_DIR="$(mktemp -d)"',
+            "trap 'rm -rf \"$KERNEL_DIR\"' EXIT",
+        ]
+    else:
+        lines.append('KERNEL_DIR="${TEST_TMPDIR:?TEST_TMPDIR is not set}"')
+    lines += [
+        'KERNEL="$KERNEL_DIR/kernel.dill"',
+        "cat " + " ".join(['"$ROOT/{}"'.format(path) for path in [test_dill] + deps_dills]) + ' > "$KERNEL"',
+    ]
+    return "\n".join(lines)
+
 
 def _find_config(test_path, pkg_dir, known):
     """The nearest flutter_test_config.dart from the test's dir up to the pubspec dir.
@@ -246,6 +277,9 @@ def _launcher(ctx, update):
     package = ctx.attr.app[FlutterPackageInfo]
     pubspec = package.pubspec
     pkg_dir = _parent(_runfile(ctx, pubspec.src))
+    # The kernels the runner joins under the test kernel: the deps kernel, or under split the test
+    # deps and the lib tier. See test_kernel_imports.
+    deps = test_kernel_imports(package, ctx.attr.dart_defines)
 
     files = ctx.files.srcs + ctx.files.data + ctx.files.goldens
     for d in ctx.attr.materialize:
@@ -270,6 +304,7 @@ def _launcher(ctx, update):
             ['export FLUTTER_TEST_UPDATE_GOLDENS="$BUILD_WORKSPACE_DIRECTORY/{}"'.format(ctx.file.src.short_path)],
         )
 
+    tester = _runfile(ctx, toolchain.flutter_tester)
     runner = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.write(
         runner,
@@ -278,10 +313,10 @@ def _launcher(ctx, update):
             update_env = update_env,
             assets_export = assets_export,
             assets_flag = assets_flag,
-            dill = _runfile(ctx, ctx.file.dill),
+            kernel = _kernel_block(_runfile(ctx, ctx.file.dill), [_runfile(ctx, d) for d in deps], update),
             icu = _runfile(ctx, toolchain.icu_data),
             package_name = _runfile(ctx, pubspec.package_name),
-            tester = _runfile(ctx, toolchain.flutter_tester),
+            run = ('"$ROOT/{}"' if update else 'exec "$ROOT/{}"').format(tester),
             workdir = _materialize_script(pkg_dir, ctx.attr.materialize, ctx.attr.materialize_mode),
         ),
         is_executable = True,
@@ -294,7 +329,7 @@ def _launcher(ctx, update):
             pubspec.src,
             toolchain.flutter_tester,
             toolchain.icu_data,
-        ] + assets_files + files,
+        ] + deps + assets_files + files,
     )
     return runner, runfiles
 
@@ -329,6 +364,9 @@ _LAUNCHER_ATTRS = {
         mandatory = True,
         providers = [FlutterPackageInfo],
         doc = "The flutter_package the test belongs to: the package name, the working directory and the assets.",
+    ),
+    "dart_defines": attr.string_dict(
+        doc = "The dill's dart_defines. A test with any imports test_deps alone; see dart_test_kernel.",
     ),
     "src": attr.label(
         allow_single_file = [".dart"],
@@ -486,6 +524,7 @@ def flutter_test(
         materialize_mode = materialize_mode,
         env = env,
         env_inherit = env_inherit,
+        dart_defines = dart_defines,
     )
     _tester_test(
         name = name,

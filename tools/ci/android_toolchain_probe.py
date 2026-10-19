@@ -208,7 +208,7 @@ def run_core_isolation(workspace, output_base):
             },
             "pre_cutover": {
                 "source": (
-                    "prototype e485184^, fresh external core Consumer, host cc_binary, "
+                    "commit e485184^, fresh external core Consumer, host cc_binary, "
                     "both Android env vars unset"
                 ),
                 "android_repository_count": len(PRE_CUTOVER_ANDROID_REPOSITORIES),

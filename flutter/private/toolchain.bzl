@@ -10,6 +10,7 @@ FlutterToolchainInfo = provider(
         "flutter": "Flutter command launcher file.",
         "tools_snapshot": "flutter_tools snapshot file that the assets action executes.",
         "dartaotruntime": "Dart AOT runtime executable file.",
+        "dart": "Dart runtime executable, which runs the test-kernel driver.",
         "frontend_server": "Frontend server snapshot file.",
         "vm_isolate_snapshot": "Host engine's debug VM isolate snapshot file, shipped as the debug overlay's vm_snapshot_data.",
         "isolate_snapshot": "Host engine's debug isolate snapshot file, shipped as the debug overlay's isolate_snapshot_data.",
@@ -36,6 +37,7 @@ def _flutter_toolchain_impl(ctx):
         flutter = ctx.file._flutter,
         tools_snapshot = ctx.file._tools_snapshot,
         dartaotruntime = ctx.executable._dartaotruntime,
+        dart = ctx.executable._dart,
         frontend_server = ctx.file._frontend_server,
         vm_isolate_snapshot = ctx.file._vm_isolate_snapshot,
         isolate_snapshot = ctx.file._isolate_snapshot,
@@ -60,6 +62,12 @@ def _toolchain_attrs():
         ),
         "_dartaotruntime": attr.label(
             default = "@flutter_sdk//:dartaotruntime",
+            executable = True,
+            cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_dart": attr.label(
+            default = "@flutter_sdk//:dart",
             executable = True,
             cfg = "exec",
             allow_single_file = True,

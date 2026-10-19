@@ -1,0 +1,87 @@
+diff --git a/.gitignore b/.gitignore
+index 4b3bb04..383229a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -31,6 +31,7 @@ node_modules/
+ .pub-cache/
+ .pub/
+ /build/
++/bazel-*
+ ios/build/
+ android/build/
+ windows/build/
+diff --git a/pubspec.lock b/pubspec.lock
+index 917653a..78f0956 100644
+--- a/pubspec.lock
++++ b/pubspec.lock
+@@ -283,11 +283,9 @@ packages:
+   computer:
+     dependency: "direct main"
+     description:
+-      path: "."
+-      ref: "v1.0.88"
+-      resolved-ref: b0819c8a939e1fa6858f1a0e12ee8122db0df390
+-      url: "https://github.com/lollipopkit/dart_computer"
+-    source: git
++      path: "third_party/git/computer"
++      relative: true
++    source: path
+     version: "3.2.1"
+   convert:
+     dependency: transitive
+@@ -894,11 +892,9 @@ packages:
+   icons_plus:
+     dependency: "direct main"
+     description:
+-      path: "."
+-      ref: main
+-      resolved-ref: "42670d29c8c1cffb7203dd110e0009ba98709667"
+-      url: "https://github.com/lollipopkit/icons_plus"
+-    source: git
++      path: "third_party/git/icons_plus"
++      relative: true
++    source: path
+     version: "5.0.0"
+   image:
+     dependency: transitive
+@@ -1419,11 +1415,9 @@ packages:
+   re_editor:
+     dependency: transitive
+     description:
+-      path: "."
+-      ref: main
+-      resolved-ref: d5d70020da74082d182301a49e2bb87d30f0ab66
+-      url: "https://github.com/lollipopkit/re-editor"
+-    source: git
++      path: "third_party/git/re_editor"
++      relative: true
++    source: path
+     version: "0.8.0"
+   re_highlight:
+     dependency: transitive
+diff --git a/pubspec.yaml b/pubspec.yaml
+index d490c0e..38ab8da 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -68,9 +68,7 @@ dependencies:
+   circle_chart:
+     path: packages/circle_chart
+   icons_plus:
+-    git:
+-      url: https://github.com/lollipopkit/icons_plus
+-      ref: main
++    path: third_party/git/icons_plus
+   xterm:
+     path: packages/xterm
+   # Extracted from this app — see `docs/principles/bmc.md`. A path dependency
+@@ -78,9 +76,7 @@ dependencies:
+   redfish:
+     path: packages/redfish
+   computer:
+-    git:
+-      url: https://github.com/lollipopkit/dart_computer
+-      ref: v1.0.88
++    path: third_party/git/computer
+   watch_connectivity:
+     path: packages/watch_connectivity
+   plain_notification_token:

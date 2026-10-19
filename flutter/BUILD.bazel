@@ -24,3 +24,12 @@ config_setting(
     name = "mode_release",
     flag_values = {":mode": "release"},
 )
+
+# How a test kernel gets its test deps and lib tier. deps_lib (the default) builds the joined
+# deps_lib kernel per package. split passes the two to the test kernel as separate inputs, so no
+# deps_lib is built. Both give the same test kernel bytes.
+string_flag(
+    name = "test_kernel_deps",
+    build_setting_default = "deps_lib",
+    values = ["deps_lib", "split"],
+)

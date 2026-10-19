@@ -1,0 +1,2028 @@
+load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["plugin_deps.MODULE.bazel"])
+
+# The lockfile records these path dependencies without content hashes. Keep
+# every package's Dart declaration and source in the app action key.
+filegroup(
+    name = "circle_chart_srcs",
+    srcs = glob(["packages/circle_chart/lib/**/*.dart"]) + ["packages/circle_chart/pubspec.yaml"],
+)
+
+filegroup(
+    name = "dartssh2_srcs",
+    srcs = glob(["packages/dartssh2/lib/**/*.dart"]) + ["packages/dartssh2/pubspec.yaml"],
+)
+
+filegroup(
+    name = "fl_build_srcs",
+    srcs = glob(["packages/fl_build/lib/**/*.dart"]) + ["packages/fl_build/pubspec.yaml"],
+)
+
+filegroup(
+    name = "fl_lib_srcs",
+    srcs = glob(["packages/fl_lib/lib/**/*.dart"]) + ["packages/fl_lib/pubspec.yaml"],
+)
+
+filegroup(
+    name = "flutter_pty_srcs",
+    srcs = glob([
+        "packages/flutter_pty/hook/**",
+        "packages/flutter_pty/lib/**/*.dart",
+        "packages/flutter_pty/src/**",
+    ]) + ["packages/flutter_pty/pubspec.yaml"],
+)
+
+filegroup(
+    name = "plain_notification_token_srcs",
+    srcs = glob(["packages/plain_notification_token/lib/**/*.dart"]) + ["packages/plain_notification_token/pubspec.yaml"],
+)
+
+filegroup(
+    name = "redfish_srcs",
+    srcs = glob(["packages/redfish/lib/**/*.dart"]) + ["packages/redfish/pubspec.yaml"],
+)
+
+filegroup(
+    name = "watch_connectivity_srcs",
+    srcs = glob(["packages/watch_connectivity/lib/**/*.dart"]) + ["packages/watch_connectivity/pubspec.yaml"],
+)
+
+filegroup(
+    name = "xterm_srcs",
+    srcs = glob(["packages/xterm/lib/**/*.dart"]) + ["packages/xterm/pubspec.yaml"],
+)
+
+# Git dependencies are vendored as path packages (rules refuse git sources).
+filegroup(
+    name = "third_party_git_srcs",
+    srcs = glob(["third_party/git/**/*.dart", "third_party/git/**/pubspec.yaml", "third_party/git/**/assets/**"], allow_empty = True),
+)
+
+_PATH_DEPS = [
+    ":circle_chart_srcs",
+    ":dartssh2_srcs",
+    ":fl_build_srcs",
+    ":fl_lib_srcs",
+    ":flutter_pty_srcs",
+    ":plain_notification_token_srcs",
+    ":redfish_srcs",
+    ":watch_connectivity_srcs",
+    ":xterm_srcs",
+    ":third_party_git_srcs",
+]
+
+flutter_app(
+    abis = ["arm64-v8a"],
+    path_deps = _PATH_DEPS,
+    pub = "@pub",
+)
+
+# BEGIN generated flutter_test targets; do not edit
+# Helper sources: every non-_test.dart under test/. Data: every non-.dart file under test/.
+_TEST_HELPERS = glob(["test/**/*.dart"], exclude = ["test/**/*_test.dart"], allow_empty = True) + glob(["scripts/**/*.dart", "hook/**/*.dart"])
+_TEST_DATA = glob(["test/**"], exclude = ["test/**/*.dart"], allow_empty = True)
+
+flutter_test(
+    name = "test_agent_command_preview_test",
+    app = ":app",
+    src = "test/agent_command_preview_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_agent_common_test",
+    app = ":app",
+    src = "test/agent_common_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_agent_conversation_replay_test",
+    app = ":app",
+    src = "test/agent_conversation_replay_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_agent_conversation_store_test",
+    app = ":app",
+    src = "test/agent_conversation_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_agent_scope_test",
+    app = ":app",
+    src = "test/agent_scope_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_agent_session_test",
+    app = ":app",
+    src = "test/agent_session_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_agent_stale_session_test",
+    app = ":app",
+    src = "test/agent_stale_session_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_agent_view_test",
+    app = ":app",
+    src = "test/agent_view_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_android_backup_policy_test",
+    app = ":app",
+    src = "test/android_backup_policy_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + ["//android/app:host_test_data"],
+)
+
+flutter_test(
+    name = "test_android_service_policy_test",
+    app = ":app",
+    src = "test/android_service_policy_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + ["//android/app:host_test_data", "lib/core/chan.dart", "lib/view/page/ssh/page/page.dart"],
+)
+
+flutter_test(
+    name = "test_animated_masonry_test",
+    app = ":app",
+    src = "test/animated_masonry_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_app_locale_test",
+    app = ":app",
+    src = "test/app_locale_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_app_tab_test",
+    app = ":app",
+    src = "test/app_tab_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ask_ai_insecure_endpoint_test",
+    app = ":app",
+    src = "test/ask_ai_insecure_endpoint_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ask_ai_layout_test",
+    app = ":app",
+    src = "test/ask_ai_layout_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ask_ai_repository_test",
+    app = ":app",
+    src = "test/ask_ai_repository_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_compression_test",
+    app = ":app",
+    src = "test/backup_compression_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_sync_encryption_test",
+    app = ":app",
+    src = "test/backup_sync_encryption_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_backup_v2_test",
+    app = ":app",
+    src = "test/backup_v2_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_benchmark_dispose_test",
+    app = ":app",
+    src = "test/benchmark_dispose_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_benchmark_log_view_test",
+    app = ":app",
+    src = "test/benchmark_log_view_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_benchmark_page_layout_test",
+    app = ":app",
+    src = "test/benchmark_page_layout_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_benchmark_resume_test",
+    app = ":app",
+    src = "test/benchmark_resume_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_benchmark_store_test",
+    app = ":app",
+    src = "test/benchmark_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_bio_auth_unavailable_test",
+    app = ":app",
+    src = "test/bio_auth_unavailable_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_bmc_cfg_test",
+    app = ":app",
+    src = "test/bmc_cfg_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_bmc_credential_store_test",
+    app = ":app",
+    src = "test/bmc_credential_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_browse_path_test",
+    app = ":app",
+    src = "test/browse_path_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_build_feature_migration_test",
+    app = ":app",
+    src = "test/build_feature_migration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_carry_mode_test",
+    app = ":app",
+    src = "test/carry_mode_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_chsh_script_test",
+    app = ":app",
+    src = "test/chsh_script_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_connection_stats_store_test",
+    app = ":app",
+    src = "test/connection_stats_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_container_resource_views_test",
+    app = ":app",
+    src = "test/container_resource_views_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_container_test",
+    app = ":app",
+    src = "test/container_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_copy_tree_test",
+    app = ":app",
+    src = "test/copy_tree_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_crash_report_collect_test",
+    app = ":app",
+    src = "test/crash_report_collect_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_crash_report_dialog_test",
+    app = ":app",
+    src = "test/crash_report_dialog_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_crash_report_test",
+    app = ":app",
+    src = "test/crash_report_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_cron_manager_test",
+    app = ":app",
+    src = "test/cron_manager_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_db_rescue_test",
+    app = ":app",
+    src = "test/db_rescue_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_desktop_shortcuts_test",
+    app = ":app",
+    src = "test/desktop_shortcuts_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_diagnostics_level_test",
+    app = ":app",
+    src = "test/diagnostics_level_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_diagnostics_scrub_test",
+    app = ":app",
+    src = "test/diagnostics_scrub_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_disk_test",
+    app = ":app",
+    src = "test/disk_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_dist_asset_render_test",
+    app = ":app",
+    src = "test/dist_asset_render_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_dist_icon_consent_test",
+    app = ":app",
+    src = "test/dist_icon_consent_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_dist_icon_test",
+    app = ":app",
+    src = "test/dist_icon_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/distro/**"]) + ["lib/data/model/server/dist_license.dart"],
+)
+
+flutter_test(
+    name = "test_dist_icon_widget_test",
+    app = ":app",
+    src = "test/dist_icon_widget_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_dist_mark_url_test",
+    app = ":app",
+    src = "test/dist_mark_url_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_edge_fade_scroll_test",
+    app = ":app",
+    src = "test/edge_fade_scroll_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_err_equality_test",
+    app = ":app",
+    src = "test/err_equality_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_file_browser_test",
+    app = ":app",
+    src = "test/file_browser_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_file_issue_test",
+    app = ":app",
+    src = "test/file_issue_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_file_tab_restore_test",
+    app = ":app",
+    src = "test/file_tab_restore_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_file_tail_test",
+    app = ":app",
+    src = "test/file_tail_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_file_transfer_test",
+    app = ":app",
+    src = "test/file_transfer_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_file_transfer_worker_test",
+    app = ":app",
+    src = "test/file_transfer_worker_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_float_shell_test",
+    app = ":app",
+    src = "test/float_shell_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_float_shell_view_test",
+    app = ":app",
+    src = "test/float_shell_view_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_frb_parser_test",
+    app = ":app",
+    src = "test/frb_parser_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + [":sbm_ffi_dylib"] + glob(["crates/sbm_parser/tests/fixtures/**"]),
+)
+
+flutter_test(
+    name = "test_geo_bundle_test",
+    app = ":app",
+    src = "test/geo_bundle_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_geo_coord_test",
+    app = ":app",
+    src = "test/geo_coord_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_geo_data_revision_test",
+    app = ":app",
+    src = "test/geo_data_revision_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_geo_manifest_test",
+    app = ":app",
+    src = "test/geo_manifest_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_geo_source_test",
+    app = ":app",
+    src = "test/geo_source_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_global_agent_tools_test",
+    app = ":app",
+    src = "test/global_agent_tools_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_globe_land_test",
+    app = ":app",
+    src = "test/globe_land_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/geo/**"]),
+)
+
+flutter_test(
+    name = "test_globe_layout_test",
+    app = ":app",
+    src = "test/globe_layout_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_globe_painter_test",
+    app = ":app",
+    src = "test/globe_painter_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_globe_projection_test",
+    app = ":app",
+    src = "test/globe_projection_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_globe_view_test",
+    app = ":app",
+    src = "test/globe_view_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_grouped_settings_test",
+    app = ":app",
+    src = "test/grouped_settings_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_guest_path_test",
+    app = ":app",
+    src = "test/guest_path_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_helpers_fake_stream_sink_test",
+    app = ":app",
+    src = "test/helpers/fake_stream_sink_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_hive_import_test",
+    app = ":app",
+    src = "test/hive_import_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_hive_release_migration_test",
+    app = ":app",
+    src = "test/hive_release_migration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_home_rail_tabs_test",
+    app = ":app",
+    src = "test/home_rail_tabs_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_host_key_forget_test",
+    app = ":app",
+    src = "test/host_key_forget_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_host_key_prompt_test",
+    app = ":app",
+    src = "test/host_key_prompt_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_host_key_verify_test",
+    app = ":app",
+    src = "test/host_key_verify_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_identities_cache_test",
+    app = ":app",
+    src = "test/identities_cache_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_identity_file_key_test",
+    app = ":app",
+    src = "test/identity_file_key_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ios_multitasking_test",
+    app = ":app",
+    src = "test/ios_multitasking_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["ios/Runner/Info-*.plist", "ios/Runner.xcodeproj/project.pbxproj"]),
+)
+
+flutter_test(
+    name = "test_ip_geo_test",
+    app = ":app",
+    src = "test/ip_geo_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_iperf_test",
+    app = ":app",
+    src = "test/iperf_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ish_exec_test",
+    app = ":app",
+    src = "test/ish_exec_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_jump_chain_test",
+    app = ":app",
+    src = "test/jump_chain_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_jump_failover_test",
+    app = ":app",
+    src = "test/jump_failover_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_l10n_fr_test",
+    app = ":app",
+    src = "test/l10n_fr_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_linux_distro_test",
+    app = ":app",
+    src = "test/linux_distro_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/**"]),
+)
+
+flutter_test(
+    name = "test_linux_seed_test",
+    app = ":app",
+    src = "test/linux_seed_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/**"]),
+)
+
+flutter_test(
+    name = "test_live_activity_switch_test",
+    app = ":app",
+    src = "test/live_activity_switch_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_local_exec_test",
+    app = ":app",
+    src = "test/local_exec_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_local_file_backend_test",
+    app = ":app",
+    src = "test/local_file_backend_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_local_source_test",
+    app = ":app",
+    src = "test/local_source_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_logo_url_test",
+    app = ":app",
+    src = "test/logo_url_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m004_id_remap_test",
+    app = ":app",
+    src = "test/m004_id_remap_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m005_monitor_insecure_http_test",
+    app = ":app",
+    src = "test/m005_monitor_insecure_http_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m006_bmc_columns_test",
+    app = ":app",
+    src = "test/m006_bmc_columns_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m007_private_key_comment_test",
+    app = ":app",
+    src = "test/m007_private_key_comment_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m011_virt_key_rows_test",
+    app = ":app",
+    src = "test/m011_virt_key_rows_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m012_known_hosts_test",
+    app = ":app",
+    src = "test/m012_known_hosts_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m013_virt_key_names_test",
+    app = ":app",
+    src = "test/m013_virt_key_names_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m014_ssh_file_transport_test",
+    app = ":app",
+    src = "test/m014_ssh_file_transport_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m015_watch_selection_to_exclusion_test",
+    app = ":app",
+    src = "test/m015_watch_selection_to_exclusion_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m016_legacy_status_urls_test",
+    app = ":app",
+    src = "test/m016_legacy_status_urls_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m017_both_transports_test",
+    app = ":app",
+    src = "test/m017_both_transports_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m018_server_geo_test",
+    app = ":app",
+    src = "test/m018_server_geo_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m019_drop_geo_cache_test",
+    app = ":app",
+    src = "test/m019_drop_geo_cache_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m021_home_tabs_bar_test",
+    app = ":app",
+    src = "test/m021_home_tabs_bar_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m022_ai_endpoint_version_test",
+    app = ":app",
+    src = "test/m022_ai_endpoint_version_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m023_enum_names_test",
+    app = ":app",
+    src = "test/m023_enum_names_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_m024_remote_desktop_profiles_test",
+    app = ":app",
+    src = "test/m024_remote_desktop_profiles_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_macos_entitlements_test",
+    app = ":app",
+    src = "test/macos_entitlements_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["macos/Runner/*.entitlements", "macos/Runner.xcodeproj/project.pbxproj", "scripts/release/release-macos-dmg.sh"]),
+)
+
+flutter_test(
+    name = "test_model_context_test",
+    app = ":app",
+    src = "test/model_context_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/**"]),
+)
+
+flutter_test(
+    name = "test_monitor_capabilities_test",
+    app = ":app",
+    src = "test/monitor_capabilities_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_monitor_file_backend_test",
+    app = ":app",
+    src = "test/monitor_file_backend_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_monitor_insecure_optin_test",
+    app = ":app",
+    src = "test/monitor_insecure_optin_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_monitor_metrics_test",
+    app = ":app",
+    src = "test/monitor_metrics_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_monitor_terminal_e2e_test",
+    app = ":app",
+    src = "test/monitor_terminal_e2e_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_monitor_terminal_ws_test",
+    app = ":app",
+    src = "test/monitor_terminal_ws_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_native_exit_test",
+    app = ":app",
+    src = "test/native_exit_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_net_speed_test",
+    app = ":app",
+    src = "test/net_speed_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_oci_image_test",
+    app = ":app",
+    src = "test/oci_image_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_pane_width_test",
+    app = ":app",
+    src = "test/pane_width_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_persistent_shell_test",
+    app = ":app",
+    src = "test/persistent_shell_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_port_forward_provider_test",
+    app = ":app",
+    src = "test/port_forward_provider_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_port_forward_store_test",
+    app = ":app",
+    src = "test/port_forward_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_privacy_manifest_test",
+    app = ":app",
+    src = "test/privacy_manifest_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + ["ios/PrivacyInfo.xcprivacy", "ios/Runner/PrivacyInfo.xcprivacy", "ios/StatusWidget/PrivacyInfo.xcprivacy", "ios/WatchApp/PrivacyInfo.xcprivacy", "macos/Runner/PrivacyInfo.xcprivacy"] + glob(["packages/**/*.xcprivacy", "packages/*/pubspec.yaml"]),
+    materialize = ["ios", "macos", "packages"],
+)
+
+flutter_test(
+    name = "test_private_address_test",
+    app = ":app",
+    src = "test/private_address_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_private_key_edit_test",
+    app = ":app",
+    src = "test/private_key_edit_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_privileged_exec_test",
+    app = ":app",
+    src = "test/privileged_exec_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_proc_test",
+    app = ":app",
+    src = "test/proc_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_progress_line_test",
+    app = ":app",
+    src = "test/progress_line_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_prompt_queue_test",
+    app = ":app",
+    src = "test/prompt_queue_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_proxy_command_sandbox_test",
+    app = ":app",
+    src = "test/proxy_command_sandbox_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_prune_android_dev_plugins_test",
+    app = ":app",
+    src = "test/prune_android_dev_plugins_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + [".flutter-plugins-dependencies"],
+)
+
+flutter_test(
+    name = "test_pve_test",
+    app = ":app",
+    src = "test/pve_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_refresh_interval_test",
+    app = ":app",
+    src = "test/refresh_interval_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_remote_desktop_navigation_test",
+    app = ":app",
+    src = "test/remote_desktop_navigation_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_remote_desktop_sessions_test",
+    app = ":app",
+    src = "test/remote_desktop_sessions_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_remote_desktop_store_test",
+    app = ":app",
+    src = "test/remote_desktop_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_remote_desktop_viewer_test",
+    app = ":app",
+    src = "test/remote_desktop_viewer_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_restoration_bucket_test",
+    app = ":app",
+    src = "test/restoration_bucket_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["lib/**/*.dart"]),
+)
+
+flutter_test(
+    name = "test_restore_identity_test",
+    app = ":app",
+    src = "test/restore_identity_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rootfs_hardlink_test",
+    app = ":app",
+    src = "test/rootfs_hardlink_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rootfs_lifecycle_test",
+    app = ":app",
+    src = "test/rootfs_lifecycle_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rootfs_manifest_ci_test",
+    app = ":app",
+    src = "test/rootfs_manifest_ci_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rootfs_manifest_source_test",
+    app = ":app",
+    src = "test/rootfs_manifest_source_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/**"]) + ["pubspec.yaml"],
+)
+
+flutter_test(
+    name = "test_rootfs_manifest_test",
+    app = ":app",
+    src = "test/rootfs_manifest_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/**"]) + ["pubspec.yaml"],
+)
+
+flutter_test(
+    name = "test_rootfs_manifest_trust_test",
+    app = ":app",
+    src = "test/rootfs_manifest_trust_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rootfs_modes_test",
+    app = ":app",
+    src = "test/rootfs_modes_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rootfs_tar_safety_test",
+    app = ":app",
+    src = "test/rootfs_tar_safety_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rootfs_whiteout_test",
+    app = ":app",
+    src = "test/rootfs_whiteout_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_rust_build_environment_test",
+    app = ":app",
+    src = "test/rust_build_environment_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_sandbox_import_test",
+    app = ":app",
+    src = "test/sandbox_import_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_schema_migration_list_test",
+    app = ":app",
+    src = "test/schema_migration_list_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_schema_too_new_page_test",
+    app = ":app",
+    src = "test/schema_too_new_page_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_scp_protocol_test",
+    app = ":app",
+    src = "test/scp_protocol_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_script_version_test",
+    app = ":app",
+    src = "test/script_version_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_secure_endpoint_test",
+    app = ":app",
+    src = "test/secure_endpoint_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_self_addr_test",
+    app = ":app",
+    src = "test/self_addr_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_card_gesture_test",
+    app = ":app",
+    src = "test/server_card_gesture_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_dedup_test",
+    app = ":app",
+    src = "test/server_dedup_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_detail_card_test",
+    app = ":app",
+    src = "test/server_detail_card_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_detail_expand_test",
+    app = ":app",
+    src = "test/server_detail_expand_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_dist_store_test",
+    app = ":app",
+    src = "test/server_dist_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_edit_logic_test",
+    app = ":app",
+    src = "test/server_edit_logic_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_exec_test",
+    app = ":app",
+    src = "test/server_exec_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_func_btn_test",
+    app = ":app",
+    src = "test/server_func_btn_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_globe_test",
+    app = ":app",
+    src = "test/server_globe_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_globe_toggle_test",
+    app = ":app",
+    src = "test/server_globe_toggle_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_picker_test",
+    app = ":app",
+    src = "test/server_picker_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_refresh_scheduler_test",
+    app = ":app",
+    src = "test/server_refresh_scheduler_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_rename_store_test",
+    app = ":app",
+    src = "test/server_rename_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_save_agent_wait_test",
+    app = ":app",
+    src = "test/server_save_agent_wait_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_selection_reload_test",
+    app = ":app",
+    src = "test/server_selection_reload_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_share_import_flow_test",
+    app = ":app",
+    src = "test/server_share_import_flow_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_share_qr_test",
+    app = ":app",
+    src = "test/server_share_qr_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_share_test",
+    app = ":app",
+    src = "test/server_share_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_status_update_req_test",
+    app = ":app",
+    src = "test/server_status_update_req_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + [":sbm_ffi_dylib"],
+)
+
+flutter_test(
+    name = "test_server_store_test",
+    app = ":app",
+    src = "test/server_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_server_tag_switcher_test",
+    app = ":app",
+    src = "test/server_tag_switcher_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_service_manager_test",
+    app = ":app",
+    src = "test/service_manager_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_services_dispose_test",
+    app = ":app",
+    src = "test/services_dispose_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_session_tab_bar_test",
+    app = ":app",
+    src = "test/session_tab_bar_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_setting_store_test",
+    app = ":app",
+    src = "test/setting_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_setting_value_shape_test",
+    app = ":app",
+    src = "test/setting_value_shape_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_settings_menu_test",
+    app = ":app",
+    src = "test/settings_menu_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_settings_pane_nav_test",
+    app = ":app",
+    src = "test/settings_pane_nav_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_sftp_escalation_test",
+    app = ":app",
+    src = "test/sftp_escalation_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_sftp_helpers_test",
+    app = ":app",
+    src = "test/sftp_helpers_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_sftp_replace_test",
+    app = ":app",
+    src = "test/sftp_replace_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_shell_file_ops_test",
+    app = ":app",
+    src = "test/shell_file_ops_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_snippet_list_test",
+    app = ":app",
+    src = "test/snippet_list_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_snippet_local_test",
+    app = ":app",
+    src = "test/snippet_local_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_spi_migration_test",
+    app = ":app",
+    src = "test/spi_migration_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_sqlite_store_test",
+    app = ":app",
+    src = "test/sqlite_store_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_auth_test",
+    app = ":app",
+    src = "test/ssh_auth_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_combined_auth_test",
+    app = ":app",
+    src = "test/ssh_combined_auth_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["packages/dartssh2/test/fixtures/**"]),
+)
+
+flutter_test(
+    name = "test_ssh_config_test",
+    app = ":app",
+    src = "test/ssh_config_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_credential_equality_test",
+    app = ":app",
+    src = "test/ssh_credential_equality_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_exec_result_test",
+    app = ":app",
+    src = "test/ssh_exec_result_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_key_unlock_test",
+    app = ":app",
+    src = "test/ssh_key_unlock_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_keygen_page_test",
+    app = ":app",
+    src = "test/ssh_keygen_page_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_keygen_test",
+    app = ":app",
+    src = "test/ssh_keygen_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_local_tunnel_test",
+    app = ":app",
+    src = "test/ssh_local_tunnel_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_native_crypto_test",
+    app = ":app",
+    src = "test/ssh_native_crypto_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + [":sbm_ffi_dylib"],
+)
+
+flutter_test(
+    name = "test_ssh_tab_restore_test",
+    app = ":app",
+    src = "test/ssh_tab_restore_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_ssh_terminal_environment_test",
+    app = ":app",
+    src = "test/ssh_terminal_environment_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_stores_init_test",
+    app = ":app",
+    src = "test/stores_init_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_sudo_password_injection_test",
+    app = ":app",
+    src = "test/sudo_password_injection_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_system_dist_test",
+    app = ":app",
+    src = "test/system_dist_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tables_schema_test",
+    app = ":app",
+    src = "test/tables_schema_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tag_group_test",
+    app = ":app",
+    src = "test/tag_group_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_terminal_clipboard_test",
+    app = ":app",
+    src = "test/terminal_clipboard_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_terminal_float_test",
+    app = ":app",
+    src = "test/terminal_float_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_terminal_output_buffer_test",
+    app = ":app",
+    src = "test/terminal_output_buffer_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_terminal_platform_test",
+    app = ":app",
+    src = "test/terminal_platform_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_terminal_session_test",
+    app = ":app",
+    src = "test/terminal_session_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tmux_command_builder_test",
+    app = ":app",
+    src = "test/tmux_command_builder_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tmux_launch_plan_test",
+    app = ":app",
+    src = "test/tmux_launch_plan_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tmux_restore_state_test",
+    app = ":app",
+    src = "test/tmux_restore_state_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tmux_session_info_test",
+    app = ":app",
+    src = "test/tmux_session_info_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tmux_session_scanner_test",
+    app = ":app",
+    src = "test/tmux_session_scanner_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_toast_test",
+    app = ":app",
+    src = "test/toast_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tombstone_test",
+    app = ":app",
+    src = "test/tombstone_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_tray_test",
+    app = ":app",
+    src = "test/tray_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_usage_sinks_test",
+    app = ":app",
+    src = "test/usage_sinks_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_user_manager_test",
+    app = ":app",
+    src = "test/user_manager_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_version_test",
+    app = ":app",
+    src = "test/version_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_virt_key_availability_test",
+    app = ":app",
+    src = "test/virt_key_availability_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_virt_key_order_test",
+    app = ":app",
+    src = "test/virt_key_order_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_virt_key_setting_test",
+    app = ":app",
+    src = "test/virt_key_setting_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_watch_sync_test",
+    app = ":app",
+    src = "test/watch_sync_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_widget_sync_test",
+    app = ":app",
+    src = "test/widget_sync_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_windows_install_ssh_e2e_test",
+    app = ":app",
+    src = "test/windows_install_ssh_e2e_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA,
+)
+
+flutter_test(
+    name = "test_windows_test",
+    app = ":app",
+    src = "test/windows_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + [":sbm_ffi_dylib"],
+)
+
+flutter_test(
+    name = "test_yabs_script_test",
+    app = ":app",
+    src = "test/yabs_script_test.dart",
+    srcs = _TEST_HELPERS,
+    data = _TEST_DATA + glob(["assets/**"]) + ["pubspec.yaml"],
+)
+
+test_suite(
+    name = "flutter_tests",
+    tests = ["test_agent_command_preview_test", "test_agent_common_test", "test_agent_conversation_replay_test", "test_agent_conversation_store_test", "test_agent_scope_test", "test_agent_session_test", "test_agent_stale_session_test", "test_agent_view_test", "test_android_backup_policy_test", "test_android_service_policy_test", "test_animated_masonry_test", "test_app_locale_test", "test_app_tab_test", "test_ask_ai_insecure_endpoint_test", "test_ask_ai_layout_test", "test_ask_ai_repository_test", "test_backup_compression_test", "test_backup_sync_encryption_test", "test_backup_v2_test", "test_benchmark_dispose_test", "test_benchmark_log_view_test", "test_benchmark_page_layout_test", "test_benchmark_resume_test", "test_benchmark_store_test", "test_bio_auth_unavailable_test", "test_bmc_cfg_test", "test_bmc_credential_store_test", "test_browse_path_test", "test_build_feature_migration_test", "test_carry_mode_test", "test_chsh_script_test", "test_connection_stats_store_test", "test_container_resource_views_test", "test_container_test", "test_copy_tree_test", "test_crash_report_collect_test", "test_crash_report_dialog_test", "test_crash_report_test", "test_cron_manager_test", "test_db_rescue_test", "test_desktop_shortcuts_test", "test_diagnostics_level_test", "test_diagnostics_scrub_test", "test_disk_test", "test_dist_asset_render_test", "test_dist_icon_consent_test", "test_dist_icon_test", "test_dist_icon_widget_test", "test_dist_mark_url_test", "test_edge_fade_scroll_test", "test_err_equality_test", "test_file_browser_test", "test_file_issue_test", "test_file_tab_restore_test", "test_file_tail_test", "test_file_transfer_test", "test_file_transfer_worker_test", "test_float_shell_test", "test_float_shell_view_test", "test_frb_parser_test", "test_geo_bundle_test", "test_geo_coord_test", "test_geo_data_revision_test", "test_geo_manifest_test", "test_geo_source_test", "test_global_agent_tools_test", "test_globe_land_test", "test_globe_layout_test", "test_globe_painter_test", "test_globe_projection_test", "test_globe_view_test", "test_grouped_settings_test", "test_guest_path_test", "test_helpers_fake_stream_sink_test", "test_hive_import_test", "test_hive_release_migration_test", "test_home_rail_tabs_test", "test_host_key_forget_test", "test_host_key_prompt_test", "test_host_key_verify_test", "test_identities_cache_test", "test_identity_file_key_test", "test_ios_multitasking_test", "test_ip_geo_test", "test_iperf_test", "test_ish_exec_test", "test_jump_chain_test", "test_jump_failover_test", "test_l10n_fr_test", "test_linux_distro_test", "test_linux_seed_test", "test_live_activity_switch_test", "test_local_exec_test", "test_local_file_backend_test", "test_local_source_test", "test_logo_url_test", "test_m004_id_remap_test", "test_m005_monitor_insecure_http_test", "test_m006_bmc_columns_test", "test_m007_private_key_comment_test", "test_m011_virt_key_rows_test", "test_m012_known_hosts_test", "test_m013_virt_key_names_test", "test_m014_ssh_file_transport_test", "test_m015_watch_selection_to_exclusion_test", "test_m016_legacy_status_urls_test", "test_m017_both_transports_test", "test_m018_server_geo_test", "test_m019_drop_geo_cache_test", "test_m021_home_tabs_bar_test", "test_m022_ai_endpoint_version_test", "test_m023_enum_names_test", "test_m024_remote_desktop_profiles_test", "test_macos_entitlements_test", "test_model_context_test", "test_monitor_capabilities_test", "test_monitor_file_backend_test", "test_monitor_insecure_optin_test", "test_monitor_metrics_test", "test_monitor_terminal_e2e_test", "test_monitor_terminal_ws_test", "test_native_exit_test", "test_net_speed_test", "test_oci_image_test", "test_pane_width_test", "test_persistent_shell_test", "test_port_forward_provider_test", "test_port_forward_store_test", "test_privacy_manifest_test", "test_private_address_test", "test_private_key_edit_test", "test_privileged_exec_test", "test_proc_test", "test_progress_line_test", "test_prompt_queue_test", "test_proxy_command_sandbox_test", "test_prune_android_dev_plugins_test", "test_pve_test", "test_refresh_interval_test", "test_remote_desktop_navigation_test", "test_remote_desktop_sessions_test", "test_remote_desktop_store_test", "test_remote_desktop_viewer_test", "test_restoration_bucket_test", "test_restore_identity_test", "test_rootfs_hardlink_test", "test_rootfs_lifecycle_test", "test_rootfs_manifest_ci_test", "test_rootfs_manifest_source_test", "test_rootfs_manifest_test", "test_rootfs_manifest_trust_test", "test_rootfs_modes_test", "test_rootfs_tar_safety_test", "test_rootfs_whiteout_test", "test_rust_build_environment_test", "test_sandbox_import_test", "test_schema_migration_list_test", "test_schema_too_new_page_test", "test_scp_protocol_test", "test_script_version_test", "test_secure_endpoint_test", "test_self_addr_test", "test_server_card_gesture_test", "test_server_dedup_test", "test_server_detail_card_test", "test_server_detail_expand_test", "test_server_dist_store_test", "test_server_edit_logic_test", "test_server_exec_test", "test_server_func_btn_test", "test_server_globe_test", "test_server_globe_toggle_test", "test_server_picker_test", "test_server_refresh_scheduler_test", "test_server_rename_store_test", "test_server_save_agent_wait_test", "test_server_selection_reload_test", "test_server_share_import_flow_test", "test_server_share_qr_test", "test_server_share_test", "test_server_status_update_req_test", "test_server_store_test", "test_server_tag_switcher_test", "test_service_manager_test", "test_services_dispose_test", "test_session_tab_bar_test", "test_setting_store_test", "test_setting_value_shape_test", "test_settings_menu_test", "test_settings_pane_nav_test", "test_sftp_escalation_test", "test_sftp_helpers_test", "test_sftp_replace_test", "test_shell_file_ops_test", "test_snippet_list_test", "test_snippet_local_test", "test_spi_migration_test", "test_sqlite_store_test", "test_ssh_auth_test", "test_ssh_combined_auth_test", "test_ssh_config_test", "test_ssh_credential_equality_test", "test_ssh_exec_result_test", "test_ssh_key_unlock_test", "test_ssh_keygen_page_test", "test_ssh_keygen_test", "test_ssh_local_tunnel_test", "test_ssh_native_crypto_test", "test_ssh_tab_restore_test", "test_ssh_terminal_environment_test", "test_stores_init_test", "test_sudo_password_injection_test", "test_system_dist_test", "test_tables_schema_test", "test_tag_group_test", "test_terminal_clipboard_test", "test_terminal_float_test", "test_terminal_output_buffer_test", "test_terminal_platform_test", "test_terminal_session_test", "test_tmux_command_builder_test", "test_tmux_launch_plan_test", "test_tmux_restore_state_test", "test_tmux_session_info_test", "test_tmux_session_scanner_test", "test_toast_test", "test_tombstone_test", "test_tray_test", "test_usage_sinks_test", "test_user_manager_test", "test_version_test", "test_virt_key_availability_test", "test_virt_key_order_test", "test_virt_key_setting_test", "test_watch_sync_test", "test_widget_sync_test", "test_windows_install_ssh_e2e_test", "test_windows_test", "test_yabs_script_test"],
+)
+# END generated flutter_test targets
+
+# sbm_ffi cdylib for the four tests that load it from cwd (`target/debug/libsbm_ffi.dylib`, test/rust_lib_helper.dart).
+# Not hermetic: uses the host cargo and its registry.
+genrule(
+    name = "sbm_ffi_dylib",
+    srcs = glob(["Cargo.toml", "Cargo.lock", "crates/**", "monitor/**"]),
+    outs = ["target/debug/libsbm_ffi.dylib", "target/debug/libsbm_ffi.so"],
+    cmd = """
+set -eo pipefail
+export HOME="$$(echo ~)"  # Bazel's genrule env has no HOME; rustup needs it
+export PATH="$$HOME/.cargo/bin:$$PATH" RUSTUP_TOOLCHAIN=1.97.1  # crates/sbm_ffi/rust-toolchain.toml
+cargo build -p sbm_ffi --target-dir "$(RULEDIR)/cargo" --quiet
+# Each host writes its own shared library; the other output is an empty placeholder.
+for ext in dylib so; do
+  if [ -f "$(RULEDIR)/cargo/debug/libsbm_ffi.$$ext" ]; then
+    cp "$(RULEDIR)/cargo/debug/libsbm_ffi.$$ext" "$(RULEDIR)/target/debug/libsbm_ffi.$$ext"
+  else
+    : > "$(RULEDIR)/target/debug/libsbm_ffi.$$ext"
+  fi
+done
+""",
+    local = True,
+)

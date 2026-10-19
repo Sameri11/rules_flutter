@@ -1,0 +1,17 @@
+[
+  {
+    "path": "third_party/git/icons_plus",
+    "url": "https://github.com/lollipopkit/icons_plus",
+    "rev": "42670d29c8c1cffb7203dd110e0009ba98709667"
+  },
+  {
+    "path": "third_party/git/computer",
+    "url": "https://github.com/lollipopkit/dart_computer",
+    "rev": "b0819c8a939e1fa6858f1a0e12ee8122db0df390"
+  },
+  {
+    "path": "third_party/git/re_editor",
+    "url": "https://github.com/lollipopkit/re-editor",
+    "rev": "d5d70020da74082d182301a49e2bb87d30f0ab66"
+  }
+]

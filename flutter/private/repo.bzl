@@ -20,6 +20,9 @@ package(default_visibility = ["//visibility:public"])
 # with the file it wraps produces a self-edge in the dependency graph.
 exports_files([
     "dartaotruntime",
+    "dart",
+    "dart_sdk_revision",
+    "vm_platform_strong.dill",
     "flutter",
     "flutter_tools.snapshot",
     "frontend_server.snapshot",
@@ -161,6 +164,22 @@ def _flutter_sdk_impl(ctx):
     ctx.symlink(
         "{}/dart-sdk/bin/dartaotruntime".format(cache),
         "dartaotruntime",
+    )
+
+    # The test-kernel driver is a kernel, run by `dart`; its build checks the SDK
+    # revision against the pin and compiles against the platform (see
+    # test_kernel_driver.bzl).
+    ctx.symlink(
+        "{}/dart-sdk/bin/dart".format(cache),
+        "dart",
+    )
+    ctx.symlink(
+        "{}/dart-sdk/lib/_internal/vm_platform_strong.dill".format(cache),
+        "vm_platform_strong.dill",
+    )
+    ctx.symlink(
+        "{}/dart-sdk/revision".format(cache),
+        "dart_sdk_revision",
     )
 
     # Declared as an input so the action key hashes the launcher's content,

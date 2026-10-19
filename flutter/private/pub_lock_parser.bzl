@@ -153,10 +153,10 @@ def resolve_lock(text):
     """Classifies lock entries; fails closed on anything not modelled.
 
     Returns `{"hosted": [...], "sdk": [...], "path": [...]}`,
-    each list sorted by package name. Hosted entries carry the lock's
-    sha256 and server URL; nothing here reaches the network. A `git` source
-    fails: the lock pins one by commit, not by a content hash Bazel's downloader
-    can verify, so it is not modelled yet.
+    each list sorted by package name. `direct` is true for `direct main` and `direct dev`.
+    Hosted entries carry the lock's sha256 and server URL; nothing here reaches the
+    network. A `git` source fails: the lock pins one by commit, not by a content hash
+    Bazel's downloader can verify, so it is not modelled yet.
 
     Args:
       text: contents of a pubspec.lock.
@@ -172,6 +172,7 @@ def resolve_lock(text):
         package = parsed["packages"][name]
         _check_name(name, "entry")
         source = package.get("source", "")
+        direct = package.get("dependency", "") in ["direct main", "direct dev"]
         version = package.get("version", "")
         description = package.get("description")
         if source == "hosted":
@@ -186,15 +187,15 @@ def resolve_lock(text):
             if not url.startswith("https://"):
                 fail("pubspec.lock: hosted package {} has non-https server {}".format(name, repr(url)))
             _check_version(name, version)
-            hosted.append({"name": name, "version": version, "sha256": sha, "url": url})
+            hosted.append({"name": name, "version": version, "sha256": sha, "url": url, "direct": direct})
         elif source == "sdk":
             if description != "flutter":
                 fail("pubspec.lock: sdk package {} comes from sdk {} (only flutter is modelled)".format(name, repr(description)))
-            sdk.append({"name": name, "version": version})
+            sdk.append({"name": name, "version": version, "direct": direct})
         elif source == "path":
             if type(description) != "dict" or description.get("relative") != "true":
                 fail("pubspec.lock: path package {} must be a relative path dependency".format(name))
-            path.append({"name": name, "version": version, "path": description.get("path", "")})
+            path.append({"name": name, "version": version, "path": description.get("path", ""), "direct": direct})
         elif source == "git":
             fail(
                 ("pubspec.lock: package {} comes from git ({}); git sources are not supported: " +

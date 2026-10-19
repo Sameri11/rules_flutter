@@ -55,7 +55,7 @@ detail behind each one.
 Compared with the stock [`flutter` CLI](https://docs.flutter.dev/reference/flutter-cli).
 **Implemented** = supported by the rules; **Partial** = limited support or extra
 configuration/tooling; **Not implemented** = no public Bazel workflow.
-Standalone Flutter commands and prototypes do not count as Bazel support.
+Standalone Flutter commands and experimental setups do not count as Bazel support.
 
 | Feature | Stock Flutter | rules_flutter | Notes |
 | --- | --- | --- | --- |

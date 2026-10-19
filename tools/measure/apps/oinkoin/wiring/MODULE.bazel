@@ -1,0 +1,19 @@
+module(
+    name = "oinkoin",
+    version = "0.0.1",
+)
+
+bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+local_path_override(
+    module_name = "sameri11_rules_flutter",
+    path = "../..",
+)
+
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.47.3")
+
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(name = "pub", lock = "//:pubspec.lock")
+use_repo(pub, "pub")
+
+include("//android:config.MODULE.bazel")

@@ -31,6 +31,7 @@ load(
 )
 load(
     "//flutter/private:rules.bzl",
+    _dart_test_deps = "dart_test_deps",
     _flutter_aot_library = "flutter_aot_library",
     _flutter_app = "flutter_app",
     _flutter_assets = "flutter_assets",
@@ -54,6 +55,9 @@ flutter_native_contribution = _flutter_native_contribution
 # across a repository boundary and have to resolve from this entrypoint.
 android_native_lib_jar = _android_native_lib_jar
 flutter_native_libs = _flutter_native_libs
+
+# Named by the BUILD file the pub extension generates for each hub's test deps kernel.
+dart_test_deps = _dart_test_deps
 
 # The Dart half on its own, for an app whose Dart layout `flutter_app` refuses.
 flutter_pubspec = _flutter_pubspec

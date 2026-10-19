@@ -1,0 +1,14 @@
+.bazelrc
+.bazelversion
+BUILD.bazel
+MODULE.bazel
+MODULE.bazel.lock
+android/BUILD.bazel
+android/app/BUILD.bazel
+android/app/src/bazel/AndroidManifest.xml
+android/config.MODULE.bazel
+bazel/flutter/BUILD.bazel
+bazel/flutter/serverbox_fixes.bzl
+bundle/stub.dart
+lib/dart_plugin_registrant.dart
+plugin_deps.MODULE.bazel

@@ -1,0 +1,258 @@
+name: Measure test kernels
+
+# Measurement only: runs the test-kernel strategies on the upstream apps and
+# uploads the records. Runs on pushes to the measurement branch.
+
+on:
+  push:
+    branches: [ci-measure/test-kernels]
+
+permissions:
+  contents: read
+
+env:
+  # Same pins as ci.yml.
+  FLUTTER_VERSION: 3.47.3
+  FLUTTER_SHA256_DARWIN_ARM64: 66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583
+  FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+  BAZELISK_VERSION: v1.29.0
+  BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+  BAZELISK_SHA256_DARWIN_ARM64: cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+
+jobs:
+  measure:
+    name: Measure — ${{ matrix.os }} — ${{ matrix.app }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(vars.MEASURE_OSES || '["ubuntu-latest","macos-15"]') }}
+        app: ${{ fromJSON(vars.MEASURE_APPS || '["oinkoin","serverbox"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The composite installs Flutter and Bazelisk and sets up the NDK. Remote cache
+      # is configured by the step below, not by the composite.
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
+          cache-mode: ''
+
+      # The app's Android wiring needs API 36 and build-tools 36.0.0; the NDK must
+      # have this host's prebuilt toolchain directory or its repository rule fails.
+      - name: Prepare the Android platform and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sm="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$sm" --install "platforms;android-36" "build-tools;36.0.0" >/dev/null
+          case "$(uname -s)" in
+            Linux) host=linux-x86_64 ;;
+            Darwin) host=darwin-x86_64 ;;
+            *) echo "unsupported host" >&2; exit 1 ;;
+          esac
+          if [[ ! -d "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$host" ]]; then
+            rm -rf "$ANDROID_NDK_HOME"
+            (yes || true) | "$sm" --install "ndk;28.2.13676358" >/dev/null
+          fi
+          test -d "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$host"
+
+      - name: Write the remote cache configuration
+        shell: bash
+        env:
+          CACHE_HOST: ${{ secrets.BAZEL_CACHE_HOST }}
+          CACHE_PROJECT_ID: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
+          CACHE_TOKEN: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "$CACHE_HOST" || -z "$CACHE_PROJECT_ID" || -z "$CACHE_TOKEN" ]]; then
+            echo "remote cache secrets are not set" >&2
+            exit 1
+          fi
+          {
+            printf 'build --remote_cache=grpcs://%s\n' "$CACHE_HOST"
+            printf 'build --remote_instance_name=%s\n' "$CACHE_PROJECT_ID"
+            printf "build --remote_cache_header='Authorization=Bearer %s'\n" "$CACHE_TOKEN"
+          } > "$RUNNER_TEMP/remote.bazelrc"
+
+      - name: Fetch and wire the app copy
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py fetch-apps --app "$APP" --dest "$GITHUB_WORKSPACE/_apps/$APP"
+      - name: Print host facts for the worker runs
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Kernel memory pressure and user-namespace policy, for diagnosing worker and sandbox failures.
+          free -m || true
+          sysctl kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true
+          grep -E '^oom_kill ' /proc/vmstat || true
+          sudo dmesg 2>/dev/null | grep -iE 'out of memory|killed process|apparmor.*userns' | tail -n 20 || true
+
+      - name: Run the measurement matrix
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+          OS_NAME: ${{ matrix.os == 'macos-15' && 'macos' || 'linux' }}
+          FREE_SDKS: ${{ matrix.os == 'macos-15' && 'no' || 'yes' }}
+          RUN_SALT: ${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.os }}-${{ matrix.app }}
+          REPEATS: ${{ matrix.os == 'macos-15' && matrix.app == 'serverbox' && '2' || '3' }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py run \
+            --app "$APP" \
+            --os "$OS_NAME" \
+            --repeats "$REPEATS" \
+            --rules-root "$GITHUB_WORKSPACE" \
+            --out "$RUNNER_TEMP/measure-out" \
+            --scratch "$RUNNER_TEMP/measure-scratch" \
+            --remote-rc "$RUNNER_TEMP/remote.bazelrc" \
+            --salt "$RUN_SALT" \
+            --free-preinstalled-sdks "$FREE_SDKS"
+
+      - name: Record the batch base manifest
+        if: always()
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py manifest \
+            --app "$APP" \
+            --rules-root "$GITHUB_WORKSPACE" \
+            --scratch "$RUNNER_TEMP/measure-scratch" \
+            --remote-rc "$RUNNER_TEMP/remote.bazelrc" \
+            --out "$RUNNER_TEMP/measure-out/manifest-$APP.txt"
+
+      - name: Check that the salt reaches the kernel action keys
+        if: always()
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py check-salt \
+            --app "$APP" \
+            --rules-root "$GITHUB_WORKSPACE" \
+            --scratch "$RUNNER_TEMP/measure-scratch" \
+            --remote-rc "$RUNNER_TEMP/remote.bazelrc" \
+            --out "$RUNNER_TEMP/measure-out/check-salt-$APP.json"
+
+      # Prints the first build error from the warm-up log.
+      - name: Show the first warm-up error
+        if: always()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/measure-out/logs/warm.log"
+          if [[ -f "$log" ]]; then awk '/^ERROR:/{p=1} p{print; n++} n>=40{exit}' "$log"; fi
+
+      # The cache token lives in the rc file and in the BEP and profile output. The
+      # scrub rewrites the tree in place (a copy would double the disk use) and fails
+      # rather than leave an unscrubbed file.
+      - name: Scrub the cache token from the measurements
+        id: scrub
+        if: always()
+        shell: bash
+        env:
+          BAZEL_CACHE_TOKEN_RW: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/scrub.py --tree "$RUNNER_TEMP/measure-out"
+
+      # Small artifact: the files that analysis reads. Uploaded even when the matrix
+      # step failed, so a partial run still leaves its records.
+      - name: Upload the records
+        if: always() && steps.scrub.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: measure-${{ matrix.os }}-${{ matrix.app }}-records
+          path: |
+            ${{ runner.temp }}/measure-out/records.jsonl
+            ${{ runner.temp }}/measure-out/hardening.json
+            ${{ runner.temp }}/measure-out/manifest-*.txt
+            ${{ runner.temp }}/measure-out/targets-*.txt
+            ${{ runner.temp }}/measure-out/excluded-targets-*.txt
+            ${{ runner.temp }}/measure-out/host-state.json
+            ${{ runner.temp }}/measure-out/run-config.json
+            ${{ runner.temp }}/measure-out/check-salt-*.json
+          if-no-files-found: warn
+
+      # Large artifact: raw logs, BEP, execution logs and profiles. Optional; its failure
+      # does not fail the job.
+      - name: Upload the raw measurements
+        if: always() && steps.scrub.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: measure-${{ matrix.os }}-${{ matrix.app }}-raw
+          path: ${{ runner.temp }}/measure-out
+          if-no-files-found: warn
+
+  determinism:
+    name: Manifest determinism — ${{ matrix.app }}
+    needs: measure
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(vars.MEASURE_APPS || '["oinkoin","serverbox"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # v7.0.0 is the newest download-artifact release; there is no v7.0.1 tag.
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: measure-*-${{ matrix.app }}-records
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Compare the Linux and macOS manifests
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          linux="$RUNNER_TEMP/artifacts/measure-ubuntu-latest-$APP-records/manifest-$APP.txt"
+          macos="$RUNNER_TEMP/artifacts/measure-macos-15-$APP-records/manifest-$APP.txt"
+          python3 tools/measure/compare_manifests.py "$linux" "$macos"
+
+  summary:
+    name: Summary
+    needs: measure
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: measure-*-records
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Summarize the records
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/measure/summarize.py --out "$RUNNER_TEMP/summary.md" "$RUNNER_TEMP/artifacts"
+
+      - name: Publish the summary to the run page
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: measure-summary
+          path: ${{ runner.temp }}/summary.md
