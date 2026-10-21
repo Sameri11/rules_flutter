@@ -136,7 +136,6 @@ def _kernel_block(test_dill, deps_dill, update):
     ]
     return "\n".join(lines)
 
-
 def _find_config(test_path, pkg_dir, known):
     """The nearest flutter_test_config.dart from the test's dir up to the pubspec dir.
 
@@ -277,6 +276,7 @@ def _launcher(ctx, update):
     package = ctx.attr.app[FlutterPackageInfo]
     pubspec = package.pubspec
     pkg_dir = _parent(_runfile(ctx, pubspec.src))
+
     # The deps kernel the runner joins under the test kernel: deps_lib, the lib tier
     # included, unless the test has dart_defines and so imports test_deps alone.
     deps = package.test_deps if ctx.attr.dart_defines else package.deps_lib
