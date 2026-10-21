@@ -1,0 +1,222 @@
+module(
+    name = "smooth_app",
+    version = "0.0.1",
+)
+
+# The rules, consumed as an ordinary dependency. local_path_override rather than
+# a registry entry only because sameri11_rules_flutter is not published.
+bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+local_path_override(
+    module_name = "sameri11_rules_flutter",
+    path = "../..",
+)
+ 
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.47.3")
+
+# Bazel resolves the app's hosted packages from its committed lock.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//packages/smooth_app:pubspec.lock",
+)
+use_repo(pub, "pub")
+
+# Only what this module's own files name by apparent repo: rules_android and
+# rules_kotlin are loaded by //packages/smooth_app/android/app, and
+# rules_jvm_external by the Maven proxy below. The rest -- rules_java, rules_cc,
+# rules_foreign_cc, rules_android_ndk, bazel_skylib -- is named only from inside
+# rules_flutter, which declares them itself.
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+# The proxy and the import stay in this Consumer Module so the mandatory
+# `plugins.project(maven_repo = ...)` label resolves before the generated
+# segment is included; that segment declares the sole `flutter_maven` install.
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+use_repo(maven, "flutter_maven")
+
+# This root module owns the Android SDK and NDK repositories and the toolchains
+# that go with them: only the *root* module's `android_sdk.configure` is
+# honoured, so rules_flutter cannot pin the compile SDK on a consumer's behalf.
+# It still owns the Flutter SDK and engine repositories -- every label naming
+# those is built inside it and returned as a `Label`, so nothing is imported for
+# them here. The NDK extension is rules_flutter's wrapper, which substitutes a
+# toolchain-less stub when ANDROID_NDK_HOME is unset; this app's CMake plugin
+# halves need the real toolchain.
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+
+register_toolchains("@androidsdk//:all")
+
+android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+
+register_toolchains("@androidndk//:all")
+
+# One target per native Android plugin, read from the same
+# .flutter-plugins-dependencies that Gradle's FlutterAppPluginLoaderPlugin uses.
+plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins.project(
+    # Every ABI the plugins' native halves are cross-compiled for. Must cover
+    # what //packages/smooth_app/android/app declares, or the APK ships an ABI
+    # with no plugin libraries in it. This app ships arm64 only; the recipes in
+    # //bazel/flutter pin prebuilts for that ABI alone, so widening this list
+    # means pinning the other archives first.
+    abis = ["arm64-v8a"],
+    embedding = "//packages/smooth_app/android/app:flutter_embedding",
+    # coursier, the default, and therefore no lock file.
+    #
+    # The gradle resolver looked mandatory: AndroidX poms demand lifecycle-runtime
+    # as both [2.7.0,2.7.0] and [2.5.1,2.5.1] down two paths, and no POM-based
+    # resolver can widen a strict range. But coursier reports every such conflict
+    # in one run rather than one per run, and there are only three. Naming them
+    # below makes them *our* coordinates, which `version_conflict_policy =
+    # "pinned"` is then authoritative over.
+    #
+    # What settled it was guava. The gradle resolver records a variant's checksum
+    # against the root coordinate's URL, so `com.google.guava:guava:33.5.0-android`
+    # fails its integrity check and the only workaround was to declare
+    # `33.5.0-jre` -- which shipped the *desktop* guava into an Android app, and
+    # only by hand-editing a generated file, so every regeneration silently
+    # restored a broken build. Under coursier the generated coordinate resolves
+    # untouched and yields guava-33.5.0-android, the variant AGP would pick.
+    #
+    # To go back to gradle when rules_jvm_external#1605 lands: restore
+    # `maven_resolver`/`maven_lock_file`, drop the three strict-range pins below,
+    # drop the flutter_secure_storage package, and repin.
+    #
+    # KMP modules resolve as a plain JVM consumer, so an Android app gets
+    # `-desktop`/`-jvm` children with no Android classes. The app compiles cleanly
+    # and then dies on launch:
+    #   NoClassDefFoundError: androidx/lifecycle/ReportFragment$ActivityInitializationListener
+    # Naming the -android variants forces them into the graph. Verified present in
+    # the APK's dex, along with PreferenceDataStoreDelegateKt.
+    extra_artifacts = [
+        "androidx.lifecycle:lifecycle-runtime-android:2.8.7",
+        "androidx.lifecycle:lifecycle-viewmodel-android:2.8.7",
+        "androidx.navigationevent:navigationevent-android:1.0.2",
+        "androidx.datastore:datastore-android:1.1.7",
+        "androidx.datastore:datastore-core-android:1.1.7",
+        # The three artifacts AndroidX demands at two incompatible strict
+        # versions at once. Declared so "pinned" settles them; needed only
+        # because coursier is POM-based.
+        "androidx.emoji2:emoji2:1.3.0",
+        "androidx.lifecycle:lifecycle-viewmodel:2.8.7",
+        "androidx.savedstate:savedstate:1.2.1",
+        # Flutter's own integration_test declares these three with Gradle
+        # dynamic versions (`androidx.test:runner:1.2+` and friends). `+` is not
+        # a pin -- it takes the newest release in the band, so the resolved
+        # version moves when Google publishes, with nothing here edited. It is
+        # not even stable across resolvers: coursier reads `runner:1.2+` as
+        # 1.2.0 and gradle as 1.3.0. Nor is the band a safety net -- `1.4+`
+        # resolves to 1.4.1-alpha03, so a prerelease can win.
+        #
+        # These are what the graph resolved to while the lock was in use, so
+        # they freeze shipped behaviour rather than changing it. They belong
+        # here rather than in a plugins.package(artifacts =): that adds to the
+        # *plugin's deps*, and the scraper already put these labels there, so it
+        # fails with "Label is duplicated in the deps attribute".
+        # `highest_versions` ranks the `+` suffix as a qualifier below any
+        # number, so the exact versions win.
+        "androidx.test:runner:1.3.0",
+        "androidx.test:rules:1.2.0",
+        "androidx.test.espresso:espresso-core:3.3.0",
+    ],
+    maven_repo = "@flutter_maven//:pin",
+    # Plugin metadata and package config both come from the pub hub, which
+    # derives them, and GeneratedPluginRegistrant.java, from this package's lock.
+    metadata = "@pub//:plugins_metadata.json",
+    package_config = "@pub//:package_config.json",
+)
+
+# --- packages the generator cannot describe ----------------------------------
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# sqlite3's build hook downloads this from a GitHub release; the sha256 is
+# published in the package's own lib/src/hook/asset_hashes.dart.
+http_file(
+    name = "libsqlite3_android_arm64",
+    # The bundle's NativeAssetsManifest.json names the library by this exact
+    # filename, and the VM dlopens it by that name.
+    downloaded_file_path = "libsqlite3.so",
+    sha256 = "e99515af1d7119fb61843ae5e597344e7f258563de3a7e5a3869f627aab2887b",
+    urls = ["https://github.com/simolus3/sqlite3.dart/releases/download/" +
+            "sqlite3-3.5.0/libsqlite3.arm64.android.so"],
+)
+
+# rive_native's Gradle module downloads this in an Exec task. URL built the way
+# its bin/setup.dart builds it; the package's hash.txt pins the same zip.
+http_archive(
+    name = "rive_native_android",
+    build_file_content = """
+filegroup(
+    name = "arm64_v8a",
+    srcs = ["arm64-v8a/librive_native.so"],
+    visibility = ["//visibility:public"],
+)
+""",
+    sha256 = "765a4e5e7e244eb849c76af105d5dc9a33fa02401cd37e6f24720d8c8941498b",
+    urls = ["https://rive-flutter-artifacts.rive.app/rive_native_versions/" +
+            "0.1.10%2B2/rive_native_artifacts_android.zip"],
+)
+
+# `macro` is not named in any of these: it defaults to `<name>_recipe`, which is
+# what each of these recipes is called.
+plugins.package(
+    name = "rive_native",
+    bzl_file = "//bazel/flutter:rive_native.bzl",
+)
+plugins.package(
+    name = "sqlite3",
+    bzl_file = "//bazel/flutter:sqlite3.bzl",
+)
+
+# --- packages the generator gets wrong ---------------------------------------
+# Temporary: each recipe carries a `# GAP:` note saying what would retire it.
+[
+    plugins.package(
+        name = pkg,
+        bzl_file = "//bazel/flutter:smooth_app_fixes.bzl",
+    )
+    for pkg in [
+        "mobile_scanner",
+        "sqflite_android",
+    ]
+]
+
+# A KMP root coordinate carries no classes of its own: `androidx.collection:
+# collection` is a pom that redirects to `collection-jvm`, so `ArraySet` reaches
+# this plugin only indirectly and strict deps refuses it. The plugin's
+# build.gradle names the root, which is what the scraper transcribes, so the
+# child has to be named by hand. Only needed under coursier -- the gradle
+# resolver skipped the classless root instead of generating a target for it.
+plugins.package(
+    name = "flutter_secure_storage",
+    artifacts = ["androidx.collection:collection-jvm:1.4.2"],
+)
+
+# Needs both phases: the artifact forces DataStore's *android* variant into the
+# resolution (a plain JVM consumer otherwise picks -jvm, which lacks
+# `preferencesDataStore` -- rules_jvm_external#1605), and the recipe compiles
+# against it. Neither half works alone.
+plugins.package(
+    name = "shared_preferences_android",
+    artifacts = ["androidx.datastore:datastore-preferences-android:1.1.7"],
+    bzl_file = "//bazel/flutter:smooth_app_fixes.bzl",
+)
+use_repo(plugins, "flutter_plugins")
+
+# Maven coordinates the plugins declare. Generated -- see
+# //packages/smooth_app:plugins_check.
+include("//:plugin_deps.MODULE.bazel")

@@ -1,0 +1,106 @@
+# The APK. Placed beside the Gradle module it mirrors so both read the same
+# manifest, resources and sources -- nothing here is a copy.
+
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The ABIs this APK ships. Must be a subset of what //packages/smooth_app
+# snapshots and of what MODULE.bazel's plugins.project builds --
+# :smooth_app_flutter_check fails on any ABI missing a piece, whichever half is
+# short.
+#
+# One ABI, so no per-ABI variant targets are emitted: :smooth_app already is
+# arm64-v8a. Adding an ABI here gives :smooth_app_<abi> beside the fat one.
+ABIS = ["arm64-v8a"]
+
+# The engine jar with its AndroidX dependencies attached. Instantiated here
+# rather than inside the rules: its deps come from @flutter_maven, which *this*
+# project's MODULE.bazel creates from *this* project's plugin coordinates.
+flutter_embedding_library(name = "flutter_embedding")
+
+# AGP expands relative class names (`android:name=".MainActivity"`) against the
+# module's `namespace`, and only afterwards stamps `applicationId` as the
+# package. android_binary has no namespace concept: it resolves relative names
+# against the manifest package, which manifest_values.applicationId sets. When
+# the two differ -- here namespace is org.openfoodfacts.app and applicationId is
+# org.openfoodfacts.scanner -- every relative name resolves to a class that does
+# not exist, and the APK builds, installs, and dies with ClassNotFoundException
+# on launch.
+#
+# So the names are expanded here, before the merger sees them. Only leading-dot
+# names are rewritten; anything already qualified is left alone.
+genrule(
+    name = "expanded_manifest",
+    srcs = ["src/main/AndroidManifest.xml"],
+    outs = ["AndroidManifest.xml"],
+    cmd = "sed 's|android:name=\"\\.|android:name=\"org.openfoodfacts.app.|g' $< > $@",
+)
+
+# Every Flutter contribution to the APK, joined into one target -- the AOT
+# snapshot, the engine, the runtime classes, the assets, the plugin libraries
+# and their native halves, the recipe libraries, the registrant -- and then the
+# APK on top. A bundle check fails the build if any of them is missing a piece.
+#
+# Four things are stated plus the manifest: the ABIs, the Dart half's package,
+# the applicationId, and this module's own targets. //packages/smooth_app:app,
+# :assets and :pubspec are derived from `app`, the per-ABI plugin and recipe
+# jars from `abis`, the resources and embedding from the layout `flutter create`
+# produced, and the registrant from the pub hub. The manifest is named because
+# this app's is generated -- see :expanded_manifest above.
+flutter_android_binary(
+    name = "smooth_app",
+    abis = ABIS,
+    app = "//packages/smooth_app",
+    manifest = ":expanded_manifest",
+    # 30 plugins plus AndroidX puts this past the 64k method limit, which is why
+    # the Gradle build sets multiDexEnabled. Nothing needs saying here:
+    # rules_android has no `multidex` attribute, its dexer shards and merges
+    # unconditionally, and `min_sdk_version` is gated behind an ACL allowlist
+    # ("Target ... is not allowed to set a min_sdk_version value"). The level
+    # the macro defaults to is what reaches the manifest and the dexer.
+    #
+    # applicationId differs from the module's gradle `namespace`, which is what
+    # :expanded_manifest exists to reconcile.
+    manifest_values = {"applicationId": "org.openfoodfacts.scanner"},
+    # This app's own targets. The Flutter join is appended by the macro, so
+    # native libraries enter the zip in the order this file always had -- a .so
+    # is stored uncompressed and page-aligned, so moving one shifts padding.
+    deps = [
+        ":app_kotlin",
+        # The -android variants forced in by extra_artifacts; see MODULE.bazel.
+        # They must also be *on the classpath*, not merely in the resolution.
+        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime_android",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_viewmodel_android",
+        "@flutter_maven//:androidx_navigationevent_navigationevent_android",
+    ],
+)
+
+# MainActivity, the quick-settings tile service, and the app's own in-tree
+# plugin. All Kotlin, compiled directly.
+kt_android_library(
+    name = "app_kotlin",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    # The embedding's AndroidX labels are listed here as well as exported by
+    # :flutter_embedding. They are written literally rather than derived,
+    # because the derivation helper is not part of the supported API, and
+    # they stay listed because dependency-walk order decides zip position and
+    # alignment padding -- dropping them moves this APK's recorded digest.
+    deps = [
+        ":flutter_embedding",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_process",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
+        "@flutter_maven//:androidx_fragment_fragment",
+        "@flutter_maven//:androidx_annotation_annotation",
+        "@flutter_maven//:androidx_tracing_tracing",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:androidx_window_window_java",
+        "@flutter_maven//:androidx_window_window",
+        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:com_getkeepsafe_relinker_relinker",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+    ],
+)

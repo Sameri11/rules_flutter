@@ -1,0 +1,224 @@
+name: Measure shared test kernels
+
+# Measurement only (branch ci-measure/shared-kernels). Nothing here gates a merge.
+#
+# parity: each app's test targets, cold, under main (a7bda2f) and under the branch
+#   (3dec6c4), both on ubuntu-latest. One status per target from the build event stream.
+# digest: the branch's deps, lib and test kernels, built cold on ubuntu-latest and on
+#   macos-15. Digests are compared per tier.
+# report: both comparisons, written to the run summary and an artifact.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci-measure/shared-kernels]
+
+permissions:
+  contents: read
+
+env:
+  # Same pins as ci.yml.
+  FLUTTER_VERSION: 3.47.3
+  FLUTTER_SHA256_DARWIN_ARM64: 66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583
+  FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+  BAZELISK_VERSION: v1.29.0
+  BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+  BAZELISK_SHA256_DARWIN_ARM64: cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+  MAIN_REV: a7bda2ff0be71fc54737472ce6724bc9b9d98dc4
+  BRANCH_REV: 3dec6c4b113a108ae4ec60e9ea0f5d1d3c76d46a
+
+jobs:
+  parity:
+    name: Parity — ${{ matrix.app }} — ${{ matrix.rules }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [oinkoin, smooth, serverbox]
+        rules: [main, branch]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.rules == 'main' && env.MAIN_REV || env.BRANCH_REV }}
+          path: rules
+          persist-credentials: false
+
+      # The runner image ships about 14 GB free; these trees are unused by the apps.
+      - name: Free runner disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/share/swift
+          df -h /
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          cache-mode: ''
+
+      - name: Install the Android platform and build-tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sm="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$sm" --install "platforms;android-36" "build-tools;36.0.0" >/dev/null
+
+      - name: Fetch and wire the app copy
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py fetch-apps --app "$APP" --dest "$GITHUB_WORKSPACE/rules/_apps/$APP"
+
+      - name: Run every test target, cold
+        timeout-minutes: 320
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+          RULES: ${{ matrix.rules }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/parity.py \
+            --app "$APP" \
+            --rules-root "$GITHUB_WORKSPACE/rules" \
+            --scratch "$RUNNER_TEMP/scratch-$RULES" \
+            --out "$RUNNER_TEMP/parity" \
+            --timeout-min 300
+
+      - name: Upload the parity records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: parity-${{ matrix.app }}-${{ matrix.rules }}
+          path: ${{ runner.temp }}/parity/**
+          if-no-files-found: warn
+
+  digest:
+    name: Digest — ${{ matrix.os }} — ${{ matrix.app }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+        app: [oinkoin, smooth, serverbox]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BRANCH_REV }}
+          path: rules
+          persist-credentials: false
+
+      - name: Free runner disk
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/share/swift
+          df -h /
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
+          cache-mode: ''
+
+      - name: Install the Android platform and build-tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sm="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$sm" --install "platforms;android-36" "build-tools;36.0.0" >/dev/null
+
+      - name: Fetch and wire the app copy
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py fetch-apps --app "$APP" --dest "$GITHUB_WORKSPACE/rules/_apps/$APP"
+
+      - name: Build the test kernels, cold
+        timeout-minutes: 320
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py manifest \
+            --app "$APP" \
+            --rules-root "$GITHUB_WORKSPACE/rules" \
+            --scratch "$RUNNER_TEMP/scratch" \
+            --out "$RUNNER_TEMP/digest/manifest-$APP.txt"
+
+      - name: Upload the digests
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.os }}-${{ matrix.app }}
+          path: |
+            ${{ runner.temp }}/digest/manifest-*.txt
+            ${{ runner.temp }}/digest/tiers-*.tsv
+            ${{ runner.temp }}/scratch/tool-logs/logs/manifest-build.log
+          if-no-files-found: warn
+
+      # The kernels themselves, for classifying a digest mismatch. Optional.
+      - name: Upload the kernels
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kernels-${{ matrix.os }}-${{ matrix.app }}
+          path: ${{ runner.temp }}/digest/kernels-${{ matrix.app }}/**
+          if-no-files-found: warn
+
+  report:
+    name: Report
+    needs: [parity, digest]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: parity-*
+          path: ${{ runner.temp }}/artifacts
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Compare parity and digests
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/report.py \
+            --artifacts "$RUNNER_TEMP/artifacts" \
+            --out "$RUNNER_TEMP/summary.md" \
+            --run-url "$RUN_URL" > /dev/null
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: measure-summary
+          path: ${{ runner.temp }}/summary.md
+          if-no-files-found: warn

@@ -1,0 +1,17 @@
+# Sources of a `path:` dependency of //packages/smooth_app.
+#
+# Bazel globs cannot cross package boundaries, so each one needs its own BUILD
+# file for the app to declare it. Pure Dart -- none of these packages declares
+# assets, so lib/ is the whole input.
+load("@rules_flutter//flutter:defs.bzl", "flutter_pubspec")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "srcs",
+    srcs = glob(["lib/**/*.dart"]),
+    visibility = ["//visibility:public"],
+)
+
+# E3 H3 (experiment copy): this package's own test, on the host harness.
+flutter_pubspec()

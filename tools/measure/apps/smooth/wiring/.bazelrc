@@ -1,0 +1,24 @@
+# Mirrors rules_flutter's own .bazelrc; see its comments for the reasoning.
+common --enable_bzlmod
+
+# Bazel's manifest merger strips <uses-permission> from dependency manifests
+# unless this is set. Flutter plugins declare their permissions in their own
+# manifests and expect them merged up, so without this the APK builds, installs,
+# launches, and then fails at runtime the first time a permission is needed.
+build --merge_android_manifest_permissions
+
+# rules_android 0.7.3 builds its dexer tools from source and they do not compile
+# under JDK 25.
+build --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
+build --java_language_version=17 --java_runtime_version=remotejdk_17
+
+# Selects both the NDK cc_toolchain and the CMake toolchain file a native plugin
+# is built with. Must be NDK 28+.
+common --repo_env=ANDROID_NDK_HOME
+
+# No CI builds this project -- rules_flutter's gate stops at its own examples --
+# so verifying a rules change here is a rebuild someone runs by hand. A disk
+# cache is what makes that affordable: the plugin graph, the NDK CMake halves
+# and the AOT step are replayed from disk instead of rerun, and a `bazel clean`
+# taken to prove a digest reproduces no longer costs a cold build.
+build --disk_cache=~/.cache/bazel-disk

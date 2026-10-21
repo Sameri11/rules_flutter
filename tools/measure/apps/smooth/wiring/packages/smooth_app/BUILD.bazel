@@ -1,0 +1,85 @@
+# Open Food Facts (smooth_app), built with rules_flutter as an ordinary
+# bazel_dep -- a real consumer of the rules rather than a test subject inside
+# them. ~810 Dart files under lib/, seven `path:` dependencies (two of them
+# transitive), and 30 native Android plugins.
+#
+# The Dart half is one call. Everything a standard `flutter create` +
+# `flutter pub get` layout fixes is defaulted by it: the source glob (which
+# covers the generated lib/l10n/app_localizations*.dart, since `generate: true`
+# makes pub write them into arb-dir as ordinary sources), the asset glob, the
+# package config, pub's three invalidation stamps, the committed Dart
+# registrant, the :pubspec target, the three guards and their build_test.
+#
+# Two things about *this* app are stated, plus the ABI list.
+
+load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_package", "flutter_test")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_app(
+    # Must cover what //packages/smooth_app/android/app declares and what
+    # MODULE.bazel's plugins.project builds -- the bundle check fails on any ABI
+    # missing a piece, whichever half is short.
+    abis = ["arm64-v8a"],
+    pub = "@pub",
+    # smooth_app's lib/main.dart deliberately refuses to run -- it prints the
+    # real entrypoints and exits. Upstream ships one per store variant; this is
+    # the Google Play one, matching the app_store/google_play path dependency.
+    entrypoint = "lib/entrypoints/android/main_google_play.dart",
+    # The seven path: dependencies. app_store_* and scanner_* are build variants
+    # upstream selects between; the pubspec depends on all of them at once, so
+    # all seven are in the resolved graph. scanner_shared and app_store_shared
+    # arrive transitively (scanner_ml_kit depends on `path: ../shared`), which
+    # :path_deps_check verifies against pubspec.lock rather than pubspec.yaml
+    # for exactly that reason.
+    path_deps = [
+        "//packages/app_store/apple_app_store:srcs",
+        "//packages/app_store/google_play:srcs",
+        "//packages/app_store/shared:srcs",
+        "//packages/app_store/uri_store:srcs",
+        "//packages/scanner/ml_kit:srcs",
+        "//packages/scanner/shared:srcs",
+        "//packages/scanner/zxing:srcs",
+    ],
+)
+
+_SMOOTH_APP_PATH_DEPS = [
+    "//packages/app_store/apple_app_store:srcs",
+    "//packages/app_store/google_play:srcs",
+    "//packages/app_store/shared:srcs",
+    "//packages/app_store/uri_store:srcs",
+    "//packages/scanner/ml_kit:srcs",
+    "//packages/scanner/shared:srcs",
+    "//packages/scanner/zxing:srcs",
+]
+
+flutter_package(
+    name = "pkg",
+    pub = "@pub",
+    pubspec = ":pubspec",
+    srcs = glob(["lib/**/*.dart"]),
+    path_deps = _SMOOTH_APP_PATH_DEPS,
+    assets = ":assets",
+)
+
+_TEST_FILES = glob(["test/**/*_test.dart"])
+
+_TEST_SRCS = glob(["lib/**/*.dart", "test/**/*.dart"], exclude = ["test/**/*_test.dart"])
+
+_TEST_DATA = glob(["test/**"], exclude = ["test/**/*.dart"], allow_empty = True)
+
+[
+    flutter_test(
+        name = f[:-len(".dart")].replace("/", "_"),
+        src = f,
+        app = ":pkg",
+        srcs = _TEST_SRCS,
+        data = _TEST_DATA,
+    )
+    for f in _TEST_FILES
+]
+
+test_suite(
+    name = "p6_tests",
+    tests = [f[:-len(".dart")].replace("/", "_") for f in _TEST_FILES],
+)

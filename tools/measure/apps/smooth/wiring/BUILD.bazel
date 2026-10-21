@@ -1,0 +1,5 @@
+# Root package. Targets live under packages/.
+
+# //packages/smooth_app:plugins_check diffs the generated coordinate list against
+# the checked-in copy, so it needs to read it as a source file.
+exports_files(["plugin_deps.MODULE.bazel"])

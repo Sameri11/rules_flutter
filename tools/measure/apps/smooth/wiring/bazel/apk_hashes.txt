@@ -1,0 +1,7 @@
+# Recorded APK digests, one line per declared APK:
+#
+#   <target> apk=<unsigned APK sha256> entries=<canonical entry-listing sha256>
+#
+# Regenerate with `bazel/apk_digest.py --record`; compare with the same command
+# and no flag. Host-specific -- see the module docstring.
+//packages/smooth_app/android/app:smooth_app apk=1fda359f2a99b90c5010579d0dbc5791419fbb41dd9c382feb1f80e16bef421c entries=e0aaa51c9aa11a2ccd797042b77bbf80ada660fc511334e21f39ba721b51f09a
