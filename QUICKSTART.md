@@ -283,8 +283,10 @@ Excluding costs build time, not correctness.
 `dart_defines` on `flutter_test` sets constants for that test. The test's own
 libraries and the app's `lib/` compile with them. Pub packages in the shared kernel
 compile without them, so a pub package that reads `String.fromEnvironment` sees its
-default in such a test. List that package in `test_deps_exclude` to compile it with
-the test's defines.
+default in such a test. To compile such a package with the test's defines, list it in
+`test_deps_exclude` only when it is a direct package that no other package in the
+shared kernel imports and no driver package imports. Naming a transitive package has no
+effect: exclude the direct packages that import it instead.
 
 Bazel checks the host SDK when fetching it and fails with both versions if it
 does not match the declared version.

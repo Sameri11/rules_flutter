@@ -17,7 +17,7 @@ left out, both by rule rather than by name:
 
 Usage: lib_entry.py <package_name_file> <package_config> <package_dir> <entry_out> <lib_list>
 <package_dir> is the package's directory, as the execroot path of its pubspec.yaml.
-Each line of lib_list is a lib file path under <package_dir>/lib/. Lists the excluded files on stderr.
+Each line of lib_list is a path, a tab, and the file's path under <package_dir>/lib/. The first path is what open() reads: a generated file's is under bazel-out. Lists the excluded files on stderr.
 """
 
 import argparse
@@ -142,10 +142,10 @@ def main(argv):
     parser.add_argument("package_config")
     parser.add_argument("package_dir")
     parser.add_argument("entry_out")
-    parser.add_argument("lib_list", help="a file with one lib file path per line")
+    parser.add_argument("lib_list", help="a file with a path and a lib-relative path per line, tab-separated")
     args = parser.parse_args(argv)
     with open(args.lib_list, encoding="utf-8") as f:
-        lib_files = [line.strip() for line in f if line.strip()]
+        lib_entries = [line.rstrip("\n").split("\t", 1) for line in f if line.strip()]
 
     with open(args.package_name_file, encoding="utf-8") as f:
         package_name = f.read().strip()
@@ -153,12 +153,8 @@ def main(argv):
     # The package itself: its lib is the directory of its candidate files, not the config's.
     package_dirs[package_name] = os.path.normpath(os.path.join(args.package_dir, "lib"))
 
-    lib_root = package_dirs[package_name]
     libs = {}
-    for path in lib_files:
-        rel = os.path.relpath(os.path.normpath(path), lib_root)
-        if rel.startswith(".."):
-            sys.exit("lib_entry: {} is not under {}".format(path, lib_root))
+    for path, rel in lib_entries:
         libs[os.path.normpath(path)] = rel
 
     graph = _Graph(package_dirs)
