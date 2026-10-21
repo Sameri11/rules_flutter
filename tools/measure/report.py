@@ -73,7 +73,9 @@ def parity_section(art, app, out):
 
 
 def load_side(art, app, os_name):
-    d = art / ("digest-%s-%s" % (os_name, app))
+    # upload-artifact keeps the common ancestor of its paths; the digest
+    # files sit under digest/ because the scratch logs share runner.temp.
+    d = art / ("digest-%s-%s" % (os_name, app)) / "digest"
     manifest = d / ("manifest-%s.txt" % app)
     tiers = d / ("tiers-%s.tsv" % app)
     if not manifest.is_file() or not tiers.is_file():
