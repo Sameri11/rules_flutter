@@ -12,6 +12,16 @@ flutter = use_extension("//flutter:extensions.bzl", "flutter")
 flutter_dev = use_extension("//flutter:extensions.bzl", "flutter", dev_dependency = True)
 flutter_dev.sdk(version = "3.47.3")
 
+# The test-kernel driver's source closure, at the pins of the SDK it is built with.
+test_kernel_driver_src = use_repo_rule("//flutter/private:test_kernel_driver.bzl", "test_kernel_driver_src")
+
+test_kernel_driver_src(
+    name = "test_kernel_driver_src",
+    driver_source = "//flutter/private/test_kernel_driver:driver.dart",
+    sdk_revision = "@flutter_sdk//:dart_sdk_revision",
+    version_file = "@flutter_sdk//:flutter.version.json",
+)
+
 use_repo(
     flutter,
     "flutter_embedding_debug",
