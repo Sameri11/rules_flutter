@@ -41,3 +41,10 @@ flutter_test(
     data = glob(["test/fixtures/materialize/**"]),
     materialize = ["test/fixtures/materialize"],
 )
+
+flutter_test(
+    name = "defines_test",
+    src = "test/defines_test.dart",
+    app = ":app",
+    dart_defines = {"DEMO_FLAVOR": "staging"},
+)
