@@ -298,13 +298,14 @@ def _pub_hub_impl(rctx):
 
     # buildifier: disable=canonical-repository
     all_srcs = ['"@@{}//:all"'.format(repo_of[n]) for n in hosted_names] + ['"package_graph.json"']
+
     # The test deps kernel's entrypoint: the `package:` libraries of every direct main
     # and dev package, minus test_deps_exclude. Path packages stay out: they compile
     # per test, with the app's own sources.
     known = {p["name"]: True for p in lock["hosted"] + lock["sdk"] + lock["path"]}
     for name in rctx.attr.test_deps_exclude:
         if name not in known:
-            fail("pub.lock hub {}: test_deps_exclude names {}, which pubspec.lock does not contain".format(rctx.attr.name, repr(name)))
+            fail("pub.lock hub {}: test_deps_exclude names {}, which pubspec.lock does not contain".format(rctx.attr.lock_name, repr(name)))
     excluded = {name: True for name in rctx.attr.test_deps_exclude}
     hosted_label = {name: label for label, name in rctx.attr.hosted.items()}
     libraries = {}
