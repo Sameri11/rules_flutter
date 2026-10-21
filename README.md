@@ -65,14 +65,14 @@ Standalone Flutter commands and prototypes do not count as Bazel support.
 | Split APKs by architecture | `--split-per-abi` | Implemented | Supports ARM64, ARM32, and x86-64. Unlike Flutter, all APK variants share one version code. |
 | Android App Bundles (AAB) | `flutter build appbundle` | Not implemented | APKs only. |
 | iOS, web, and desktop builds | Platform-specific builds | Not implemented | Android only. |
-| Dart defines | `--dart-define`, `--dart-define-from-file` | Partial | `flutter_app(dart_defines = {...})`; read through `const String.fromEnvironment(...)`. No `--dart-define-from-file`. |
+| Dart defines | `--dart-define`, `--dart-define-from-file` | Partial | `flutter_app(dart_defines = {...})` and `flutter_test(dart_defines = {...})`, read through `const String.fromEnvironment(...)`. A test's defines reach its app and test libraries, not pub packages in the shared test kernel; see QUICKSTART.md, `pub.lock`. No `--dart-define-from-file`. |
 | Icon-font tree shaking | Default in release APKs | Not implemented | Full icon fonts are bundled. |
 | Android plugins and native packages | Standard Flutter/Gradle workflow | Partial | Common Java/Kotlin and CMake plugins work. Custom build logic and native-asset packages need extra configuration or [Package Recipes](QUICKSTART.md#consumer-recipes-and-native-assets). |
 | Release signing | Gradle signing configuration | Not implemented | Development APKs are debug-key signed; sign the unsigned APK externally for distribution. |
 | Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |
 | Dart obfuscation / split debug info | `--obfuscate`, `--split-debug-info` | Not implemented | No equivalent build options. |
 | Run, hot reload / restart, DevTools | `flutter run` / `flutter attach` | Partial | Use Flutter with the Bazel-built debug APK, without Gradle. Packaging changes require a rebuild; see the [development workflow](QUICKSTART.md#hot-reload-with-flutter-run). |
-| Unit and widget tests | `flutter test` | Partial | `flutter_test(app = ":app", src = "test/x_test.dart")` runs host tests against a `flutter_app`'s `:app` or a `flutter_package`. Goldens are declared in `goldens` and written by `bazel run :<name>_update_goldens`. `materialize` copies directories in as real files, and `env` sets variables (TZ is UTC by default). Test-local imports go in `srcs`. No devices, no integration tests. |
+| Unit and widget tests | `flutter test` | Partial | `flutter_test(app = ":app", src = "test/x_test.dart")` runs host tests against a `flutter_app`'s `:app` or a `flutter_package`. Goldens are declared in `goldens` and written by `bazel run :<name>_update_goldens`. `materialize` copies directories in as real files, and `env` sets variables (TZ is UTC by default). Test-local imports go in `srcs`. `dart_defines` sets constants for one test. No devices, no integration tests. |
 | On-device integration tests | `flutter test integration_test` | Not implemented | No Bazel device-test rule; standard `integration_test/` entrypoints are unsupported. |
 | Localization generation | `flutter gen-l10n` | Not implemented | Generate Dart sources under `lib/` before building; regenerate after translation changes. |
 
