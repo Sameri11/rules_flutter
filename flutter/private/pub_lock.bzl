@@ -17,7 +17,8 @@ The `pub` module extension reads a consumer's `pubspec.lock` and creates
       - `android/{debug,release}/GeneratedPluginRegistrant.java`, the Android
         registrant flutter_tools would write for each mode (registrant.bzl).
       - filegroups `:lib` (every hosted package's packageUri tree and pubspec) and
-        `:all` (every hosted package file, for the bundle).
+        `:all` (every hosted package file, for the bundle), and `:test_deps` (the debug
+        kernel of the direct packages; see dart_test_deps).
 
 Nothing under ~/.pub-cache appears in any of it, and no rule reads
 `flutter pub get`'s outputs (`.dart_tool/`, `.flutter-plugins-dependencies`):
@@ -91,6 +92,29 @@ def _relpath(base, target):
 
 def _segments(path):
     return [s for s in str(path).split("/") if s]
+
+def _test_deps_libraries(rctx, name, lib, sdk):
+    """The `package:` libraries one direct package adds to the hub's test deps kernel.
+
+    `<name>/<name>.dart` when the package has it. An SDK package without one (flutter
+    has no lib/flutter.dart) contributes its top-level libraries, the ones a test
+    imports. A pub package without one contributes nothing: its libraries compile per
+    test.
+    """
+    if not lib.exists:
+        return []
+    if lib.get_child(name + ".dart").exists:
+        return ["package:{0}/{0}.dart".format(name)]
+    if not sdk:
+        return []
+    uris = []
+    for f in sorted(lib.readdir(), key = str):
+        if not f.basename.endswith(".dart"):
+            continue
+        if any([line.startswith("part of ") for line in rctx.read(f).split("\n")]):
+            continue
+        uris.append("package:{}/{}".format(name, f.basename))
+    return uris
 
 def _pub_hub_impl(rctx):
     lock_label = rctx.attr.lock
@@ -274,7 +298,35 @@ def _pub_hub_impl(rctx):
 
     # buildifier: disable=canonical-repository
     all_srcs = ['"@@{}//:all"'.format(repo_of[n]) for n in hosted_names] + ['"package_graph.json"']
-    rctx.file("BUILD.bazel", """package(default_visibility = ["//visibility:public"])
+    # The test deps kernel's entrypoint: the `package:` libraries of every direct main
+    # and dev package, minus test_deps_exclude. Path packages stay out: they compile
+    # per test, with the app's own sources.
+    known = {p["name"]: True for p in lock["hosted"] + lock["sdk"] + lock["path"]}
+    for name in rctx.attr.test_deps_exclude:
+        if name not in known:
+            fail("pub.lock hub {}: test_deps_exclude names {}, which pubspec.lock does not contain".format(rctx.attr.name, repr(name)))
+    excluded = {name: True for name in rctx.attr.test_deps_exclude}
+    hosted_label = {name: label for label, name in rctx.attr.hosted.items()}
+    libraries = {}
+    direct = []
+    for package in lock["hosted"]:
+        name = package["name"]
+        if package["direct"] and name not in excluded:
+            direct.append(name)
+            lib = rctx.path(hosted_label[name]).dirname.get_child("lib")
+            for uri in _test_deps_libraries(rctx, name, lib, sdk = False):
+                libraries[uri] = True
+    for package in lock["sdk"]:
+        name = package["name"]
+        if package["direct"] and name not in excluded:
+            direct.append(name)
+            pubspec = rctx.path(Label("@flutter_sdk//:{}/pubspec.yaml".format(sdk_package_root(name))))
+            for uri in _test_deps_libraries(rctx, name, pubspec.dirname.get_child("lib"), sdk = True):
+                libraries[uri] = True
+
+    rctx.file("BUILD.bazel", """load("{defs_bzl}", "dart_test_deps")
+
+package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "package_config.json",
@@ -294,7 +346,27 @@ filegroup(
     name = "all",
     srcs = [{all}],
 )
-""".format(lib = ", ".join(lib_srcs), all = ", ".join(all_srcs)))
+
+# The debug kernel of the hub's direct packages, shared by every flutter_test on
+# this hub. See dart_test_deps.
+dart_test_deps(
+    name = "test_deps",
+    hub = "{hub}",
+    lock_name = "{lock_name}",
+    libraries = [{libraries}],
+    packages = [{packages}],
+    package_config = "package_config.json",
+    pub_srcs = [":lib"],
+)
+""".format(
+        defs_bzl = rctx.attr.defs_bzl,
+        hub = rctx.attr.name,
+        lock_name = rctx.attr.lock_name,
+        lib = ", ".join(lib_srcs),
+        all = ", ".join(all_srcs),
+        libraries = ", ".join(['"{}"'.format(uri) for uri in sorted(libraries.keys())]),
+        packages = ", ".join(['"{}"'.format(name) for name in sorted(direct)]),
+    ))
 
 def _write_android_registrants(rctx, entries, flutter_plugins, direct, non_dev):
     """`android/<mode>/GeneratedPluginRegistrant.java`, as flutter_tools writes it.
@@ -354,6 +426,11 @@ pub_hub = repository_rule(
         "pubspec": attr.label(allow_single_file = True, mandatory = True),
         "hosted": attr.label_keyed_string_dict(allow_files = True),
         "sdk": attr.string_list(),
+        "test_deps_exclude": attr.string_list(
+            doc = "Packages left out of the test deps kernel. A test that imports one compiles it itself; see dart_test_deps.",
+        ),
+        "lock_name": attr.string(mandatory = True, doc = "The hub's name in pub.lock, for messages."),
+        "defs_bzl": attr.string(mandatory = True, doc = "The label of defs.bzl, which the generated BUILD file loads dart_test_deps from."),
     },
 )
 
@@ -392,6 +469,9 @@ def _pub_impl(mctx):
                 pubspec = lock.lock.same_package_label(lock.lock.name.rpartition("/")[0] + "/pubspec.yaml" if "/" in lock.lock.name else "pubspec.yaml"),
                 hosted = hosted,
                 sdk = [package["name"] for package in resolved["sdk"]],
+                test_deps_exclude = lock.test_deps_exclude,
+                lock_name = lock.name,
+                defs_bzl = str(Label("//flutter:defs.bzl")),
             )
 
     return mctx.extension_metadata(reproducible = True)
@@ -404,6 +484,9 @@ _lock_tag = tag_class(
             mandatory = True,
             allow_single_file = True,
             doc = "The project's pubspec.lock. pubspec.yaml must sit beside it.",
+        ),
+        "test_deps_exclude": attr.string_list(
+            doc = "Packages to leave out of the test deps kernel, by name. A direct package whose libraries do not compile there fails the build naming it; list it here, and each test that imports it compiles it itself.",
         ),
     },
 )
