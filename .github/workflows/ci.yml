@@ -192,6 +192,12 @@ jobs:
           cache-project-id: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
           cache-token: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
 
+      # Runs before the example's first build: cached outputs have no worker spawns to check.
+      - name: Test kernel invariants
+        working-directory: ${{ matrix.example.directory }}
+        run: |
+          ../../tools/ci/test_kernel_invariants.sh ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }}
+
       # Hash gate builds the APKs below; tests run their target guards.
       - name: bazel test //...
         working-directory: ${{ matrix.example.directory }}
@@ -228,6 +234,16 @@ jobs:
         with:
           name: example-apk-artifacts-${{ matrix.os }}-${{ matrix.example.name }}
           path: _ci_hashes/
+          if-no-files-found: warn
+
+      # Per OS and example. The gate compares kernel names across OS; digests
+      # depend on the host platform dill, so they are recorded, not compared.
+      - name: Upload kernel digests
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kernel-digests-${{ matrix.os }}-${{ matrix.example.name }}
+          path: ${{ matrix.example.directory }}/kernel-digests-*.txt
           if-no-files-found: warn
 
       - name: Report cache statistics
@@ -320,6 +336,47 @@ jobs:
                   )
 
           print("OK: every recorded example has a matrix job: {}".format(sorted(first_examples)))
+          PY
+
+      - name: Download kernel digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: kernel-digests-*
+          path: kernel-digests
+          merge-multiple: false
+
+      - name: Kernel names agree across OS
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          # Digests vary by host (platform dill); only kernel names are compared.
+          workflow = pathlib.Path(".github/workflows/ci.yml").read_text()
+          block = re.search(r"\n        example:\n(.*?)\n    steps:", workflow, re.S)
+          examples = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))
+          os_block = re.search(r"\n        os:\n((?:          - \S+\n)+)", workflow)
+          oses = set(re.findall(r"- (\S+)", os_block.group(1)))
+
+          found = {}
+          for path in pathlib.Path("kernel-digests").glob("*/kernel-digests-*.txt"):
+              # Artifact name is kernel-digests-<os>-<example>; example names have no hyphen.
+              os_name, example = path.parent.name.removeprefix("kernel-digests-").rsplit("-", 1)
+              found[(os_name, example)] = {
+                  line.split("  ", 1)[1] for line in path.read_text().splitlines() if line
+              }
+
+          missing = sorted((o, e) for o in oses for e in examples if (o, e) not in found)
+          if missing:
+              sys.exit("FAIL: no kernel digests for {}".format(missing))
+
+          for example in sorted(examples):
+              names = {o: found[(o, example)] for o in oses}
+              reference = names[sorted(oses)[0]]
+              for o, got in names.items():
+                  if got != reference:
+                      sys.exit("FAIL: {} kernel names differ on {}: {} vs {}".format(
+                          example, o, sorted(got), sorted(reference)))
+          print("OK: kernel names agree across {} for {}".format(sorted(oses), sorted(examples)))
           PY
 
       - name: Matrix result
