@@ -273,6 +273,21 @@ include("//android:config.MODULE.bazel")
 The `pub.lock` tag names the hub repository (`@pub`) and the project's
 `pubspec.lock`, with `pubspec.yaml` beside it.
 
+Host tests share one debug kernel per hub, built from the hub's direct main and dev
+packages, so each package compiles once rather than once per test. If a package in
+that kernel fails to compile, the build fails naming it. `test_deps_exclude =
+["name"]` on the `pub.lock` tag leaves the package out instead: the tests that import
+it compile it themselves, and a `lib/` that imports it compiles it in the lib kernel.
+Excluding costs build time, not correctness.
+
+`dart_defines` on `flutter_test` sets constants for that test. The test's own
+libraries and the app's `lib/` compile with them. Pub packages in the shared kernel
+compile without them, so a pub package that reads `String.fromEnvironment` sees its
+default in such a test. To compile such a package with the test's defines, list it in
+`test_deps_exclude` only when it is a direct package that no other package in the
+shared kernel imports and no driver package imports. Naming a transitive package has no
+effect: exclude the direct packages that import it instead.
+
 Bazel checks the host SDK when fetching it and fails with both versions if it
 does not match the declared version.
 
@@ -447,6 +462,7 @@ release-only.
 | `pubspec.yaml must sit beside //:pubspec.lock` | Put `pubspec.yaml` in the package of the label given to `pub.lock`. |
 | `pubspec.lock: ... git sources are not supported` | Depend on a hosted or path package; the lock records a git commit, not a content hash. |
 | A hosted package download fails its sha256 check | The lock is stale or was edited by hand. Regenerate it with `flutter pub get` and commit it. |
+| A `dart_test_deps` error names a package | Add the package to `test_deps_exclude` on the `pub.lock` tag. Its tests then compile it themselves. |
 
 ## Root app with pub plugins
 

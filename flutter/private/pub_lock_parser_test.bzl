@@ -58,12 +58,12 @@ def _classifies_each_source_impl(ctx):
     env = unittest.begin(ctx)
     resolved = resolve_lock(_MIXED)
     asserts.equals(env, ["characters", "http"], [p["name"] for p in resolved["hosted"]])
-    asserts.equals(env, {"name": "characters", "version": "1.4.0", "sha256": _SHA, "url": "https://pub.dev"}, resolved["hosted"][0])
+    asserts.equals(env, {"name": "characters", "version": "1.4.0", "sha256": _SHA, "url": "https://pub.dev", "direct": True}, resolved["hosted"][0])
 
     # A trailing slash on the server does not leak into the download URL.
     asserts.equals(env, "https://pub.example.org", resolved["hosted"][1]["url"])
-    asserts.equals(env, [{"name": "flutter", "version": "0.0.0"}], resolved["sdk"])
-    asserts.equals(env, [{"name": "greeter", "version": "0.0.1", "path": "../greeter"}], resolved["path"])
+    asserts.equals(env, [{"name": "flutter", "version": "0.0.0", "direct": True}], resolved["sdk"])
+    asserts.equals(env, [{"name": "greeter", "version": "0.0.1", "path": "../greeter", "direct": True}], resolved["path"])
     return unittest.end(env)
 
 _classifies_each_source_test = unittest.make(_classifies_each_source_impl)

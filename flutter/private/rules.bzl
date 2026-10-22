@@ -360,11 +360,12 @@ keys are unchanged.""",
 # reports it as not found. The hint says where the file has to be declared.
 _TEST_IMPORT_HINT = "hint: declare test-local imports in `srcs`"
 
-def _jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint):
+def _jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, what):
     """Declares the debug kernel action of dart_jit_kernel and dart_test_kernel.
 
     `pkg` is a struct of the package's inputs: package_name, package_config,
-    pub_srcs, path_deps, srcs, registrant and registrant_path.
+    pub_srcs, path_deps, srcs, registrant, registrant_path, and import_dill, the
+    kernel to import with --import-dill, or None.
     """
     toolchain = _flutter_toolchain(ctx)
 
@@ -382,6 +383,17 @@ def _jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint):
     args.add("--no-print-incremental-dependencies")
     args.add_all(_DEBUG_KERNEL_FLAGS)
     args.add_all(_dart_define_flags(dart_defines))
+    if pkg.import_dill:
+        args.add("--import-dill", pkg.import_dill)
+
+        # frontend_server writes every library of an --import-dill compile with an
+        # empty line table (filterExternal sets includeSources: false), so a stack
+        # frame in the test's own libraries loses its line and column. One dill per
+        # package keeps the line tables; the pieces are joined below. Source text is
+        # left out, so a comment that changes neither line count nor offsets leaves
+        # the bytes unchanged.
+        args.add("--split-output-by-packages")
+        args.add("--no-embed-source-text")
 
     # Two virtual roots, so that generated and source files resolve the same
     # way: sources from the execroot, generated files from bin_dir. The package
@@ -402,9 +414,26 @@ def _jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint):
     scalars.add(pkg.registrant_path)
     scalars.add(dill)
 
-    run = 'exec "$@" --output-dill "$DILL" "$ENTRY"'
-    if hint:
-        run = '"$@" --output-dill "$DILL" "$ENTRY" || {\n    status=$?\n    echo \'' + hint + '\' >&2\n    exit "$status"\n}'
+    # With --split-output-by-packages (import_dill set), frontend_server writes one dill
+    # per package beside its output; the pieces are joined into $DILL with the main
+    # piece first, since the launcher runs the first component with a main. Without
+    # import_dill the kernel goes straight to $DILL.
+    on_fail = "    echo '" + hint + "' >&2\n" if hint else ""
+    fail_exit = "|| {\n    status=$?\n" + on_fail + '    exit "$status"\n}\n'
+    if pkg.import_dill:
+        collect = """if [ -f "$WORK/kernel.dill-packages" ]; then
+    {
+        cat "$WORK/kernel.dill-main.dilp"
+        while read -r pkg; do
+            if [ "$pkg" != main ]; then cat "$WORK/kernel.dill-$pkg.dilp"; fi
+        done < "$WORK/kernel.dill-packages"
+    } > "$DILL"
+else
+    cat "$WORK/kernel.dill" > "$DILL"
+fi"""
+        run = 'WORK="$(mktemp -d)"\ntrap \'rm -rf "$WORK"\' EXIT\n"$@" --output-dill "$WORK/kernel.dill" "$ENTRY" ' + fail_exit + collect
+    else:
+        run = '"$@" --output-dill "$DILL" "$ENTRY" ' + fail_exit
 
     ctx.actions.run_shell(
         command = """set -euo pipefail
@@ -441,7 +470,7 @@ fi
                          pkg.package_name,
                          entrypoint,
                      ] + ([pkg.registrant] if pkg.registrant else []) +
-                     pkg.path_deps,
+                     pkg.path_deps + ([pkg.import_dill] if pkg.import_dill else []),
             transitive = [
                 depset(toolchain.platform_debug),
                 depset(pkg.srcs),
@@ -450,8 +479,8 @@ fi
             ],
         ),
         outputs = [dill],
-        mnemonic = "DartJitKernel",
-        progress_message = "Compiling Dart JIT kernel %{label}",
+        mnemonic = mnemonic,
+        progress_message = "Compiling " + what + " %{label}",
     )
 
 def _dart_jit_kernel_impl(ctx):
@@ -470,10 +499,13 @@ def _dart_jit_kernel_impl(ctx):
             srcs = ctx.files.srcs,
             registrant = registrant,
             registrant_path = _library_path(ctx, registrant, "dart_plugin_registrant") if registrant else "",
+            import_dill = None,
         ),
         entrypoint = ctx.file.entrypoint,
         dart_defines = ctx.attr.dart_defines,
         hint = "",
+        mnemonic = "DartJitKernel",
+        what = "Dart JIT kernel",
     )
     return [DefaultInfo(files = depset([dill]))]
 
@@ -492,10 +524,15 @@ def _dart_test_kernel_impl(ctx):
             srcs = ctx.files.srcs + package.srcs,
             registrant = None,
             registrant_path = "",
+            # A test with dart_defines compiles its package's libraries itself,
+            # since deps_lib was compiled without the test's constants.
+            import_dill = package.test_deps if ctx.attr.dart_defines else package.deps_lib,
         ),
         entrypoint = ctx.file.entrypoint,
         dart_defines = ctx.attr.dart_defines,
         hint = _TEST_IMPORT_HINT,
+        mnemonic = "DartTestKernel",
+        what = "Dart test kernel",
     )
     return [DefaultInfo(files = depset([dill]))]
 
@@ -508,6 +545,8 @@ FlutterPackageInfo = provider(
         "pub_srcs": "The pub hub's lib tree, as a list.",
         "path_deps": "Sources of path dependencies, as a list.",
         "assets": "The flutter_assets directory, or None.",
+        "test_deps": "The pub hub's test deps kernel, from dart_test_deps. deps_lib builds on it; a test with dart_defines imports it alone.",
+        "deps_lib": "The kernel a test kernel imports with --import-dill: the lib tier appended to test_deps, or test_deps alone when there is no lib tier.",
     },
 )
 
@@ -517,7 +556,11 @@ dart_test_kernel = rule(
 
 Compiles dart_jit_kernel's action over the package inputs its `app` provides.
 It takes the test's own dart_defines and none of the app's: `flutter test` reads
-defines from its command line only, so an app's defines never reach a test.""",
+defines from its command line only, so an app's defines never reach a test.
+
+It imports the package's deps_lib, or test_deps alone when it has dart_defines:
+the lib tier is compiled without the test's constants, so such a test compiles its
+package's libraries itself.""",
     attrs = {
         "app": attr.label(
             mandatory = True,
@@ -535,6 +578,168 @@ defines from its command line only, so an app's defines never reach a test.""",
         ),
         "dart_defines": attr.string_dict(
             doc = "Compile-time constants of this test; see dart_aot_kernel.dart_defines.",
+        ),
+    },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
+
+# Packages every host test of a hub imports, compiled once per hub. Tests that import
+# these libraries take them from this kernel with --import-dill, so the test kernel
+# holds only the app's and the test's own libraries. The driver's imports are listed
+# here too, so the deps kernel covers everything the test bootstrap imports.
+_DRIVER_PACKAGE_URIS = [
+    "package:async/async.dart",
+    "package:flutter_test/flutter_test.dart",
+    "package:stream_channel/stream_channel.dart",
+    "package:test_api/backend.dart",
+    "package:test_api/hooks.dart",
+]
+
+def _dart_test_deps_impl(ctx):
+    toolchain = _flutter_toolchain(ctx)
+    dill = ctx.actions.declare_file(ctx.label.name + ".dill")
+    entry = ctx.actions.declare_file(ctx.label.name + "_entry.dart")
+
+    host = [f for f in ctx.files._driver if f.basename == "host.dart"]
+    if len(host) != 1:
+        fail("{}: the driver needs exactly one host.dart".format(ctx.label))
+
+    uris = sorted({uri: True for uri in ctx.attr.libraries + _DRIVER_PACKAGE_URIS}.keys())
+
+    # The entrypoint imports every library the kernel holds. The driver is imported
+    # by URI, as the test bootstrap imports it, so both kernels name one library.
+    lines = ["// Generated by dart_test_deps for hub {}: the deps kernel's entrypoint.".format(ctx.attr.lock_name)]
+    lines += ["import '{}';".format(uri) for uri in uris]
+    lines.append("import 'org-dartlang-root:///{}';".format(_execroot_path(host[0])))
+    lines += ["", "void main() {}", ""]
+    ctx.actions.write(entry, "\n".join(lines))
+
+    # The test kernel's debug flags, so the deps kernel and the test kernels agree on
+    # what they compile. No dart_defines: see dart_test_deps.
+    sdk_root = _sdk_root_for(toolchain.platform_debug, "debug")
+
+    args = ctx.actions.args()
+    args.add(toolchain.dartaotruntime)
+    args.add(toolchain.frontend_server)
+    args.add("--sdk-root", sdk_root + "/")
+    args.add("--target", "flutter")
+    args.add("--no-print-incremental-dependencies")
+    args.add_all(_DEBUG_KERNEL_FLAGS)
+    args.add("--filesystem-root", ".")
+    args.add("--filesystem-root", ctx.bin_dir.path)
+    args.add("--filesystem-scheme", "org-dartlang-root")
+    args.add("--packages", "org-dartlang-root:///" + ctx.file.package_config.path)
+
+    scalars = ctx.actions.args()
+    scalars.add(ctx.attr.hub)
+    scalars.add(ctx.attr.lock_name)
+    scalars.add_joined(ctx.attr.packages, join_with = " ")
+    scalars.add(dill)
+    scalars.add("org-dartlang-root:///" + _execroot_path(entry))
+
+    ctx.actions.run_shell(
+        command = """set -euo pipefail
+HUB="$1"; shift
+LOCK="$1"; shift
+NAMES="$1"; shift
+DILL="$1"; shift
+ENTRY="$1"; shift
+
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
+if "$@" --output-dill "$DILL" "$ENTRY" >"$LOG" 2>&1; then
+    exit 0
+fi
+cat "$LOG" >&2
+
+# Attribution: the first direct package whose repository holds an error's location.
+# Context lines name Flutter APIs, so only ': Error: ' locations are matched.
+locs="$(grep -F ': Error: ' "$LOG" | sed 's/: Error: .*//' || true)"
+culprit=""
+for name in $NAMES; do
+    if grep -F -q -e "package:$name/" -e "$HUB-$name/" <<< "$locs"; then
+        culprit="$name"
+        break
+    fi
+done
+if [ -n "$culprit" ]; then
+    echo "dart_test_deps: pub.lock hub $LOCK's deps kernel does not compile package \\`$culprit\\`." >&2
+else
+    echo "dart_test_deps: pub.lock hub $LOCK's deps kernel does not compile; no direct package is named in the errors above." >&2
+fi
+echo "  Leave the failing package out with test_deps_exclude on pub.lock(name = \\"$LOCK\\"); its tests then compile it per test." >&2
+echo "  If another package in the deps kernel imports it, exclude that importer too." >&2
+exit 1
+""",
+        arguments = [scalars, args],
+        tools = [toolchain.dartaotruntime],
+        inputs = depset(
+            direct = [
+                toolchain.frontend_server,
+                toolchain.sdk_version,
+                ctx.file.package_config,
+                entry,
+            ],
+            transitive = [
+                depset(toolchain.platform_debug),
+                depset(ctx.files._driver),
+                depset(ctx.files.pub_srcs),
+                toolchain.sdk_packages,
+            ],
+        ),
+        outputs = [dill],
+        mnemonic = "DartTestDeps",
+        progress_message = "Compiling test deps kernel %{label}",
+    )
+    return [DefaultInfo(files = depset([dill]))]
+
+dart_test_deps = rule(
+    implementation = _dart_test_deps_impl,
+    doc = """The debug kernel of a pub hub's direct packages, shared by its host tests.
+
+One per `pub.lock` hub, declared in the hub's BUILD file. Its entrypoint imports the
+`package:` libraries of every direct main and dev package (`<name>/<name>.dart`, or
+the top-level libraries of an SDK package without one), and the driver. Every test
+kernel on the hub passes it to frontend_server as --import-dill, so libraries it
+holds are not recompiled per test.
+
+It is built with the test kernel's flags and no dart_defines: a pub package in it
+sees the fixed debug defines only. A test's own defines reach the app's and the
+test's libraries, which compile per test.""",
+    attrs = {
+        "hub": attr.string(
+            mandatory = True,
+            doc = "The hub's repository name prefix; its packages' repositories are `<hub>-<name>`.",
+        ),
+        "lock_name": attr.string(
+            mandatory = True,
+            doc = "The hub's name in pub.lock, shown in errors and in the generated entrypoint.",
+        ),
+        "libraries": attr.string_list(
+            mandatory = True,
+            doc = "The `package:` URIs of the direct packages' libraries, from the hub.",
+        ),
+        "packages": attr.string_list(
+            mandatory = True,
+            doc = "The names of the direct packages, which the errors are attributed to.",
+        ),
+        "package_config": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The pub hub's `package_config.json`.",
+        ),
+        "pub_srcs": attr.label_list(
+            allow_files = True,
+            allow_empty = False,
+            mandatory = True,
+            doc = "The pub hub's `:lib`.",
+        ),
+        "_driver": attr.label_list(
+            allow_files = [".dart"],
+            default = [
+                "//flutter/private/test/driver:host.dart",
+                "//flutter/private/test/driver:core.dart",
+            ],
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
@@ -821,14 +1026,127 @@ def _workspace_label(label):
         )
     return label
 
+def _lib_tier(ctx, pubspec):
+    """Declares a package's lib tier, and the deps_lib its test kernels import.
+
+    The tier is the package's lib/ libraries, compiled once against test_deps and so
+    shared by the package's tests. lib_entry.py picks the libraries and writes their
+    entrypoint; frontend_server writes one dill per package, joined main first as in
+    _jit_kernel_action. deps_lib is test_deps with the tier appended: the one
+    --import-dill a test kernel takes, since frontend_server rejects two.
+
+    A package with no lib/ sources has no tier: deps_lib is test_deps.
+    """
+    if not ctx.files.srcs:
+        return ctx.file.test_deps
+
+    toolchain = _flutter_toolchain(ctx)
+    lib = ctx.actions.declare_file(ctx.label.name + "_lib.dill")
+    deps_lib = ctx.actions.declare_file(ctx.label.name + "_deps_lib.dill")
+    entry = ctx.actions.declare_file(ctx.label.name + "_lib_entry.dart")
+    lib_list = ctx.actions.declare_file(ctx.label.name + "_lib_list.txt")
+    pkg_dir = pubspec.src.short_path.rpartition("/")[0]
+    prefix = pkg_dir + "/lib/" if pkg_dir else "lib/"
+    entries = []
+    for f in ctx.files.srcs:
+        if not f.short_path.startswith(prefix):
+            fail("{}: lib source {} is not under {}".format(ctx.label, f.short_path, prefix))
+        entries.append(f.path + "\t" + f.short_path[len(prefix):])
+    ctx.actions.write(lib_list, "\n".join(entries) + "\n")
+
+    # The debug flags and line-table handling of _jit_kernel_action, with the hub's
+    # test deps as the import.
+    args = ctx.actions.args()
+    args.add(toolchain.dartaotruntime)
+    args.add(toolchain.frontend_server)
+    args.add("--sdk-root", _sdk_root_for(toolchain.platform_debug, "debug") + "/")
+    args.add("--target", "flutter")
+    args.add("--no-print-incremental-dependencies")
+    args.add_all(_DEBUG_KERNEL_FLAGS)
+    args.add("--import-dill", ctx.file.test_deps)
+    args.add("--split-output-by-packages")
+    args.add("--no-embed-source-text")
+    args.add("--filesystem-root", ".")
+    args.add("--filesystem-root", ctx.bin_dir.path)
+    args.add("--filesystem-scheme", "org-dartlang-root")
+    args.add("--packages", "org-dartlang-root:///" + ctx.file.package_config.path)
+
+    scalars = ctx.actions.args()
+    scalars.add(pubspec.package_name)
+    scalars.add(ctx.file.package_config)
+    scalars.add(pubspec.src.path.rpartition("/")[0] or ".")
+    scalars.add(entry)
+    scalars.add("org-dartlang-root:///" + _execroot_path(entry))
+    scalars.add(lib_list)
+    scalars.add(lib)
+    scalars.add(deps_lib)
+    scalars.add(ctx.file.test_deps)
+    scalars.add(ctx.file._lib_entry)
+
+    ctx.actions.run_shell(
+        command = """set -euo pipefail
+NAME_FILE="$1"; shift
+CONFIG="$1"; shift
+PKG_DIR="$1"; shift
+ENTRY="$1"; shift
+ENTRY_URI="$1"; shift
+LIST="$1"; shift
+LIB="$1"; shift
+DEPS_LIB="$1"; shift
+DEPS="$1"; shift
+GEN="$1"; shift
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+python3 "$GEN" "$NAME_FILE" "$CONFIG" "$PKG_DIR" "$ENTRY" "$LIST"
+"$@" --output-dill "$WORK/lib.dill" "$ENTRY_URI"
+if [ -f "$WORK/lib.dill-packages" ]; then
+    {
+        cat "$WORK/lib.dill-main.dilp"
+        while read -r pkg; do
+            if [ "$pkg" != main ]; then cat "$WORK/lib.dill-$pkg.dilp"; fi
+        done < "$WORK/lib.dill-packages"
+    } > "$LIB"
+else
+    cat "$WORK/lib.dill" > "$LIB"
+fi
+cat "$DEPS" "$LIB" > "$DEPS_LIB"
+""",
+        arguments = [scalars, args],
+        tools = [toolchain.dartaotruntime],
+        inputs = depset(
+            direct = [
+                toolchain.frontend_server,
+                toolchain.sdk_version,
+                ctx.file.package_config,
+                pubspec.package_name,
+                ctx.file.test_deps,
+                ctx.file._lib_entry,
+                lib_list,
+            ] + ctx.files.srcs + ctx.files.pub_srcs + ctx.files.path_deps,
+            transitive = [
+                depset(toolchain.platform_debug),
+                toolchain.sdk_packages,
+            ],
+        ),
+        outputs = [lib, deps_lib, entry],
+        mnemonic = "DartLibKernel",
+        progress_message = "Compiling lib kernel %{label}",
+    )
+    return deps_lib
+
 def _flutter_package_impl(ctx):
     assets = ctx.attr.assets[DefaultInfo].files.to_list() if ctx.attr.assets else []
     if len(assets) > 1:
         fail("{}: assets must be one flutter_assets directory, got {} files".format(ctx.label, len(assets)))
+    pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
+    deps_lib = _lib_tier(ctx, pubspec)
     return [FlutterPackageInfo(
-        pubspec = ctx.attr.pubspec[FlutterPubspecInfo],
+        pubspec = pubspec,
         srcs = ctx.files.srcs,
         package_config = ctx.file.package_config,
+        test_deps = ctx.file.test_deps,
+        deps_lib = deps_lib,
         pub_srcs = ctx.files.pub_srcs,
         path_deps = ctx.files.path_deps,
         assets = assets[0] if assets else None,
@@ -852,6 +1170,11 @@ _flutter_package = rule(
             mandatory = True,
             doc = "The pub hub's `package_config.json`.",
         ),
+        "test_deps": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The pub hub's test deps kernel, from dart_test_deps.",
+        ),
         "pub_srcs": attr.label_list(
             allow_files = True,
             allow_empty = False,
@@ -865,13 +1188,18 @@ _flutter_package = rule(
         "assets": attr.label(
             doc = "A flutter_assets directory, passed to tests as --flutter-assets-dir.",
         ),
+        "_lib_entry": attr.label(
+            default = "//flutter/private:lib_entry.py",
+            allow_single_file = True,
+        ),
     },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
 def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = None, **kwargs):
     """The inputs a host test reads from a Dart package, with no app build.
 
-    Declares no action. `flutter_app` declares one as `:app`; a package without
+    Declares no app build. `flutter_app` declares one as `:app`; a package without
     an app declares one by hand, as the conformance suite does:
 
         flutter_pubspec(name = "pubspec")
@@ -897,6 +1225,7 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
         pubspec = pubspec,
         srcs = srcs,
         package_config = package_config,
+        test_deps = pub + "//:test_deps",
         pub_srcs = [pub_lib],
         path_deps = path_deps,
         assets = assets,

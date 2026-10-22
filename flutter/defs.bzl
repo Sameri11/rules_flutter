@@ -31,6 +31,7 @@ load(
 )
 load(
     "//flutter/private:rules.bzl",
+    _dart_test_deps = "dart_test_deps",
     _flutter_aot_library = "flutter_aot_library",
     _flutter_app = "flutter_app",
     _flutter_assets = "flutter_assets",
@@ -51,9 +52,11 @@ flutter_embedding_library = _flutter_embedding_library
 flutter_native_contribution = _flutter_native_contribution
 
 # Named by the BUILD files the plugin extension generates, so they are loaded
-# across a repository boundary and have to resolve from this entrypoint.
+# across a repository boundary and have to resolve from this entrypoint. The hub
+# BUILD files also load dart_test_deps from here.
 android_native_lib_jar = _android_native_lib_jar
 flutter_native_libs = _flutter_native_libs
+dart_test_deps = _dart_test_deps
 
 # The Dart half on its own, for an app whose Dart layout `flutter_app` refuses.
 flutter_pubspec = _flutter_pubspec

@@ -6,6 +6,8 @@ load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_test")
 package(default_visibility = ["//visibility:public"])
 
 flutter_app(
+    # A generated lib source, compiled with the package's other lib/ sources.
+    srcs = glob(["lib/**/*.dart"]) + [":lib/gen_info.dart"],
     # Keep this list aligned with the Android target.
     abis = [
         "arm64-v8a",
@@ -40,4 +42,23 @@ flutter_test(
     app = ":app",
     data = glob(["test/fixtures/materialize/**"]),
     materialize = ["test/fixtures/materialize"],
+)
+
+flutter_test(
+    name = "defines_test",
+    src = "test/defines_test.dart",
+    app = ":app",
+    dart_defines = {"DEMO_FLAVOR": "staging"},
+)
+
+genrule(
+    name = "gen_lib",
+    outs = ["lib/gen_info.dart"],
+    cmd = "echo \"const String generatedGreeting = 'generated';\" > $@",
+)
+
+flutter_test(
+    name = "generated_lib_test",
+    src = "test/generated_lib_test.dart",
+    app = ":app",
 )
