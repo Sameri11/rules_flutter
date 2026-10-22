@@ -20,6 +20,9 @@ FlutterToolchainInfo = provider(
         "platform_debug": "Debug patched SDK files.",
         "sdk_packages": "Depset of the SDK's Dart package files: every `packages/<name>` package plus sky_engine, as lib/, pubspec.yaml and license files.",
         "gen_snapshots": "ABI and AOT mode to gen_snapshot executable file mapping.",
+        "dart": "Dart SDK executable file, used to run the test-kernel driver.",
+        "vm_platform_strong": "VM platform dill the test-kernel driver is compiled against.",
+        "dart_sdk_revision": "Dart SDK revision file; the driver's sdk_hash comes from it.",
     },
 )
 
@@ -36,6 +39,9 @@ def _flutter_toolchain_impl(ctx):
         flutter = ctx.file._flutter,
         tools_snapshot = ctx.file._tools_snapshot,
         dartaotruntime = ctx.executable._dartaotruntime,
+        dart = ctx.executable._dart,
+        vm_platform_strong = ctx.file._vm_platform_strong,
+        dart_sdk_revision = ctx.file._dart_sdk_revision,
         frontend_server = ctx.file._frontend_server,
         vm_isolate_snapshot = ctx.file._vm_isolate_snapshot,
         isolate_snapshot = ctx.file._isolate_snapshot,
@@ -62,6 +68,20 @@ def _toolchain_attrs():
             default = "@flutter_sdk//:dartaotruntime",
             executable = True,
             cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_dart": attr.label(
+            default = "@flutter_sdk//:dart",
+            executable = True,
+            cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_vm_platform_strong": attr.label(
+            default = "@flutter_sdk//:vm_platform_strong.dill",
+            allow_single_file = True,
+        ),
+        "_dart_sdk_revision": attr.label(
+            default = "@flutter_sdk//:dart_sdk_revision",
             allow_single_file = True,
         ),
         "_frontend_server": attr.label(

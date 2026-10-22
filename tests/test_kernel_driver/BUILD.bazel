@@ -1,0 +1,66 @@
+load("//flutter/private:test_kernel_driver.bzl", "driver_dill")
+load(":checks.bzl", "driver_golden_test", "driver_rejects_test", "unpinned_driver_test")
+load(":golden.bzl", "golden_entries")
+load(":identity.bzl", "test_kernel_identity_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The driver's one-shot output must equal frontend_server's for the same argv. Both tests import
+# package:kernel_fixture/extra.dart, which the seed does not, so the test's kernel has a second
+# package piece that is joined after main.
+test_kernel_identity_test(
+    name = "plain_test",
+    srcs = glob([
+        "lib/**/*.dart",
+        "test/**/*.dart",
+    ]),
+    entry = "test/plain_test.dart",
+    package_config = "package_config.json",
+)
+
+test_kernel_identity_test(
+    name = "dart_defines_test",
+    srcs = glob([
+        "lib/**/*.dart",
+        "test/**/*.dart",
+    ]),
+    dart_defines = {
+        "FIXTURE_ENABLED": "true",
+        "FIXTURE_NAME": "bazel",
+    },
+    entry = "test/defines_test.dart",
+    package_config = "package_config.json",
+)
+
+driver_golden_test(
+    name = "driver_golden_test",
+    driver = "//flutter/private/test_kernel_driver:driver",
+    goldens = golden_entries(),
+    version_file = "@flutter_sdk//:flutter.version.json",
+)
+
+# A driver whose -Dsdk_hash is wrong; the revision file is the only difference from the real one.
+driver_dill(
+    name = "wrong_revision_driver",
+    srcs = ["@test_kernel_driver_src//:srcs"],
+    driver = "@test_kernel_driver_src//:driver.dart",
+    revision = "wrong_revision.txt",
+)
+
+driver_rejects_test(
+    name = "rejects_wrong_revision_test",
+    driver = ":wrong_revision_driver",
+)
+
+# No sources, which is what an unpinned version yields. The driver file is a local stub, so the
+# source repository is not fetched.
+driver_dill(
+    name = "unpinned_driver",
+    srcs = [],
+    driver = "unpinned_driver.dart",
+)
+
+unpinned_driver_test(
+    name = "unpinned_driver_test",
+    target_under_test = ":unpinned_driver",
+)

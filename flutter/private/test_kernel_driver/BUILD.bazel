@@ -1,0 +1,19 @@
+load("//flutter/private:test_kernel_driver.bzl", "driver_dill")
+load(":pins_test.bzl", "pins_test_suite")
+
+package(default_visibility = [
+    "//flutter:__subpackages__",
+    "//tests:__subpackages__",
+])
+
+exports_files(["driver.dart"])
+
+# Built only when something depends on it: fetching the SDK and native sources is not free, so the
+# toolchain does not reference this target.
+driver_dill(
+    name = "driver",
+    srcs = ["@test_kernel_driver_src//:srcs"],
+    driver = "@test_kernel_driver_src//:driver.dart",
+)
+
+pins_test_suite(name = "pins_test")

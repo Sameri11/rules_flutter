@@ -237,7 +237,7 @@ jobs:
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
 
-  # Host test driver conformance on Linux; macOS runs it in core (bazel test //...).
+  # Host test driver conformance and the test-kernel driver on Linux; macOS runs them in core (bazel test //...).
   conformance:
     name: Test driver conformance — ubuntu-latest
     runs-on: ubuntu-latest
@@ -256,10 +256,10 @@ jobs:
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
           cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
 
-      - name: bazel test //tests/flutter_test_conformance/...
+      - name: bazel test //tests/flutter_test_conformance/... and the test-kernel driver
         run: |
           set -o pipefail
-          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tests/flutter_test_conformance/... 2>&1 | tee bazel_test_conformance.log
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tests/flutter_test_conformance/... //flutter/private/test_kernel_driver/... //tests/test_kernel_driver/... 2>&1 | tee bazel_test_conformance.log
 
   gate:
     name: Hash table fully claimed

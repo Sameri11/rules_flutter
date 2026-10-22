@@ -19,6 +19,9 @@ package(default_visibility = ["//visibility:public"])
 # They are deliberately not wrapped in filegroups: a filegroup sharing a name
 # with the file it wraps produces a self-edge in the dependency graph.
 exports_files([
+    "dart_sdk_revision",
+    "dart",
+    "vm_platform_strong.dill",
     "dartaotruntime",
     "flutter",
     "flutter_tools.snapshot",
@@ -161,6 +164,20 @@ def _flutter_sdk_impl(ctx):
     ctx.symlink(
         "{}/dart-sdk/bin/dartaotruntime".format(cache),
         "dartaotruntime",
+    )
+    ctx.symlink(
+        "{}/dart-sdk/bin/dart".format(cache),
+        "dart",
+    )
+
+    # The test-kernel driver is compiled against this platform, and its build checks the revision.
+    ctx.symlink(
+        "{}/dart-sdk/lib/_internal/vm_platform_strong.dill".format(cache),
+        "vm_platform_strong.dill",
+    )
+    ctx.symlink(
+        "{}/dart-sdk/revision".format(cache),
+        "dart_sdk_revision",
     )
 
     # Declared as an input so the action key hashes the launcher's content,
