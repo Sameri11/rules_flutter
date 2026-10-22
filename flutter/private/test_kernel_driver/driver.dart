@@ -1,12 +1,19 @@
-// Test-kernel driver: compiles one test kernel with frontend_server's argument shape.
+// Test-kernel driver: compiles one test kernel with frontend_server's arguments, in process.
 //
-// `dart driver.dill <frontend_server args>` takes the arguments a test kernel is compiled with
-// (--import-dill, --split-output-by-packages, --no-embed-source-text, -D, ...) and writes the
-// same bytes frontend_server does, without running it. The seed's libraries are reused through
-// IncrementalKernelGenerator.fromComponent, and the per-package pieces are joined, main first.
+// One-shot: `dart driver.dill <args>` writes the bytes frontend_server writes for the same
+// arguments (--import-dill, --split-output-by-packages, --no-embed-source-text, -D, ...). The
+// import dill's libraries are reused through IncrementalKernelGenerator.fromComponent, and the
+// per-package pieces are joined, main first.
 //
-// Built by frontend_server with -Dsdk_hash=<Dart revision[:10]>. The driver refuses to run unless
-// that define equals the import dill's SDK hash, and the output must carry the same hash.
+// Worker: `dart driver.dill --persistent_worker` serves Bazel's JSON worker protocol: one
+// WorkRequest per line on stdin, one WorkResponse per line on stdout, singleplex. A request reads
+// only its declared inputs. They are linked into a view, kept per process and mirrored to each
+// request by diff, and the file system's '.' root is that view. Up to two seeds, one per import
+// dill digest, stay loaded between requests.
+//
+// Built by frontend_server with -Dsdk_hash=<Dart revision[:10]>. The driver refuses an import dill
+// whose SDK hash differs from its own, and checks the output's hash.
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -29,14 +36,43 @@ import 'package:vm/kernel_front_end.dart'
 const _sdkHashOffset = 8;
 const _sdkHashLength = 10;
 const _sdkHashDefine = String.fromEnvironment('sdk_hash');
+const _persistentFlag = '--persistent_worker';
+const _seedLimit = 2;
 
-/// frontend_server's arguments, parsed. Flags that only the frontend's batch path reads are
-/// accepted and ignored: the driver always omits the platform and writes the split output.
+// Accepted for frontend_server compatibility; the driver always writes the split output without
+// the platform and without source text.
+const _ignored = {
+  '--enable-asserts',
+  '--no-link-platform',
+  '--no-print-incremental-dependencies',
+  '--split-output-by-packages',
+  '--no-embed-source-text',
+};
+
+String need(String? value, String flag) =>
+    value ?? (throw FormatException('test_kernel_driver: expected $flag'));
+
+String _join(String base, String path) => path.startsWith('/') ? path : '$base/$path';
+
+/// `@file` arguments expand to their lines, relative to [base].
+List<String> _expand(Iterable<String> args, String base) => [
+  for (final a in args)
+    if (a.startsWith('@') &&
+        !a.startsWith('@@') &&
+        File(_join(base, a.substring(1))).existsSync())
+      ...File(_join(base, a.substring(1))).readAsLinesSync()
+    else
+      a,
+];
+
 class _Args {
   String? sdkRoot;
   String? packages;
   String? output;
-  String? entry;
+  String? entryScheme;
+  String? entryPath;
+  String? packageNameFile;
+  String? errorHint;
   bool trackWidgetCreation = false;
   final roots = <String>[];
   final imports = <String>[];
@@ -61,34 +97,30 @@ class _Args {
       } else if (a == '--filesystem-root') {
         roots.add(value());
       } else if (a == '--filesystem-scheme') {
-        if (value() != 'org-dartlang-root') throw FormatException('test_kernel_driver: unsupported scheme');
+        if (value() != 'org-dartlang-root') {
+          throw FormatException('test_kernel_driver: unsupported scheme');
+        }
       } else if (a == '--import-dill') {
         imports.add(value());
       } else if (a == '--output-dill') {
         output = value();
       } else if (a == '--target') {
         if (value() != 'flutter') throw FormatException('test_kernel_driver: only --target flutter');
+      } else if (a == '--entry-scheme') {
+        entryScheme = value();
+      } else if (a == '--entry-path') {
+        entryPath = value();
+      } else if (a == '--package-name-file') {
+        packageNameFile = value();
+      } else if (a == '--error-hint') {
+        errorHint = value();
       } else if (a == '--track-widget-creation') {
         trackWidgetCreation = true;
-      } else if (const {
-        '--enable-asserts',
-        '--no-link-platform',
-        '--no-print-incremental-dependencies',
-        '--split-output-by-packages',
-        '--no-embed-source-text',
-      }.contains(a)) {
-        // Implied by the one-shot output below.
-      } else if (a.startsWith('--')) {
-        throw FormatException('test_kernel_driver: unsupported flag $a');
-      } else if (entry == null) {
-        entry = a;
-      } else {
-        throw FormatException('test_kernel_driver: more than one entrypoint');
+      } else if (!_ignored.contains(a)) {
+        throw FormatException('test_kernel_driver: unsupported argument $a');
       }
     }
   }
-
-  String get(String? v, String flag) => v ?? (throw FormatException('test_kernel_driver: expected $flag'));
 }
 
 String _hex(Uint8List bytes) => bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
@@ -109,115 +141,249 @@ Component _load(Uint8List bytes, CanonicalName root, String filename, dynamic ta
   return c;
 }
 
+/// The libraries a compile starts from: the platform and one import dill.
+class _Seed {
+  final List<Library> libs;
+  final Map<Uri, Source> uriToSource;
+  final Set<Library> libSet;
+
+  _Seed(this.libs, this.uriToSource) : libSet = {...libs};
+}
+
+class Driver {
+  final List<(String, _Seed)> _seeds = [];
+  String? _view;
+  final Map<String, String> _links = {};
+  final Set<String> _dirs = {};
+
+  /// Compiles one request. Returns null on success, else the diagnostics. A null [cacheKey]
+  /// loads the seed for this compile only. Relative paths resolve against [base]; a '.' root
+  /// is [view] when given, else [base].
+  Future<String?> compile(_Args a, {required String base, String? view, String? cacheKey}) async {
+    final importPath = _join(base, a.imports.single);
+    // Checked before any kernel read: the reader's own check fails with an opaque trace.
+    final importHash = String.fromCharCodes(_sdkHash(importPath));
+    if (_sdkHashDefine != importHash) {
+      return "test_kernel_driver: -Dsdk_hash is '$_sdkHashDefine' but the import dill's SDK hash is "
+          "'$importHash'; build the driver with -Dsdk_hash set to the SDK's Dart revision.";
+    }
+    final hint = a.errorHint == null || a.errorHint!.isEmpty ? '' : '\n${a.errorHint}';
+    try {
+      final sdkRoot = Uri.directory(_join(base, need(a.sdkRoot, '--sdk-root')));
+      final packages = need(a.packages, '--packages');
+      final output = _join(base, need(a.output, '--output-dill'));
+      // dynamic: the target's API is the SDK's own, and its null-safe return type gets in the way.
+      final dynamic target = createFrontEndTarget(
+        'flutter',
+        trackCreationLocations: a.trackWidgetCreation,
+        supportMirrors: true,
+        includeUnsupportedPlatformLibraryStubs: false,
+        constKeepLocalsIndicator: true,
+      );
+      final seed = _seedFor(
+        cacheKey == null ? null : '$cacheKey|${a.trackWidgetCreation}',
+        () => _loadSeed(sdkRoot, importPath, target),
+      );
+
+      final errors = <String>[];
+      final roots = [
+        for (final r in a.roots) r == '.' ? (view ?? base) : _join(base, r),
+      ];
+      final options = CompilerOptions()
+        ..sdkRoot = sdkRoot
+        ..fileSystem = createFrontEndFileSystem('org-dartlang-root', roots)
+        ..packagesFileUri = Uri.parse(packages)
+        ..sdkSummary = sdkRoot.resolve('platform_strong.dill')
+        ..embedSourceText = false
+        ..target = target
+        ..onDiagnostic = (CfeDiagnosticMessage m) {
+          if (m.severity == CfeSeverity.error || m.severity == CfeSeverity.internalProblem) {
+            errors.addAll(m.plainTextFormatted);
+          }
+        }
+        ..environmentDefines = target.updateEnvironmentDefines(Map.of(a.defines));
+
+      final work = '$output.work';
+      Directory(work).createSync(recursive: true);
+      try {
+        final source = resolveInputUri(_entryUri(a, base));
+        // A fresh list per compile: the generator takes the list by reference.
+        final gen = IncrementalKernelGenerator.fromComponent(
+          options,
+          [source],
+          Component(
+            libraries: List<Library>.of(seed.libs),
+            uriToSource: Map<Uri, Source>.of(seed.uriToSource),
+          ),
+        );
+        final res = await gen.computeDelta(entryPoints: [source]);
+        if (errors.isNotEmpty) return errors.join('\n') + hint;
+        final results = KernelCompilationResults.named(
+          component: res.component,
+          loadedLibraries: seed.libSet,
+          classHierarchy: res.classHierarchy,
+          coreTypes: res.coreTypes,
+        );
+
+        final full = '$work/kernel.dill';
+        sortComponent(res.component);
+        final sink = File(full).openWrite();
+        BinaryPrinter(
+          sink,
+          libraryFilter: (lib) => !seed.libSet.contains(lib),
+          includeSources: false,
+        ).writeComponentFile(res.component);
+        await sink.close();
+        await writeOutputSplitByPackages(source, options, results, full);
+
+        final join = File(output).openWrite();
+        join.add(File('$full-main.dilp').readAsBytesSync());
+        for (final pkg in File('$full-packages').readAsLinesSync()) {
+          if (pkg != 'main' && pkg.isNotEmpty) {
+            join.add(File('$full-$pkg.dilp').readAsBytesSync());
+          }
+        }
+        await join.close();
+      } finally {
+        Directory(work).deleteSync(recursive: true);
+      }
+
+      final got = _hex(_sdkHash(output));
+      final want = _hex(_sdkHash(importPath));
+      if (got != want) {
+        return "test_kernel_driver: the output's SDK hash $got differs from the import dill's $want; "
+            'the driver was built without the matching -Dsdk_hash';
+      }
+      return null;
+    } on Object catch (err) {
+      return '$err$hint';
+    }
+  }
+
+  String _entryUri(_Args a, String base) {
+    final path = need(a.entryPath, '--entry-path');
+    if (need(a.entryScheme, '--entry-scheme') == 'package') {
+      final name = File(_join(base, need(a.packageNameFile, '--package-name-file')))
+          .readAsStringSync()
+          .trimRight();
+      return 'package:$name/$path';
+    }
+    return 'org-dartlang-root:///$path';
+  }
+
+  _Seed _seedFor(String? key, _Seed Function() load) {
+    if (key == null) return load();
+    final hit = _seeds.indexWhere((e) => e.$1 == key);
+    if (hit >= 0) {
+      final entry = _seeds.removeAt(hit);
+      _seeds.add(entry);
+      return entry.$2;
+    }
+    final seed = load();
+    _seeds.add((key, seed));
+    if (_seeds.length > _seedLimit) _seeds.removeAt(0);
+    return seed;
+  }
+
+  _Seed _loadSeed(Uri sdkRoot, String importPath, dynamic target) {
+    final root = CanonicalName.root();
+    final platUri = sdkRoot.resolve('platform_strong.dill');
+    final platform = _load(File.fromUri(platUri).readAsBytesSync(), root, '$platUri', target);
+    final deps = _load(File(importPath).readAsBytesSync(), root, importPath, target);
+    return _Seed(
+      [...platform.libraries, ...deps.libraries],
+      {...platform.uriToSource, ...deps.uriToSource},
+    );
+  }
+
+  /// Makes the view hold exactly [inputs]: a link at each base-relative path, to `base/path`. A
+  /// link that already points at the right target is kept, so a request with the same inputs as
+  /// the last one does no filesystem work.
+  String _mirrorView(String base, Iterable<String> inputs) {
+    final view = _view ??= Directory.systemTemp.createTempSync('test-kernel-view-').path;
+    final want = {for (final rel in inputs) rel: _join(base, rel)};
+    for (final rel in _links.keys.toList()) {
+      if (want[rel] != _links[rel]) {
+        Link('$view/$rel').deleteSync();
+        _links.remove(rel);
+      }
+    }
+    for (final entry in want.entries) {
+      if (_links.containsKey(entry.key)) continue;
+      final dst = '$view/${entry.key}';
+      final dir = dst.substring(0, dst.lastIndexOf('/'));
+      if (_dirs.add(dir)) Directory(dir).createSync(recursive: true);
+      Link(dst).createSync(entry.value);
+      _links[entry.key] = entry.value;
+    }
+    return view;
+  }
+
+  /// Serves one WorkRequest and returns its WorkResponse.
+  Future<Map<String, Object?>> handle(Map<String, dynamic> req) async {
+    final base = Directory((req['sandboxDir'] as String?) ?? Directory.current.path).absolute.path;
+    Map<String, Object?> response(int exitCode, String output) => {
+      'exitCode': exitCode,
+      'output': output,
+      if (req['requestId'] case final int id when id != 0) 'requestId': id,
+    };
+
+    try {
+      final a = _Args.parse(_expand([for (final x in req['arguments'] as List) x as String], base));
+      final inputs = {
+        for (final item in req['inputs'] as List? ?? const [])
+          (item as Map)['path'] as String: (item['digest'] ?? '') as String,
+      };
+      final importRel = a.imports.single;
+      final digest = inputs[importRel];
+      if (digest == null) {
+        return response(1, 'test_kernel_driver: the import dill must be a declared input');
+      }
+      final view = _mirrorView(base, inputs.keys);
+      final error = await compile(
+        a,
+        base: base,
+        view: view,
+        cacheKey: '$importRel|$digest',
+      );
+      return error == null ? response(0, '') : response(1, error);
+    } on Object catch (err) {
+      return response(1, 'worker error: $err');
+    }
+  }
+
+  void close() {
+    final view = _view;
+    if (view != null) Directory(view).deleteSync(recursive: true);
+  }
+}
+
+Future<void> _serve() async {
+  final driver = Driver();
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    if (line.trim().isEmpty) continue;
+    final response = await driver.handle(jsonDecode(line) as Map<String, dynamic>);
+    stdout.writeln(jsonEncode(response));
+    await stdout.flush();
+  }
+  driver.close();
+}
+
 Future<void> main(List<String> argv) async {
-  final a = _Args.parse(argv);
-  final sdkRoot = Uri.directory(Directory(a.get(a.sdkRoot, '--sdk-root')).absolute.path);
-  final output = a.get(a.output, '--output-dill');
-  final entry = a.get(a.entry, 'entrypoint');
-  if (a.imports.length != 1) {
-    throw FormatException('test_kernel_driver: exactly one --import-dill is required');
+  if (argv.contains(_persistentFlag)) {
+    await _serve();
+    return;
   }
-  final importPath = a.imports.single;
-  // Checked before any kernel read: the reader's own check fails with an opaque trace.
-  final importHash = String.fromCharCodes(_sdkHash(importPath));
-  if (_sdkHashDefine != importHash) {
-    stderr.writeln(
-      "test_kernel_driver: -Dsdk_hash is '$_sdkHashDefine' but the import dill's SDK hash is "
-      "'$importHash'; build the driver with -Dsdk_hash set to the SDK's Dart revision.",
-    );
-    exit(1);
-  }
-  // dynamic: the target's API is the SDK's own, and its null-safe return type gets in the way.
-  final dynamic target = createFrontEndTarget(
-    'flutter',
-    trackCreationLocations: a.trackWidgetCreation,
-    supportMirrors: true,
-    includeUnsupportedPlatformLibraryStubs: false,
-    constKeepLocalsIndicator: true,
-  );
-
-  final root = CanonicalName.root();
-  final platform = _load(
-    File.fromUri(sdkRoot.resolve('platform_strong.dill')).readAsBytesSync(),
-    root,
-    '$sdkRoot/platform_strong.dill',
-    target,
-  );
-  final deps = _load(File(importPath).readAsBytesSync(), root, importPath, target);
-  final seedLibs = [...platform.libraries, ...deps.libraries];
-  final seedSources = {...platform.uriToSource, ...deps.uriToSource};
-  final seedSet = {...seedLibs};
-
-  final errors = <String>[];
-  final options = CompilerOptions()
-    ..sdkRoot = sdkRoot
-    ..fileSystem = createFrontEndFileSystem(
-      'org-dartlang-root',
-      [for (final r in a.roots) Directory(r).absolute.path],
-    )
-    ..packagesFileUri = Uri.parse(a.get(a.packages, '--packages'))
-    ..sdkSummary = sdkRoot.resolve('platform_strong.dill')
-    ..embedSourceText = false
-    ..target = target
-    ..onDiagnostic = (CfeDiagnosticMessage m) {
-      if (m.severity == CfeSeverity.error || m.severity == CfeSeverity.internalProblem) {
-        errors.addAll(m.plainTextFormatted);
-      }
-    }
-    ..environmentDefines = target.updateEnvironmentDefines(Map.of(a.defines));
-
-  final work = '$output.work';
-  Directory(work).createSync(recursive: true);
+  final cwd = Directory.current.path;
   try {
-    final source = resolveInputUri(entry);
-    final gen = IncrementalKernelGenerator.fromComponent(
-      options,
-      [source],
-      Component(libraries: List<Library>.of(seedLibs), uriToSource: Map<Uri, Source>.of(seedSources)),
-    );
-    final res = await gen.computeDelta(entryPoints: [source]);
-    if (errors.isNotEmpty) {
-      stderr.writeln(errors.join('\n'));
+    final a = _Args.parse(_expand(argv, cwd));
+    final error = await Driver().compile(a, base: cwd);
+    if (error != null) {
+      stderr.writeln(error);
       exitCode = 1;
-      return;
     }
-    final results = KernelCompilationResults.named(
-      component: res.component,
-      loadedLibraries: seedSet,
-      classHierarchy: res.classHierarchy,
-      coreTypes: res.coreTypes,
-    );
-
-    final full = '$work/kernel.dill';
-    sortComponent(res.component);
-    final sink = File(full).openWrite();
-    BinaryPrinter(
-      sink,
-      libraryFilter: (lib) => !seedSet.contains(lib),
-      includeSources: false,
-    ).writeComponentFile(res.component);
-    await sink.close();
-    await writeOutputSplitByPackages(source, options, results, full);
-
-    final join = File(output).openWrite();
-    join.add(File('$full-main.dilp').readAsBytesSync());
-    for (final pkg in File('$full-packages').readAsLinesSync()) {
-      if (pkg != 'main' && pkg.isNotEmpty) {
-        join.add(File('$full-$pkg.dilp').readAsBytesSync());
-      }
-    }
-    await join.close();
-  } finally {
-    Directory(work).deleteSync(recursive: true);
-  }
-
-  final got = _hex(_sdkHash(output));
-  final want = _hex(_sdkHash(importPath));
-  if (got != want) {
-    stderr.writeln(
-      "test_kernel_driver: the output's SDK hash $got differs from the import dill's $want; "
-      'the driver was built without the matching -Dsdk_hash',
-    );
-    exit(1);
+  } on Object catch (err) {
+    stderr.writeln('test_kernel_driver: $err');
+    exitCode = 1;
   }
 }

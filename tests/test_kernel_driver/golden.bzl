@@ -16,7 +16,7 @@ rebuild the driver and replace its entry the same way. Say in the commit why the
 GOLDEN = {
     "3.47.3": {
         # macOS arm64 archive.
-        "29c2c85a130f154a5097ea9ab3a3fc9031fb4b4ac8126a9c05c9c6a19048e911": "02d9dd279c0e77efbba5c69ca971d43f8398e15d35fb75004b8a8d1288062b9d",
+        "29c2c85a130f154a5097ea9ab3a3fc9031fb4b4ac8126a9c05c9c6a19048e911": "0320aa321fd6ea0a078e43a455661cd6d1f5571f66cb8b67cc865a4b9c4f680b",
         # Linux x64 archive.
         "883d97292177020d42bed41ffcc3755319bb499872239715dde5e0ae3a723f67": "092807c3eded79d5706a4913d52c8ec6937cf0150d5e4ae6a1f18c0247cffb80",
     },

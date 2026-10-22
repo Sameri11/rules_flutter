@@ -82,7 +82,7 @@ def _rejects_test_impl(ctx):
         # The import is the platform dill, which carries the real SDK hash; the driver must
         # refuse before it reads anything.
         'if "$dart" "$d" --sdk-root "${p%/*}/" --import-dill "$p" --output-dill "$tmp/out.dill" ' +
-        "org-dartlang-root:///probe.dart 2>\"$tmp/err\"; then",
+        '--entry-scheme org-dartlang-root --entry-path probe.dart 2>"$tmp/err"; then',
         '  echo "driver_rejects_test: a driver built from a wrong revision was accepted" >&2',
         "  exit 1",
         "fi",

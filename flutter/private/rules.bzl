@@ -509,31 +509,147 @@ def _dart_jit_kernel_impl(ctx):
     )
     return [DefaultInfo(files = depset([dill]))]
 
+# resource_set must be a top-level function, so each fixed step is one. A reservation
+# rounds up to the next step.
+def _memory_1024(os, inputs):
+    return {"cpu": 1, "memory": 1024}
+
+def _memory_1700(os, inputs):
+    return {"cpu": 1, "memory": 1700}
+
+def _memory_2048(os, inputs):
+    return {"cpu": 1, "memory": 2048}
+
+def _memory_3072(os, inputs):
+    return {"cpu": 1, "memory": 3072}
+
+def _memory_4096(os, inputs):
+    return {"cpu": 1, "memory": 4096}
+
+def _memory_6144(os, inputs):
+    return {"cpu": 1, "memory": 6144}
+
+def _memory_8192(os, inputs):
+    return {"cpu": 1, "memory": 8192}
+
+_MEMORY_RESOURCE_SETS = [
+    (1024, _memory_1024),
+    (1700, _memory_1700),
+    (2048, _memory_2048),
+    (3072, _memory_3072),
+    (4096, _memory_4096),
+    (6144, _memory_6144),
+    (8192, _memory_8192),
+]
+
+def _resource_set_for(mb):
+    for step, resource_set in _MEMORY_RESOURCE_SETS:
+        if mb <= step:
+            return resource_set
+    fail("test_kernel_memory_mb must be at most {}".format(_MEMORY_RESOURCE_SETS[-1][0]))
+
+def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver, resource_set):
+    """Declares the test kernel action on the test-kernel driver.
+
+    Bazel starts the worker with the driver path as its only startup argument and
+    appends --persistent_worker; the request arguments come from the param file.
+    The same arguments serve a one-shot run, so the driver expands the param file.
+    """
+    toolchain = _flutter_toolchain(ctx)
+    sdk_root = _sdk_root_for(toolchain.platform_debug, "debug")
+    scheme, path = _dart_entry_uri(ctx, entrypoint)
+
+    startup = ctx.actions.args()
+    startup.add(driver)
+
+    args = ctx.actions.args()
+    args.set_param_file_format("multiline")
+    args.use_param_file("@%s", use_always = True)
+    args.add("--sdk-root", sdk_root + "/")
+    args.add("--target", "flutter")
+    args.add_all(_DEBUG_KERNEL_FLAGS)
+    args.add_all(_dart_define_flags(dart_defines))
+    args.add("--import-dill", pkg.import_dill)
+    args.add("--filesystem-root", ".")
+    args.add("--filesystem-root", ctx.bin_dir.path)
+    args.add("--filesystem-scheme", "org-dartlang-root")
+    args.add("--packages", "org-dartlang-root:///" + pkg.package_config.path)
+    args.add("--entry-scheme", scheme)
+    args.add("--entry-path", path)
+    args.add("--package-name-file", pkg.package_name)
+    args.add("--error-hint", _TEST_IMPORT_HINT)
+    args.add("--output-dill", dill)
+
+    ctx.actions.run(
+        executable = toolchain.dart,
+        arguments = [startup, args],
+        tools = [toolchain.dart],
+        inputs = depset(
+            direct = [
+                driver,
+                toolchain.sdk_version,
+                pkg.package_config,
+                pkg.package_name,
+                entrypoint,
+                pkg.import_dill,
+            ] + pkg.path_deps,
+            transitive = [
+                depset(toolchain.platform_debug),
+                depset(pkg.srcs),
+                depset(pkg.pub_srcs),
+                toolchain.sdk_packages,
+            ],
+        ),
+        outputs = [dill],
+        mnemonic = "DartTestKernel",
+        progress_message = "Compiling Dart test kernel %{label}",
+        resource_set = resource_set,
+        execution_requirements = {
+            "supports-workers": "1",
+            "requires-worker-protocol": "json",
+        },
+    )
+
 def _dart_test_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
     package = ctx.attr.app[FlutterPackageInfo]
-
-    _jit_kernel_action(
-        ctx,
-        dill = dill,
-        pkg = struct(
-            package_name = package.pubspec.package_name,
-            package_config = package.package_config,
-            pub_srcs = package.pub_srcs,
-            path_deps = package.path_deps,
-            srcs = ctx.files.srcs + package.srcs,
-            registrant = None,
-            registrant_path = "",
-            # A test with dart_defines compiles its package's libraries itself,
-            # since deps_lib was compiled without the test's constants.
-            import_dill = package.test_deps if ctx.attr.dart_defines else package.deps_lib,
-        ),
-        entrypoint = ctx.file.entrypoint,
-        dart_defines = ctx.attr.dart_defines,
-        hint = _TEST_IMPORT_HINT,
-        mnemonic = "DartTestKernel",
-        what = "Dart test kernel",
+    pkg = struct(
+        package_name = package.pubspec.package_name,
+        package_config = package.package_config,
+        pub_srcs = package.pub_srcs,
+        path_deps = package.path_deps,
+        srcs = ctx.files.srcs + package.srcs,
+        registrant = None,
+        registrant_path = "",
+        # A test with dart_defines compiles its package's libraries itself,
+        # since deps_lib was compiled without the test's constants.
+        import_dill = package.test_deps if ctx.attr.dart_defines else package.deps_lib,
     )
+
+    # Without a pin for the Flutter version there is no driver. frontend_server, or no
+    # driver, selects the frontend_server action.
+    drivers = ctx.files._test_kernel_driver
+    if drivers and ctx.attr._test_kernel_compiler[BuildSettingInfo].value == "worker":
+        _test_kernel_driver_action(
+            ctx,
+            dill = dill,
+            pkg = pkg,
+            entrypoint = ctx.file.entrypoint,
+            dart_defines = ctx.attr.dart_defines,
+            driver = drivers[0],
+            resource_set = _resource_set_for(ctx.attr._test_kernel_memory_mb[BuildSettingInfo].value),
+        )
+    else:
+        _jit_kernel_action(
+            ctx,
+            dill = dill,
+            pkg = pkg,
+            entrypoint = ctx.file.entrypoint,
+            dart_defines = ctx.attr.dart_defines,
+            hint = _TEST_IMPORT_HINT,
+            mnemonic = "DartTestKernel",
+            what = "Dart test kernel",
+        )
     return [DefaultInfo(files = depset([dill]))]
 
 FlutterPackageInfo = provider(
@@ -554,7 +670,10 @@ dart_test_kernel = rule(
     implementation = _dart_test_kernel_impl,
     doc = """The debug kernel of one flutter_test.
 
-Compiles dart_jit_kernel's action over the package inputs its `app` provides.
+Compiles the test's debug kernel over the package inputs its `app` provides, through the
+test-kernel driver as a persistent worker when the Flutter version has a pin. Set
+`//flutter:test_kernel_compiler=frontend_server` to use frontend_server instead, as
+dart_jit_kernel does; a Flutter version without a pin uses frontend_server too.
 It takes the test's own dart_defines and none of the app's: `flutter test` reads
 defines from its command line only, so an app's defines never reach a test.
 
@@ -578,6 +697,18 @@ package's libraries itself.""",
         ),
         "dart_defines": attr.string_dict(
             doc = "Compile-time constants of this test; see dart_aot_kernel.dart_defines.",
+        ),
+        "_test_kernel_driver": attr.label(
+            default = "//flutter/private/test_kernel_driver:driver",
+            allow_files = [".dill"],
+        ),
+        "_test_kernel_compiler": attr.label(
+            default = "//flutter:test_kernel_compiler",
+            providers = [BuildSettingInfo],
+        ),
+        "_test_kernel_memory_mb": attr.label(
+            default = "//flutter:test_kernel_memory_mb",
+            providers = [BuildSettingInfo],
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
