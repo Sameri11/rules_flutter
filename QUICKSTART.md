@@ -1174,3 +1174,29 @@ exercise every newly added plugin or native-asset path. This runtime exercise
 catches a missing registrant, an unsupported device ABI, or a native library
 that is packaged but fails when loaded; build guards cover declared-library and
 bundle consistency checks.
+
+### Test kernel compilation
+
+Test kernels compile in a persistent Bazel worker by default. The worker runs
+the test-kernel driver as one singleplex process per worker key; the execution
+log reports the runner as `worker`. No flags are needed.
+
+To opt out, for a Flutter version without a pin or to compare outputs:
+
+```sh
+bazel test //... --@rules_flutter//flutter:test_kernel_compiler=frontend_server
+```
+
+Each worker reserves 1700 MB by default. Override it with
+`--@rules_flutter//flutter:test_kernel_memory_mb=N`; the reservation rounds up
+to 1024, 1700, 2048, 3072, 4096, 6144, or 8192 MB. On small hosts, pair it with
+`--local_resources` and `--worker_max_instances` to bound concurrent drivers.
+
+`--worker_sandboxing` adds 11–16% wall time. `--experimental_worker_sandbox_hardening`
+is Linux only; on Ubuntu 24.04 it needs `kernel.apparmor_restrict_unprivileged_userns=0`.
+
+Remote execution is not supported for test kernels: the worker runs locally only.
+
+Idle workers stay alive between builds. Use `--worker_quit_after_build` to stop
+them when each build ends, or `--experimental_total_worker_memory_limit_mb` to
+evict idle workers once they exceed a total memory budget.
