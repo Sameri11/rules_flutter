@@ -17,7 +17,7 @@ build_flags=(--disk_cache= --noremote_accept_cached --lockfile_mode=error)
 restore_probe() {
   if [ -n "$probe_backup" ]; then
     cp "$probe_backup" "$probe_dir/BUILD.bazel"
-    rm -f "$probe_dir/test/undeclared_import_probe_test.dart" "$probe_dir/test/undeclared_import_probe_helper.dart"
+    rm -f "$probe_dir/test/undeclared_import_probe_test.dart" "$probe_dir/test/undeclared_import_probe_helper.dart" "$probe_dir/test/undeclared_generated_import_probe_test.dart"
     probe_backup=""
   fi
 }
@@ -93,7 +93,7 @@ if ! diff -u "$work/worker.digests" "$work/frontend.digests"; then
   exit 1
 fi
 
-# (c) An undeclared import must fail under the worker with the test import hint.
+# (c) An undeclared import, of a source or a generated file, must fail under the worker with the test import hint.
 # The probe goes in the app's package, since tests must sit under its pubspec;
 # its BUILD.bazel is restored on exit.
 app_build=$(find . -name BUILD.bazel -not -path './bazel-*' -print | LC_ALL=C sort | while read -r f; do
@@ -119,18 +119,29 @@ mkdir -p "$probe_dir/test"
   fi
   cat "$probe_backup"
   printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    app = ":app",\n    tags = ["manual"],\n)\n'
+  printf '\ngenrule(\n    name = "undeclared_generated_import_probe_helper",\n    outs = ["test/undeclared_generated_import_probe_helper.dart"],\n    cmd = "touch $@",\n    tags = ["manual"],\n)\n'
+  printf '\nflutter_test(\n    name = "undeclared_generated_import_probe",\n    src = "test/undeclared_generated_import_probe_test.dart",\n    app = ":app",\n    tags = ["manual"],\n)\n'
 } > "$app_build"
 printf "import 'undeclared_import_probe_helper.dart';\n\nvoid main() {}\n" > "$probe_dir/test/undeclared_import_probe_test.dart"
 printf 'const undeclaredImportProbe = 1;\n' > "$probe_dir/test/undeclared_import_probe_helper.dart"
-if bazel build "${build_flags[@]}" ${extra[@]+"${extra[@]}"} -- "//$app_pkg:undeclared_import_probe_kernel" > "$work/probe.log" 2>&1; then
-  echo "FAIL: undeclared import compiled under the worker" >&2
-  exit 1
-fi
-if ! grep -F -- "$hint" "$work/probe.log" > /dev/null; then
-  cat "$work/probe.log" >&2
-  echo "FAIL: undeclared import failed without the test import hint" >&2
-  exit 1
-fi
+printf "import 'undeclared_generated_import_probe_helper.dart';\n\nvoid main() {}\n" > "$probe_dir/test/undeclared_generated_import_probe_test.dart"
+
+# Builds one probe kernel, which must fail with the test import hint.
+expect_undeclared_import_failure() {
+  if bazel build "${build_flags[@]}" ${extra[@]+"${extra[@]}"} -- "//$app_pkg:$1" > "$work/probe.log" 2>&1; then
+    echo "FAIL: undeclared import compiled under the worker: $1" >&2
+    exit 1
+  fi
+  if ! grep -F -- "$hint" "$work/probe.log" > /dev/null; then
+    cat "$work/probe.log" >&2
+    echo "FAIL: undeclared import failed without the test import hint: $1" >&2
+    exit 1
+  fi
+}
+expect_undeclared_import_failure undeclared_import_probe_kernel
+# The generated helper is built first, so its output is in bazel-bin when the test compiles.
+bazel build "${build_flags[@]}" ${extra[@]+"${extra[@]}"} -- "//$app_pkg:undeclared_generated_import_probe_helper"
+expect_undeclared_import_failure undeclared_generated_import_probe_kernel
 restore_probe
 
 echo "OK: test kernel worker invariants hold for $(wc -l < "$work/labels" | tr -d ' ') kernels"
