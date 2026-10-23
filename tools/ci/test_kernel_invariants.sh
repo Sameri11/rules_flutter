@@ -7,6 +7,7 @@ set -euo pipefail
 os=$(uname -s)
 extra=("$@")
 work=$(mktemp -d)
+probe_dir=""
 probe_backup=""
 hint='hint: declare test-local imports in `srcs`'
 frontend=--@rules_flutter//flutter:test_kernel_compiler=frontend_server
@@ -15,8 +16,8 @@ build_flags=(--disk_cache= --noremote_accept_cached --lockfile_mode=error)
 
 restore_probe() {
   if [ -n "$probe_backup" ]; then
-    cp "$probe_backup" BUILD.bazel
-    rm -f test/undeclared_import_probe_test.dart test/undeclared_import_probe_helper.dart
+    cp "$probe_backup" "$probe_dir/BUILD.bazel"
+    rm -f "$probe_dir/test/undeclared_import_probe_test.dart" "$probe_dir/test/undeclared_import_probe_helper.dart"
     probe_backup=""
   fi
 }
@@ -93,14 +94,8 @@ if ! diff -u "$work/worker.digests" "$work/frontend.digests"; then
 fi
 
 # (c) An undeclared import must fail under the worker with the test import hint.
-# The probe target is appended to BUILD.bazel and restored on exit.
-probe_backup="$work/BUILD.bazel"
-cp BUILD.bazel "$probe_backup"
-probe_load='load("@rules_flutter//flutter:defs.bzl", "flutter_test")'
-if grep -q 'flutter_test' BUILD.bazel; then
-  probe_load=""
-fi
-mkdir -p test
+# The probe goes in the app's package, since tests must sit under its pubspec;
+# its BUILD.bazel is restored on exit.
 app_build=$(find . -name BUILD.bazel -not -path './bazel-*' -print | LC_ALL=C sort | while read -r f; do
   if grep -q '^flutter_app(' "$f"; then echo "$f"; fi
 done | sed -n 1p)
@@ -108,23 +103,26 @@ if [ -z "$app_build" ]; then
   echo "FAIL: no flutter_app package for the undeclared-import probe" >&2
   exit 1
 fi
-app_dir=$(dirname "$app_build")
-app_dir=${app_dir#./}
-if [ "$app_dir" = "." ]; then
-  app_label="//:app"
-else
-  app_label="//$app_dir:app"
+probe_dir=$(dirname "$app_build")
+app_pkg=${probe_dir#.}
+app_pkg=${app_pkg#/}
+probe_load='load("@rules_flutter//flutter:defs.bzl", "flutter_test")'
+if grep -q 'flutter_test' "$app_build"; then
+  probe_load=""
 fi
+probe_backup="$work/BUILD.bazel"
+cp "$app_build" "$probe_backup"
+mkdir -p "$probe_dir/test"
 {
   if [ -n "$probe_load" ]; then
     echo "$probe_load"
   fi
   cat "$probe_backup"
-  printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    app = "%s",\n    tags = ["manual"],\n)\n' "$app_label"
-} > BUILD.bazel
-printf "import 'undeclared_import_probe_helper.dart';\n\nvoid main() {}\n" > test/undeclared_import_probe_test.dart
-printf 'const undeclaredImportProbe = 1;\n' > test/undeclared_import_probe_helper.dart
-if bazel build "${build_flags[@]}" ${extra[@]+"${extra[@]}"} -- //:undeclared_import_probe_kernel > "$work/probe.log" 2>&1; then
+  printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    app = ":app",\n    tags = ["manual"],\n)\n'
+} > "$app_build"
+printf "import 'undeclared_import_probe_helper.dart';\n\nvoid main() {}\n" > "$probe_dir/test/undeclared_import_probe_test.dart"
+printf 'const undeclaredImportProbe = 1;\n' > "$probe_dir/test/undeclared_import_probe_helper.dart"
+if bazel build "${build_flags[@]}" ${extra[@]+"${extra[@]}"} -- "//$app_pkg:undeclared_import_probe_kernel" > "$work/probe.log" 2>&1; then
   echo "FAIL: undeclared import compiled under the worker" >&2
   exit 1
 fi
