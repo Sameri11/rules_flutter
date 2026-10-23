@@ -1187,7 +1187,7 @@ To opt out, for a Flutter version without a pin or to compare outputs:
 bazel test //... --@rules_flutter//flutter:test_kernel_compiler=frontend_server
 ```
 
-Each worker reserves 1700 MB by default. Override it with
+Each worker reserves 4096 MB by default. Override it with
 `--@rules_flutter//flutter:test_kernel_memory_mb=N`; the reservation rounds up
 to 1024, 1700, 2048, 3072, 4096, 6144, or 8192 MB. On small hosts, pair it with
 `--local_resources` and `--worker_max_instances` to bound concurrent drivers.
