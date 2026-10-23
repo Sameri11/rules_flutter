@@ -101,20 +101,17 @@ if grep -q 'flutter_test' BUILD.bazel; then
   probe_load=""
 fi
 mkdir -p test
+app_label=$(bazel query 'kind(flutter_app, //...)' ${extra[@]+"${extra[@]}"} | LC_ALL=C sort | head -1)
+if [ -z "$app_label" ]; then
+  echo "FAIL: no flutter_app target for the undeclared-import probe" >&2
+  exit 1
+fi
 {
   if [ -n "$probe_load" ]; then
     echo "$probe_load"
   fi
   cat "$probe_backup"
-  cat <<'EOF'
-
-flutter_test(
-    name = "undeclared_import_probe",
-    src = "test/undeclared_import_probe_test.dart",
-    app = "//:app",
-    tags = ["manual"],
-)
-EOF
+  printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    app = "%s",\n    tags = ["manual"],\n)\n' "$app_label"
 } > BUILD.bazel
 printf "import 'undeclared_import_probe_helper.dart';\n\nvoid main() {}\n" > test/undeclared_import_probe_test.dart
 printf 'const undeclaredImportProbe = 1;\n' > test/undeclared_import_probe_helper.dart
