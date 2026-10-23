@@ -101,10 +101,17 @@ if grep -q 'flutter_test' BUILD.bazel; then
   probe_load=""
 fi
 mkdir -p test
-app_label=$(bazel query 'kind(flutter_app, //...)' ${extra[@]+"${extra[@]}"} | LC_ALL=C sort | head -1)
-if [ -z "$app_label" ]; then
-  echo "FAIL: no flutter_app target for the undeclared-import probe" >&2
+app_build=$(find . -name BUILD.bazel -not -path './bazel-*' -print | while read -r f; do grep -q '^flutter_app(' "$f" && echo "$f"; done | sed -n 1p)
+if [ -z "$app_build" ]; then
+  echo "FAIL: no flutter_app package for the undeclared-import probe" >&2
   exit 1
+fi
+app_dir=$(dirname "$app_build")
+app_dir=${app_dir#./}
+if [ "$app_dir" = "." ]; then
+  app_label="//:app"
+else
+  app_label="//$app_dir:app"
 fi
 {
   if [ -n "$probe_load" ]; then
