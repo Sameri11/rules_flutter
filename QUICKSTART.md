@@ -1181,7 +1181,7 @@ Test kernels compile in a persistent Bazel worker by default. The worker runs
 the test-kernel driver as one singleplex process per worker key; the execution
 log reports the runner as `worker`. No flags are needed.
 
-To opt out, for a Flutter version without a pin or to compare outputs:
+To opt out, for example to compare outputs (a Flutter version without a driver pin uses frontend_server automatically, with a warning):
 
 ```sh
 bazel test //... --@rules_flutter//flutter:test_kernel_compiler=frontend_server
