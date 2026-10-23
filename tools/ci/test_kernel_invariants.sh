@@ -96,8 +96,17 @@ fi
 # The probe target is appended to BUILD.bazel and restored on exit.
 probe_backup="$work/BUILD.bazel"
 cp BUILD.bazel "$probe_backup"
+probe_load='load("@rules_flutter//flutter:defs.bzl", "flutter_test")'
+if grep -q 'flutter_test' BUILD.bazel; then
+  probe_load=""
+fi
 mkdir -p test
-cat >> BUILD.bazel <<'EOF'
+{
+  if [ -n "$probe_load" ]; then
+    echo "$probe_load"
+  fi
+  cat "$probe_backup"
+  cat <<'EOF'
 
 flutter_test(
     name = "undeclared_import_probe",
@@ -106,6 +115,7 @@ flutter_test(
     tags = ["manual"],
 )
 EOF
+} > BUILD.bazel
 printf "import 'undeclared_import_probe_helper.dart';\n\nvoid main() {}\n" > test/undeclared_import_probe_test.dart
 printf 'const undeclaredImportProbe = 1;\n' > test/undeclared_import_probe_helper.dart
 if bazel build "${build_flags[@]}" ${extra[@]+"${extra[@]}"} -- //:undeclared_import_probe_kernel > "$work/probe.log" 2>&1; then

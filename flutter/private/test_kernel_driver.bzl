@@ -43,6 +43,8 @@ def _test_kernel_driver_src_impl(rctx):
     pin = PINS.get(version)
     if pin == None:
         rctx.file("driver.dart", "")
+
+        # buildifier: disable=print
         print("test_kernel_driver: Flutter {} has no driver pin; test kernels use the slower frontend_server action. Add the version to pins.bzl to use the driver.".format(version))
         rctx.file("package_config.json", "{}\n")
         rctx.file("BUILD.bazel", _NO_DRIVER_BUILD)

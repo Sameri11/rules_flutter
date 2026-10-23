@@ -19,7 +19,10 @@ string_flag(
 string_flag(
     name = "test_kernel_compiler",
     build_setting_default = "worker",
-    values = ["worker", "frontend_server"],
+    values = [
+        "worker",
+        "frontend_server",
+    ],
 )
 
 # Memory reserved per test-kernel worker action, in MB; rounded up to the next fixed step.
