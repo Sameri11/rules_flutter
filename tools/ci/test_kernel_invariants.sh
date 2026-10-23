@@ -66,16 +66,20 @@ cp "$work/worker.digests" "kernel-digests-$os.txt"
 python3 - "$exec_log" <<'PY'
 import json, sys
 
+text = open(sys.argv[1]).read()
+decoder = json.JSONDecoder()
 counts = {}
-with open(sys.argv[1]) as log:
-    for line in log:
-        if not line.strip():
-            continue
-        entry = json.loads(line)
-        spawn = entry.get("spawn", entry)
-        if spawn.get("mnemonic") == "DartTestKernel":
-            runner = spawn.get("runner", "")
-            counts[runner] = counts.get(runner, 0) + 1
+pos = 0
+while True:
+    while pos < len(text) and text[pos].isspace():
+        pos += 1
+    if pos >= len(text):
+        break
+    entry, pos = decoder.raw_decode(text, pos)
+    spawn = entry.get("spawn", entry)
+    if spawn.get("mnemonic") == "DartTestKernel":
+        runner = spawn.get("runner", "")
+        counts[runner] = counts.get(runner, 0) + 1
 print("DartTestKernel runners:", counts)
 if not counts or set(counts) != {"worker"}:
     sys.exit("FAIL: test kernel actions must run on the singleplex worker runner")

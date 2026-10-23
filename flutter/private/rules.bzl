@@ -511,25 +511,25 @@ def _dart_jit_kernel_impl(ctx):
 
 # resource_set must be a top-level function, so each fixed step is one. A reservation
 # rounds up to the next step.
-def _memory_1024(os, inputs):
+def _memory_1024(_os, _inputs):
     return {"cpu": 1, "memory": 1024}
 
-def _memory_1700(os, inputs):
+def _memory_1700(_os, _inputs):
     return {"cpu": 1, "memory": 1700}
 
-def _memory_2048(os, inputs):
+def _memory_2048(_os, _inputs):
     return {"cpu": 1, "memory": 2048}
 
-def _memory_3072(os, inputs):
+def _memory_3072(_os, _inputs):
     return {"cpu": 1, "memory": 3072}
 
-def _memory_4096(os, inputs):
+def _memory_4096(_os, _inputs):
     return {"cpu": 1, "memory": 4096}
 
-def _memory_6144(os, inputs):
+def _memory_6144(_os, _inputs):
     return {"cpu": 1, "memory": 6144}
 
-def _memory_8192(os, inputs):
+def _memory_8192(_os, _inputs):
     return {"cpu": 1, "memory": 8192}
 
 _MEMORY_RESOURCE_SETS = [
