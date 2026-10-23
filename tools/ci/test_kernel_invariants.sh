@@ -81,6 +81,8 @@ while True:
     if spawn.get("mnemonic") == "DartTestKernel":
         runner = spawn.get("runner", "")
         counts[runner] = counts.get(runner, 0) + 1
+        if not any(i.get("path", "").endswith("/driver.dill") and i.get("isTool") for i in spawn.get("inputs", [])):
+            sys.exit("FAIL: driver.dill must be a tool of every test kernel spawn")
 print("DartTestKernel runners:", counts)
 if not counts or set(counts) != {"worker"}:
     sys.exit("FAIL: test kernel actions must run on the singleplex worker runner")
