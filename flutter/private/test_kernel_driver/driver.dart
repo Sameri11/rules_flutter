@@ -365,29 +365,13 @@ class Driver {
   /// this process's stdin pipe, which stays open only while the process lives, so the view is
   /// removed even when Bazel kills the worker.
   Future<String> _startView() async {
-    final view = Directory.systemTemp.createTempSync('test-kernel-view-$pid-').path;
+    final view = Directory.systemTemp.createTempSync('test-kernel-view-').path;
     _remover = await Process.start('sh', ['-c', r'cat >/dev/null; rm -rf "$1"', 'sh', view]);
     return view;
   }
 }
 
-final _viewName = RegExp(r'^test-kernel-view-(\d+)-');
-
-/// Removes views whose worker died without closing them, such as after SIGKILL.
-void _removeDeadViews() {
-  for (final entry in Directory.systemTemp.listSync()) {
-    final owner = _viewName.firstMatch(entry.path.split('/').last)?.group(1);
-    if (owner == null || Process.runSync('kill', ['-0', owner]).exitCode == 0) continue;
-    try {
-      entry.deleteSync(recursive: true);
-    } on FileSystemException {
-      // A worker starting at the same time may have removed it first.
-    }
-  }
-}
-
 Future<void> _serve() async {
-  _removeDeadViews();
   final driver = Driver();
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     if (line.trim().isEmpty) continue;
