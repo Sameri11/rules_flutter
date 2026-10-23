@@ -8,8 +8,8 @@
 // Worker: `dart driver.dill --persistent_worker` serves Bazel's JSON worker protocol: one
 // WorkRequest per line on stdin, one WorkResponse per line on stdout, singleplex. A request reads
 // only its declared inputs. They are linked into a view, kept per process and mirrored to each
-// request by diff, and the file system's '.' root is that view. Up to two seeds, one per import
-// dill digest, stay loaded between requests.
+// request by diff, and the file system's roots all resolve inside that view. Up to two seeds,
+// one per import dill digest, stay loaded between requests.
 //
 // Built by frontend_server with -Dsdk_hash=<Dart revision[:10]>. The driver refuses an import dill
 // whose SDK hash differs from its own, and checks the output's hash.
@@ -153,12 +153,13 @@ class _Seed {
 class Driver {
   final List<(String, _Seed)> _seeds = [];
   String? _view;
+  Process? _remover;
   final Map<String, String> _links = {};
   final Set<String> _dirs = {};
 
   /// Compiles one request. Returns null on success, else the diagnostics. A null [cacheKey]
-  /// loads the seed for this compile only. Relative paths resolve against [base]; a '.' root
-  /// is [view] when given, else [base].
+  /// loads the seed for this compile only. Relative paths resolve against [base]; file system
+  /// roots resolve inside [view] when given, else [base].
   Future<String?> compile(_Args a, {required String base, String? view, String? cacheKey}) async {
     final importPath = _join(base, a.imports.single);
     // Checked before any kernel read: the reader's own check fails with an opaque trace.
@@ -187,7 +188,7 @@ class Driver {
 
       final errors = <String>[];
       final roots = [
-        for (final r in a.roots) r == '.' ? (view ?? base) : _join(base, r),
+        for (final r in a.roots) r == '.' ? (view ?? base) : _join(view ?? base, r),
       ];
       final options = CompilerOptions()
         ..sdkRoot = sdkRoot
@@ -299,8 +300,8 @@ class Driver {
   /// Makes the view hold exactly [inputs]: a link at each base-relative path, to `base/path`. A
   /// link that already points at the right target is kept, so a request with the same inputs as
   /// the last one does no filesystem work.
-  String _mirrorView(String base, Iterable<String> inputs) {
-    final view = _view ??= Directory.systemTemp.createTempSync('test-kernel-view-').path;
+  Future<String> _mirrorView(String base, Iterable<String> inputs) async {
+    final view = _view ??= await _startView();
     final want = {for (final rel in inputs) rel: _join(base, rel)};
     for (final rel in _links.keys.toList()) {
       if (want[rel] != _links[rel]) {
@@ -324,7 +325,7 @@ class Driver {
     final base = Directory((req['sandboxDir'] as String?) ?? Directory.current.path).absolute.path;
     Map<String, Object?> response(int exitCode, String output) => {
       'exitCode': exitCode,
-      'output': output,
+      'output': output.isEmpty || output.endsWith('\n') ? output : '$output\n',
       if (req['requestId'] case final int id when id != 0) 'requestId': id,
     };
 
@@ -339,7 +340,7 @@ class Driver {
       if (digest == null) {
         return response(1, 'test_kernel_driver: the import dill must be a declared input');
       }
-      final view = _mirrorView(base, inputs.keys);
+      final view = await _mirrorView(base, inputs.keys);
       final error = await compile(
         a,
         base: base,
@@ -352,13 +353,41 @@ class Driver {
     }
   }
 
-  void close() {
-    final view = _view;
-    if (view != null) Directory(view).deleteSync(recursive: true);
+  /// Ends the remover, which removes the view.
+  Future<void> close() async {
+    final remover = _remover;
+    if (remover == null) return;
+    await remover.stdin.close();
+    await remover.exitCode;
+  }
+
+  /// Creates the view, and a remover that deletes it once this process ends. The remover reads
+  /// this process's stdin pipe, which stays open only while the process lives, so the view is
+  /// removed even when Bazel kills the worker.
+  Future<String> _startView() async {
+    final view = Directory.systemTemp.createTempSync('test-kernel-view-$pid-').path;
+    _remover = await Process.start('sh', ['-c', r'cat >/dev/null; rm -rf "$1"', 'sh', view]);
+    return view;
+  }
+}
+
+final _viewName = RegExp(r'^test-kernel-view-(\d+)-');
+
+/// Removes views whose worker died without closing them, such as after SIGKILL.
+void _removeDeadViews() {
+  for (final entry in Directory.systemTemp.listSync()) {
+    final owner = _viewName.firstMatch(entry.path.split('/').last)?.group(1);
+    if (owner == null || Process.runSync('kill', ['-0', owner]).exitCode == 0) continue;
+    try {
+      entry.deleteSync(recursive: true);
+    } on FileSystemException {
+      // A worker starting at the same time may have removed it first.
+    }
   }
 }
 
 Future<void> _serve() async {
+  _removeDeadViews();
   final driver = Driver();
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     if (line.trim().isEmpty) continue;
@@ -366,7 +395,7 @@ Future<void> _serve() async {
     stdout.writeln(jsonEncode(response));
     await stdout.flush();
   }
-  driver.close();
+  await driver.close();
 }
 
 Future<void> main(List<String> argv) async {
