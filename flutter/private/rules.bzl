@@ -514,9 +514,6 @@ def _dart_jit_kernel_impl(ctx):
 def _memory_1024(_os, _inputs):
     return {"cpu": 1, "memory": 1024}
 
-def _memory_1700(_os, _inputs):
-    return {"cpu": 1, "memory": 1700}
-
 def _memory_2048(_os, _inputs):
     return {"cpu": 1, "memory": 2048}
 
@@ -534,7 +531,6 @@ def _memory_8192(_os, _inputs):
 
 _MEMORY_RESOURCE_SETS = [
     (1024, _memory_1024),
-    (1700, _memory_1700),
     (2048, _memory_2048),
     (3072, _memory_3072),
     (4096, _memory_4096),

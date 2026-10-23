@@ -28,7 +28,7 @@ string_flag(
 # Memory reserved per test-kernel worker action, in MB; rounded up to the next fixed step.
 int_flag(
     name = "test_kernel_memory_mb",
-    build_setting_default = 4096,
+    build_setting_default = 2048,
 )
 
 config_setting(
