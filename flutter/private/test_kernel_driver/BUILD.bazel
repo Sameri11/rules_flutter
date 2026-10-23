@@ -16,4 +16,21 @@ driver_dill(
     driver = "@test_kernel_driver_src//:driver.dart",
 )
 
+# Selects the worker compiler's driver, so frontend_server never loads the driver's sources.
+config_setting(
+    name = "worker_compiler",
+    flag_values = {"//flutter:test_kernel_compiler": "worker"},
+)
+
+# Empty for frontend_server, which then loads nothing from the driver package.
+filegroup(name = "no_driver")
+
+alias(
+    name = "compiler_driver",
+    actual = select({
+        ":worker_compiler": ":driver",
+        "//conditions:default": ":no_driver",
+    }),
+)
+
 pins_test_suite(name = "pins_test")

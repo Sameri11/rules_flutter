@@ -579,7 +579,7 @@ def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver,
     ctx.actions.run(
         executable = toolchain.dart,
         arguments = [startup, args],
-        tools = [toolchain.dart],
+        tools = [toolchain.dart, driver],
         inputs = depset(
             direct = [
                 driver,
@@ -694,9 +694,10 @@ package's libraries itself.""",
         "dart_defines": attr.string_dict(
             doc = "Compile-time constants of this test; see dart_aot_kernel.dart_defines.",
         ),
+        # Empty for frontend_server, so that compiler never loads the driver's sources.
         "_test_kernel_driver": attr.label(
-            default = "//flutter/private/test_kernel_driver:driver",
-            allow_files = [".dill"],
+            default = "//flutter/private/test_kernel_driver:compiler_driver",
+            allow_files = True,
         ),
         "_test_kernel_compiler": attr.label(
             default = "//flutter:test_kernel_compiler",
