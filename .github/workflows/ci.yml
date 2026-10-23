@@ -236,8 +236,8 @@ jobs:
           path: _ci_hashes/
           if-no-files-found: warn
 
-      # Per OS and example. The gate compares kernel names across OS; digests
-      # depend on the host platform dill, so they are recorded, not compared.
+      # Per OS and example. The gate compares the digests across OS: kernels are
+      # byte-identical across hosts, and only driver.dill differs by host.
       - name: Upload kernel digests
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -345,12 +345,12 @@ jobs:
           path: kernel-digests
           merge-multiple: false
 
-      - name: Kernel names agree across OS
+      - name: Kernel digests agree across OS
         run: |
           python3 - <<'PY'
           import pathlib, re, sys
 
-          # Digests vary by host (platform dill); only kernel names are compared.
+          # Kernels are byte-identical across hosts; only driver.dill differs by host.
           workflow = pathlib.Path(".github/workflows/ci.yml").read_text()
           block = re.search(r"\n        example:\n(.*?)\n    steps:", workflow, re.S)
           examples = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))
@@ -361,9 +361,7 @@ jobs:
           for path in pathlib.Path("kernel-digests").glob("*/kernel-digests-*.txt"):
               # Artifact name is kernel-digests-<os>-<example>; example names have no hyphen.
               os_name, example = path.parent.name.removeprefix("kernel-digests-").rsplit("-", 1)
-              found[(os_name, example)] = {
-                  line.split("  ", 1)[1] for line in path.read_text().splitlines() if line
-              }
+              found[(os_name, example)] = set(path.read_text().splitlines()) - {""}
 
           missing = sorted((o, e) for o in oses for e in examples if (o, e) not in found)
           if missing:
@@ -374,9 +372,9 @@ jobs:
               reference = names[sorted(oses)[0]]
               for o, got in names.items():
                   if got != reference:
-                      sys.exit("FAIL: {} kernel names differ on {}: {} vs {}".format(
+                      sys.exit("FAIL: {} kernel digests differ on {}: {} vs {}".format(
                           example, o, sorted(got), sorted(reference)))
-          print("OK: kernel names agree across {} for {}".format(sorted(oses), sorted(examples)))
+          print("OK: kernel digests agree across {} for {}".format(sorted(oses), sorted(examples)))
           PY
 
       - name: Matrix result
