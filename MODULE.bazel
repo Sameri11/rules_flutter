@@ -22,6 +22,15 @@ test_kernel_driver_src(
     version_file = "@flutter_sdk//:flutter.version.json",
 )
 
+# The metadata parser's source closure, at the pins of the SDK it is used with.
+test_metadata_parser_src = use_repo_rule("//flutter/private:test_kernel_driver.bzl", "metadata_parser_src")
+
+test_metadata_parser_src(
+    name = "test_metadata_parser_src",
+    parser_source = "//flutter/private/test_metadata:parser.dart",
+    version_file = "@flutter_sdk//:flutter.version.json",
+)
+
 use_repo(
     flutter,
     "flutter_embedding_debug",

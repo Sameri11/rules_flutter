@@ -1,0 +1,17 @@
+{
+  "fixture": "c27_annotation_text",
+  "source": "hand-written: annotation text in comments and strings is not metadata; the case runs and passes",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "runs": "pass"
+      },
+      "tags": {
+        "runs": []
+      }
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")
+load("//flutter/private:test_metadata.bzl", "parse_error_test")
 
 exports_files(["pubspec.lock"])
 
@@ -39,6 +40,15 @@ FIXTURES = [
     "c17_sigterm",
     "c18_exit_mid_suite",
     "c19_utc",
+    "c20_library_skip",
+    "c21_onplatform_skip",
+    "c22_library_timeout",
+    "c23_library_retry",
+    "c24_library_teston",
+    "c25_library_tags",
+    "c26_prefixed_annotations",
+    "c27_annotation_text",
+    "c28_skip_onplatform",
 ]
 
 [
@@ -72,3 +82,9 @@ FIXTURES = [
     )
     for fixture in FIXTURES
 ]
+
+parse_error_test(
+    name = "non_literal_annotation_test",
+    src = "metadata/non_literal.dart",
+    expect = "Error on line 1, column 7 of tests/flutter_test_conformance/metadata/non_literal.dart",
+)

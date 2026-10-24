@@ -9,6 +9,8 @@ A flutter_test is these targets:
   <name>_bootstrap       expand_template of bootstrap.dart.tmpl: imports the
                          test, its flutter_test_config.dart (if any) and the
                          driver.
+  <name>_metadata        parse_metadata of the test file: its library-level
+                         annotations, as a Dart library the bootstrap imports.
   <name>_kernel          dart_test_kernel over the bootstrap, the test sources,
                          the driver and the package. Always debug: tests never
                          read //flutter:mode.
@@ -18,6 +20,7 @@ filter/shard variables for it.
 """
 
 load(":rules.bzl", "FlutterPackageInfo", "dart_test_kernel")
+load(":test_metadata.bzl", "parse_metadata")
 
 visibility(["//flutter"])
 
@@ -189,6 +192,7 @@ def _flutter_test_bootstrap_impl(ctx):
             "{{TEST_LABEL}}": ctx.attr.test_label,
             "{{TEST_MAIN}}": test_main,
             "{{TEST_URI}}": uri(test),
+            "{{METADATA_URI}}": uri(ctx.file.metadata),
         },
     )
     return [DefaultInfo(files = depset([out]))]
@@ -217,6 +221,11 @@ _flutter_test_bootstrap = rule(
         ),
         "goldens_declared": attr.bool(
             doc = "Whether the test declares goldens, which picks the golden hint.",
+        ),
+        "metadata": attr.label(
+            allow_single_file = [".dart"],
+            mandatory = True,
+            doc = "The test's library-level metadata, as a Dart library.",
         ),
         "_template": attr.label(
             allow_single_file = True,
@@ -496,6 +505,11 @@ def flutter_test(
     """
     tags = kwargs.pop("tags", [])
     bootstrap = name + "_bootstrap"
+    parse_metadata(
+        name = name + "_metadata",
+        src = src,
+        tags = ["manual"],
+    )
     _flutter_test_bootstrap(
         name = bootstrap,
         app = app,
@@ -503,13 +517,14 @@ def flutter_test(
         srcs = srcs,
         test_label = "//{}:{}".format(native.package_name(), name),
         goldens_declared = goldens != None,
+        metadata = ":" + name + "_metadata",
         tags = ["manual"],
     )
     all_srcs = srcs if src in srcs else [src] + srcs
     dart_test_kernel(
         name = name + "_kernel",
         app = app,
-        srcs = all_srcs + _DRIVER_SRCS,
+        srcs = all_srcs + _DRIVER_SRCS + [":" + name + "_metadata"],
         entrypoint = ":" + bootstrap,
         dart_defines = dart_defines,
         tags = ["manual"],

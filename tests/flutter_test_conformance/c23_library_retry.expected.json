@@ -1,0 +1,14 @@
+{
+  "fixture": "c23_library_retry",
+  "source": "hand-written: library @Retry(2) gives three attempts; with no retry the first attempt fails",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "flaky until the third attempt": "pass"
+      }
+    }
+  ]
+}

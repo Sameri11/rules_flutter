@@ -1,0 +1,17 @@
+{
+  "fixture": "c26_prefixed_annotations",
+  "source": "hand-written: a prefixed @ft.Skip applies to the library, as an unprefixed one does",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "body": "skip"
+      },
+      "messages": {
+        "body": "prefixed skip"
+      }
+    }
+  ]
+}

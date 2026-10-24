@@ -1,0 +1,15 @@
+load("//flutter/private:test_kernel_driver.bzl", "metadata_parser_dill")
+
+package(default_visibility = [
+    "//flutter:__subpackages__",
+    "//tests:__subpackages__",
+])
+
+exports_files(["parser.dart"])
+
+# The parser's pub closure is fetched for every flutter_test, since each one parses its test file.
+metadata_parser_dill(
+    name = "parser",
+    srcs = ["@test_metadata_parser_src//:srcs"],
+    parser = "@test_metadata_parser_src//:parser.dart",
+)

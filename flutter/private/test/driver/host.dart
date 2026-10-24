@@ -9,6 +9,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -27,12 +28,14 @@ import 'core.dart';
 /// Stack paths under it are shown relative to it. [testLabel] is the test's
 /// Bazel label, named in golden hints.
 /// [goldensDeclared] is whether the test passes `goldens`, which picks the hint.
+/// [metadataJson] is the library's parsed test metadata, as JSON.
 void hostMain({
   required String testFile,
   required String packageRoot,
   required String testLabel,
   required bool goldensDeclared,
   required Future<void> Function() testMain,
+  required String metadataJson,
 }) {
   final env = Platform.environment;
   final runfiles = env['TEST_SRCDIR'] ?? env['RUNFILES_DIR'];
@@ -115,6 +118,7 @@ void hostMain({
         sink: sink,
         nameFilter: filter,
         shard: shard,
+        metadata: jsonDecode(metadataJson) as Map<String, Object?>,
       ),
       onComplete: (completed) {
         finishing = true;
@@ -238,25 +242,33 @@ String _junit(String suite, List<CaseResult> cases, String packageRoot) {
     final firstLine = _xml(
       _display(result.message, packageRoot).split('\n').first,
     );
+    final tags = _tagProperties(result.tags);
     switch (result.outcome) {
       case Outcome.pass:
-        body.write('<testcase classname="$classname" name="$name"/>');
+        body.write(_testcase(classname, name, tags, ''));
       case Outcome.skip:
         skipped++;
-        body.write(
-          '<testcase classname="$classname" name="$name"><skipped/></testcase>',
-        );
+        final reason = message.isEmpty ? '' : ' message="$message"';
+        body.write(_testcase(classname, name, tags, '<skipped$reason/>'));
       case Outcome.fail:
         failures++;
         body.write(
-          '<testcase classname="$classname" name="$name">'
-          '<failure message="$firstLine">$message</failure></testcase>',
+          _testcase(
+            classname,
+            name,
+            tags,
+            '<failure message="$firstLine">$message</failure>',
+          ),
         );
       case Outcome.error:
         errors++;
         body.write(
-          '<testcase classname="$classname" name="$name">'
-          '<error message="$firstLine">$message</error></testcase>',
+          _testcase(
+            classname,
+            name,
+            tags,
+            '<error message="$firstLine">$message</error>',
+          ),
         );
     }
   }
@@ -265,6 +277,18 @@ String _junit(String suite, List<CaseResult> cases, String packageRoot) {
       'failures="$failures" errors="$errors" skipped="$skipped">'
       '$body</testsuite>';
 }
+
+/// Tags are JUnit properties, so a report can be filtered by tag.
+String _tagProperties(List<String> tags) {
+  if (tags.isEmpty) return '';
+  final properties = tags
+      .map((tag) => '<property name="tag" value="${_xml(tag)}"/>')
+      .join();
+  return '<properties>$properties</properties>';
+}
+
+String _testcase(String classname, String name, String tags, String inner) =>
+    '<testcase classname="$classname" name="$name">$tags$inner</testcase>';
 
 String _xml(String value) => value
     .replaceAll('&', '&amp;')

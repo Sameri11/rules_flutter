@@ -1,0 +1,15 @@
+{
+  "fixture": "c22_library_timeout",
+  "source": "hand-written: library @Timeout(1s) fails the 3s test; the 30s default would pass it",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 1,
+      "cases": {
+        "fast": "pass",
+        "slow": "error"
+      }
+    }
+  ]
+}

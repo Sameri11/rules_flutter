@@ -1,7 +1,7 @@
 """Checks on the driver's pin table: every pinned version has complete, well-formed entries."""
 
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":pins.bzl", "PINS")
+load(":pins.bzl", "PINS", "select_parser_pin")
 
 def _pins_are_complete_test(ctx):
     env = unittest.begin(ctx)
@@ -21,6 +21,28 @@ def _pins_are_complete_test(ctx):
 
 pins_are_complete_test = unittest.make(_pins_are_complete_test)
 
+_SELECT_PINS = {"3.9.0": "nine", "3.47.3": "forty-seven"}
+
+def _select_parser_pin_test(ctx):
+    env = unittest.begin(ctx)
+    pinned, pin, warning = select_parser_pin("3.9.0", _SELECT_PINS)
+    asserts.equals(env, "3.9.0", pinned)
+    asserts.equals(env, "nine", pin)
+    asserts.equals(env, None, warning)
+
+    # As strings "3.9.0" sorts after "3.47.3"; the newest must be chosen numerically.
+    newest, pin, warning = select_parser_pin("3.50.0", _SELECT_PINS)
+    asserts.equals(env, "3.47.3", newest)
+    asserts.equals(env, "forty-seven", pin)
+    asserts.equals(
+        env,
+        "test_metadata_parser: Flutter 3.50.0 has no parser pin; parsing with the pin for 3.47.3.",
+        warning,
+    )
+    return unittest.end(env)
+
+select_parser_pin_test = unittest.make(_select_parser_pin_test)
+
 def pins_test_suite(name):
     """Instantiates the pin table tests and a suite named `name` holding them.
 
@@ -29,4 +51,5 @@ def pins_test_suite(name):
     unittest.suite(
         name,
         pins_are_complete_test,
+        select_parser_pin_test,
     )
