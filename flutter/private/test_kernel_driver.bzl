@@ -9,7 +9,7 @@
   revision. The driver itself rejects a -Dsdk_hash that differs from the import dill's header.
 """
 
-load("//flutter/private/test_kernel_driver:pins.bzl", "PINS")
+load("//flutter/private/test_kernel_driver:pins.bzl", "PARSER_PINS", "PINS")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -92,17 +92,11 @@ test_kernel_driver_src = repository_rule(
     },
 )
 
-def _driver_dill_impl(ctx):
-    if not ctx.files.srcs:
-        return [DefaultInfo()]
-
-    tc = ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
-    revision = ctx.file.revision or tc.dart_sdk_revision
-    out = ctx.actions.declare_file(ctx.label.name + ".dill")
+def _frontend_compile(ctx, tc, main, srcs, revision, out, mnemonic, progress):
+    """Compiles `main` with frontend_server. The package root is the repository holding `main`."""
 
     # --platform is relative to --sdk-root, which is the directory holding the platform file.
-    # The package root and driver paths are repository-relative: no checkout path reaches argv.
-    root = ctx.file.driver.dirname
+    # The package root and entry paths are repository-relative: no checkout path reaches argv.
     command = " ".join([
         "h=$(cut -c1-10 " + revision.path + ");",
         tc.dartaotruntime.path,
@@ -112,19 +106,36 @@ def _driver_dill_impl(ctx):
         "--platform=" + tc.vm_platform_strong.basename,
         "--sdk-root=" + tc.vm_platform_strong.dirname + "/",
         "-Dsdk_hash=$h",
-        "--filesystem-root=" + root,
+        "--filesystem-root=" + main.dirname,
         "--filesystem-scheme=org-dartlang-root",
         "--packages=org-dartlang-root:///package_config.json",
         "--output-dill=" + out.path,
-        "org-dartlang-root:///driver.dart",
+        "org-dartlang-root:///" + main.basename,
     ])
     ctx.actions.run_shell(
         outputs = [out],
-        inputs = ctx.files.srcs + [tc.frontend_server, tc.vm_platform_strong, revision],
+        inputs = srcs + [tc.frontend_server, tc.vm_platform_strong, revision],
         tools = [tc.dartaotruntime],
         command = "set -eu\n" + command + "\n",
-        mnemonic = "TestKernelDriver",
-        progress_message = "Compiling the test-kernel driver %{output}",
+        mnemonic = mnemonic,
+        progress_message = progress,
+    )
+
+def _driver_dill_impl(ctx):
+    if not ctx.files.srcs:
+        return [DefaultInfo()]
+
+    tc = ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
+    out = ctx.actions.declare_file(ctx.label.name + ".dill")
+    _frontend_compile(
+        ctx,
+        tc,
+        ctx.file.driver,
+        ctx.files.srcs,
+        ctx.file.revision or tc.dart_sdk_revision,
+        out,
+        "TestKernelDriver",
+        "Compiling the test-kernel driver %{output}",
     )
     return [DefaultInfo(files = depset([out]))]
 
@@ -138,6 +149,79 @@ driver_dill = rule(
             allow_single_file = True,
             doc = "Test-only override of the SDK revision file; the toolchain's is used when unset.",
         ),
+    },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
+
+_PARSER_BUILD = """package(default_visibility = ["//visibility:public"])
+
+exports_files(["package_config.json", "parser.dart"])
+
+filegroup(
+    name = "srcs",
+    srcs = glob(["pub/*/lib/**", "pub/*/pubspec.yaml"], allow_empty = False) + [
+        "package_config.json",
+        "parser.dart",
+    ],
+)
+"""
+
+def _version_key(version):
+    return tuple([int(part) for part in version.split(".")])
+
+def _metadata_parser_src_impl(rctx):
+    version = json.decode(rctx.read(rctx.attr.version_file))["frameworkVersion"]
+    pin = PARSER_PINS.get(version)
+    if pin == None:
+        newest = sorted(PARSER_PINS.keys(), key = _version_key)[-1]
+
+        # buildifier: disable=print
+        print("test_metadata_parser: Flutter {} has no parser pin; parsing with the pin for {}.".format(version, newest))
+        pin = PARSER_PINS[newest]
+
+    rctx.file("parser.dart", rctx.read(rctx.attr.parser_source))
+    packages = []
+    for name, ver, sha256, language_version in pin["pub_archives"]:
+        _fetch(rctx, "https://pub.dev/api/archives/{}-{}.tar.gz".format(name, ver), sha256, "", "pub/{}-{}".format(name, ver))
+        packages.append({
+            "languageVersion": language_version,
+            "name": name,
+            "packageUri": "lib/",
+            "rootUri": "pub/{}-{}/".format(name, ver),
+        })
+    rctx.file("package_config.json", json.encode_indent({"configVersion": 2, "packages": packages}, indent = "  ") + "\n")
+    rctx.file("BUILD.bazel", _PARSER_BUILD)
+
+metadata_parser_src = repository_rule(
+    implementation = _metadata_parser_src_impl,
+    doc = "The metadata parser's source closure and package config: test_core's parseMetadata and its pub dependencies, at the pins for the Flutter version in use.",
+    attrs = {
+        "version_file": attr.label(allow_single_file = True, mandatory = True),
+        "parser_source": attr.label(allow_single_file = True, mandatory = True),
+    },
+)
+
+def _metadata_parser_dill_impl(ctx):
+    tc = ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
+    out = ctx.actions.declare_file(ctx.label.name + ".dill")
+    _frontend_compile(
+        ctx,
+        tc,
+        ctx.file.parser,
+        ctx.files.srcs,
+        tc.dart_sdk_revision,
+        out,
+        "TestMetadataParser",
+        "Compiling the metadata parser %{output}",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+metadata_parser_dill = rule(
+    implementation = _metadata_parser_dill_impl,
+    doc = "parser.dill: the metadata parser compiled by the toolchain's frontend_server. It is a host build tool only; its closure never reaches a test or app kernel.",
+    attrs = {
+        "parser": attr.label(allow_single_file = [".dart"], mandatory = True),
+        "srcs": attr.label_list(allow_files = True, mandatory = True),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
