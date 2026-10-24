@@ -48,6 +48,7 @@ FIXTURES = [
     "c25_library_tags",
     "c26_prefixed_annotations",
     "c27_annotation_text",
+    "c28_skip_onplatform",
 ]
 
 [

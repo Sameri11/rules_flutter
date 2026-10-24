@@ -1,0 +1,19 @@
+{
+  "fixture": "c28_skip_onplatform",
+  "source": "hand-written: a matching @OnPlatform Skip reason overrides the library @Skip reason on the VM",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "first": "skip",
+        "second": "skip"
+      },
+      "messages": {
+        "first": "VM reason",
+        "second": "VM reason"
+      }
+    }
+  ]
+}

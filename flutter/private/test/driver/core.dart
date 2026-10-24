@@ -161,7 +161,7 @@ final class _Core {
           _strays.add(message);
         }
       });
-      await _visit(root, skipReason: _libraryReason(options.metadata));
+      await _visit(root, skipReason: _testOnReason(options.metadata));
     }
   }
 
@@ -214,17 +214,18 @@ final class _Core {
         PlatformSelector.parse(selector as String).evaluate(_suitePlatform);
   }
 
-  /// The reason every case of the library is skipped, or null when it runs. The
-  /// listener drops a group whose `testOn` fails, which would leave an empty
-  /// suite. run() therefore strips the library's `testOn` from `initial`, and
-  /// this check applies it, with the library's own `skip`.
-  String? _libraryReason(Map metadata) {
+  /// The reason every case of the library is skipped because `testOn` does not
+  /// match, or null. The listener drops a group whose `testOn` fails, which would
+  /// leave an empty suite, so run() strips the library's `testOn` from `initial`
+  /// and this check applies it. A library `skip` is read from the listener's
+  /// resolved root metadata, which already holds any matching `OnPlatform` reason.
+  String? _testOnReason(Map metadata) {
     final selector = metadata['testOn'];
     if (selector != null &&
         !PlatformSelector.parse(selector as String).evaluate(_suitePlatform)) {
       return 'not compatible with ${_suitePlatform.runtime.identifier}';
     }
-    return _skipOf(metadata);
+    return null;
   }
 
   /// The reason a group or test is skipped by its own metadata, or null.
