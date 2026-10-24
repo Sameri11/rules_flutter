@@ -9,7 +9,7 @@
   revision. The driver itself rejects a -Dsdk_hash that differs from the import dill's header.
 """
 
-load("//flutter/private/test_kernel_driver:pins.bzl", "PARSER_PINS", "PINS")
+load("//flutter/private/test_kernel_driver:pins.bzl", "PARSER_PINS", "PINS", "select_parser_pin")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -166,18 +166,12 @@ filegroup(
 )
 """
 
-def _version_key(version):
-    return tuple([int(part) for part in version.split(".")])
-
 def _metadata_parser_src_impl(rctx):
     version = json.decode(rctx.read(rctx.attr.version_file))["frameworkVersion"]
-    pin = PARSER_PINS.get(version)
-    if pin == None:
-        newest = sorted(PARSER_PINS.keys(), key = _version_key)[-1]
-
+    _, pin, warning = select_parser_pin(version, PARSER_PINS)
+    if warning:
         # buildifier: disable=print
-        print("test_metadata_parser: Flutter {} has no parser pin; parsing with the pin for {}.".format(version, newest))
-        pin = PARSER_PINS[newest]
+        print(warning)
 
     rctx.file("parser.dart", rctx.read(rctx.attr.parser_source))
     packages = []

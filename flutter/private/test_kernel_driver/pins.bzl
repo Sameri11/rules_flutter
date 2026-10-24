@@ -103,3 +103,22 @@ PARSER_PINS = {
         ],
     },
 }
+
+def version_key(version):
+    """Orders dotted versions numerically, so 3.9 sorts before 3.47."""
+    return tuple([int(part) for part in version.split(".")])
+
+def select_parser_pin(version, pins):
+    """The parser pin for a Flutter version, or the newest pin when it has none.
+
+    Args:
+      version: the Flutter version to parse for.
+      pins: a dict from Flutter version to pin.
+
+    Returns:
+      (pin_version, pin, warning). The warning is None when `version` is pinned.
+    """
+    if version in pins:
+        return version, pins[version], None
+    newest = sorted(pins.keys(), key = version_key)[-1]
+    return newest, pins[newest], "test_metadata_parser: Flutter {} has no parser pin; parsing with the pin for {}.".format(version, newest)
