@@ -1187,15 +1187,11 @@ To opt out, for example to compare outputs (a Flutter version without a driver p
 bazel test //... --@rules_flutter//flutter:test_kernel_compiler=frontend_server
 ```
 
-Each worker reserves 2048 MB by default. Large apps need more: a wide `lib` edit
-peaked at about 3.3 GB per worker on a 240-test app. Override it with
+Each worker reserves 2048 MB by default. Large apps need more: override it with
 `--@rules_flutter//flutter:test_kernel_memory_mb=N`; the reservation rounds up
 to 1024, 2048, 3072, 4096, 6144, or 8192 MB. Bazel runs as many workers as fit
 in `--local_resources=memory` (by default two thirds of RAM), so on small hosts
 raise the reservation or lower `--worker_max_instances` to avoid swapping.
-
-`--worker_sandboxing` adds 11–16% wall time. `--experimental_worker_sandbox_hardening`
-is Linux only; on Ubuntu 24.04 it needs `kernel.apparmor_restrict_unprivileged_userns=0`.
 
 Remote execution is not supported for test kernels: the worker runs locally only.
 
