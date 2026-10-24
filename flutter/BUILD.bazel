@@ -1,4 +1,4 @@
-load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@bazel_skylib//rules:common_settings.bzl", "int_flag", "string_flag")
 load("//flutter/private:abis.bzl", "MODES")
 
 package(default_visibility = ["//visibility:public"])
@@ -13,6 +13,22 @@ string_flag(
     name = "mode",
     build_setting_default = "release",
     values = MODES,
+)
+
+# Test kernels compile in the worker by default; frontend_server selects the one-shot action.
+string_flag(
+    name = "test_kernel_compiler",
+    build_setting_default = "worker",
+    values = [
+        "worker",
+        "frontend_server",
+    ],
+)
+
+# Memory reserved per test-kernel worker action, in MB; rounded up to the next fixed step.
+int_flag(
+    name = "test_kernel_memory_mb",
+    build_setting_default = 2048,
 )
 
 config_setting(

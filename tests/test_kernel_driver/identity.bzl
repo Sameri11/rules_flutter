@@ -100,7 +100,8 @@ def _identity_test_impl(ctx):
         inputs = depset([seed, driver], transitive = [inputs]),
         tools = [tc.dart],
         command = "set -eu\n" + _quote([tc.dart.path, driver.path] + shared_with_seed) +
-                  " --output-dill " + shell.quote(drv.path) + " " + shell.quote(entry) + "\n",
+                  " --entry-scheme org-dartlang-root --entry-path " + shell.quote(ctx.file.entry.path) +
+                  " --output-dill " + shell.quote(drv.path) + "\n",
         mnemonic = "TestKernelIdentityDriver",
     )
 
