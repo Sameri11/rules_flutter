@@ -288,55 +288,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Every recorded row belongs to a matrix job
-        run: |
-          python3 - <<'PY'
-          import pathlib, re, sys
-
-          # Read the matrix instead of duplicating its example list.
-          workflow = pathlib.Path(".github/workflows/ci.yml").read_text()
-          block = re.search(r"\n        example:\n(.*?)\n    steps:", workflow, re.S)
-          if not block:
-              sys.exit("FAIL: no example matrix in .github/workflows/ci.yml")
-          jobs = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))
-
-          def recorded_examples(golden):
-              return {
-                  line.split(" ", 1)[0]
-                  for line in pathlib.Path(golden).read_text().splitlines()
-                  if line and not line.startswith("#")
-              }
-
-          goldens = ["tools/ci/example_hashes_macos.txt", "tools/ci/example_hashes_linux.txt"]
-          by_golden = {golden: recorded_examples(golden) for golden in goldens}
-
-          missing = {
-              golden: sorted(examples - jobs)
-              for golden, examples in by_golden.items()
-              if examples - jobs
-          }
-          if missing:
-              sys.exit(
-                  "FAIL: {} but no matrix job builds it, so its bytes are "
-                  "unchecked.".format(
-                      "; ".join("{} records {}".format(g, e) for g, e in missing.items())
-                  )
-              )
-
-          # Both OS tables must gate the same examples; a table updated alone
-          # would silently stop covering the other OS.
-          first_golden, first_examples = goldens[0], by_golden[goldens[0]]
-          for golden in goldens[1:]:
-              if by_golden[golden] != first_examples:
-                  sys.exit(
-                      "FAIL: {} records {} but {} records {} -- the per-OS "
-                      "tables must cover the same examples.".format(
-                          first_golden, sorted(first_examples),
-                          golden, sorted(by_golden[golden]),
-                      )
-                  )
-
-          print("OK: every recorded example has a matrix job: {}".format(sorted(first_examples)))
-          PY
+        run: python3 tools/ci/matrix_gate.py rows
 
       - name: Download kernel digests
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -346,36 +298,7 @@ jobs:
           merge-multiple: false
 
       - name: Kernel digests agree across OS
-        run: |
-          python3 - <<'PY'
-          import pathlib, re, sys
-
-          # Kernels are byte-identical across hosts; only driver.dill differs by host.
-          workflow = pathlib.Path(".github/workflows/ci.yml").read_text()
-          block = re.search(r"\n        example:\n(.*?)\n    steps:", workflow, re.S)
-          examples = set(re.findall(r"^\s+- name: (\S+)$", block.group(1), re.M))
-          os_block = re.search(r"\n        os:\n((?:          - \S+\n)+)", workflow)
-          oses = set(re.findall(r"- (\S+)", os_block.group(1)))
-
-          found = {}
-          for path in pathlib.Path("kernel-digests").glob("*/kernel-digests-*.txt"):
-              # Artifact name is kernel-digests-<os>-<example>; example names have no hyphen.
-              os_name, example = path.parent.name.removeprefix("kernel-digests-").rsplit("-", 1)
-              found[(os_name, example)] = set(path.read_text().splitlines()) - {""}
-
-          missing = sorted((o, e) for o in oses for e in examples if (o, e) not in found)
-          if missing:
-              sys.exit("FAIL: no kernel digests for {}".format(missing))
-
-          for example in sorted(examples):
-              names = {o: found[(o, example)] for o in oses}
-              reference = names[sorted(oses)[0]]
-              for o, got in names.items():
-                  if got != reference:
-                      sys.exit("FAIL: {} kernel digests differ on {}: {} vs {}".format(
-                          example, o, sorted(got), sorted(reference)))
-          print("OK: kernel digests agree across {} for {}".format(sorted(oses), sorted(examples)))
-          PY
+        run: python3 tools/ci/matrix_gate.py kernel-digests kernel-digests
 
       - name: Matrix result
         if: needs.example.result != 'success'

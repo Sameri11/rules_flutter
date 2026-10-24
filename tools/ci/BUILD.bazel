@@ -73,3 +73,17 @@ build_test(
     name = "committed_lock_guard_selftest_test",
     targets = [":committed_lock_guard_selftest"],
 )
+
+genrule(
+    name = "matrix_gate_selftest",
+    srcs = ["matrix_gate.py"],
+    outs = ["matrix_gate_selftest.checked"],
+    cmd = """set -euo pipefail
+python3 $(location matrix_gate.py) --selftest > "$@"
+""",
+)
+
+build_test(
+    name = "matrix_gate_selftest_test",
+    targets = [":matrix_gate_selftest"],
+)
