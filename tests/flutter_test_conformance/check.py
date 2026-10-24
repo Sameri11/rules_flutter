@@ -33,9 +33,9 @@ SIGTERM_EXIT_WAIT = 30
 MARKER_WAIT = 120
 
 
-def junit_cases(path):
-    """Cases in document order as (name, outcome), where outcome is pass,
-    fail, skip or error."""
+def junit_details(path):
+    """Cases in document order as dicts: name, outcome (pass, fail, skip or
+    error), message (the skip reason, or None when not skipped) and tags."""
     root = ET.parse(path).getroot()
     cases = []
     for case in root.iter("testcase"):
@@ -48,8 +48,21 @@ def junit_cases(path):
             outcome = "skip"
         else:
             outcome = "pass"
-        cases.append((case.get("name"), outcome))
+        skipped = case.find("skipped")
+        cases.append(
+            {
+                "name": case.get("name"),
+                "outcome": outcome,
+                "message": skipped.get("message", "") if skipped is not None else None,
+                "tags": [p.get("value") for p in case.iter("property") if p.get("name") == "tag"],
+            }
+        )
     return cases
+
+
+def junit_cases(path):
+    """Cases in document order as (name, outcome)."""
+    return [(case["name"], case["outcome"]) for case in junit_details(path)]
 
 
 def read(path):
@@ -124,6 +137,19 @@ def check_run(launcher, fixture, run, tmp):
         problems.append("no JUnit written to XML_OUTPUT_FILE")
     else:
         actual = junit_cases(xml_path)
+        details = {case["name"]: case for case in junit_details(xml_path)}
+        for name, message in run.get("messages", {}).items():
+            got = details.get(name, {}).get("message")
+            if got != message:
+                problems.append(
+                    "skip message of {!r}: expected {!r}, actual {!r}".format(name, message, got)
+                )
+        for name, tags in run.get("tags", {}).items():
+            got = sorted(details.get(name, {}).get("tags", []))
+            if got != sorted(tags):
+                problems.append(
+                    "tags of {!r}: expected {!r}, actual {!r}".format(name, sorted(tags), got)
+                )
         xml_text = read(xml_path)
         expected = list(run["cases"].items())
         if actual != expected:

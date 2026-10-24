@@ -1,0 +1,19 @@
+{
+  "fixture": "c25_library_tags",
+  "source": "hand-written: library @Tags reach every case and the JUnit properties; tag selection is unsupported",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "tagged by library": "pass",
+        "tagged by library and case": "pass"
+      },
+      "tags": {
+        "tagged by library": ["io", "slow"],
+        "tagged by library and case": ["extra", "io", "slow"]
+      }
+    }
+  ]
+}

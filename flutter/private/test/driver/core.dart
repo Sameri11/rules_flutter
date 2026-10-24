@@ -11,15 +11,24 @@ import 'package:stream_channel/stream_channel.dart';
 import 'package:test_api/backend.dart';
 
 /// The result of one case. [name] is the full test name, or `load` for a suite
-/// that failed to load.
+/// that failed to load. [tags] are the case's tags, inherited from its library
+/// and groups.
 final class CaseResult {
-  const CaseResult(this.name, this.outcome, [this.message = '']);
+  const CaseResult(
+    this.name,
+    this.outcome, [
+    this.message = '',
+    this.tags = const <String>[],
+  ]);
 
   final String name;
   final Outcome outcome;
 
-  /// Failure or error text, one entry per error event; empty otherwise.
+  /// Failure, error or skip text, one entry per error event. A skip carries its
+  /// reason here; otherwise empty.
   final String message;
+
+  final List<String> tags;
 }
 
 enum Outcome { pass, fail, skip, error }
@@ -49,6 +58,7 @@ final class CoreOptions {
     required this.platformVariables,
     required this.suitePath,
     required this.sink,
+    required this.metadata,
     this.nameFilter,
     this.shard,
   });
@@ -58,6 +68,10 @@ final class CoreOptions {
   final List<String> platformVariables;
   final String suitePath;
   final EventSink sink;
+
+  /// The library's `Metadata.serialize()` map: the annotations of the test file,
+  /// which the listener applies to the suite and inherits into every case.
+  final Map<String, Object?> metadata;
 
   /// Matched against full test names, as `flutter test --name` does.
   final RegExp? nameFilter;
@@ -106,7 +120,7 @@ final class _Core {
     _multi.sink.add({
       'type': 'initial',
       'platform': options.platform,
-      'metadata': Metadata.empty.serialize(),
+      'metadata': {...options.metadata, 'testOn': null},
       'asciiGlyphs': false,
       'path': options.suitePath,
       'collectTraces': true,
@@ -147,7 +161,7 @@ final class _Core {
           _strays.add(message);
         }
       });
-      await _visit(root, parentSkipped: false);
+      await _visit(root, skipReason: _libraryReason(options.metadata));
     }
   }
 
@@ -170,7 +184,6 @@ final class _Core {
     final filter = options.nameFilter;
     final leaves = <Map>[];
     void collect(Map group) {
-      if (!_supports(group['metadata'] as Map)) return;
       for (final entry in group['entries'] as List) {
         if (entry['type'] == 'group') {
           collect(entry as Map);
@@ -201,6 +214,25 @@ final class _Core {
         PlatformSelector.parse(selector as String).evaluate(_suitePlatform);
   }
 
+  /// The reason every case of the library is skipped, or null when it runs. The
+  /// listener drops a group whose `testOn` fails, which would leave an empty
+  /// suite. run() therefore strips the library's `testOn` from `initial`, and
+  /// this check applies it, with the library's own `skip`.
+  String? _libraryReason(Map metadata) {
+    final selector = metadata['testOn'];
+    if (selector != null &&
+        !PlatformSelector.parse(selector as String).evaluate(_suitePlatform)) {
+      return 'not compatible with ${_suitePlatform.runtime.identifier}';
+    }
+    return _skipOf(metadata);
+  }
+
+  /// The reason a group or test is skipped by its own metadata, or null.
+  String? _skipOf(Map metadata) {
+    if (metadata['skip'] != true) return null;
+    return (metadata['skipReason'] as String?) ?? '';
+  }
+
   /// Whether any chosen leaf lies under [group]. A group without one is not
   /// entered, so its setUpAll and tearDownAll do not run.
   bool _hasChosen(Map group) {
@@ -214,24 +246,25 @@ final class _Core {
     return false;
   }
 
-  Future<void> _visit(Map group, {required bool parentSkipped}) async {
-    if (!_supports(group['metadata'] as Map)) return;
+  /// Runs the chosen cases of [group]. A skipped group, with [skipReason] or its
+  /// own skip, runs no setUpAll or tearDownAll, and its cases report as skipped.
+  Future<void> _visit(Map group, {String? skipReason}) async {
     if (!_hasChosen(group)) return;
-    final skipped = parentSkipped || (group['metadata'] as Map)['skip'] == true;
+    final reason = skipReason ?? _skipOf(group['metadata'] as Map);
     var setUpOk = true;
-    if (!skipped) {
+    if (reason == null) {
       setUpOk = await _runHook(group['setUpAll'] as Map?);
     }
     if (setUpOk) {
       for (final entry in group['entries'] as List) {
         if (entry['type'] == 'group') {
-          await _visit(entry as Map, parentSkipped: skipped);
+          await _visit(entry as Map, skipReason: reason);
         } else if (_chosen.contains(entry)) {
-          await _runTest(entry as Map, skipped: skipped);
+          await _runTest(entry as Map, skipReason: reason);
         }
       }
     }
-    if (!skipped) {
+    if (reason == null) {
       await _runHook(group['tearDownAll'] as Map?);
     }
   }
@@ -255,11 +288,13 @@ final class _Core {
     return false;
   }
 
-  Future<void> _runTest(Map item, {required bool skipped}) async {
+  Future<void> _runTest(Map item, {String? skipReason}) async {
     final name = item['name'] as String;
     final metadata = item['metadata'] as Map;
-    if (skipped || metadata['skip'] == true) {
-      _finish(CaseResult(name, Outcome.skip));
+    final tags = (metadata['tags'] as List).cast<String>();
+    final reason = skipReason ?? _skipOf(metadata);
+    if (reason != null) {
+      _finish(CaseResult(name, Outcome.skip, reason, tags));
       return;
     }
     final tests = _multi.virtualChannel((item['channel'] as num).toInt());
@@ -271,11 +306,13 @@ final class _Core {
     final outcome = await _drain(run.stream, name);
     switch (outcome.result) {
       case 'success':
-        _finish(CaseResult(name, Outcome.pass));
+        _finish(CaseResult(name, Outcome.pass, '', tags));
       case 'skipped':
-        _finish(CaseResult(name, Outcome.skip));
+        _finish(CaseResult(name, Outcome.skip, '', tags));
       default:
-        _finish(CaseResult(name, _outcomeOf(outcome.result), outcome.detail));
+        _finish(
+          CaseResult(name, _outcomeOf(outcome.result), outcome.detail, tags),
+        );
     }
   }
 

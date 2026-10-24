@@ -1,0 +1,19 @@
+{
+  "fixture": "c21_onplatform_skip",
+  "source": "hand-written: matching @OnPlatform Skip reports every case skipped (CLI reports one (suite) skip; see CONFORMANCE.md)",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "first": "skip",
+        "second": "skip"
+      },
+      "messages": {
+        "first": "vm skipped",
+        "second": "vm skipped"
+      }
+    }
+  ]
+}

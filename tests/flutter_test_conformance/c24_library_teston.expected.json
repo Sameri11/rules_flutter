@@ -1,0 +1,19 @@
+{
+  "fixture": "c24_library_teston",
+  "source": "hand-written: incompatible library @TestOn skips every case with a reason and passes (CLI exits 79; see CONFORMANCE.md)",
+  "runs": [
+    {
+      "name": "default",
+      "env": {},
+      "exit_code": 0,
+      "cases": {
+        "first": "skip",
+        "second": "skip"
+      },
+      "messages": {
+        "first": "not compatible with vm",
+        "second": "not compatible with vm"
+      }
+    }
+  ]
+}

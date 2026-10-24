@@ -365,6 +365,27 @@ config and hosted packages. `plugin_deps = None` is the deliberate no-plugin-gra
 plugin repository and generated registrant guards; it is not appropriate once
 the app has a pub or path plugin.
 
+### Library-level test annotations
+
+A `flutter_test` reads its test file's library-level annotations at build time:
+`@Skip`, `@OnPlatform`, `@TestOn`, `@Timeout`, `@Retry`, and `@Tags`, including
+prefixed forms such as `@ft.Skip`. Annotation text in comments and strings has no
+effect. An argument that is not a literal, such as `@Skip(reason)`, fails the
+build and names the file and the span.
+
+- `@Skip`, or a matching `@OnPlatform` skip: every case is reported skipped with
+  the reason, and no `setUpAll` or `tearDownAll` runs. The CLI reports one
+  `(suite)` skip instead.
+- `@TestOn` that does not match the VM: every case is reported skipped with the
+  reason "not compatible with vm", and the target passes. The CLI exits 79 with no
+  cases.
+- `@Timeout` sets the deadline of each case. `@Retry(n)` allows `n` retries.
+- `@Tags` reach every case and the JUnit report, as `tag` properties. Tag
+  selection (`--tags`, `--exclude-tags`) is not supported.
+
+For a Flutter version with no pinned parser, the newest pinned parser is used, and
+the build prints a warning that names the version it used.
+
 ### Add the Android target
 
 Find Flutter's generated activity path first; the organization and project name

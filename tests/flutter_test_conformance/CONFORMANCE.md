@@ -1,4 +1,4 @@
-# Host test driver conformance (C1–C19)
+# Host test driver conformance (C1–C27)
 
 The host driver (`flutter/private/test/driver/`) runs each fixture through `flutter_tester` and must report the same per-case outcomes as `flutter test --reporter json` on the same SDK.
 
@@ -36,10 +36,18 @@ python3 tests/flutter_test_conformance/rebaseline.py          # rewrite after an
 | C17 | `c17_sigterm` | 143 | hand-written: SIGTERM mid-test writes a JUnit with the running test as error, and exits 143 |
 | C18 | `c18_exit_mid_suite` | 0 | hand-written: `exit(0)` mid-suite writes no JUnit and leaves `TEST_PREMATURE_EXIT_FILE` |
 | C19 | `c19_utc` | 0 | hand-written: the test sees UTC (Bazel sets `TZ=UTC`) |
+| C20 | `c20_library_skip` | 0 | hand-written: library `@Skip`: every case skipped with the reason; no `setUpAll` runs |
+| C21 | `c21_onplatform_skip` | 0 | hand-written: matching `@OnPlatform` `Skip`: every case skipped |
+| C22 | `c22_library_timeout` | 1 | hand-written: library `@Timeout(1s)`: the 3s case errors; the fast one passes |
+| C23 | `c23_library_retry` | 0 | hand-written: library `@Retry(2)`: passes on the third attempt |
+| C24 | `c24_library_teston` | 0 | hand-written: incompatible library `@TestOn('browser')`: every case skipped, "not compatible with vm" |
+| C25 | `c25_library_tags` | 0 | hand-written: library `@Tags` reach every case and the JUnit `tag` properties |
+| C26 | `c26_prefixed_annotations` | 0 | hand-written: prefixed `@ft.Skip`: every case skipped |
+| C27 | `c27_annotation_text` | 0 | hand-written: annotation text in comments and strings is not metadata: the case passes |
 
 ## Known divergences
 - **C15.** The CLI attributes a `test()` called after the tests have begun to the running test, or with none running reports "No tests were found" and exits 0. The driver reports a `load` error and exits 1, so `c15_late_declare.expected.json` is hand-written and `rebaseline.py` does not write it.
 - **C16–C19.** Hand-written driver behaviour with no CLI oracle, so `rebaseline.py` does not write them. The CLI has no equivalent for a test-channel message of unknown type, a SIGTERM, or a process exit mid-suite, and C19 depends on the shell's zone.
 - **`suiteChannel`.** test_api 0.7.12 has no public route through `openChannelCallback`, so `spawn-hybrid-uri` cases fail at once. Hybrid-channel suites are unsupported.
-- **Library annotations.** Library-level annotations such as `@Skip` are unsupported. C2's library-level `@Skip` line was removed.
+- **Library annotations.** The parser (test_core's `parseMetadata`) runs at build time. C20–C27 are hand-written, because the CLI reports a skipped library as one `(suite)` case and an incompatible `@TestOn` as exit 79 with no cases. The driver's divergences: every case of a skipped library or an incompatible `@TestOn` is reported skipped with the reason, and the target passes. `@Tags` reach every case and the JUnit `tag` properties, but tag selection is unsupported. A non-literal annotation argument fails the build with the file and span (`non_literal_annotation_test`).
 - **`--packages` omitted.** The pub hub's `package_config.json` uses execroot-relative `rootUri`s, which do not resolve in runfiles. The kernel already holds every imported library.
