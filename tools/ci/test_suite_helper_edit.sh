@@ -12,7 +12,7 @@ cp "$inside" "$tmp/inside"
 cp "$unread" "$tmp/unread"
 trap 'cp "$tmp/inside" "$inside"; cp "$tmp/unread" "$unread"; rm -rf "$tmp"' EXIT
 
-bazel test "$pkg" >/dev/null
+bazel test "$pkg" --remote_cache= --disk_cache= >/dev/null
 
 # Count executed kernel and run spawns, and print their labels.
 executed() {
@@ -35,7 +35,7 @@ PY
 }
 
 echo "// edit $RANDOM$$" >> "$inside"
-bazel test "$pkg" --execution_log_json_file="$tmp/inside.json" >/dev/null
+bazel test "$pkg" --remote_cache= --disk_cache= --execution_log_json_file="$tmp/inside.json" >/dev/null
 got=$(executed "$tmp/inside.json")
 echo "helper read by one test re-ran:"
 echo "$got"
@@ -43,7 +43,7 @@ echo "$got"
 echo "$got" | grep -q 'inside_test' || { echo "expected spawns for inside_test"; exit 1; }
 
 echo "// edit $RANDOM$$" >> "$unread"
-bazel test "$pkg" --execution_log_json_file="$tmp/unread.json" >/dev/null
+bazel test "$pkg" --remote_cache= --disk_cache= --execution_log_json_file="$tmp/unread.json" >/dev/null
 got=$(executed "$tmp/unread.json")
 [ -z "$got" ] || { echo "unread helper edit re-ran spawns:"; echo "$got"; exit 1; }
 echo "unread helper edit re-ran nothing"
