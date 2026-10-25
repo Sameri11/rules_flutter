@@ -1,7 +1,7 @@
 # Dart targets for the flat demo app. Standard flutter_app paths are derived
 # from the flutter create layout.
 
-load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_test", "flutter_test_suite")
+load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_assets_sdk_free", "flutter_package", "flutter_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,6 +18,45 @@ flutter_app(
     path_deps = ["//packages/mylib:srcs"],
     # The hub of pubspec.lock, declared in MODULE.bazel.
     pub = "@pub",
+)
+
+# A package-only provider lets no-assets probes omit :assets from their graph.
+flutter_package(
+    name = "package_without_assets",
+    pub = "@pub",
+    pubspec = ":pubspec",
+    path_deps = ["//packages/mylib:srcs"],
+)
+
+flutter_assets_sdk_free(
+    name = "android_sdk_free_assets",
+    abis = ["arm64-v8a"],
+    assets = glob(["assets/**"]),
+    pubspec = ":pubspec",
+    package_config = "@pub//:project_package_config.json",
+    pub_srcs = ["@pub//:all"],
+    path_deps = ["//packages/mylib:srcs"],
+)
+
+flutter_package(
+    name = "package_android_sdk_free_assets",
+    pub = "@pub",
+    pubspec = ":pubspec",
+    path_deps = ["//packages/mylib:srcs"],
+    assets = ":android_sdk_free_assets",
+)
+
+flutter_test(
+    name = "root_bundle_asset_android_sdk_free",
+    src = "test/root_bundle_asset_test.dart",
+    app = ":package_android_sdk_free_assets",
+)
+
+flutter_test(
+    name = "custom_font_golden_android_sdk_free",
+    src = "test/custom_font_golden_test.dart",
+    app = ":package_android_sdk_free_assets",
+    goldens = glob(["test/goldens/custom_font_*.png"], allow_empty = True),
 )
 
 # The special tests below need their own settings, so they are declared by hand
@@ -43,11 +82,40 @@ flutter_test_suite(
 flutter_test(
     name = "golden_test_without_assets",
     src = "test/golden_test.dart",
-    app = ":app",
+    app = ":package_without_assets",
     goldens = glob(["test/goldens/**"]),
     include_assets = False,
 )
 
+flutter_test(
+    name = "root_bundle_asset_without_assets",
+    src = "test/root_bundle_asset_test.dart",
+    app = ":package_without_assets",
+    include_assets = False,
+)
+
+flutter_test(
+    name = "custom_font_golden_without_assets",
+    src = "test/custom_font_golden_test.dart",
+    app = ":package_without_assets",
+    goldens = glob(["test/goldens/custom_font_*.png"], allow_empty = True),
+    include_assets = False,
+)
+
+flutter_test(
+    name = "custom_font_fallback_without_assets",
+    src = "test/custom_font_fallback_golden_test.dart",
+    app = ":package_without_assets",
+    goldens = glob(["test/goldens/custom_font_fallback_*.png"], allow_empty = True),
+    include_assets = False,
+)
+
+flutter_test(
+    name = "ink_ripple_without_assets",
+    src = "test/ink_ripple_test.dart",
+    app = ":package_without_assets",
+    include_assets = False,
+)
 
 flutter_test(
     name = "materialize_test",

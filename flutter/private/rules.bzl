@@ -1390,6 +1390,7 @@ def flutter_app(
         path_deps = [],
         srcs = None,
         assets = None,
+        assets_sdk_free = False,
         entrypoint = "lib/main.dart",
         dart_plugin_registrant = _DEFAULT_DART_PLUGIN_REGISTRANT,
         pub = None,
@@ -1541,7 +1542,8 @@ def flutter_app(
         **kwargs
     )
 
-    flutter_assets(
+    asset_rule = flutter_assets_sdk_free if assets_sdk_free else flutter_assets
+    asset_rule(
         name = "assets",
         abis = abis,
         assets = assets,
@@ -1658,7 +1660,7 @@ rm -rf "{dir}/native_assets"
         dir = _bundle_dir(out, abi, index),
     )
 
-def _flutter_assets_impl(ctx):
+def _flutter_assets_impl(ctx, android_sdk):
     # The directory must be named flutter_assets: android_binary derives the
     # in-APK path from the artifact path with assets_dir stripped, and Flutter
     # requires the bundle at assets/flutter_assets/ at runtime.
@@ -1708,12 +1710,16 @@ def _flutter_assets_impl(ctx):
         for component in [ctx.label.workspace_root, ctx.label.package]
         if component
     ])
+    android_env = ""
+    android_sdk_inputs = []
+    if android_sdk:
+        android_env = 'export ANDROID_HOME="$(python3 -c \'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))\' "$EXECROOT/{android_sdk}")"\nexport ANDROID_SDK_ROOT="$ANDROID_HOME"'.format(android_sdk = android_sdk.path)
+        android_sdk_inputs = [android_sdk]
 
     cmd = """set -euo pipefail
 EXECROOT="$PWD"
 export PATH="/usr/bin:/bin"
-export ANDROID_HOME="$(python3 -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' "$EXECROOT/{android_sdk}")"
-export ANDROID_SDK_ROOT="$ANDROID_HOME"
+{android_env}
 export FLUTTER_ALREADY_LOCKED="true"
 # Refuse what this bundle does not model, before any flutter_tools work.
 python3 "$EXECROOT/{bundle_guard}" --pubspec "$EXECROOT/{pubspec}"
@@ -1748,7 +1754,7 @@ export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
 flutter_tool() {{
     "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{snapshot}" "$@"
 }}""".format(launcher = toolchain.flutter.path, snapshot = toolchain.tools_snapshot.path),
-        android_sdk = ctx.file._android_sdk.path,
+        android_env = android_env,
         manifest = manifest.path,
         place_config = (
             'mkdir -p "$STAGE/{d}.dart_tool" && cp "$EXECROOT/{c}" "$STAGE/{d}.dart_tool/package_config.json"\n' +
@@ -1769,7 +1775,7 @@ flutter_tool() {{
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk],
+            direct = stage_manifest_files + android_sdk_inputs + [manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot],
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
@@ -1779,9 +1785,7 @@ flutter_tool() {{
 
     return [DefaultInfo(files = depset([out]))]
 
-flutter_assets = rule(
-    implementation = _flutter_assets_impl,
-    doc = """Produces a flutter_assets/ tree (AssetManifest.bin, FontManifest.json,
+_FLUTTER_ASSETS_DOC = """Produces a flutter_assets/ tree (AssetManifest.bin, FontManifest.json,
 NOTICES.Z, fonts, shaders, declared assets) for packaging into an APK.
 
 Mode-independent, and free of app Dart: it takes no sources, entrypoint or kernel, and
@@ -1796,60 +1800,81 @@ asset `transformers:`: rules_flutter supports neither.
 The action runs `flutter build bundle --release` against a generated stub
 entrypoint, because flutter_tools derives the project directory from `--target`.
 That is an interim mechanism: the standalone-asset-bundle epic replaces the
-action's internals, not this interface.""",
-    attrs = {
-        "assets": attr.label_list(
-            allow_files = True,
-            doc = "Files declared under `assets:` in pubspec.yaml.",
-        ),
-        "pubspec": attr.label(
-            mandatory = True,
-            providers = [FlutterPubspecInfo],
-            doc = """A flutter_pubspec target.
+action's internals, not this interface."""
+
+_FLUTTER_ASSETS_ATTRS = {
+    "assets": attr.label_list(
+        allow_files = True,
+        doc = "Files declared under `assets:` in pubspec.yaml.",
+    ),
+    "pubspec": attr.label(
+        mandatory = True,
+        providers = [FlutterPubspecInfo],
+        doc = """A flutter_pubspec target.
 
 `flutter build bundle` parses the pubspec itself -- assets, fonts and
 uses-material-design all come from it -- so this rule stages the file rather
 than a fact read out of it.""",
-        ),
-        "package_config": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-            doc = """The pub hub's `project_package_config.json`, staged as the project's
+    ),
+    "package_config": attr.label(
+        allow_single_file = True,
+        mandatory = True,
+        doc = """The pub hub's `project_package_config.json`, staged as the project's
 `.dart_tool/package_config.json`. Its rootUris are relative to that directory.""",
-        ),
-        "pub_srcs": attr.label_list(
-            allow_files = True,
-            allow_empty = False,
-            mandatory = True,
-            doc = "The pub hub's `:all`: hosted package files and `package_graph.json`.",
-        ),
-        "path_deps": attr.label_list(
-            allow_files = True,
-            doc = "Sources of `path:` dependencies, staged and declared. See dart_aot_kernel.path_deps.",
-        ),
-        "abis": attr.string_list(
-            mandatory = True,
-            doc = """ABIs to bundle for. Required, always a list.
+    ),
+    "pub_srcs": attr.label_list(
+        allow_files = True,
+        allow_empty = False,
+        mandatory = True,
+        doc = "The pub hub's `:all`: hosted package files and `package_graph.json`.",
+    ),
+    "path_deps": attr.label_list(
+        allow_files = True,
+        doc = "Sources of `path:` dependencies, staged and declared. See dart_aot_kernel.path_deps.",
+    ),
+    "abis": attr.string_list(
+        mandatory = True,
+        doc = """ABIs to bundle for. Required, always a list.
 
 `flutter build bundle` runs once per ABI inside this one action, because
 exactly one file it produces -- NativeAssetsManifest.json -- is keyed by
 architecture. The manifests are merged and everything else is compared, so a
 bundle that started varying by architecture fails here rather than shipping.""",
-        ),
-        "_android_sdk": attr.label(
-            default = "//flutter/private:_android_sdk_marker",
-            allow_single_file = True,
-            cfg = "exec",
-        ),
-        "_merger": attr.label(
-            default = "//flutter/private:merge_native_assets.py",
-            allow_single_file = True,
-        ),
-        "_bundle_guard": attr.label(
-            default = "//flutter/private:check_bundle_pubspec.py",
-            allow_single_file = True,
-        ),
-    },
+    ),
+    "_merger": attr.label(
+        default = "//flutter/private:merge_native_assets.py",
+        allow_single_file = True,
+    ),
+    "_bundle_guard": attr.label(
+        default = "//flutter/private:check_bundle_pubspec.py",
+        allow_single_file = True,
+    ),
+}
+
+_FLUTTER_ASSETS_WITH_SDK_ATTRS = dict(_FLUTTER_ASSETS_ATTRS)
+_FLUTTER_ASSETS_WITH_SDK_ATTRS["_android_sdk"] = attr.label(
+    default = "//flutter/private:_android_sdk_marker",
+    allow_single_file = True,
+    cfg = "exec",
+)
+
+def _flutter_assets_with_sdk_impl(ctx):
+    return _flutter_assets_impl(ctx, ctx.file._android_sdk)
+
+def _flutter_assets_sdk_free_impl(ctx):
+    return _flutter_assets_impl(ctx, None)
+
+flutter_assets = rule(
+    implementation = _flutter_assets_with_sdk_impl,
+    doc = _FLUTTER_ASSETS_DOC,
+    attrs = _FLUTTER_ASSETS_WITH_SDK_ATTRS,
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
+
+flutter_assets_sdk_free = rule(
+    implementation = _flutter_assets_sdk_free_impl,
+    doc = _FLUTTER_ASSETS_DOC,
+    attrs = _FLUTTER_ASSETS_ATTRS,
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 

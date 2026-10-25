@@ -36,6 +36,7 @@ load(
     _flutter_aot_library = "flutter_aot_library",
     _flutter_app = "flutter_app",
     _flutter_assets = "flutter_assets",
+    _flutter_assets_sdk_free = "flutter_assets_sdk_free",
     _flutter_package = "flutter_package",
     _pub_path_deps_check = "pub_path_deps_check",
     _pub_plugins_check = "pub_plugins_check",
@@ -63,6 +64,7 @@ dart_test_deps = _dart_test_deps
 # The Dart half on its own, for an app whose Dart layout `flutter_app` refuses.
 flutter_pubspec = _flutter_pubspec
 flutter_aot_library = _flutter_aot_library
+flutter_assets_sdk_free = _flutter_assets_sdk_free
 flutter_assets = _flutter_assets
 pub_path_deps_check = _pub_path_deps_check
 pub_plugins_check = _pub_plugins_check

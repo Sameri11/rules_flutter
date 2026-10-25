@@ -1,0 +1,43 @@
+name: BNT12 prototype host assets
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-no-android-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+
+      - name: Remove Android SDK and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}"
+          unset ANDROID_HOME ANDROID_SDK_ROOT ANDROID_NDK_HOME ANDROID_NDK_ROOT
+          test -z "${ANDROID_HOME:-}${ANDROID_SDK_ROOT:-}${ANDROID_NDK_HOME:-}${ANDROID_NDK_ROOT:-}"
+
+      - name: Test passing no-bundle and SDK-free Android bundle targets without Android SDK
+        working-directory: examples/no_plugins
+        shell: bash
+        run: |
+          set -euo pipefail
+          bazel test //:host_test_without_assets //:host_test_android_sdk_free --disk_cache= --worker_quit_after_build
+          for target in //:host_test_without_assets //:host_test_android_sdk_free; do
+            suffix="${target##*:}"
+            bazel query "deps($target)" > "$RUNNER_TEMP/query-$suffix.txt"
+            bazel cquery "deps($target)" > "$RUNNER_TEMP/cquery-$suffix.txt"
+            if grep -E 'androidsdk|_android_sdk_marker|androidndk' "$RUNNER_TEMP/query-$suffix.txt" "$RUNNER_TEMP/cquery-$suffix.txt"; then
+              echo "Unexpected Android SDK/NDK edge in $target deps" >&2
+              exit 1
+            fi
+          done
