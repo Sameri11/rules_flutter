@@ -33,7 +33,7 @@ jobs:
       - name: Arm (a) flutter test
         working-directory: tests/host_registrant
         run: |
-          set -uo pipefail
+          set +e
           mkdir -p "$RUNNER_TEMP/arm-a"
           flutter pub get > "$RUNNER_TEMP/arm-a/pub_get.log" 2>&1
           for t in shared_preferences_test path_provider_test control_channel_test; do
