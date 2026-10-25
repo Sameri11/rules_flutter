@@ -41,6 +41,15 @@ flutter_test_suite(
 )
 
 flutter_test(
+    name = "golden_test_without_assets",
+    src = "test/golden_test.dart",
+    app = ":app",
+    goldens = glob(["test/goldens/**"]),
+    include_assets = False,
+)
+
+
+flutter_test(
     name = "materialize_test",
     src = "test/materialize_test.dart",
     app = ":app",

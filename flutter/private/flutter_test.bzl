@@ -301,7 +301,7 @@ def _launcher(ctx, update):
     assets_flag = ""
     assets_export = ""
     assets_files = []
-    if package.assets:
+    if ctx.attr.include_assets and package.assets:
         assets_files = [package.assets]
         assets_path = _runfile(ctx, package.assets)
         assets_export = 'export UNIT_TEST_ASSETS="$ROOT/{}"'.format(assets_path)
@@ -382,6 +382,10 @@ _LAUNCHER_ATTRS = {
         mandatory = True,
         providers = [FlutterPackageInfo],
         doc = "The flutter_package the test belongs to: the package name, the working directory and the assets.",
+    ),
+    "include_assets": attr.bool(
+        default = True,
+        doc = "Prototype switch: pass the package bundle to flutter_tester.",
     ),
     "dart_defines": attr.string_dict(
         doc = "The dill's dart_defines. A test with any imports test_deps alone; see dart_test_kernel.",
@@ -512,6 +516,7 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
         env = env,
         env_inherit = env_inherit,
         dart_defines = dart_defines,
+        include_assets = kwargs.pop("include_assets", True),
     )
     _tester_test(
         name = name,
