@@ -6,7 +6,7 @@
 # manual and run only through their checking wrapper.
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")
+load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test", "flutter_test_suite")
 load("//flutter/private:test_metadata.bzl", "parse_error_test")
 
 exports_files(["pubspec.lock"])
@@ -87,4 +87,12 @@ parse_error_test(
     name = "non_literal_annotation_test",
     src = "metadata/non_literal.dart",
     expect = "Error on line 1, column 7 of tests/flutter_test_conformance/metadata/non_literal.dart",
+)
+
+# A nested flutter_test_config applies below its directory and not to a sibling. The suite
+# covers only test/scope/, since the C fixtures above are run through their wrappers.
+flutter_test_suite(
+    name = "scope_tests",
+    srcs = glob(["test/scope/**/*_test.dart"]),
+    app = ":pkg",
 )
