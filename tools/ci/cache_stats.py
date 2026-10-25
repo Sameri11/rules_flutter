@@ -48,7 +48,7 @@ TEST_SUMMARY_RE = re.compile(
 )
 
 # A test served from the cache prints `(cached)` in place of its timing.
-CACHED_TEST_RE = re.compile(r"^//\S+\s+\(cached\)")
+CACHED_TEST_RE = re.compile(r"^(?:@{1,2}[^/\s]*)?//\S+(?:\s+\([^)]+\))?\s+\(cached\)")
 
 # Label, width. One spec keeps the header, the rows, and the TOTAL line from
 # drifting apart as categories are added.
@@ -286,6 +286,16 @@ def selftest() -> int:
         "Executed 1 out of 3 tests: 3 tests pass.\n"
     )
     assert mixed == TestStats(executed=1, cached=2, total=3), mixed
+    for label in (
+        "//:a_test",
+        "@repo//pkg:a_test",
+        "@@repo//pkg:a_test",
+    ):
+        annotated = parse_test_log(
+            f"{label} (k8-fastbuild) (cached) PASSED in 1.1s\n"
+            "Executed 0 out of 1 test: 1 test passes.\n"
+        )
+        assert annotated == TestStats(executed=0, cached=1, total=1), (label, annotated)
     assert parse_test_log("INFO: 5 processes: 5 internal.\n") is None
     assert format_test_lines([("warm.log", tests), ("absent.log", None), ("mixed.log", mixed)]) == [
         "warm.log: tests: 0 executed, 2 cached (of 2)",
