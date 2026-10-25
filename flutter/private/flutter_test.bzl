@@ -17,6 +17,8 @@ A flutter_test is these targets:
 
 The launcher is a test so that Bazel sets TEST_SRCDIR, TEST_TMPDIR and the
 filter/shard variables for it.
+
+A flutter_test_suite is one flutter_test per test file, under one test_suite.
 """
 
 load(":rules.bzl", "FlutterPackageInfo", "dart_test_kernel")
@@ -293,7 +295,7 @@ def _launcher(ctx, update):
     files = ctx.files.srcs + ctx.files.data + ctx.files.goldens
     for d in ctx.attr.materialize:
         prefix = pkg_dir + "/" + d + "/"
-        if not any([_runfile(ctx, f).startswith(prefix) for f in files]):
+        if not any([_runfile(ctx, f).startswith(prefix) for f in files + ctx.files.prunable_srcs]):
             fail("materialize: {} has no declared file under it; list its files in data, srcs or goldens".format(d))
 
     assets_flag = ""
@@ -331,6 +333,12 @@ def _launcher(ctx, update):
         is_executable = True,
     )
 
+    # A pruned source is a kernel input the test may not read. Keeping it in the runfiles would
+    # re-run every test on an edit to any of them; a materialized directory copies its files from
+    # the runfiles, so those stay.
+    materialized = [pkg_dir + "/" + d + "/" for d in ctx.attr.materialize]
+    kept = [f for f in ctx.files.prunable_srcs if any([_runfile(ctx, f).startswith(p) for p in materialized])]
+
     runfiles = ctx.runfiles(
         files = [
             ctx.file.dill,
@@ -339,7 +347,7 @@ def _launcher(ctx, update):
             pubspec.src,
             toolchain.flutter_tester,
             toolchain.icu_data,
-        ] + assets_files + files,
+        ] + assets_files + files + kept,
     )
     return runner, runfiles
 
@@ -386,6 +394,10 @@ _LAUNCHER_ATTRS = {
     "srcs": attr.label_list(
         allow_files = True,
         doc = "Test sources, in runfiles for golden files and the like.",
+    ),
+    "prunable_srcs": attr.label_list(
+        allow_files = [".dart"],
+        doc = "Test sources the kernel may leave unread. A source the test's kernel does not read stays out of the runfiles, so an edit to it re-runs neither the kernel nor the test. Set by flutter_test_suite.",
     ),
     "data": attr.label_list(
         allow_files = True,
@@ -440,6 +452,78 @@ def _materialize_dirs(dirs):
             if e != d and e.startswith(d + "/"):
                 fail("materialize: {} lies under {}; materialize only the outer one".format(e, d))
     return out
+
+def _dedupe(labels):
+    """The strings of `labels` in order, without repeats."""
+    seen = {}
+    for label in labels:
+        seen[label] = True
+    return list(seen.keys())
+
+def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
+    """The shared body of flutter_test and flutter_test_suite.
+
+    `srcs` are kept in the runfiles; `prunable_srcs` are the kernel's inputs that it may leave
+    unread. Either may name `src`, and otherwise `src` is added to `srcs`.
+    """
+    data = kwargs.pop("data", [])
+    dart_defines = kwargs.pop("dart_defines", {})
+    materialize = kwargs.pop("materialize", [])
+    materialize_mode = kwargs.pop("materialize_mode", "copy")
+    env = kwargs.pop("env", {})
+    env_inherit = kwargs.pop("env_inherit", [])
+    tags = kwargs.pop("tags", [])
+    bootstrap = name + "_bootstrap"
+    parse_metadata(
+        name = name + "_metadata",
+        src = src,
+        tags = ["manual"],
+    )
+    all_srcs = srcs if src in srcs or src in prunable_srcs else [src] + srcs
+    _flutter_test_bootstrap(
+        name = bootstrap,
+        app = app,
+        src = src,
+        srcs = _dedupe(all_srcs + prunable_srcs),
+        test_label = "//{}:{}".format(native.package_name(), name),
+        goldens_declared = goldens != None,
+        metadata = ":" + name + "_metadata",
+        tags = ["manual"],
+    )
+    dart_test_kernel(
+        name = name + "_kernel",
+        app = app,
+        srcs = all_srcs + _DRIVER_SRCS + [":" + name + "_metadata"],
+        prunable_srcs = prunable_srcs,
+        entrypoint = ":" + bootstrap,
+        dart_defines = dart_defines,
+        tags = ["manual"],
+    )
+    launcher = dict(
+        dill = ":" + name + "_kernel",
+        app = app,
+        src = src,
+        srcs = srcs,
+        prunable_srcs = prunable_srcs,
+        data = data,
+        goldens = goldens or [],
+        materialize = _materialize_dirs(materialize),
+        materialize_mode = materialize_mode,
+        env = env,
+        env_inherit = env_inherit,
+        dart_defines = dart_defines,
+    )
+    _tester_test(
+        name = name,
+        tags = tags,
+        **dict(launcher, **kwargs)
+    )
+    if goldens != None:
+        _golden_update(
+            name = name + _UPDATE_SUFFIX,
+            tags = ["manual"],
+            **dict(launcher, **{k: kwargs[k] for k in ["visibility", "testonly"] if k in kwargs})
+        )
 
 def flutter_test(
         name,
@@ -503,53 +587,94 @@ def flutter_test(
       **kwargs: forwarded to the launcher test rule. The update target takes
         only `visibility` and `testonly`.
     """
-    tags = kwargs.pop("tags", [])
-    bootstrap = name + "_bootstrap"
-    parse_metadata(
-        name = name + "_metadata",
-        src = src,
-        tags = ["manual"],
-    )
-    _flutter_test_bootstrap(
-        name = bootstrap,
+    _flutter_test(
+        name = name,
         app = app,
         src = src,
         srcs = srcs,
-        test_label = "//{}:{}".format(native.package_name(), name),
-        goldens_declared = goldens != None,
-        metadata = ":" + name + "_metadata",
-        tags = ["manual"],
-    )
-    all_srcs = srcs if src in srcs else [src] + srcs
-    dart_test_kernel(
-        name = name + "_kernel",
-        app = app,
-        srcs = all_srcs + _DRIVER_SRCS + [":" + name + "_metadata"],
-        entrypoint = ":" + bootstrap,
-        dart_defines = dart_defines,
-        tags = ["manual"],
-    )
-    launcher = dict(
-        dill = ":" + name + "_kernel",
-        app = app,
-        src = src,
-        srcs = srcs,
+        prunable_srcs = [],
+        goldens = goldens,
         data = data,
-        goldens = goldens or [],
-        materialize = _materialize_dirs(materialize),
+        dart_defines = dart_defines,
+        materialize = materialize,
         materialize_mode = materialize_mode,
         env = env,
         env_inherit = env_inherit,
-        dart_defines = dart_defines,
+        **kwargs
     )
-    _tester_test(
-        name = name,
-        tags = tags,
-        **dict(launcher, **kwargs)
-    )
-    if goldens != None:
-        _golden_update(
-            name = name + _UPDATE_SUFFIX,
-            tags = ["manual"],
-            **dict(launcher, **{k: kwargs[k] for k in ["visibility", "testonly"] if k in kwargs})
+
+def flutter_test_suite(
+        name,
+        app,
+        srcs = None,
+        tests = [],
+        **kwargs):
+    """Runs each test file of the package as its own flutter_test, under one test_suite.
+
+        flutter_test_suite(
+            name = "tests",
+            app = ":app",
         )
+
+    `srcs` defaults to `test/**/*_test.dart`. A test is named after its file without
+    `.dart`: `test/widget/foo_test.dart` is `:test/widget/foo_test`. A new file needs no
+    edit here. Each test is a separate process, as in `flutter test`.
+
+    Every test takes the package's other `test/**/*.dart` files, and its root
+    `flutter_test_config.dart`, as inputs. The kernel reads only the ones its test
+    imports, so an edit to a helper re-runs the tests that import it, and an edit to a
+    test file re-runs only that test. A `flutter_test_config.dart` applies to the tests
+    below it, nearest first, as in `flutter test`. The suite must be declared next to
+    `pubspec.yaml`, in the app's package; a hand-written `flutter_test` works elsewhere.
+
+    A test whose directory has a `goldens/` directory gets its files and a
+    `<name>_update_goldens` target, and so does every other test in that directory.
+    A directory without goldens gets neither. Declare the first golden with a
+    hand-written flutter_test, passing `goldens = glob(["test/goldens/**"],
+    allow_empty = True)`, then run its `_update_goldens` target.
+
+    Keyword arguments go to every test: `data`, `dart_defines`, `env`, `env_inherit`,
+    `materialize`, `materialize_mode`, `size`, `timeout`, `shard_count` and `tags`.
+    `tags`, `visibility` and `testonly` also go to the test_suite. A file that needs
+    other settings is left out of `srcs`, declared with flutter_test, and added to
+    `tests`.
+
+    Args:
+      name: the test_suite's name.
+      app: the flutter_package target of the package.
+      srcs: the test files, relative to the package. Defaults to `test/**/*_test.dart`.
+      tests: more labels for the test_suite, such as hand-written flutter_test targets.
+      **kwargs: forwarded to every flutter_test.
+    """
+    if "goldens" in kwargs:
+        fail("flutter_test_suite {}: goldens are found beside each test; remove the argument".format(name))
+    pkg = native.package_name()
+    if native.package_relative_label(app).package != pkg:
+        fail("flutter_test_suite {}: declare it next to pubspec.yaml, in the package of {}; a hand-written flutter_test works elsewhere".format(name, app))
+    if srcs == None:
+        srcs = native.glob(["test/**/*_test.dart"], allow_empty = True)
+    if not srcs:
+        fail("flutter_test_suite {}: srcs is empty; the package has no test/**/*_test.dart files".format(name))
+    for f in srcs:
+        if not f.endswith(".dart") or f.startswith("/") or ":" in f or ".." in f.split("/"):
+            fail("flutter_test_suite {}: {} is not a Dart file under the package".format(name, f))
+
+    prunable = _dedupe(sorted(native.glob(["test/**/*.dart", "flutter_test_config.dart"], allow_empty = True)) + srcs)
+    generated = []
+    for f in sorted(srcs):
+        goldens = native.glob([_join(_parent(f), "goldens/**")], allow_empty = True)
+        _flutter_test(
+            name = f[:-len(".dart")],
+            app = app,
+            src = f,
+            srcs = [],
+            prunable_srcs = prunable,
+            goldens = goldens or None,
+            **kwargs
+        )
+        generated.append(":" + f[:-len(".dart")])
+    native.test_suite(
+        name = name,
+        tests = generated + tests,
+        **{k: kwargs[k] for k in ["tags", "visibility", "testonly"] if k in kwargs}
+    )

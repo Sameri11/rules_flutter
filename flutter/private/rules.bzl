@@ -544,7 +544,16 @@ def _resource_set_for(mb):
             return resource_set
     fail("test_kernel_memory_mb must be at most {}".format(_MEMORY_RESOURCE_SETS[-1][0]))
 
-def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver, resource_set):
+def _declare_prune(ctx, srcs):
+    """The files of a pruned kernel: the manifest of the sources it may prune, and the unused list the driver writes."""
+    manifest = ctx.actions.declare_file(ctx.label.name + ".prune_manifest")
+    ctx.actions.write(manifest, "".join([f.path + "\n" for f in srcs]))
+    return struct(
+        manifest = manifest,
+        unused = ctx.actions.declare_file(ctx.label.name + ".unused_inputs"),
+    )
+
+def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver, resource_set, prune = None):
     """Declares the test kernel action on the test-kernel driver.
 
     Bazel starts the worker with the driver path as its only startup argument and
@@ -575,6 +584,9 @@ def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver,
     args.add("--package-name-file", pkg.package_name)
     args.add("--error-hint", _TEST_IMPORT_HINT)
     args.add("--output-dill", dill)
+    if prune:
+        args.add("--prune-manifest", prune.manifest)
+        args.add("--unused-inputs-list", prune.unused)
 
     ctx.actions.run(
         executable = toolchain.dart,
@@ -588,7 +600,7 @@ def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver,
                 pkg.package_name,
                 entrypoint,
                 pkg.import_dill,
-            ] + pkg.path_deps,
+            ] + pkg.path_deps + ([prune.manifest] if prune else []),
             transitive = [
                 depset(toolchain.platform_debug),
                 depset(pkg.srcs),
@@ -596,7 +608,8 @@ def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver,
                 toolchain.sdk_packages,
             ],
         ),
-        outputs = [dill],
+        outputs = [dill] + ([prune.unused] if prune else []),
+        unused_inputs_list = prune.unused if prune else None,
         mnemonic = "DartTestKernel",
         progress_message = "Compiling Dart test kernel %{label}",
         resource_set = resource_set,
@@ -614,7 +627,7 @@ def _dart_test_kernel_impl(ctx):
         package_config = package.package_config,
         pub_srcs = package.pub_srcs,
         path_deps = package.path_deps,
-        srcs = ctx.files.srcs + package.srcs,
+        srcs = ctx.files.srcs + ctx.files.prunable_srcs + package.srcs,
         registrant = None,
         registrant_path = "",
         # A test with dart_defines compiles its package's libraries itself,
@@ -625,7 +638,12 @@ def _dart_test_kernel_impl(ctx):
     # Without a pin for the Flutter version there is no driver. frontend_server, or no
     # driver, selects the frontend_server action.
     drivers = ctx.files._test_kernel_driver
-    if drivers and ctx.attr._test_kernel_compiler[BuildSettingInfo].value == "worker":
+    use_driver = bool(drivers) and ctx.attr._test_kernel_compiler[BuildSettingInfo].value == "worker"
+
+    # frontend_server's --depfile cannot name the org-dartlang-root sources of a test, so only the
+    # driver writes a read list; other compilers take every prunable source as an input.
+    prune = _declare_prune(ctx, ctx.files.prunable_srcs) if use_driver and ctx.files.prunable_srcs else None
+    if use_driver:
         _test_kernel_driver_action(
             ctx,
             dill = dill,
@@ -634,6 +652,7 @@ def _dart_test_kernel_impl(ctx):
             dart_defines = ctx.attr.dart_defines,
             driver = drivers[0],
             resource_set = _resource_set_for(ctx.attr._test_kernel_memory_mb[BuildSettingInfo].value),
+            prune = prune,
         )
     else:
         _jit_kernel_action(
@@ -693,6 +712,10 @@ package's libraries itself.""",
         ),
         "dart_defines": attr.string_dict(
             doc = "Compile-time constants of this test; see dart_aot_kernel.dart_defines.",
+        ),
+        "prunable_srcs": attr.label_list(
+            allow_files = [".dart"],
+            doc = "Test sources the kernel may leave out of its inputs. On the worker path a source the compile does not read is listed as unused, so an edit to it re-runs neither this kernel nor, through it, the test. Other compilers take every one as an input.",
         ),
         # Empty for frontend_server, so that compiler never loads the driver's sources.
         "_test_kernel_driver": attr.label(

@@ -109,7 +109,7 @@ probe_dir=$(dirname "$app_build")
 app_pkg=${probe_dir#.}
 app_pkg=${app_pkg#/}
 probe_load='load("@rules_flutter//flutter:defs.bzl", "flutter_test")'
-if grep -q 'flutter_test' "$app_build"; then
+if grep -q '"flutter_test"' "$app_build"; then
   probe_load=""
 fi
 probe_backup="$work/BUILD.bazel"

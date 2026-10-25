@@ -1124,6 +1124,125 @@ file, and the selected ABI can load it. The build guards catch missing declared
 libraries; exercising both APIs checks whether the packaged binaries load on the
 target device.
 
+## Testing
+
+`flutter_test_suite` declares one host test per file under `test/`. Add the
+suite to the package's `BUILD.bazel`:
+
+```python
+load("@rules_flutter//flutter:defs.bzl", "flutter_test_suite")
+
+flutter_test_suite(
+    name = "tests",
+    app = ":app",
+)
+```
+
+`bazel test //:tests` runs every file matched by `test/**/*_test.dart`. A new
+`*_test.dart` file needs no BUILD edit. Each test is named by its path without
+`.dart`, so `test/widget/foo_test.dart` is `//:test/widget/foo_test`. Keyword
+arguments such as `data`, `dart_defines`, `env`, `env_inherit`, `size`, `timeout`,
+`tags`, `shard_count` and `materialize` apply to every test. `tests` adds targets
+declared elsewhere to the suite. `srcs` replaces the glob; the macro fails at
+load time if `srcs` is empty or names a file outside the package.
+
+Files that need other settings are left out of `srcs` and declared with
+`flutter_test`, then passed through `tests`:
+
+```python
+flutter_test_suite(
+    name = "tests",
+    app = ":app",
+    srcs = glob(
+        ["test/**/*_test.dart"],
+        exclude = ["test/defines_test.dart"],
+    ),
+    tests = [":defines_test"],
+)
+
+flutter_test(
+    name = "defines_test",
+    src = "test/defines_test.dart",
+    app = ":app",
+    dart_defines = {"DEMO_FLAVOR": "staging"},
+)
+```
+
+### Goldens
+
+A test gets its directory's `goldens/` files, and a `<name>_update_goldens`
+target, when that directory has at least one file under `goldens/`. Every test in
+the directory gets them, not only the one the files were made for. Golden files
+are compared under `bazel test` and never written there.
+
+```sh
+bazel run //:test/widget/foo_test_update_goldens
+```
+
+To create the first golden, declare the test with `flutter_test` and an empty
+glob, so the update target exists before any golden file does:
+
+```python
+flutter_test(
+    name = "foo_test",
+    src = "test/widget/foo_test.dart",
+    app = ":app",
+    goldens = glob(["test/widget/goldens/**"], allow_empty = True),
+)
+```
+
+Run `bazel run //:foo_test_update_goldens`. Then delete the hand-written target:
+the suite covers the file and finds the goldens.
+
+### Running a subset and sharding
+
+`--test_filter` takes a regular expression matched against case names:
+
+```sh
+bazel test //:tests --test_filter='renders the header'
+```
+
+`shard_count` splits each test's cases across that many Bazel shards:
+
+```python
+flutter_test_suite(
+    name = "tests",
+    app = ":app",
+    shard_count = 4,
+)
+```
+
+### Caching
+
+Each test is its own action, so Bazel caches each file's result. A file's
+kernel compiles once, and its result is reused while nothing it reads changes.
+
+- An edit under `lib/` re-runs the package's tests.
+- On the default worker path, a helper edit under `test/` re-compiles and
+  re-runs only the tests that read it, locally. The compiler reports what it
+  read, so unread files do not invalidate other tests.
+- With `--@rules_flutter//flutter:test_kernel_compiler=frontend_server`, every
+  test in the suite re-runs after a helper edit.
+- On another machine, the kernels recompile after a helper edit, but a test's
+  cached result is reused when its kernel output is unchanged.
+
+Dart sources under `test/` are not in the test's runfiles unless a `materialize`
+directory holds them, so an edit to one test file does not re-run the others.
+
+### Differences from `flutter test`
+
+- `@Skip`, `@OnPlatform` and `@TestOn` are read per file, and their
+  behaviour is in [library-level test annotations](#library-level-test-annotations).
+- Tag selection (`--tags`, `--exclude-tags`) is not supported. Use
+  `--test_filter` or separate targets.
+- `dart_test.yaml` is ignored.
+- `flutter_test_config.dart` applies to the nearest one above the test, up to
+  the package root. A nested config applies to the tests below it and not to
+  sibling directories. A suite must be declared next to `pubspec.yaml`; other packages use `flutter_test`.
+- `spawnHybridUri` is not supported under `flutter_tester`: the case fails.
+- [Test kernel compilation](#test-kernel-compilation) covers the worker and its
+  memory settings.
+
 ## Common variants and maintenance
 
 ### Assets
