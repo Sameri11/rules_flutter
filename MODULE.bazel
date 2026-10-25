@@ -156,3 +156,10 @@ pub_dev.lock(
     lock = "//tests/flutter_test_conformance:pubspec.lock",
 )
 use_repo(pub_dev, "flutter_test_conformance")
+
+# Pub hub for the host-registrant prototype (//tests/host_registrant).
+pub_dev.lock(
+    name = "host_registrant",
+    lock = "//tests/host_registrant:pubspec.lock",
+)
+use_repo(pub_dev, "host_registrant")

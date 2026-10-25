@@ -1,0 +1,86 @@
+# PROTOTYPE (BNT05 host registrant). Dispatch-only; not for merge.
+name: BNT05 host registrant prototype
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: 3.47.3
+  FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+  BAZELISK_VERSION: v1.29.0
+  BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+
+jobs:
+  host-registrant:
+    name: Host registrant arms — ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+
+      - name: Arm (a) flutter test
+        working-directory: tests/host_registrant
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/arm-a"
+          flutter pub get > "$RUNNER_TEMP/arm-a/pub_get.log" 2>&1
+          for t in shared_preferences_test path_provider_test control_channel_test; do
+            flutter test --reporter expanded "test/$t.dart" > "$RUNNER_TEMP/arm-a/$t.log" 2>&1
+            echo "$t exit=$?"
+            grep -h "instance =\|PASS\|ERROR\|Exception" "$RUNNER_TEMP/arm-a/$t.log" | cut -c1-200 || true
+          done
+
+      - name: Arms (b) worker and (c) registrant, Bazel
+        run: |
+          set -uo pipefail
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test \
+            //tests/host_registrant:shared_preferences_test \
+            //tests/host_registrant:path_provider_test \
+            //tests/host_registrant:control_channel_test \
+            //tests/host_registrant:shared_preferences_test_host_registrant \
+            //tests/host_registrant:path_provider_test_host_registrant \
+            //tests/host_registrant:control_channel_test_host_registrant \
+            --test_output=errors --keep_going || echo "bazel exit=$?"
+
+      - name: Arm (b) frontend_server, Bazel
+        run: |
+          set -uo pipefail
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test \
+            //tests/host_registrant:shared_preferences_test \
+            //tests/host_registrant:path_provider_test \
+            //tests/host_registrant:control_channel_test \
+            --//flutter:test_kernel_compiler=frontend_server \
+            --test_output=errors --keep_going || echo "bazel exit=$?"
+
+      - name: Summaries and logs
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/testlogs"
+          mkdir -p "$out"
+          for t in shared_preferences_test path_provider_test control_channel_test \
+            shared_preferences_test_host_registrant path_provider_test_host_registrant control_channel_test_host_registrant; do
+            echo "== $t"
+            log="bazel-testlogs/tests/host_registrant/$t/test.log"
+            grep -h "instance =\|PASS\|ERROR\|Exception\|DOBJC" "$log" 2>/dev/null | cut -c1-200 | head -6 || true
+            cp -L "$log" "$out/$t.log" 2>/dev/null || true
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bnt05-host-registrant-linux
+          path: |
+            ${{ runner.temp }}/arm-a
+            ${{ runner.temp }}/testlogs
+          if-no-files-found: warn

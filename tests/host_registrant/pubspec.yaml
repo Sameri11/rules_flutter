@@ -1,0 +1,19 @@
+name: host_registrant
+description: Host tests that call federated plugins' Dart host implementations without mocking.
+version: 0.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  path_provider: ^2.1.6
+  path_provider_platform_interface: ^2.1.2
+  shared_preferences: ^2.5.6
+  shared_preferences_platform_interface: ^2.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

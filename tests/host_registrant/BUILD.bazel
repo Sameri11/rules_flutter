@@ -1,0 +1,46 @@
+# Host tests that call federated plugins' Dart host implementations without mocks.
+#
+# Arm (b): each test as on main, no registrant. Arm (c): the same test with
+# lib/dart_plugin_registrant.dart, a copy of flutter_tools' generated file, compiled
+# into the test kernel (prototype only; see the branch's commit message). Arm (a) is
+# `flutter test` in this directory. The pub hub is declared in the root MODULE.bazel.
+
+load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")
+
+exports_files(["pubspec.lock"])
+
+flutter_pubspec(name = "pubspec")
+
+flutter_package(
+    name = "pkg",
+    srcs = [],
+    pub = "@host_registrant",
+    pubspec = ":pubspec",
+)
+
+TESTS = [
+    "shared_preferences_test",
+    "path_provider_test",
+    "control_channel_test",
+]
+
+[
+    flutter_test(
+        name = test,
+        src = "test/" + test + ".dart",
+        app = ":pkg",
+        tags = ["manual"],
+    )
+    for test in TESTS
+]
+
+[
+    flutter_test(
+        name = test + "_host_registrant",
+        src = "test/" + test + ".dart",
+        app = ":pkg",
+        dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
+        tags = ["manual"],
+    )
+    for test in TESTS
+]

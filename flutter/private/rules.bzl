@@ -615,8 +615,8 @@ def _dart_test_kernel_impl(ctx):
         pub_srcs = package.pub_srcs,
         path_deps = package.path_deps,
         srcs = ctx.files.srcs + package.srcs,
-        registrant = None,
-        registrant_path = "",
+        registrant = ctx.file.dart_plugin_registrant,
+        registrant_path = ctx.file.dart_plugin_registrant.short_path[len(ctx.label.package + "/lib/"):] if ctx.file.dart_plugin_registrant else "",
         # A test with dart_defines compiles its package's libraries itself,
         # since deps_lib was compiled without the test's constants.
         import_dill = package.test_deps if ctx.attr.dart_defines else package.deps_lib,
@@ -625,7 +625,8 @@ def _dart_test_kernel_impl(ctx):
     # Without a pin for the Flutter version there is no driver. frontend_server, or no
     # driver, selects the frontend_server action.
     drivers = ctx.files._test_kernel_driver
-    if drivers and ctx.attr._test_kernel_compiler[BuildSettingInfo].value == "worker":
+    # PROTOTYPE: the test-kernel driver rejects --source, so a registrant forces the one-shot action.
+    if drivers and ctx.attr._test_kernel_compiler[BuildSettingInfo].value == "worker" and not ctx.file.dart_plugin_registrant:
         _test_kernel_driver_action(
             ctx,
             dill = dill,
@@ -693,6 +694,10 @@ package's libraries itself.""",
         ),
         "dart_defines": attr.string_dict(
             doc = "Compile-time constants of this test; see dart_aot_kernel.dart_defines.",
+        ),
+        "dart_plugin_registrant": attr.label(
+            allow_single_file = [".dart"],
+            doc = "PROTOTYPE: the Dart plugin registrant under lib/, compiled in via --source.",
         ),
         # Empty for frontend_server, so that compiler never loads the driver's sources.
         "_test_kernel_driver": attr.label(

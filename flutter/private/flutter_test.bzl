@@ -448,6 +448,7 @@ def flutter_test(
         srcs = [],
         data = [],
         dart_defines = {},
+        dart_plugin_registrant = None,
         goldens = None,
         materialize = [],
         materialize_mode = "copy",
@@ -526,6 +527,7 @@ def flutter_test(
         app = app,
         srcs = all_srcs + _DRIVER_SRCS + [":" + name + "_metadata"],
         entrypoint = ":" + bootstrap,
+        dart_plugin_registrant = dart_plugin_registrant,
         dart_defines = dart_defines,
         tags = ["manual"],
     )
