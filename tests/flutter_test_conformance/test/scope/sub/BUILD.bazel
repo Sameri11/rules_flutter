@@ -1,7 +1,0 @@
-load("//flutter:defs.bzl", "flutter_test_suite")
-
-# A subpackage: its suite takes helpers and config from this package only.
-flutter_test_suite(
-    name = "sub_tests",
-    app = "//tests/flutter_test_conformance:pkg",
-)

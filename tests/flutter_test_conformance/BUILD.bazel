@@ -18,7 +18,6 @@ flutter_package(
     srcs = [],
     pub = "@flutter_test_conformance",
     pubspec = ":pubspec",
-    visibility = ["//tests/flutter_test_conformance:__subpackages__"],
 )
 
 FIXTURES = [
