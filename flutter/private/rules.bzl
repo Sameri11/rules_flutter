@@ -1660,7 +1660,7 @@ rm -rf "{dir}/native_assets"
         dir = _bundle_dir(out, abi, index),
     )
 
-def _flutter_assets_impl(ctx, android_sdk):
+def _flutter_assets_impl(ctx, android_sdk, tester = False):
     # The directory must be named flutter_assets: android_binary derives the
     # in-APK path from the artifact path with assets_dir stripped, and Flutter
     # requires the bundle at assets/flutter_assets/ at runtime.
@@ -1719,6 +1719,7 @@ def _flutter_assets_impl(ctx, android_sdk):
     cmd = """set -euo pipefail
 EXECROOT="$PWD"
 export PATH="/usr/bin:/bin"
+unset ANDROID_HOME ANDROID_SDK_ROOT ANDROID_NDK_HOME ANDROID_NDK_ROOT
 {android_env}
 export FLUTTER_ALREADY_LOCKED="true"
 # Refuse what this bundle does not model, before any flutter_tools work.
@@ -1740,11 +1741,12 @@ cd "$STAGE/{project_dir}"
 mkdir -p .flutter_bazel
 printf 'void main() {{}}\\n' > .flutter_bazel/stub.dart
 STUB=".flutter_bazel/stub.dart"
-mkdir -p "$STAGE/bundles"
 {flutter_tool}
+{tester_bundle}
 {bundles}
 # Keep the shell alive so its EXIT trap removes STAGE after the merger.
-python3 "$EXECROOT/{merger}" {merge_args}
+{tester_copy}
+{merge}
 """.format(
         project_dir = project_dir,
         bundle_guard = ctx.file._bundle_guard.path,
@@ -1765,20 +1767,28 @@ flutter_tool() {{
             g = package_graph,
         ),
         merger = ctx.file._merger.path,
-        bundles = "\n".join([_bundle_command(out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
-        merge_args = " ".join([
-            '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
-            for i, abi in enumerate(ctx.attr.abis)
-        ]),
+        bundles = "\n".join([_bundle_command(out, abi, i) for i, abi in enumerate(ctx.attr.abis)]) if not tester else "",
+        tester_bundle = """mkdir -p "$STAGE/build/unit_test_assets"
+"$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{builder}" "$STAGE/build/unit_test_assets"
+""".format(builder = ctx.file._tester_asset_builder.path) if tester else "",
+        tester_copy = """mkdir -p "$EXECROOT/{out}"
+cp -R build/unit_test_assets/. "$EXECROOT/{out}/"
+""".format(out = out.path) if tester else "",
+        merge = ("python3 \"$EXECROOT/{merger}\" {merge_args}".format(
+            merger = ctx.file._merger.path,
+            merge_args = " ".join([
+                '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
+                for i, abi in enumerate(ctx.attr.abis)
+            ]),
+        ) if not tester else ""),
     )
-
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = stage_manifest_files + android_sdk_inputs + [manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot],
+            direct = stage_manifest_files + android_sdk_inputs + [manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, ctx.file._tester_asset_builder, toolchain.flutter, toolchain.tools_snapshot],
         ),
         outputs = [out],
-        mnemonic = "FlutterAssets",
+        mnemonic = "FlutterTesterAssets" if tester else "FlutterAssets",
         progress_message = "Bundling Flutter assets %{label}",
         execution_requirements = _ASSETS_EXEC,
     )
@@ -1849,6 +1859,10 @@ bundle that started varying by architecture fails here rather than shipping.""",
         default = "//flutter/private:check_bundle_pubspec.py",
         allow_single_file = True,
     ),
+    "_tester_asset_builder": attr.label(
+        default = "//flutter/private:tester_asset_builder.dart",
+        allow_single_file = True,
+    ),
 }
 
 _FLUTTER_ASSETS_WITH_SDK_ATTRS = dict(_FLUTTER_ASSETS_ATTRS)
@@ -1863,6 +1877,9 @@ def _flutter_assets_with_sdk_impl(ctx):
 
 def _flutter_assets_sdk_free_impl(ctx):
     return _flutter_assets_impl(ctx, None)
+def _flutter_assets_tester_impl(ctx):
+    return _flutter_assets_impl(ctx, None, tester = True)
+
 
 flutter_assets = rule(
     implementation = _flutter_assets_with_sdk_impl,
@@ -1874,6 +1891,14 @@ flutter_assets = rule(
 flutter_assets_sdk_free = rule(
     implementation = _flutter_assets_sdk_free_impl,
     doc = _FLUTTER_ASSETS_DOC,
+    attrs = _FLUTTER_ASSETS_ATTRS,
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
+flutter_assets_tester = rule(
+    implementation = _flutter_assets_tester_impl,
+    doc = """Produces Flutter's `TargetPlatform.tester` asset bundle through
+flutter_tools' AssetBundle and writeBundle APIs. This uses the same asset
+platform as `flutter test`; `flutter build bundle` does not accept tester.""",
     attrs = _FLUTTER_ASSETS_ATTRS,
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )

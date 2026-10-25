@@ -1,7 +1,7 @@
 # Dart targets for the flat demo app. Standard flutter_app paths are derived
 # from the flutter create layout.
 
-load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_assets_sdk_free", "flutter_package", "flutter_test", "flutter_test_suite")
+load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_assets_sdk_free", "flutter_assets_tester", "flutter_package", "flutter_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,6 +38,24 @@ flutter_assets_sdk_free(
     path_deps = ["//packages/mylib:srcs"],
 )
 
+flutter_assets_tester(
+    name = "tester_assets",
+    abis = [],
+    assets = glob(["assets/**"]),
+    pubspec = ":pubspec",
+    package_config = "@pub//:project_package_config.json",
+    pub_srcs = ["@pub//:all"],
+    path_deps = ["//packages/mylib:srcs"],
+)
+
+flutter_package(
+    name = "package_tester_assets",
+    pub = "@pub",
+    pubspec = ":pubspec",
+    path_deps = ["//packages/mylib:srcs"],
+    assets = ":tester_assets",
+)
+
 flutter_package(
     name = "package_android_sdk_free_assets",
     pub = "@pub",
@@ -59,6 +77,25 @@ flutter_test(
     goldens = glob(["test/goldens/custom_font_*.png"], allow_empty = True),
 )
 
+
+flutter_test(
+    name = "root_bundle_asset_tester",
+    src = "test/root_bundle_asset_test.dart",
+    app = ":package_tester_assets",
+)
+
+flutter_test(
+    name = "custom_font_golden_tester",
+    src = "test/custom_font_golden_test.dart",
+    app = ":package_tester_assets",
+    goldens = glob(["test/goldens/custom_font_*.png"], allow_empty = True),
+)
+
+flutter_test(
+    name = "ink_ripple_tester",
+    src = "test/ink_ripple_test.dart",
+    app = ":package_tester_assets",
+)
 # The special tests below need their own settings, so they are declared by hand
 # and added to the suite's tests.
 flutter_test_suite(
@@ -142,4 +179,9 @@ flutter_test(
     name = "generated_lib_test",
     src = "test/generated_lib_test.dart",
     app = ":app",
+)
+flutter_test(
+    name = "sqlite3_code_asset_tester",
+    src = "test/sqlite3_code_asset_test.dart",
+    app = ":package_tester_assets",
 )

@@ -37,6 +37,7 @@ load(
     _flutter_app = "flutter_app",
     _flutter_assets = "flutter_assets",
     _flutter_assets_sdk_free = "flutter_assets_sdk_free",
+    _flutter_assets_tester = "flutter_assets_tester",
     _flutter_package = "flutter_package",
     _pub_path_deps_check = "pub_path_deps_check",
     _pub_plugins_check = "pub_plugins_check",
@@ -66,5 +67,6 @@ flutter_pubspec = _flutter_pubspec
 flutter_aot_library = _flutter_aot_library
 flutter_assets_sdk_free = _flutter_assets_sdk_free
 flutter_assets = _flutter_assets
+flutter_assets_tester = _flutter_assets_tester
 pub_path_deps_check = _pub_path_deps_check
 pub_plugins_check = _pub_plugins_check

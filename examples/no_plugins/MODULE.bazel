@@ -29,4 +29,3 @@ pub.lock(
 )
 use_repo(pub, "pub")
 
-include("//android:config.MODULE.bazel")

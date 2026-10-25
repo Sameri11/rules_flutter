@@ -1,6 +1,6 @@
 # Dart targets for a plugin-free app.
 
-load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_assets_sdk_free", "flutter_package", "flutter_test", "flutter_test_suite")
+load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_assets_sdk_free", "flutter_assets_tester", "flutter_package", "flutter_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -20,6 +20,22 @@ flutter_assets_sdk_free(
     pubspec = ":pubspec",
     package_config = "@pub//:project_package_config.json",
     pub_srcs = ["@pub//:all"],
+)
+
+flutter_assets_tester(
+    name = "assets_tester",
+    abis = [],
+    assets = [],
+    pubspec = ":pubspec",
+    package_config = "@pub//:project_package_config.json",
+    pub_srcs = ["@pub//:all"],
+)
+
+flutter_package(
+    name = "package_tester_assets",
+    pub = "@pub",
+    pubspec = ":pubspec",
+    assets = ":assets_tester",
 )
 
 flutter_package(
@@ -46,6 +62,12 @@ flutter_test(
     name = "host_test_android_sdk_free",
     src = "test/host_test.dart",
     app = ":package_sdk_free_assets",
+)
+
+flutter_test(
+    name = "host_test_tester_assets",
+    src = "test/host_test.dart",
+    app = ":package_tester_assets",
 )
 
 

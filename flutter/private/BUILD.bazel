@@ -34,6 +34,7 @@ exports_files(
         "lib_entry.py",
         "merge_native_assets.py",
         "read_pubspec.py",
+        "tester_asset_builder.dart",
     ],
     visibility = ["//flutter:__subpackages__"],
 )
