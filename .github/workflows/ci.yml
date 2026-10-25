@@ -23,10 +23,12 @@ env:
   # Bazelisk release assets are mutable; verify their bytes before execution.
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
   BAZELISK_SHA256_DARWIN_ARM64: cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-  BAZEL_CACHE_MODE: ${{ github.event_name == 'pull_request' && 'write' || '' }}
+  # Measurement branch only: dispatch populates the Linux core cache.
+  BAZEL_CACHE_MODE: write
 
 jobs:
   lint:
+    if: github.event_name != 'workflow_dispatch'
     name: Starlark format and lint
     runs-on: ubuntu-latest
     steps:
@@ -56,7 +58,7 @@ jobs:
 
   core:
     name: Root and consumer
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,9 +66,9 @@ jobs:
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          flutter-sha256: ${{ env.FLUTTER_SHA256_DARWIN_ARM64 }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
-          bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -153,6 +155,7 @@ jobs:
         run: python3 tools/ci/cache_stats.py bazel_test_root.log bazel_consumer_api.log bazel_consumer_test.log
 
   example:
+    if: github.event_name != 'workflow_dispatch'
     name: Example — ${{ matrix.os }} — ${{ matrix.example.description }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -259,6 +262,7 @@ jobs:
 
   # Host test driver conformance and the test-kernel driver on Linux; macOS runs them in core (bazel test //...).
   conformance:
+    if: github.event_name != 'workflow_dispatch'
     name: Test driver conformance — ubuntu-latest
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -291,7 +295,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: example
     # Run coverage after matrix failures, then propagate their result below.
-    if: always()
+    if: always() && github.event_name != 'workflow_dispatch'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
