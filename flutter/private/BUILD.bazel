@@ -10,7 +10,7 @@ mechanical exceptions need a label, and only those:
     resolves an implicit dependency against the package of the `.bzl` that
     defines the rule, so `//flutter:__subpackages__` is enough even though the
     rules are instantiated in another module's packages.
-  * The five `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
+  * The seven `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
     That guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
@@ -41,10 +41,12 @@ exports_files(
 exports_files(
     [
         "android.bzl",
+        "flutter_test.bzl",
         "ndk.bzl",
         "plugins.bzl",
         "repo.bzl",
         "rules.bzl",
+        "test_kernel_driver.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
 )
