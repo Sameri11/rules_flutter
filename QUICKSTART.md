@@ -1238,7 +1238,8 @@ directory holds them, so an edit to one test file does not re-run the others.
 - `dart_test.yaml` is ignored.
 - `flutter_test_config.dart` applies to the nearest one above the test, up to
   the package root. A nested config applies to the tests below it and not to
-  sibling directories.
+  sibling directories. A suite in a subpackage (a `BUILD.bazel` below the app's
+  directory) takes its helpers and configs from that package only.
 - `spawnHybridUri` is not supported under `flutter_tester`: the case fails.
 - [Test kernel compilation](#test-kernel-compilation) covers the worker and its
   memory settings.

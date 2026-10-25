@@ -620,11 +620,12 @@ def flutter_test_suite(
     `.dart`: `test/widget/foo_test.dart` is `:test/widget/foo_test`. A new file needs no
     edit here. Each test is a separate process, as in `flutter test`.
 
-    Every test takes the package's other `test/**/*.dart` files as inputs, and the
-    kernel reads only the ones its test imports. So an edit to a helper re-runs the
-    tests that import it, and an edit to a test file re-runs only that test. A
+    Every test takes the other Dart files of the suite's package as inputs: `test/**`
+    for a suite in the app's package, the whole package otherwise. The kernel reads
+    only the ones its test imports, so an edit to a helper re-runs the tests that
+    import it, and an edit to a test file re-runs only that test. A
     `flutter_test_config.dart` applies to the tests below it, nearest first, as in
-    `flutter test`. Those outside test/ are found at the package root.
+    `flutter test`. A suite in a subpackage does not see a config in a parent package.
 
     A test whose directory has a `goldens/` directory gets its files and a
     `<name>_update_goldens` target, and so does every other test in that directory.
@@ -641,21 +642,27 @@ def flutter_test_suite(
     Args:
       name: the test_suite's name.
       app: the flutter_package target of the package.
-      srcs: the test files, relative to the package. Defaults to `test/**/*_test.dart`.
+      srcs: the test files, relative to the package. Defaults to `test/**/*_test.dart`, or `**/*_test.dart` in a subpackage.
       tests: more labels for the test_suite, such as hand-written flutter_test targets.
       **kwargs: forwarded to every flutter_test.
     """
     if "goldens" in kwargs:
         fail("flutter_test_suite {}: goldens are found beside each test; remove the argument".format(name))
+    pkg = native.package_name()
+    app_pkg = native.package_relative_label(app).package
+    own = pkg == app_pkg
+    if not own and app_pkg and not pkg.startswith(app_pkg + "/"):
+        fail("flutter_test_suite {}: the suite must be in the app's package or below it, not {}".format(name, pkg))
     if srcs == None:
-        srcs = native.glob(["test/**/*_test.dart"], allow_empty = True)
+        srcs = native.glob(["test/**/*_test.dart" if own else "**/*_test.dart"], allow_empty = True)
     if not srcs:
-        fail("flutter_test_suite {}: srcs is empty; the package has no test/**/*_test.dart files".format(name))
+        fail("flutter_test_suite {}: srcs is empty; the package has no matching test files".format(name))
     for f in srcs:
         if not f.endswith(".dart") or f.startswith("/") or ":" in f or ".." in f.split("/"):
             fail("flutter_test_suite {}: {} is not a Dart file under the package".format(name, f))
 
-    prunable = _dedupe(sorted(native.glob(["test/**/*.dart", "flutter_test_config.dart"], allow_empty = True)) + srcs)
+    inputs = ["test/**/*.dart", "flutter_test_config.dart"] if own else ["**/*.dart"]
+    prunable = _dedupe(sorted(native.glob(inputs, allow_empty = True)) + srcs)
     generated = []
     for f in sorted(srcs):
         goldens = native.glob([_join(_parent(f), "goldens/**")], allow_empty = True)
