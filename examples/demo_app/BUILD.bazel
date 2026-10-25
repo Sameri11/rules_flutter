@@ -27,9 +27,6 @@ flutter_test_suite(
     srcs = glob(
         ["test/**/*_test.dart"],
         exclude = [
-            # The app calls rive_native at startup, and host tests load no
-            # librive_native dylib; the test fails under flutter_tester.
-            "test/widget_test.dart",
             "test/defines_test.dart",
             "test/generated_lib_test.dart",
             "test/materialize_test.dart",
