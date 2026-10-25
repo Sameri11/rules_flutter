@@ -2,6 +2,8 @@
 name: BNT05 host registrant prototype
 
 on:
+  push:
+    branches: [prototype/bnt05-host-registrant]
   workflow_dispatch:
 
 permissions:
