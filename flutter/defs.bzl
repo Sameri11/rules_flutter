@@ -22,6 +22,7 @@ load(
 load(
     "//flutter/private:flutter_test.bzl",
     _flutter_test = "flutter_test",
+    _flutter_test_suite = "flutter_test_suite",
 )
 load("//flutter/private:pubspec.bzl", _flutter_pubspec = "flutter_pubspec")
 load(
@@ -47,6 +48,7 @@ load(
 flutter_app = _flutter_app
 flutter_package = _flutter_package
 flutter_test = _flutter_test
+flutter_test_suite = _flutter_test_suite
 flutter_android_binary = _flutter_android_binary
 flutter_embedding_library = _flutter_embedding_library
 flutter_native_contribution = _flutter_native_contribution

@@ -73,6 +73,8 @@ class _Args {
   String? entryPath;
   String? packageNameFile;
   String? errorHint;
+  String? pruneManifest;
+  String? unusedOutput;
   bool trackWidgetCreation = false;
   final roots = <String>[];
   final imports = <String>[];
@@ -114,6 +116,10 @@ class _Args {
         packageNameFile = value();
       } else if (a == '--error-hint') {
         errorHint = value();
+      } else if (a == '--prune-manifest') {
+        pruneManifest = value();
+      } else if (a == '--unused-inputs-list') {
+        unusedOutput = value();
       } else if (a == '--track-widget-creation') {
         trackWidgetCreation = true;
       } else if (!_ignored.contains(a)) {
@@ -148,6 +154,34 @@ class _Seed {
   final Set<Library> libSet;
 
   _Seed(this.libs, this.uriToSource) : libSet = {...libs};
+}
+
+/// Writes the pruned sources the compile did not read to --unused-inputs-list. The compile reads a
+/// source when its component holds the file and a file system root resolves it under [origin]: the
+/// view in a worker, which links only the declared inputs, else [base].
+void _writeUnused(
+  _Args a, {
+  required String base,
+  required String origin,
+  required Component component,
+  required _Seed seed,
+}) {
+  final read = <String>{};
+  for (final uri in component.uriToSource.keys) {
+    if (uri.scheme != 'org-dartlang-root' || seed.uriToSource.containsKey(uri)) continue;
+    final rel = uri.pathSegments.join('/');
+    for (final root in a.roots) {
+      final path = root == '.' ? rel : '$root/$rel';
+      if (File(_join(origin, path)).existsSync()) {
+        read.add(path);
+        break;
+      }
+    }
+  }
+  final pruned = File(_join(base, need(a.pruneManifest, '--prune-manifest'))).readAsLinesSync();
+  final unused = [for (final p in pruned) if (p.isNotEmpty && !read.contains(p)) p];
+  File(_join(base, need(a.unusedOutput, '--unused-inputs-list')))
+      .writeAsStringSync(unused.map((p) => '$p\n').join());
 }
 
 class Driver {
@@ -245,6 +279,9 @@ class Driver {
           }
         }
         await join.close();
+        if (a.pruneManifest != null) {
+          _writeUnused(a, base: base, origin: view ?? base, component: res.component, seed: seed);
+        }
       } finally {
         Directory(work).deleteSync(recursive: true);
       }
