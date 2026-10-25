@@ -16,6 +16,4 @@ flutter_app(
 flutter_test_suite(
     name = "tests",
     app = "//:app",
-    # CI does not run example tests yet.
-    tags = ["manual"],
 )
