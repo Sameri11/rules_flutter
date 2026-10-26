@@ -257,6 +257,49 @@ jobs:
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
 
+  # Host tests run with no Android SDK or NDK, so a dependency on either fails.
+  host-tests-without-android:
+    name: Host tests without Android SDK — ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Remove the runner's Android SDK
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android
+          test ! -e /usr/local/lib/android
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          select-ndk: 'false'
+
+      - name: bazel test //:tests
+        working-directory: examples/no_plugins
+        run: |
+          set -o pipefail
+          env -u ANDROID_HOME -u ANDROID_SDK_ROOT -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT \
+            bazel test //:tests --lockfile_mode=error 2>&1 | tee "$RUNNER_TEMP/bazel_host_tests.log"
+
+      - name: No Android SDK or NDK in the host test closure
+        working-directory: examples/no_plugins
+        run: |
+          set -euo pipefail
+          env -u ANDROID_HOME -u ANDROID_SDK_ROOT -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT \
+            bazel query 'deps(//:tests)' > "$RUNNER_TEMP/host_tests_query.txt"
+          env -u ANDROID_HOME -u ANDROID_SDK_ROOT -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT \
+            bazel cquery 'deps(//:tests)' > "$RUNNER_TEMP/host_tests_cquery.txt"
+          if grep -E 'androidsdk|_android_sdk_marker|androidndk' \
+            "$RUNNER_TEMP/host_tests_query.txt" "$RUNNER_TEMP/host_tests_cquery.txt"; then
+            echo "Android SDK or NDK edge in the host test closure" >&2
+            exit 1
+          fi
+
   # Focused conformance lane also checks helper-edit invalidation with caches disabled.
   conformance:
     name: Test driver conformance — ubuntu-latest
