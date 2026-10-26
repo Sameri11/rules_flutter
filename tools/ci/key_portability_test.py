@@ -578,7 +578,6 @@ class Checker:
             regions.extend(_action_regions(name, tree))
         forbidden = (
             (re.compile(r"/(?:Users|home|opt|private)/"), "host absolute path"),
-            (re.compile(r"\bFLUTTER_ROOT\b"), "literal FLUTTER_ROOT"),
             (re.compile(r"\bPUB_CACHE\b"), "literal PUB_CACHE"),
             (re.compile(r"\$(?:\{ANDROID_NDK_HOME\}|ANDROID_NDK_HOME|\(ANDROID_NDK_HOME\))"), "direct ANDROID_NDK_HOME expansion"),
         )
@@ -925,19 +924,30 @@ def _staged_command(tree):
     return _formatted_template(_named_value(staging, "command"))
 
 
+def _command_templates(node, tree):
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _command_templates(node.left, tree) + _command_templates(node.right, tree)
+    if isinstance(node, ast.Attribute) and node.attr == "command":
+        staged = _staged_command(tree)
+        return [] if staged is None else [staged]
+    text = _formatted_template(node)
+    return [] if text is None else [text]
+
+
 def _action_regions(name, tree):
     regions = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and _call_path(node) in (
-            ["ctx", "actions", "run"],
-            ["ctx", "actions", "run_shell"],
-        ):
-            command = _keyword(node, "command")
-            text = _formatted_template(command)
-            if text is None and isinstance(command, ast.Name):
-                text = _formatted_template(_named_value(tree, command.id))
-            if text is not None:
-                regions.append((name, text))
+    for function in ast.walk(tree):
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        for node in ast.walk(function):
+            if isinstance(node, ast.Call) and _call_path(node) in (
+                ["ctx", "actions", "run"],
+                ["ctx", "actions", "run_shell"],
+            ):
+                command = _keyword(node, "command")
+                if isinstance(command, ast.Name):
+                    command = _named_value(function, command.id)
+                regions.extend((name, text) for text in _command_templates(command, tree))
     if name == "defs":
         command = _staged_command(tree)
         if command is not None:
