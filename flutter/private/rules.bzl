@@ -1726,13 +1726,17 @@ export PATH="/usr/bin:/bin"
 # Refuse what this bundle does not model, before any flutter_tools work.
 python3 "$EXECROOT/{bundle_guard}" --pubspec "$EXECROOT/{pubspec}"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
-trap 'rm -rf "$STAGE"' EXIT
+trap 'rm -rf "$STAGE" "$STAGE.tar"' EXIT
 # flutter_tools needs writable state; use a stage-local HOME so the host HOME
 # does not affect the action key.
 export HOME="$STAGE/home"
 mkdir -p "$HOME"
 
-tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
+# Archive to a file rather than a pipe, so the writer cannot fail when the
+# reader exits early.
+tar -cf "$STAGE.tar" -T "{manifest}"
+(cd "$STAGE" && tar -xf "$STAGE.tar")
+rm -f "$STAGE.tar"
 chmod -R u+w "$STAGE"
 {place_config}
 {flutter_root}cd "$STAGE/{project_dir}"
