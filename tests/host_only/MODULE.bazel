@@ -9,7 +9,6 @@ module(
 # bazel_dep order, so declare it before anything that brings rules_cc's
 # toolchain.
 bazel_dep(name = "apple_support", version = "1.24.5")
-
 bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
 local_path_override(
     module_name = "sameri11_rules_flutter",
