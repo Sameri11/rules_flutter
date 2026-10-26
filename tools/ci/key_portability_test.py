@@ -299,21 +299,22 @@ class Checker:
         tree = self.tree("defs", "D")
         if tree is None:
             return
+        staging = _function(tree, "_stage_flutter_assets")
         function = _function(tree, "_flutter_assets_impl")
-        if function is None:
-            self.fail("D", "{} must define _flutter_assets_impl".format(FILES["defs"]))
+        if staging is None or function is None:
+            self.fail("D", "{} must define _stage_flutter_assets and _flutter_assets_impl".format(FILES["defs"]))
             return
 
         # Declare every staged file as an action input.
-        stage = _named_value(function, "stage_manifest_files")
+        stage = _named_value(staging, "files")
         for path, description in (
             (["ctx", "file", "package_config"], "the project package config"),
             (["ctx", "files", "pub_srcs"], "the hub's package files (pub_srcs)"),
             (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
         ):
             if not _contains_attr(stage, path):
-                self.fail("D", "stage_manifest_files must include {}".format(description))
-        if _named_value(function, "declared_project_files") is not None:
+                self.fail("D", "staged files must include {}".format(description))
+        if _named_value(staging, "declared_project_files") is not None:
             self.fail("D", "every staged file must be declared: no declared_project_files subset")
 
         action = _action_call(function, "run_shell")
@@ -321,10 +322,10 @@ class Checker:
             self.fail("D", "_flutter_assets_impl must create its action with ctx.actions.run_shell")
         else:
             inputs = _keyword(action, "inputs")
-            if not _contains_name(inputs, "manifest"):
+            if not _contains_attr(inputs, ["staged", "manifest"]):
                 self.fail("D", "FlutterAssets inputs must declare the generated stage manifest")
-            if not _contains_name(inputs, "stage_manifest_files"):
-                self.fail("D", "FlutterAssets inputs must declare every staged file (stage_manifest_files)")
+            if not _contains_attr(inputs, ["staged", "files"]):
+                self.fail("D", "FlutterAssets inputs must declare every staged file (staged.files)")
             for name in ("_merger", "_android_sdk"):
                 expected = ["ctx", "file", name]
                 if not _contains_attr(inputs, expected):
@@ -352,24 +353,35 @@ class Checker:
         if _string_dict(_named_value(tree, "_ASSETS_EXEC")) != {"no-remote-exec": "1"}:
             self.fail("D", "_ASSETS_EXEC must require only no-remote-exec: the action is sandboxed and cacheable")
 
-        command = _assets_command(function)
-        if command is None:
-            self.fail("D", "_flutter_assets_impl must define its shell command")
+        staged_command = _staged_command(tree)
+        android_env = _formatted_template(_named_value(function, "android_env"))
+        flutter_root = _formatted_template(_named_value(staging, "flutter_root"))
+        if staged_command is None or android_env is None or flutter_root is None:
+            self.fail("D", "the staged and Android shell environments must be format templates")
         else:
             required = (
-                ('export PATH="/usr/bin:/bin"', "fixed PATH"),
-                ("$EXECROOT/{android_sdk}", "EXECROOT Android SDK marker"),
-                ('export ANDROID_HOME=', "ANDROID_HOME export"),
-                ('export ANDROID_SDK_ROOT="$ANDROID_HOME"', "ANDROID_SDK_ROOT export"),
-                ('export FLUTTER_ALREADY_LOCKED="true"', "FLUTTER_ALREADY_LOCKED export"),
-                ('export HOME="$STAGE/home"', "stage-local HOME"),
-                ('$EXECROOT/{bundle_guard}', "the pubspec guard invocation"),
+                (staged_command, 'export PATH="/usr/bin:/bin"', "fixed PATH"),
+                (staged_command, 'export FLUTTER_ALREADY_LOCKED="true"', "FLUTTER_ALREADY_LOCKED export"),
+                (staged_command, 'export HOME="$STAGE/home"', "stage-local HOME"),
+                (staged_command, "$EXECROOT/{bundle_guard}", "the pubspec guard invocation"),
+                (android_env, "$EXECROOT/{android_sdk}", "EXECROOT Android SDK marker"),
+                (android_env, "export ANDROID_HOME=", "ANDROID_HOME export"),
+                (android_env, 'export ANDROID_SDK_ROOT="$ANDROID_HOME"', "ANDROID_SDK_ROOT export"),
             )
-            for token, description in required:
-                if token not in command:
-                    self.fail("D", "FlutterAssets command must contain {}".format(description))
-            if "realpath" not in command or "dirname" not in command:
-                self.fail("D", "FlutterAssets command must derive Android SDK root from the marker")
+            for text, token, description in required:
+                if token not in text:
+                    self.fail("D", "FlutterAssets shell must contain {}".format(description))
+            if "realpath" not in flutter_root or "dirname" not in flutter_root:
+                self.fail("D", "FlutterAssets must derive FLUTTER_ROOT from the flutter launcher's realpath")
+
+        tester = _function(tree, "_flutter_test_assets_impl")
+        if tester is None:
+            self.fail("D", "{} must define _flutter_test_assets_impl".format(FILES["defs"]))
+        else:
+            if _contains_attr(tester, ["ctx", "file", "_android_sdk"]) or _contains_attr(tester, ["ctx", "attr", "abis"]):
+                self.fail("D", "the test assets bundle must not depend on the Android SDK or ABIs")
+            if any(isinstance(node, ast.Constant) and isinstance(node.value, str) and "ANDROID" in node.value for node in ast.walk(tester)):
+                self.fail("D", "the test assets bundle must not set an Android environment")
 
         if _function(tree, "_kernel_blob_command") is not None:
             self.fail("D", "_kernel_blob_command must not exist: the overlay adds kernel_blob.bin, flutter_assets does not")
@@ -906,9 +918,11 @@ def _formatted_template(node):
     return None
 
 
-def _assets_command(function):
-    value = _assignments(function).get("cmd")
-    return _formatted_template(value)
+def _staged_command(tree):
+    staging = _function(tree, "_stage_flutter_assets")
+    if staging is None:
+        return None
+    return _formatted_template(_named_value(staging, "command"))
 
 
 def _action_regions(name, tree):
@@ -925,11 +939,9 @@ def _action_regions(name, tree):
             if text is not None:
                 regions.append((name, text))
     if name == "defs":
-        function = _function(tree, "_flutter_assets_impl")
-        if function is not None:
-            command = _assets_command(function)
-            if command is not None:
-                regions.append((name, command))
+        command = _staged_command(tree)
+        if command is not None:
+            regions.append((name, command))
         bundle = _function(tree, "_bundle_command")
         if bundle is not None:
             for node in ast.walk(bundle):
