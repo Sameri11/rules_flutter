@@ -121,11 +121,12 @@ runs:
       run: |
         set -euo pipefail
         case "$CACHE_MODE" in
-          read|write) ;;
+          read) upload_local_results=false ;;
+          write) upload_local_results=true ;;
           *) echo "unknown cache-mode: $CACHE_MODE" >&2; exit 1 ;;
         esac
         cat >> "$HOME/.bazelrc" <<RC
-        build --config=cache-$CACHE_MODE
+        build --remote_upload_local_results=$upload_local_results
         build --remote_cache=grpcs://${BAZEL_CACHE_BAZEL_REMOTE_CACHE_HOST}
         build --remote_instance_name=${BAZEL_CACHE_BAZEL_PROJECT_ID}
         build --remote_cache_header='Authorization=Bearer ${BAZEL_CACHE_BAZEL_REMOTE_CACHE_TOKEN}'

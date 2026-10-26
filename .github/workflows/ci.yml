@@ -56,7 +56,7 @@ jobs:
 
   core:
     name: Root and consumer
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,9 +64,13 @@ jobs:
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          flutter-sha256: ${{ env.FLUTTER_SHA256_DARWIN_ARM64 }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
-          bazelisk-sha256: ${{ env.BAZELISK_SHA256_DARWIN_ARM64 }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          cache-mode: ${{ env.BAZEL_CACHE_MODE }}
+          cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
+          cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
+          cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
 
       - name: bazel test //...
         run: |
@@ -253,7 +257,7 @@ jobs:
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
 
-  # Host test driver conformance and the test-kernel driver on Linux; macOS runs them in core (bazel test //...).
+  # Focused conformance lane also checks helper-edit invalidation with caches disabled.
   conformance:
     name: Test driver conformance — ubuntu-latest
     runs-on: ubuntu-latest
