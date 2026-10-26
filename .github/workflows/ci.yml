@@ -280,14 +280,14 @@ jobs:
           select-ndk: 'false'
 
       - name: bazel test //:tests
-        working-directory: examples/no_plugins
+        working-directory: tests/host_only
         run: |
           set -o pipefail
           env -u ANDROID_HOME -u ANDROID_SDK_ROOT -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT \
             bazel test //:tests --lockfile_mode=error 2>&1 | tee "$RUNNER_TEMP/bazel_host_tests.log"
 
       - name: No Android SDK or NDK in the host test closure
-        working-directory: examples/no_plugins
+        working-directory: tests/host_only
         run: |
           set -euo pipefail
           env -u ANDROID_HOME -u ANDROID_SDK_ROOT -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT \

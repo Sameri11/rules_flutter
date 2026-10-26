@@ -1,0 +1,28 @@
+module(
+    name = "host_only",
+    version = "0.0.1",
+)
+
+# macOS host C/C++ (protoc) must use apple_support's toolchain: Xcode 27 clang
+# records the SDK's SDKSettings.json in every dependency file, which only
+# apple_support's builtin include directories allow. Toolchains register in
+# bazel_dep order, so declare it before anything that brings rules_cc's
+# toolchain.
+bazel_dep(name = "apple_support", version = "1.24.5")
+
+bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+local_path_override(
+    module_name = "sameri11_rules_flutter",
+    path = "../..",
+)
+
+# No Android registration: host tests must build without an Android SDK or NDK.
+flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.47.3")
+
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//:pubspec.lock",
+)
+use_repo(pub, "pub")

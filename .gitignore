@@ -4,6 +4,7 @@
 # Nested-module output-base symlinks.
 /tests/consumer/bazel-*
 /tests/core_consumer/bazel-*
+/tests/host_only/bazel-*
 /examples/*/bazel-*
 /tests/namespace_dynamic/bazel-*
 
