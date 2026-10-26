@@ -1146,7 +1146,7 @@ arguments such as `data`, `dart_defines`, `env`, `env_inherit`, `size`, `timeout
 declared elsewhere to the suite. `srcs` replaces the glob; the macro fails at
 load time if `srcs` is empty or names a file outside the package.
 
-Host tests need no Android SDK, NDK, or ABIs. `flutter_app` runs them against `:test_assets`, a host-platform copy of the `:assets` bundle, and `flutter_package(assets = ...)` overrides it. The test bundle carries no build-hook native outputs and no `NativeAssetsManifest.json`, so a test that loads those needs an override. A module that registers the Android NDK toolchains, as `examples/no_plugins/android` does, still needs `ANDROID_NDK_HOME` for any build, including its tests; a module without that registration builds its tests with neither.
+Host tests need no Android SDK, NDK, or ABIs. `flutter_app` runs them against `:test_assets`, a bundle built from the same declared assets for the host test platform, and `flutter_package(assets = ...)` overrides it. The test bundle carries no build-hook native outputs and no `NativeAssetsManifest.json`, so a test that loads those needs an override. A module that registers the Android NDK toolchains, as `examples/no_plugins/android` does, still needs `ANDROID_NDK_HOME` for any build, including its tests; a module without that registration builds its tests with neither.
 
 Files that need other settings are left out of `srcs` and declared with
 `flutter_test`, then passed through `tests`:
