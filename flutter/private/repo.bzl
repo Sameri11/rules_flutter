@@ -31,6 +31,7 @@ exports_files([
     "flutter_tester",
     "icudtl.dat",
     "flutter.version.json",
+    "flutter_tools_package_config.json",
 ] + {gen_snapshots})
 
 # Patched SDK containing platform_strong.dill. `--sdk-root` wants the directory,
@@ -53,6 +54,13 @@ filegroup(
 filegroup(
     name = "sdk_packages",
     srcs = glob({sdk_globs}, allow_empty = True),
+)
+
+# The Dart closure the test-asset builder compiles from. The config's rootUris
+# are relative to the repository, so the builder never reads the pub cache.
+filegroup(
+    name = "flutter_tools_packages",
+    srcs = glob(["flutter_tools_packages/**"], allow_empty = True),
 )
 """
 
@@ -135,6 +143,56 @@ def _sdk_package_names(ctx, root):
     if ctx.path("{}/{}/pubspec.yaml".format(root, sdk_package_root("sky_engine"))).exists:
         names.append("sky_engine")
     return sorted(names)
+
+# flutter_tools' Dart packages, copied into the repository. The SDK's package
+# config names directories under the pub cache of the machine that ran
+# `flutter --version`, which no action may read, so each package is copied and
+# the generated config points at the copies.
+def _run(ctx, args):
+    result = ctx.execute(args)
+    if result.return_code != 0:
+        fail("{} failed:\n{}".format(" ".join(args), result.stderr))
+
+def _flutter_tools_packages(ctx, root):
+    config_dir = "{}/packages/flutter_tools/.dart_tool".format(root)
+    config = "{}/package_config.json".format(config_dir)
+    if not ctx.path(config).exists:
+        fail(
+            "flutter_tools package config missing at {}.\n".format(config) +
+            "Run `flutter --version` once on this host.",
+        )
+    packages = []
+    for package in json.decode(ctx.read(config))["packages"]:
+        name = package["name"]
+        package_uri = package.get("packageUri", "lib/").rstrip("/")
+        root_uri = package["rootUri"]
+        if root_uri.startswith("file://"):
+            source = root_uri[len("file://"):]
+        else:
+            source = "{}/{}".format(config_dir, root_uri)
+        if "%" in source:
+            fail("percent-encoded package root is not supported: {}".format(source))
+        if not ctx.path(source).exists:
+            fail(
+                "flutter_tools package {} is missing at {}.\n".format(name, source) +
+                "Run `flutter --version` once on this host.",
+            )
+        dest = "flutter_tools_packages/{}/{}".format(name, package_uri)
+        _run(ctx, ["mkdir", "-p", dest])
+        if ctx.path("{}/{}".format(source, package_uri)).exists:
+            _run(ctx, ["cp", "-RL", "{}/{}/.".format(source, package_uri), dest])
+        entry = {
+            "name": name,
+            "rootUri": "flutter_tools_packages/{}/".format(name),
+            "packageUri": package_uri + "/",
+        }
+        if "languageVersion" in package:
+            entry["languageVersion"] = package["languageVersion"]
+        packages.append(entry)
+    ctx.file(
+        "flutter_tools_package_config.json",
+        json.encode_indent({"configVersion": 2, "packages": packages}) + "\n",
+    )
 
 def _flutter_sdk_impl(ctx):
     if not ctx.attr.version:
@@ -248,6 +306,8 @@ def _flutter_sdk_impl(ctx):
     sdk_package_roots = [sdk_package_root(name) for name in _sdk_package_names(ctx, root)]
     for pkg_root in sdk_package_roots:
         ctx.symlink("{}/{}".format(root, pkg_root), pkg_root)
+
+    _flutter_tools_packages(ctx, root)
 
     ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
         sdk_globs = repr(

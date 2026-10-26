@@ -39,6 +39,27 @@ exports_files(
     visibility = ["//flutter:__subpackages__"],
 )
 
+# The test-asset builder, compiled once per SDK from the closure repo.bzl copies
+# out of the SDK. Test bundles run this dill, so no action compiles flutter_tools
+# or reads the pub cache. frontend_server names every source through the execroot
+# scheme, so the dill carries no machine-specific paths.
+genrule(
+    name = "tester_assets_dill",
+    srcs = [
+        "tester_assets.dart",
+        "@flutter_sdk//:flutter_tools_package_config.json",
+        "@flutter_sdk//:flutter_tools_packages",
+        "@flutter_sdk//:vm_platform_strong.dill",
+    ],
+    outs = ["tester_assets.dill"],
+    cmd = "d=$$PWD/$$(dirname $(execpath @flutter_sdk//:vm_platform_strong.dill)) && $(execpath @flutter_sdk//:dartaotruntime) $(execpath @flutter_sdk//:frontend_server.snapshot) --target=vm --sdk-root=$$d/ --platform=$$d/vm_platform_strong.dill --filesystem-root . --filesystem-scheme org-dartlang-root --packages=org-dartlang-root:///$(execpath @flutter_sdk//:flutter_tools_package_config.json) --no-print-incremental-dependencies --output-dill=$@ org-dartlang-root:///$(execpath tester_assets.dart)",
+    tools = [
+        "@flutter_sdk//:dartaotruntime",
+        "@flutter_sdk//:frontend_server.snapshot",
+    ],
+    visibility = ["//flutter:__subpackages__"],
+)
+
 exports_files(
     [
         "android.bzl",

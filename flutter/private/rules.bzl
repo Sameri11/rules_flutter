@@ -1890,16 +1890,17 @@ def _flutter_test_assets_impl(ctx):
 
     toolchain = _flutter_toolchain(ctx)
     staged = _stage_flutter_assets(ctx, toolchain, "")
-    cmd = staged.command + """"$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{builder}" "$EXECROOT/{out}"
+    cmd = staged.command + """"$EXECROOT/{dart}" "$EXECROOT/{builder}" "$EXECROOT/{out}"
 """.format(
-        builder = ctx.file._builder.path,
+        dart = toolchain.dart.path,
+        builder = ctx.file._builder_dill.path,
         out = out.path,
     )
 
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.flutter, ctx.file._bundle_guard, ctx.file._builder],
+            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.flutter, toolchain.dart, toolchain.dart_sdk_revision, toolchain.vm_platform_strong, ctx.file._bundle_guard, ctx.file._builder_dill],
         ),
         outputs = [out],
         mnemonic = "FlutterTestAssets",
@@ -1946,8 +1947,8 @@ AssetBundle and writeBundle with TargetPlatform.tester, as `flutter test` builds
             default = "//flutter/private:check_bundle_pubspec.py",
             allow_single_file = True,
         ),
-        "_builder": attr.label(
-            default = "//flutter/private:tester_assets.dart",
+        "_builder_dill": attr.label(
+            default = "//flutter/private:tester_assets_dill",
             allow_single_file = True,
         ),
     },
