@@ -146,15 +146,18 @@ class Checker:
                     self.fail("A", "flutter_sdk repository must not capture generated SDK or unrelated environment state")
                     break
 
-        # A repository rule's environment declaration is the only source-level
-        # capture contract here; reject a second environment declaration too.
+        # Every repository rule in repo.bzl reads the same environment, so none
+        # captures HOME or PUB_CACHE.
         environ_calls = [
             node
             for node in ast.walk(tree)
             if isinstance(node, ast.Call) and _keyword(node, "environ") is not None
         ]
-        if len(environ_calls) != 1:
-            self.fail("A", "repo.bzl must have one environment declaration, on flutter_sdk")
+        if not environ_calls:
+            self.fail("A", "repo.bzl must declare repository environments")
+        for call in environ_calls:
+            if _string_list(_keyword(call, "environ")) != ["FLUTTER_ROOT", "PATH"]:
+                self.fail("A", "every repository rule in repo.bzl must declare environ [\"FLUTTER_ROOT\", \"PATH\"]")
 
     def check_b(self):
         for name in ("defs", "android", "test", "test_driver"):
