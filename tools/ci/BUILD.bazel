@@ -48,6 +48,8 @@ genrule(
         "//flutter/private:android.bzl",
         "//flutter/private:plugins.bzl",
         "//flutter/private:ndk.bzl",
+        "//flutter/private:flutter_test.bzl",
+        "//flutter/private:test_kernel_driver.bzl",
     ],
     outs = ["key_portability_check.checked"],
     cmd = """set -euo pipefail

@@ -13,6 +13,10 @@ actually re-executed.
 
 Bazel's own category counts do not always sum to its process total (the line
 above sums to 2928), so no attempt is made to reconcile them.
+
+Test results come from Bazel's `Executed N out of T tests` summary. A test that
+Bazel served from the cache prints `(cached)` on its result line, and is counted
+separately from the executed ones.
 """
 
 from __future__ import annotations
@@ -37,6 +41,14 @@ SANDBOX_RE = re.compile(r"(\d+)\s+[a-z0-9]+-sandbox\b")
 # Persistent workers report as `worker`, multiplexed ones as `multiplex-worker`,
 # and a single build can use both.
 WORKER_RE = re.compile(r"(\d+)\s+(?:multiplex-)?worker\b")
+
+# Bazel's test summary, e.g. `Executed 0 out of 7 tests: 7 tests pass.`
+TEST_SUMMARY_RE = re.compile(
+    r"^\s*(?:INFO:\s*)?Executed (?P<executed>\d+) out of (?P<total>\d+) tests?\b"
+)
+
+# A test served from the cache prints `(cached)` in place of its timing.
+CACHED_TEST_RE = re.compile(r"^(?:@{1,2}[^/\s]*)?//\S+(?:\s+\([^)]+\))?\s+\(cached\)")
 
 # Label, width. One spec keeps the header, the rows, and the TOTAL line from
 # drifting apart as categories are added.
@@ -126,6 +138,37 @@ def has_remote_cache_hits(stats: CacheStats | None) -> bool:
     return stats is not None and stats.remote_cache_hits > 0
 
 
+@dataclass(frozen=True)
+class TestStats:
+    executed: int
+    cached: int
+    total: int
+
+
+def parse_test_log(text: str) -> TestStats | None:
+    """Sum Bazel's test summaries in one log, and count its `(cached)` test lines."""
+    lines = text.splitlines()
+    executed = total = 0
+    found = False
+    for line in lines:
+        match = TEST_SUMMARY_RE.match(line)
+        if match is not None:
+            found = True
+            executed += int(match.group("executed"))
+            total += int(match.group("total"))
+    if not found:
+        return None
+    cached = sum(1 for line in lines if CACHED_TEST_RE.match(line))
+    return TestStats(executed=executed, cached=cached, total=total)
+
+
+def extract_test_stats_from_log(log_path: Path) -> TestStats | None:
+    try:
+        return parse_test_log(log_path.read_text())
+    except FileNotFoundError:
+        return None
+
+
 def format_row(name: str, cells: Sequence[str]) -> str:
     padded = " ".join(f"{cell:>{width}}" for cell, (_, width) in zip(cells, COLUMNS))
     return f"{name:<{NAME_WIDTH}} {padded}"
@@ -150,6 +193,14 @@ def format_stats_table(
             )
         )
     return "\n".join(lines)
+
+
+def format_test_lines(results: list[tuple[str, TestStats | None]]) -> list[str]:
+    return [
+        f"{name}: tests: {stats.executed} executed, {stats.cached} cached (of {stats.total})"
+        for name, stats in results
+        if stats is not None
+    ]
 
 
 def selftest() -> int:
@@ -212,7 +263,46 @@ def selftest() -> int:
     assert "Sandbox" in table and "Internal" in table and "Worker" in table
     assert "Cached 2202 of 2260 non-internal actions; 58 re-executed." in table
 
-    print("OK: cache summary parsing, every category, and table layout passed")
+    tests = parse_test_log(
+        "//:a_test                                                       (cached) PASSED in 1.1s\n"
+        "//:b_test                                                       (cached) PASSED in 0.2s\n"
+        "Executed 0 out of 2 tests: 2 tests pass.\n"
+    )
+    assert tests == TestStats(executed=0, cached=2, total=2), tests
+
+    cold_tests = parse_test_log(
+        "//:a_test                                                       PASSED in 2.0s\n"
+        "//:b_test                                                       PASSED in 0.5s\n"
+        "//:c_test                                                       PASSED in 0.7s\n"
+        "Executed 3 out of 3 tests: 3 tests pass.\n"
+    )
+    assert cold_tests == TestStats(executed=3, cached=0, total=3), cold_tests
+
+    # A partly cached run: one test re-executed, two served from the cache.
+    mixed = parse_test_log(
+        "//:a_test                                                       (cached) PASSED in 1.1s\n"
+        "//:b_test                                                       (cached) PASSED in 0.2s\n"
+        "//:c_test                                                       PASSED in 0.7s\n"
+        "Executed 1 out of 3 tests: 3 tests pass.\n"
+    )
+    assert mixed == TestStats(executed=1, cached=2, total=3), mixed
+    for label in (
+        "//:a_test",
+        "@repo//pkg:a_test",
+        "@@repo//pkg:a_test",
+    ):
+        annotated = parse_test_log(
+            f"{label} (k8-fastbuild) (cached) PASSED in 1.1s\n"
+            "Executed 0 out of 1 test: 1 test passes.\n"
+        )
+        assert annotated == TestStats(executed=0, cached=1, total=1), (label, annotated)
+    assert parse_test_log("INFO: 5 processes: 5 internal.\n") is None
+    assert format_test_lines([("warm.log", tests), ("absent.log", None), ("mixed.log", mixed)]) == [
+        "warm.log: tests: 0 executed, 2 cached (of 2)",
+        "mixed.log: tests: 1 executed, 2 cached (of 3)",
+    ]
+
+    print("OK: cache summary and test summary parsing, table layout passed")
     return 0
 
 
@@ -232,13 +322,18 @@ def main() -> int:
         parser.error("at least one log is required unless --selftest is used")
 
     invocations: list[tuple[str, CacheStats | None]] = []
+    tests: list[tuple[str, TestStats | None]] = []
     totals: CacheStats | None = None
     for log_name in args.logs:
-        stats = extract_stats_from_log(Path(log_name))
-        invocations.append((Path(log_name).name, stats))
+        log = Path(log_name)
+        stats = extract_stats_from_log(log)
+        invocations.append((log.name, stats))
+        tests.append((log.name, extract_test_stats_from_log(log)))
         if stats is not None:
             totals = stats if totals is None else totals + stats
     print(format_stats_table(invocations, totals))
+    for line in format_test_lines(tests):
+        print(line)
     if args.require_hits and not has_remote_cache_hits(totals):
         print("ERROR: reading build produced zero remote-cache hits", file=sys.stderr)
         return 1

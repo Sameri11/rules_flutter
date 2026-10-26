@@ -14,6 +14,8 @@ FILES = {
     "android": "flutter/private/android.bzl",
     "plugins": "flutter/private/plugins.bzl",
     "ndk": "flutter/private/ndk.bzl",
+    "test": "flutter/private/flutter_test.bzl",
+    "test_driver": "flutter/private/test_kernel_driver.bzl",
 }
 
 
@@ -60,6 +62,8 @@ class Checker:
         self.check_f()
         self.check_g()
         self.check_h()
+        self.check_i()
+        self.check_j()
         return self.failures
 
     def tree(self, name, contract):
@@ -153,7 +157,7 @@ class Checker:
             self.fail("A", "repo.bzl must have one environment declaration, on flutter_sdk")
 
     def check_b(self):
-        for name in ("defs", "android"):
+        for name in ("defs", "android", "test", "test_driver"):
             tree = self.tree(name, "B")
             if tree is None:
                 continue
@@ -571,9 +575,92 @@ class Checker:
                 if pattern.search(region):
                     self.fail("H", "{} action/cache region contains {}".format(name, description))
 
+    def check_i(self):
+        # The test kernel worker is sandboxed and cacheable, and names every input it reads.
+        defs = self.tree("defs", "I")
+        function = _function(defs, "_test_kernel_driver_action") if defs is not None else None
+        if function is None:
+            self.fail("I", "{} must define _test_kernel_driver_action".format(FILES["defs"]))
+        else:
+            action = _action_call(function, "run")
+            if action is None:
+                self.fail("I", "_test_kernel_driver_action must create its action with ctx.actions.run")
+            else:
+                requirements = _string_dict(_keyword(action, "execution_requirements"))
+                if requirements != {"supports-workers": "1", "requires-worker-protocol": "json"}:
+                    self.fail("I", "the test kernel worker must require only the worker protocol: no local, no-cache or no-sandbox")
+                inputs = _keyword(action, "inputs")
+                for path, description in (
+                    (["pkg", "package_config"], "the package config"),
+                    (["pkg", "package_name"], "the package name"),
+                    (["pkg", "pub_srcs"], "the hub's package files (pub_srcs)"),
+                    (["pkg", "import_dill"], "the kernel it imports (import_dill)"),
+                    (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
+                    (["toolchain", "sdk_version"], "the toolchain's SDK identity"),
+                ):
+                    if not _contains_attr(inputs, path):
+                        self.fail("I", "test kernel worker inputs must declare {}".format(description))
+                if not _contains_attr(_keyword(action, "tools"), ["toolchain", "dart"]):
+                    self.fail("I", "test kernel worker must declare the toolchain's dart binary as a tool")
+
+        # Repository rules that capture host environment would key on it.
+        driver = self.tree("test_driver", "I")
+        if driver is not None and any(
+            (isinstance(node, ast.keyword) and node.arg == "environ")
+            or (isinstance(node, ast.Attribute) and node.attr in ("environ", "getenv"))
+            for node in ast.walk(driver)
+        ):
+            self.fail("I", "test_kernel_driver.bzl must not capture the host environment")
+
+    def check_j(self):
+        # A test runs with its declared env and env_inherit, and no other host state.
+        tree = self.tree("test", "J")
+        if tree is not None:
+            runs = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and _call_path(node) == ["RunEnvironmentInfo"]
+            ]
+            if len(runs) != 1:
+                self.fail("J", "flutter_test.bzl must declare exactly one RunEnvironmentInfo, on the launcher test")
+            else:
+                if _attr_path(_keyword(runs[0], "environment")) != ["ctx", "attr", "env"]:
+                    self.fail("J", "test environment must be exactly the declared env attribute")
+                if _attr_path(_keyword(runs[0], "inherited_environment")) != ["ctx", "attr", "env_inherit"]:
+                    self.fail("J", "inherited test environment must be exactly the declared env_inherit attribute")
+
+        host_variable = re.compile(r"\$\{?(?:HOME|PWD|USER|TMPDIR)\b")
+        host_path = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")
+        for name in ("test", "test_driver"):
+            tree = self.trees.get(name)
+            if tree is None:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.keyword) and node.arg == "use_default_shell_env":
+                    self.fail("J", "{} must not inherit the shell environment".format(FILES[name]))
+                text = _string(node)
+                if text is None:
+                    continue
+                if host_variable.search(text):
+                    self.fail("J", "{} must not expand a host variable (HOME, PWD, USER, TMPDIR)".format(FILES[name]))
+                if host_path.search(text):
+                    self.fail("J", "{} must not contain a host absolute path".format(FILES[name]))
+
+        # The test kernel's argv is part of its key, so it names no host path or variable.
+        defs = self.trees.get("defs")
+        if defs is not None:
+            for function_name in ("_test_kernel_driver_action", "_jit_kernel_action", "_dart_test_kernel_impl"):
+                function = _function(defs, function_name)
+                if function is None:
+                    continue
+                for node in ast.walk(function):
+                    text = _string(node)
+                    if text is not None and (host_path.search(text) or host_variable.search(text)):
+                        self.fail("J", "{} must not bake a host path or variable into its action".format(function_name))
+
 
 def _file_contract(name):
-    return {"repo": "A", "defs": "B", "android": "E", "plugins": "F", "ndk": "G"}[name]
+    return {"repo": "A", "defs": "B", "android": "E", "plugins": "F", "ndk": "G", "test": "I", "test_driver": "I"}[name]
 
 
 def _string(node):
@@ -865,7 +952,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures))
         return 1
-    print("OK: key portability contracts A-H hold")
+    print("OK: key portability contracts A-J hold")
     return 0
 
 
