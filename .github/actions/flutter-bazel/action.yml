@@ -35,12 +35,6 @@ inputs:
       disables the cache, which is what fork pull requests get.
     required: false
     default: ''
-  select-ndk:
-    description: >-
-      Install and select the pinned NDK. Set to false for jobs that need no
-      Android NDK.
-    required: false
-    default: 'true'
 
 runs:
   using: composite
@@ -144,7 +138,6 @@ runs:
     # when the image lacks it.
     - name: Select the NDK
       shell: bash
-      if: inputs.select-ndk == 'true'
       run: |
         set -euo pipefail
         ndk=28.2.13676358
