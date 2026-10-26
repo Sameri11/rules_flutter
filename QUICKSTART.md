@@ -1146,6 +1146,8 @@ arguments such as `data`, `dart_defines`, `env`, `env_inherit`, `size`, `timeout
 declared elsewhere to the suite. `srcs` replaces the glob; the macro fails at
 load time if `srcs` is empty or names a file outside the package.
 
+Host tests need no Android SDK, NDK, or ABIs. `flutter_app` runs them against `:test_assets`, a bundle built from the same declared assets for the host test platform, and `flutter_package(assets = ...)` overrides it. The test bundle carries no build-hook native outputs and no `NativeAssetsManifest.json`, so a test that loads those needs an override. A module that registers the Android NDK toolchains, as `examples/no_plugins/android` does, still needs `ANDROID_NDK_HOME` for any build, including its tests; a module without that registration builds its tests with neither.
+
 Files that need other settings are left out of `srcs` and declared with
 `flutter_test`, then passed through `tests`:
 
@@ -1254,6 +1256,7 @@ For a new app, `assets = []` is correct until real asset files exist. When
 `pubspec.yaml` and the asset files as declared inputs; run `flutter pub get` and
 commit `pubspec.lock` only when the edit also changes dependencies. Assets and
 native-asset manifest contents are part of the bundle that the APK packages.
+Host tests use the `:test_assets` bundle instead, which has none of them; see [Testing](#testing).
 
 ### One ABI, many ABIs, fat APKs, and per-ABI APKs
 

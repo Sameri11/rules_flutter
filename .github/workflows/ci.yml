@@ -209,6 +209,16 @@ jobs:
           set -o pipefail
           bazel test //... --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
+      # Host tests must not reach the Android SDK or NDK through any action input or environment.
+      - name: Host test closure has no Android SDK or NDK
+        if: matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app'
+        working-directory: ${{ matrix.example.directory }}
+        run: |
+          set -euo pipefail
+          bazel aquery 'deps(kind(".*_test rule", //...) except //android/...)' \
+            --output=jsonproto --lockfile_mode=error > "$RUNNER_TEMP/host_test_aquery.json"
+          python3 ../../tools/ci/host_test_closure.py "$RUNNER_TEMP/host_test_aquery.json"
+
       # The update target is manual, so bazel test never builds it. Building it
       # keeps its launcher compiling without writing goldens.
       - name: bazel build golden update target

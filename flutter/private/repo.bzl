@@ -136,6 +136,75 @@ def _sdk_package_names(ctx, root):
         names.append("sky_engine")
     return sorted(names)
 
+def _run(ctx, args):
+    result = ctx.execute(args)
+    if result.return_code != 0:
+        fail("{} failed:\n{}".format(" ".join(args), result.stderr))
+
+# flutter_tools' Dart packages, in their own repository so only the test-asset
+# builder fetches them. The SDK's package config names directories under the
+# pub cache of the machine that ran `flutter --version`, which no action may
+# read, so each package is copied and the generated config points at the copies.
+def _flutter_tools_packages_impl(ctx):
+    root = _resolve_flutter_root(ctx)
+
+    # A new SDK or a re-resolved closure must refetch the copies.
+    ctx.read("{}/bin/cache/flutter.version.json".format(root))
+    tool = "{}/packages/flutter_tools".format(root)
+    config_dir = "{}/.dart_tool".format(tool)
+    config = "{}/package_config.json".format(config_dir)
+    remedy = "Run `flutter pub get` in {}.".format(tool)
+    if not ctx.path(config).exists:
+        fail("flutter_tools package config missing at {}.\n{}".format(config, remedy))
+    packages = []
+    for package in json.decode(ctx.read(config))["packages"]:
+        name = package["name"]
+        package_uri = package.get("packageUri", "lib/").rstrip("/")
+        root_uri = package["rootUri"]
+        if root_uri.startswith("file://"):
+            source = root_uri[len("file://"):]
+        else:
+            source = "{}/{}".format(config_dir, root_uri)
+        if "%" in source:
+            fail("percent-encoded package root is not supported: {}".format(source))
+        if not ctx.path(source).exists:
+            fail("flutter_tools package {} is missing at {}.\n{}".format(name, source, remedy))
+        dest = "flutter_tools_packages/{}/{}".format(name, package_uri)
+        _run(ctx, ["mkdir", "-p", dest])
+        if ctx.path("{}/{}".format(source, package_uri)).exists:
+            _run(ctx, ["cp", "-RL", "{}/{}/.".format(source, package_uri), dest])
+        entry = {
+            "name": name,
+            "rootUri": "flutter_tools_packages/{}/".format(name),
+            "packageUri": package_uri + "/",
+        }
+        if "languageVersion" in package:
+            entry["languageVersion"] = package["languageVersion"]
+        packages.append(entry)
+    ctx.file(
+        "flutter_tools_package_config.json",
+        json.encode_indent({"configVersion": 2, "packages": packages}) + "\n",
+    )
+    ctx.file("BUILD.bazel", _FLUTTER_TOOLS_PACKAGES_BUILD)
+
+flutter_tools_packages = repository_rule(
+    implementation = _flutter_tools_packages_impl,
+    doc = "flutter_tools' Dart closure, copied from the local SDK for the test-asset builder.",
+    local = True,
+    environ = ["FLUTTER_ROOT", "PATH"],
+)
+
+_FLUTTER_TOOLS_PACKAGES_BUILD = """
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["flutter_tools_package_config.json"])
+
+filegroup(
+    name = "flutter_tools_packages",
+    srcs = glob(["flutter_tools_packages/**"], allow_empty = True),
+)
+"""
+
 def _flutter_sdk_impl(ctx):
     if not ctx.attr.version:
         fail("The root module must declare flutter.sdk(version = \"X.Y.Z\") to build Flutter targets.")
@@ -337,6 +406,8 @@ def _flutter_impl(ctx):
         name = "flutter_sdk",
         version = declared_version,
     )
+
+    flutter_tools_packages(name = "flutter_tools_packages")
 
     # Each artifact repository reads the version file through the SDK label.
     # The label dependency makes Bazel re-resolve these URLs with that SDK.

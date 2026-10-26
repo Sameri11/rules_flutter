@@ -1423,10 +1423,11 @@ def flutter_app(
     | target | what |
     | --- | --- |
     | `:pubspec` | the package name and version, read once from pubspec.yaml |
-    | `:app` | the package inputs `flutter_test(app = ...)` reads: pubspec, `lib/` sources, pub hub, `path_deps`, and `:assets` |
+    | `:app` | the package inputs `flutter_test(app = ...)` reads: pubspec, `lib/` sources, pub hub, `path_deps`, and `:test_assets` |
     | `:app_<abi>` | the AOT snapshot per ABI; release only |
     | `:app_jit_kernel` | the debug kernel, from flutter_aot_library; manual, shipped as `kernel_blob.bin` by the debug overlay |
     | `:assets` | the flutter_assets bundle, built for every ABI; no app Dart inputs, the same under every mode |
+    | `:test_assets` | the bundle host tests read, for flutter_tester's platform; no ABIs and no Android SDK. Override it with `flutter_package(assets = ...)` |
     | `:path_deps_check` | fails if a `path:` dependency is undeclared |
     | `:plugins_check` | fails if the committed Maven coordinates drifted |
     | `:plugins_update` | writes the generated Maven segment into the workspace |
@@ -1552,13 +1553,23 @@ def flutter_app(
         **kwargs
     )
 
+    _flutter_test_assets(
+        name = "test_assets",
+        assets = assets,
+        pubspec = ":pubspec",
+        package_config = project_package_config,
+        pub_srcs = [pub_all],
+        path_deps = path_deps,
+        **kwargs
+    )
+
     flutter_package(
         name = "app",
         pub = pub,
         pubspec = ":pubspec",
         srcs = srcs,
         path_deps = path_deps,
-        assets = ":assets",
+        assets = ":test_assets",
         **kwargs
     )
 
@@ -1658,18 +1669,17 @@ rm -rf "{dir}/native_assets"
         dir = _bundle_dir(out, abi, index),
     )
 
-def _flutter_assets_impl(ctx):
-    # The directory must be named flutter_assets: android_binary derives the
-    # in-APK path from the artifact path with assets_dir stripped, and Flutter
-    # requires the bundle at assets/flutter_assets/ at runtime.
-    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+def _stage_flutter_assets(ctx, toolchain, platform_env):
+    """Declares a flutter_assets bundle's inputs and stages them for flutter_tools.
 
-    toolchain = _flutter_toolchain(ctx)
-
-    package_graph = ctx.file.package_config.dirname + "/package_graph.json"
+    The Android bundle and the tester bundle read the same files, so both stage
+    them here. Returns the declared files, the manifest that lists them, and the
+    shell that stages them and leaves it in the project root with FLUTTER_ROOT
+    set. platform_env is shell that exports the platform's environment, if any.
+    """
 
     # Every file the bundle can read is staged and declared.
-    stage_manifest_files = (
+    files = (
         [
             ctx.file.package_config,
             ctx.attr.pubspec[FlutterPubspecInfo].src,
@@ -1684,7 +1694,7 @@ def _flutter_assets_impl(ctx):
     manifest = ctx.actions.declare_file(ctx.label.name + ".stage_manifest")
     ctx.actions.write(
         manifest,
-        "".join([f.path + "\n" for f in stage_manifest_files]),
+        "".join([f.path + "\n" for f in files]),
     )
 
     # Stage project inputs so flutter_tools writes transient state outside the
@@ -1699,56 +1709,41 @@ def _flutter_assets_impl(ctx):
     #
     # flutter_tools bookkeeping is nondeterministic, so remove it from the tree
     # artifact.
-    #
-    # Code assets belong in APK JNI libraries, not the asset tree. Packaging
-    # recipes install them under lib/<abi>/; discard flutter_tools' duplicate.
-    # NativeAssetsManifest.json is retained beside the bundle for runtime lookup.
     project_dir = "/".join([
         component
         for component in [ctx.label.workspace_root, ctx.label.package]
         if component
     ])
 
-    cmd = """set -euo pipefail
+    flutter_root = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{launcher}")"
+export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
+""".format(launcher = toolchain.flutter.path)
+
+    command = """set -euo pipefail
 EXECROOT="$PWD"
 export PATH="/usr/bin:/bin"
-export ANDROID_HOME="$(python3 -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' "$EXECROOT/{android_sdk}")"
-export ANDROID_SDK_ROOT="$ANDROID_HOME"
-export FLUTTER_ALREADY_LOCKED="true"
+{platform_env}export FLUTTER_ALREADY_LOCKED="true"
 # Refuse what this bundle does not model, before any flutter_tools work.
 python3 "$EXECROOT/{bundle_guard}" --pubspec "$EXECROOT/{pubspec}"
 STAGE="$(mktemp -d "${{TMPDIR:-/tmp}}/flutter_assets.XXXXXX")"
-trap 'rm -rf "$STAGE"' EXIT
+trap 'rm -rf "$STAGE" "$STAGE.tar"' EXIT
 # flutter_tools needs writable state; use a stage-local HOME so the host HOME
 # does not affect the action key.
 export HOME="$STAGE/home"
 mkdir -p "$HOME"
 
-tar -cf - -T "{manifest}" | (cd "$STAGE" && tar -xf -)
+# Archive to a file rather than a pipe, so the writer cannot fail when the
+# reader exits early.
+tar -cf "$STAGE.tar" -T "{manifest}"
+(cd "$STAGE" && tar -xf "$STAGE.tar")
+rm -f "$STAGE.tar"
 chmod -R u+w "$STAGE"
 {place_config}
-cd "$STAGE/{project_dir}"
-# flutter_tools takes the project directory as two levels above --target, so
-# the stub sits in its own directory. It is compiled only for record-use and
-# imports nothing.
-mkdir -p .flutter_bazel
-printf 'void main() {{}}\\n' > .flutter_bazel/stub.dart
-STUB=".flutter_bazel/stub.dart"
-mkdir -p "$STAGE/bundles"
-{flutter_tool}
-{bundles}
-# Keep the shell alive so its EXIT trap removes STAGE after the merger.
-python3 "$EXECROOT/{merger}" {merge_args}
+{flutter_root}cd "$STAGE/{project_dir}"
 """.format(
-        project_dir = project_dir,
+        platform_env = platform_env,
         bundle_guard = ctx.file._bundle_guard.path,
         pubspec = ctx.attr.pubspec[FlutterPubspecInfo].src.path,
-        flutter_tool = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{launcher}")"
-export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
-flutter_tool() {{
-    "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{snapshot}" "$@"
-}}""".format(launcher = toolchain.flutter.path, snapshot = toolchain.tools_snapshot.path),
-        android_sdk = ctx.file._android_sdk.path,
         manifest = manifest.path,
         place_config = (
             'mkdir -p "$STAGE/{d}.dart_tool" && cp "$EXECROOT/{c}" "$STAGE/{d}.dart_tool/package_config.json"\n' +
@@ -1756,8 +1751,43 @@ flutter_tool() {{
         ).format(
             d = project_dir + "/" if project_dir else "",
             c = ctx.file.package_config.path,
-            g = package_graph,
+            g = ctx.file.package_config.dirname + "/package_graph.json",
         ),
+        flutter_root = flutter_root,
+        project_dir = project_dir,
+    )
+    return struct(files = files, manifest = manifest, command = command)
+
+def _flutter_assets_impl(ctx):
+    # The directory must be named flutter_assets: android_binary derives the
+    # in-APK path from the artifact path with assets_dir stripped, and Flutter
+    # requires the bundle at assets/flutter_assets/ at runtime.
+    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+
+    toolchain = _flutter_toolchain(ctx)
+    android_env = """export ANDROID_HOME="$(python3 -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' "$EXECROOT/{android_sdk}")"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+""".format(android_sdk = ctx.file._android_sdk.path)
+    staged = _stage_flutter_assets(ctx, toolchain, android_env)
+
+    # Code assets belong in APK JNI libraries, not the asset tree. Packaging
+    # recipes install them under lib/<abi>/; discard flutter_tools' duplicate.
+    # NativeAssetsManifest.json is retained beside the bundle for runtime lookup.
+    cmd = staged.command + """# flutter_tools takes the project directory as two levels above --target, so
+# the stub sits in its own directory. It is compiled only for record-use and
+# imports nothing.
+mkdir -p .flutter_bazel
+printf 'void main() {{}}\\n' > .flutter_bazel/stub.dart
+STUB=".flutter_bazel/stub.dart"
+mkdir -p "$STAGE/bundles"
+flutter_tool() {{
+    "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{snapshot}" "$@"
+}}
+{bundles}
+# Keep the shell alive so its EXIT trap removes STAGE after the merger.
+python3 "$EXECROOT/{merger}" {merge_args}
+""".format(
+        snapshot = toolchain.tools_snapshot.path,
         merger = ctx.file._merger.path,
         bundles = "\n".join([_bundle_command(out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
         merge_args = " ".join([
@@ -1769,7 +1799,7 @@ flutter_tool() {{
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = stage_manifest_files + [manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk],
+            direct = staged.files + [staged.manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk],
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
@@ -1847,6 +1877,78 @@ bundle that started varying by architecture fails here rather than shipping.""",
         ),
         "_bundle_guard": attr.label(
             default = "//flutter/private:check_bundle_pubspec.py",
+            allow_single_file = True,
+        ),
+    },
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
+)
+
+def _flutter_test_assets_impl(ctx):
+    # Native build hooks do not run here, so the bundle carries no
+    # native-library outputs and no NativeAssetsManifest.json.
+    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+
+    toolchain = _flutter_toolchain(ctx)
+    staged = _stage_flutter_assets(ctx, toolchain, "")
+    cmd = staged.command + """"$EXECROOT/{dart}" "$EXECROOT/{builder}" "$EXECROOT/{out}"
+""".format(
+        dart = toolchain.dart.path,
+        builder = ctx.file._builder_dill.path,
+        out = out.path,
+    )
+
+    ctx.actions.run_shell(
+        command = cmd,
+        inputs = depset(
+            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.flutter, toolchain.dart, toolchain.dart_sdk_revision, toolchain.vm_platform_strong, ctx.file._bundle_guard, ctx.file._builder_dill],
+        ),
+        outputs = [out],
+        mnemonic = "FlutterTestAssets",
+        progress_message = "Bundling test assets %{label}",
+        execution_requirements = _ASSETS_EXEC,
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+_flutter_test_assets = rule(
+    implementation = _flutter_test_assets_impl,
+    doc = """The asset bundle host tests read, built for flutter_tester's platform.
+
+Takes the flutter_assets inputs (pubspec, package config, pub hub, declared assets,
+path dependencies), but no ABIs and no Android SDK. Built through flutter_tools'
+AssetBundle and writeBundle with TargetPlatform.tester, as `flutter test` builds it:
+`flutter build bundle` does not accept that platform.""",
+    attrs = {
+        "assets": attr.label_list(
+            allow_files = True,
+            doc = "Files declared under `assets:` in pubspec.yaml.",
+        ),
+        "pubspec": attr.label(
+            mandatory = True,
+            providers = [FlutterPubspecInfo],
+            doc = "A flutter_pubspec target. See flutter_assets.",
+        ),
+        "package_config": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The pub hub's `project_package_config.json`. See flutter_assets.",
+        ),
+        "pub_srcs": attr.label_list(
+            allow_files = True,
+            allow_empty = False,
+            mandatory = True,
+            doc = "The pub hub's `:all`. See flutter_assets.",
+        ),
+        "path_deps": attr.label_list(
+            allow_files = True,
+            doc = "Sources of `path:` dependencies. See flutter_assets.",
+        ),
+        "_bundle_guard": attr.label(
+            default = "//flutter/private:check_bundle_pubspec.py",
+            allow_single_file = True,
+        ),
+        "_builder_dill": attr.label(
+            default = "//flutter/private:tester_assets_dill",
             allow_single_file = True,
         ),
     },
