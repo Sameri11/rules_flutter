@@ -946,7 +946,7 @@ def _action_regions(name, tree):
             ):
                 command = _keyword(node, "command")
                 if isinstance(command, ast.Name):
-                    command = _named_value(function, command.id)
+                    command = _named_value(function, command.id) or _named_value(tree, command.id)
                 regions.extend((name, text) for text in _command_templates(command, tree))
     if name == "defs":
         command = _staged_command(tree)
