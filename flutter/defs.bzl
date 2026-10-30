@@ -40,6 +40,18 @@ load(
     _pub_path_deps_check = "pub_path_deps_check",
     _pub_plugins_check = "pub_plugins_check",
 )
+load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
+load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
+load(
+    "//flutter/private:core.bzl",
+    _FlutterArtifactInfo = "FlutterArtifactInfo",
+    _flutter_core = "flutter_core",
+)
+load(
+    "//flutter/private:native_files.bzl",
+    _flutter_native_files = "flutter_native_files",
+    _flutter_native_files_by_abi = "flutter_native_files_by_abi",
+)
 
 # Explicit assignments make the curated names exports of this module. Merely
 # importing names with load() does not re-export them to downstream BUILD files.
@@ -66,3 +78,15 @@ flutter_aot_library = _flutter_aot_library
 flutter_assets = _flutter_assets
 pub_path_deps_check = _pub_path_deps_check
 pub_plugins_check = _pub_plugins_check
+
+# The platform-composed artifact: one core per app, one android_inputs and
+# apk_check per Android binary.
+flutter_core = _flutter_core
+FlutterArtifactInfo = _FlutterArtifactInfo
+flutter_android_inputs = _flutter_android_inputs
+flutter_apk_check = _flutter_apk_check
+
+# Named by the hub BUILD files the plugin extension generates, which load them
+# across a repository boundary from this entrypoint.
+flutter_native_files = _flutter_native_files
+flutter_native_files_by_abi = _flutter_native_files_by_abi
