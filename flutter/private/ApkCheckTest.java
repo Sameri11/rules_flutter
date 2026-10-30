@@ -22,7 +22,8 @@ public class ApkCheckTest {
     fileAndArchiveFails();
     deflatedLibraryIsReported();
     missingAndStrayAreReported();
-    linkedLibraryIsDeclared();
+    sharedNativeFileIsOneEntry();
+    nativeAndArchiveNameFails();
     System.out.println("ApkCheckTest: all passed");
   }
 
@@ -91,24 +92,54 @@ public class ApkCheckTest {
         "missing and stray entries");
   }
 
-  // A library the binary links for a split is declared the way a Flutter library is: the
-  // spec holds it, and the APK's copy must match. A library neither set declares still fails.
-  private static void linkedLibraryIsDeclared() throws IOException {
-    byte[] declared = "declared".getBytes(StandardCharsets.UTF_8);
-    byte[] linked = "linked".getBytes(StandardCharsets.UTF_8);
-    byte[] stray = "stray".getBytes(StandardCharsets.UTF_8);
-    ApkCheck.Spec s = new ApkCheck.Spec();
-    s.mode = "release";
-    s.abis.add(ABI);
-    ApkCheck.addExpected(s, ABI, "libdeclared.so", new ApkCheck.Expected(crc(declared), "d.so", false), LABEL);
-    ApkCheck.addExpected(s, ABI, "libapk.so", new ApkCheck.Expected(crc(linked), "apk.so", false), LABEL);
-    List<String> bad = checkApk(s, entry("lib/" + ABI + "/libdeclared.so", declared, true),
-        entry("lib/" + ABI + "/libapk.so", linked, true),
-        entry("lib/" + ABI + "/libstray_probe.so", stray, true));
-    assertEquals(
-        Arrays.asList("lib/arm64-v8a/libstray_probe.so is not declared by the native inputs"),
-        bad,
-        "linked library declared, stray not");
+  // A spec read through parseSpec: an expect and a native record for one file are one entry,
+  // and a native record with a new basename adds its own.
+  private static void sharedNativeFileIsOneEntry() throws IOException {
+    Path dir = Files.createTempDirectory("apk_check_spec");
+    Path shared = file(dir, "libx.so", "shared");
+    Path linked = file(dir, "libnew.so", "linked");
+    Path spec = spec(dir,
+        "mode\trelease",
+        "abi\t" + ABI,
+        "expect\t" + ABI + "\tlibx.so\t" + shared,
+        "native\t" + ABI + "\tlibx.so\t" + shared,
+        "native\t" + ABI + "\tlibnew.so\t" + linked);
+    ApkCheck.Spec s = ApkCheck.parseSpec(spec, LABEL);
+    assertEquals(2, s.expect.get(ABI).size(), "shared basename is one entry");
+    assertEquals(shared.toString(), s.expect.get(ABI).get("libx.so").source, "shared basename source");
+  }
+
+  // A native record and an archive record may not name one basename: the library has two sources.
+  private static void nativeAndArchiveNameFails() throws IOException {
+    Path dir = Files.createTempDirectory("apk_check_spec");
+    Path native_ = file(dir, "libx.so", "native");
+    Path aar = dir.resolve("lib.zip");
+    try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(aar))) {
+      out.putNextEntry(new ZipEntry("lib/" + ABI + "/libx.so"));
+      out.write("archived".getBytes(StandardCharsets.UTF_8));
+      out.closeEntry();
+    }
+    Path spec = spec(dir,
+        "mode\trelease",
+        "abi\t" + ABI,
+        "native\t" + ABI + "\tlibx.so\t" + native_,
+        "archive\t" + ABI + "\t" + aar);
+    expectFailure(
+        "flutter_apk_check: //app:app: lib/arm64-v8a/libx.so is in " + native_ + " and in " + aar
+            + "; a library name must come from one source",
+        () -> ApkCheck.parseSpec(spec, LABEL));
+  }
+
+  private static Path file(Path dir, String name, String text) throws IOException {
+    Path p = dir.resolve(name);
+    Files.write(p, text.getBytes(StandardCharsets.UTF_8));
+    return p;
+  }
+
+  private static Path spec(Path dir, String... lines) throws IOException {
+    Path p = dir.resolve("spec.tsv");
+    Files.write(p, (String.join("\n", lines) + "\n").getBytes(StandardCharsets.UTF_8));
+    return p;
   }
 
   // One entry to write into a test APK: its name, bytes, and whether it is stored.

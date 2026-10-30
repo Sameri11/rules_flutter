@@ -125,7 +125,7 @@ public class ApkCheck {
     throw new CheckFailure(prefix(label, message));
   }
 
-  private static Spec parseSpec(Path file, String label) throws IOException {
+  static Spec parseSpec(Path file, String label) throws IOException {
     Spec s = new Spec();
     List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
     for (int i = 0; i < lines.size(); i++) {
