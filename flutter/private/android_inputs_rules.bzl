@@ -142,18 +142,6 @@ def _split_native_impl(ctx):
         ))
 
     info = ctx.attr.core[FlutterArtifactInfo]
-    if info.mode != mode:
-        fail("{}: the core artifact was built for mode={}, but this split is mode={}.".format(
-            ctx.label,
-            info.mode,
-            mode,
-        ))
-    if info.abi != abi:
-        fail("{}: this split builds {}, but the core artifact was built for {}.".format(
-            ctx.label,
-            abi,
-            info.abi,
-        ))
 
     libraries = []
     if info.libapp != None:
