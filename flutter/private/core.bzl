@@ -187,6 +187,7 @@ def flutter_core(
         dart_defines = {},
         dart_plugin_registrant = None,
         plugin_deps = None,
+        plugins = "@flutter_plugins",
         target_os = "android",
         **kwargs):
     """Declares an app's platform-neutral artifact as the target `<name>`.
@@ -205,6 +206,7 @@ def flutter_core(
       dart_defines: `-D` constants the kernel compiles with.
       dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
       plugin_deps: the committed Maven plugin file, checked against the hub.
+      plugins: the plugin hub the guards check against, e.g. "@flutter_plugins".
       target_os: OS the kernel is compiled for; must be "android".
       **kwargs: visibility and tags of `<name>`.
     """
@@ -299,7 +301,7 @@ def flutter_core(
         pub_plugins_check(
             name = "plugins_check",
             committed = plugin_deps,
-            expected = "@flutter_plugins//:plugin_deps.MODULE.bazel",
+            expected = plugins + "//:plugin_deps.MODULE.bazel",
         )
         guards.append(":plugins_check")
 
@@ -307,7 +309,7 @@ def flutter_core(
         pub_plugins_check(
             name = "dart_registrant_check",
             committed = dart_plugin_registrant,
-            expected = "@flutter_plugins//:dart_plugin_registrant.dart",
+            expected = plugins + "//:dart_plugin_registrant.dart",
         )
         guards.append(":dart_registrant_check")
 

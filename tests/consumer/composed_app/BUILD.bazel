@@ -32,6 +32,7 @@ flutter_core(
     # Sources of the path plugin, declared so pub_path_deps_check accepts it.
     path_deps = ["//:composed_plugin_srcs"],
     srcs = glob(["lib/**/*.dart"]),
+    plugins = "@composed_plugins",
 )
 
 flutter_android_inputs(
