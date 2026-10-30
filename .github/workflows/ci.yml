@@ -41,22 +41,37 @@ jobs:
           chmod +x "$RUNNER_TEMP/bazel"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      - name: buildifier
+      - name: buildifier (core)
         working-directory: rules_flutter_core
         run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //:buildifier_test
 
-      - name: Key portability contract
+      - name: buildifier (android)
+        working-directory: rules_flutter_android
+        run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //:buildifier_test
+
+      - name: Key portability contract (core)
         working-directory: rules_flutter_core
         run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/ci:key_portability_test
+
+      - name: Key portability contract (android)
+        working-directory: rules_flutter_android
+        run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/ci:key_portability_test
+
+      - name: Python selftests
+        run: |
+          set -euo pipefail
+          python3 tools/ci/example_hashes.py --selftest
+          python3 tools/ci/cache_stats.py --selftest
+          python3 tools/ci/committed_lock_guard.py --selftest
+          python3 tools/ci/matrix_gate.py --selftest
 
       - name: Committed lock portability guard
         run: |
           set -euo pipefail
-          python3 tools/ci/committed_lock_guard.py --selftest
           python3 tools/ci/committed_lock_guard.py
 
   core:
-    name: Root and consumer
+    name: Core module and consumers
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -74,19 +89,15 @@ jobs:
           cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
 
       - name: bazel test //...
+        working-directory: rules_flutter_core
         run: |
           set -o pipefail
-          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... 2>&1 | tee bazel_test_root.log
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... 2>&1 | tee ../bazel_test_core.log
 
       # An SDK change that moves a conformance case outcome fails here.
       - name: Conformance oracles recapture
+        working-directory: rules_flutter_core
         run: python3 tests/flutter_test_conformance/rebaseline.py --check
-
-      # The registrant parity goldens, recaptured from this Flutter SDK, must
-      # still match: a template change in flutter_tools fails here.
-      - name: Registrant parity recapture
-        working-directory: rules_flutter_android
-        run: python3 tests/registrant_parity/capture.py --check
 
       - name: Dynamic namespace rejection
         working-directory: tests/namespace_dynamic
@@ -188,7 +199,41 @@ jobs:
 
       - name: Report cache statistics
         if: always()
-        run: python3 tools/ci/cache_stats.py bazel_test_root.log bazel_consumer_api.log bazel_consumer_test.log
+        run: python3 tools/ci/cache_stats.py bazel_test_core.log bazel_consumer_api.log bazel_consumer_test.log
+
+  android:
+    name: Android module and registrant parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          cache-mode: ${{ env.BAZEL_CACHE_MODE }}
+          cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
+          cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
+          cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
+
+      - name: bazel test //...
+        working-directory: rules_flutter_android
+        run: |
+          set -o pipefail
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... 2>&1 | tee ../bazel_test_android.log
+
+      # The registrant parity goldens, recaptured from this Flutter SDK, must
+      # still match: a template change in flutter_tools fails here.
+      - name: Registrant parity recapture
+        working-directory: rules_flutter_android
+        run: python3 tests/registrant_parity/capture.py --check
+
+      - name: Report cache statistics
+        if: always()
+        run: python3 tools/ci/cache_stats.py bazel_test_android.log
 
   example:
     name: Example — ${{ matrix.os }} — ${{ matrix.example.description }}
@@ -325,9 +370,10 @@ jobs:
           cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
 
       - name: bazel test //tests/flutter_test_conformance/... and the test-kernel driver
+        working-directory: rules_flutter_core
         run: |
           set -o pipefail
-          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tests/flutter_test_conformance/... //flutter/private/test_kernel_driver/... //tests/test_kernel_driver/... 2>&1 | tee bazel_test_conformance.log
+          bazel test //tests/flutter_test_conformance/... //flutter/private/test_kernel_driver/... //tests/test_kernel_driver/... 2>&1 | tee ../bazel_test_conformance.log
 
       # A helper edit re-runs only the tests that read it, on the worker path.
       - name: Test suite helper edit re-runs importers only

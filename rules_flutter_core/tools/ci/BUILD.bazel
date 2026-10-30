@@ -1,5 +1,11 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 
+# The rules_flutter_android slice runs this script over its own files.
+exports_files(
+    ["key_portability_test.py"],
+    visibility = ["//visibility:public"],
+)
+
 genrule(
     name = "key_portability_check",
     srcs = [

@@ -2,7 +2,7 @@
 # Edits a helper read by one suite test, then a helper read by none, and counts
 # the executed test kernels and runs. The read list must re-run only the importer.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../../rules_flutter_core"
 
 pkg=//tests/flutter_test_conformance:scope_tests
 inside=tests/flutter_test_conformance/test/scope/support/only_inside.dart

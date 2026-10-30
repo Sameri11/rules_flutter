@@ -15,6 +15,8 @@ _CASES = (
     "no_plugins",
 )
 
+# The hub names are fixed in MODULE.bazel, so the extension reads nothing from module_ctx.
+# buildifier: disable=unused-variable
 def _registrant_parity_impl(module_ctx):
     for case in _CASES:
         hub = "@registrant_parity_" + case

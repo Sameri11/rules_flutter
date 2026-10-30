@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 COMMITTED_LOCKS = (
     "rules_flutter_core/MODULE.bazel.lock",
+    "rules_flutter_android/MODULE.bazel.lock",
     "examples/demo_app/MODULE.bazel.lock",
     "examples/local_plugin/MODULE.bazel.lock",
     "examples/no_plugins/MODULE.bazel.lock",
