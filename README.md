@@ -185,7 +185,7 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter_core//flutter:extensions.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
@@ -240,7 +240,7 @@ find android/app/src/main/kotlin -name MainActivity.kt
 Create `android/app/BUILD.bazel`, replacing `com.example.hello_bazel`, `hello_bazel`, and the `MainActivity.kt` path when your project differs:
 
 ```python
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])

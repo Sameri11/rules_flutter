@@ -12,7 +12,7 @@ The android_binary side takes the artifact through `FlutterArtifactInfo`. See
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_repo", "engine_libs_label")
+load("//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_repo", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
 
@@ -38,7 +38,7 @@ def _split_label(abi, mode):
     return Label("//flutter/private:split_{}_{}".format(abi.replace("-", "_"), mode))
 
 _ANDROID_SPLIT_OUTPUTS = [
-    # The options rules_android's android_split_transition writes. The kernel
+    # The options the Android split transition writes. The kernel
     # and the bundle must not inherit any of them from whichever split asked.
     "//command_line_option:Android configuration distinguisher",
     "//command_line_option:android_compiler",
@@ -46,7 +46,6 @@ _ANDROID_SPLIT_OUTPUTS = [
     "//command_line_option:compiler",
     "//command_line_option:dynamic_mode",
     "//command_line_option:platforms",
-    "@rules_android//rules/flags:bytecode_transformer",
 ]
 
 def _platform_neutral_transition_impl(_settings, _attr):
@@ -61,7 +60,6 @@ def _platform_neutral_transition_impl(_settings, _attr):
         "//command_line_option:compiler": None,
         "//command_line_option:dynamic_mode": "default",
         "//command_line_option:platforms": ["@platforms//host:host"],
-        "@rules_android//rules/flags:bytecode_transformer": "@rules_android//rules/flags:dummy",
     }
 
 _platform_neutral_transition = transition(
@@ -185,6 +183,7 @@ def flutter_core(
         srcs = [],
         path_deps = [],
         dart_defines = {},
+        native_build_env = None,
         dart_plugin_registrant = None,
         plugin_deps = None,
         plugins = "@flutter_plugins",
@@ -208,6 +207,7 @@ def flutter_core(
       plugin_deps: the committed Maven plugin file, checked against the hub.
       plugins: the plugin hub the guards check against, e.g. "@flutter_plugins"; required with plugin_deps.
       target_os: OS the kernel is compiled for; must be "android".
+      native_build_env: the native build environment for the asset bundle's flutter build action, or None. Android builds pass rules_flutter_android's `native_build_env` rule.
       **kwargs: visibility and tags of `<name>`.
     """
     if name == "pubspec":
@@ -262,6 +262,7 @@ def flutter_core(
     flutter_assets(
         name = name + "_assets",
         abis = list(ABIS),
+        native_build_env = native_build_env,
         assets = assets,
         pubspec = ":pubspec",
         package_config = project_package_config,

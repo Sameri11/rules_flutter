@@ -24,28 +24,14 @@ SCENARIOS = (
 )
 EM_AARCH64 = 183
 
-CORE_FORBIDDEN_MARKERS = (
-    "androidndk",
-    "rules_android_ndk",
+# Repository-name fragments that only the Android module's dependency graph materialises.
+ANDROID_REPO_MARKERS = (
     "android_gmaven",
     "android_tools",
-)
-
-# Measured transitive module registrations that remain.
-CORE_DEPENDENCY_REGISTRATIONS = (
-    "rules_android+",
-    "rules_android++android_sdk_repository_extension+androidsdk",
-    "rules_foreign_cc+",
-    "rules_foreign_cc++tools+cmake_3.31.8_toolchains",
-    "rules_foreign_cc++tools+ninja_1.13.0_toolchains",
-    "rules_foreign_cc++tools+rules_foreign_cc_framework_toolchains",
-    "rules_kotlin+",
-    "rules_kotlin++rules_kotlin_extensions+com_github_jetbrains_kotlin",
-)
-
-ANDROID_REPO_MARKERS = CORE_FORBIDDEN_MARKERS + (
+    "androidndk",
     "androidsdk",
     "rules_android",
+    "rules_flutter_android",
     "rules_foreign_cc",
     "rules_jvm_external",
     "rules_kotlin",
@@ -174,29 +160,16 @@ def run_core_isolation(workspace, output_base):
             environment=environment,
         )
         repositories = _external_repositories(output_base)
-        materialized = [
+        materialized = sorted(
             name.lstrip("@").removesuffix(".marker")
             for name in repositories
             if any(marker in name for marker in ANDROID_REPO_MARKERS)
-        ]
-        forbidden = sorted(
-            {
-                name
-                for name in materialized
-                if any(marker in name for marker in CORE_FORBIDDEN_MARKERS)
-            },
         )
-        if forbidden:
+        if materialized:
             raise ProbeError(
-                "the core Consumer materialised ruleset-registered Android "
-                "repositories: {}".format(forbidden),
-            )
-
-        unexpected = sorted(set(materialized) - set(CORE_DEPENDENCY_REGISTRATIONS))
-        if unexpected:
-            raise ProbeError(
-                "the core Consumer materialised unrecorded Android-adjacent "
-                "repositories: {}".format(unexpected),
+                "the core Consumer materialised Android-adjacent repositories: {}".format(
+                    materialized,
+                ),
             )
 
         return {
@@ -208,7 +181,7 @@ def run_core_isolation(workspace, output_base):
             },
             "pre_cutover": {
                 "source": (
-                    "prototype e485184^, fresh external core Consumer, host cc_binary, "
+                    "e485184^, fresh external core Consumer, host cc_binary, "
                     "both Android env vars unset"
                 ),
                 "android_repository_count": len(PRE_CUTOVER_ANDROID_REPOSITORIES),

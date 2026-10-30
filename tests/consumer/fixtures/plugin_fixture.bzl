@@ -36,6 +36,7 @@ def _namespace_plugin_metadata_impl(ctx):
                 {key: plugin[key] for key in ["name", "native_build", "dependencies", "dev_dependency"]}
                 for plugin in plugins
             ]},
+            "registrant": [],
         }),
     )
     ctx.file(

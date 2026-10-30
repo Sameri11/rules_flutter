@@ -6,7 +6,7 @@ own File, so the hub emits one `flutter_native_files` per ABI from the same
 contributions and keys them with `flutter_native_files_by_abi`.
 """
 
-load(":abis.bzl", "ABIS")
+load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
 load(":recipe.bzl", "FlutterNativeInfo")
 
 # Generated hub repositories load this file across a repository boundary.

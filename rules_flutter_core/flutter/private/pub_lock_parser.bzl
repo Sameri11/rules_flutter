@@ -411,3 +411,71 @@ def pubspec_flutter_plugin(pubspec_text):
         if value == "" or value.startswith("#"):
             stack.append((indent, key))
     return implements, found
+
+def pubspec_dart_plugin(pubspec_text, name):
+    """`flutter: plugin: platforms: android: dartPluginClass` of a pubspec.yaml.
+
+    Returns `(dartClass, dartFileName)`, or `(None, None)` when the plugin has no
+    Dart class. The file defaults to `<name>.dart`, as flutter_tools does.
+
+    This is indentation-driven rather than a real YAML parse, which is why it
+    checks the nesting it walks rather than scanning for a bare key: a
+    `dartPluginClass` under ios: must not be picked up for android.
+
+    Args:
+      pubspec_text: contents of the plugin's pubspec.yaml.
+      name: the plugin's package name.
+
+    Returns:
+      `(dartClass, dartFileName)`.
+    """
+    in_flutter = False
+    in_plugin = False
+    in_platforms = False
+    in_android = False
+    dart_class = None
+    dart_file = None
+
+    for raw in pubspec_text.split("\n"):
+        line = raw.split("#")[0].rstrip()
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        key = line.strip().split(":")[0].strip()
+        value = line.strip()[len(key) + 1:].strip() if ":" in line else ""
+
+        if indent == 0:
+            in_flutter = key == "flutter"
+            in_plugin = False
+            in_platforms = False
+            in_android = False
+            continue
+        if not in_flutter:
+            continue
+        if indent <= 2:
+            in_plugin = key == "plugin"
+            in_platforms = False
+            in_android = False
+            continue
+        if not in_plugin:
+            continue
+        if indent <= 4:
+            in_platforms = key == "platforms"
+            in_android = False
+            continue
+        if not in_platforms:
+            continue
+        if indent <= 6:
+            in_android = key == "android"
+            continue
+        if in_android:
+            if key == "dartPluginClass":
+                dart_class = value
+            elif key == "dartFileName":
+                dart_file = value
+
+    if dart_class == None:
+        return None, None
+
+    # flutter_tools defaults the file to <pluginName>.dart when unspecified.
+    return dart_class, (dart_file if dart_file else "{}.dart".format(name))

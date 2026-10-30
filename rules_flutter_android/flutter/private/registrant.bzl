@@ -185,3 +185,113 @@ def render_android_registrant(entries):
       The file content, byte for byte what flutter_tools writes.
     """
     return _HEADER + "".join([_ENTRY.format(name = n, cls = c) for n, c in entries]) + _FOOTER
+
+def package_roots(ctx):
+    """Every pub package in the resolution, name -> real directory.
+
+    The plugin metadata lists only what Gradle would see: packages with an
+    `android/` module. A recipe has to be able to name a package that is not a
+    plugin at all -- `sqlite3` ships a Dart build hook and no Android module, so
+    nothing in the metadata refers to it -- and the pub hub's `package_config.json`
+    resolves every package by name.
+
+    Its rootUris are relative to the hub directory, `<output_base>/external/<hub>`,
+    which is also where the execroot's `external/` sits. A root therefore lands in
+    a sibling repository (a hosted package, an SDK package) or climbs out of
+    `external/` into the workspace (the project and its path packages). An
+    absolute `file://` root means the config is one `flutter pub get` wrote, which
+    names host paths this rule refuses to read.
+
+    Args:
+      ctx: the pub hub's repository context; its package_config.json names every package.
+
+    Returns:
+      A dict from package name to the real directory of that package.
+    """
+    roots = {}
+    config_label = ctx.attr.package_config
+    config_path = ctx.path(config_label)
+    hub = config_path.dirname
+    output_base = hub.dirname.dirname
+    config = json.decode(ctx.read(config_path))
+    for package in config.get("packages", []):
+        name = package["name"]
+        root = package.get("rootUri", "")
+        if "://" in root:
+            fail(
+                ("plugins.project package_config {} has the absolute rootUri {} for package `{}`. " +
+                 "Pass the pub hub's config, `@<hub>//:package_config.json` from `pub.lock`, " +
+                 "not the `.dart_tool/package_config.json` `flutter pub get` writes.").format(
+                    config_label,
+                    root,
+                    name,
+                ),
+            )
+        segments = ["external", hub.basename]
+        for segment in root.split("/"):
+            if segment in ["", "."]:
+                continue
+            if segment == "..":
+                if not segments:
+                    fail("package_config {}: rootUri {} of `{}` leaves the execroot".format(config_label, root, name))
+                segments.pop()
+            else:
+                segments.append(segment)
+        base = output_base if segments and segments[0] == "external" else ctx.workspace_root
+        roots[name] = str(base.get_child(*segments))
+    return roots
+
+def write_android_registrants(rctx, metadata, roots):
+    """`android/<mode>/GeneratedPluginRegistrant.java`, as flutter_tools writes it.
+
+    Debug is what `flutter pub get` writes, release what a release `flutter build`
+    rewrites it to. Both come from the `registrant` section of plugins_metadata.json,
+    so the Android build reads nothing `flutter pub get` leaves behind.
+
+    Args:
+      rctx: the repository context.
+      metadata: the decoded plugins_metadata.json.
+      roots: package name -> root directory, from package_roots().
+    """
+    if "registrant" not in metadata:
+        fail("plugins_metadata.json has no `registrant` section. rules_flutter_core's pub hub writes it.")
+    plugins = [
+        android_plugin(p["name"], p["implements"], p["android"], p["direct"], p["dev"])
+        for p in metadata["registrant"]
+    ]
+
+    # Read once, only for plugins some mode registers -- flutter_tools reads the
+    # main class only then, and fails only then when it is missing.
+    v2 = {}
+    for mode in ["debug", "release"]:
+        entries = []
+        for plugin in resolve_android_plugins(plugins, release = mode == "release"):
+            # `hasMethodChannel`, then `_getSupportedEmbeddings` (nothing without a package).
+            if plugin["plugin_class"] == None or plugin["package"] == None:
+                continue
+            name = plugin["name"]
+            if name not in v2:
+                v2[name] = _supports_v2(rctx, roots, plugin)
+            if v2[name]:
+                entries.append((name, plugin["package"] + "." + plugin["plugin_class"]))
+        rctx.file(
+            "android/{}/GeneratedPluginRegistrant.java".format(mode),
+            render_android_registrant(entries),
+        )
+
+def _supports_v2(rctx, roots, plugin):
+    name = plugin["name"]
+    if name not in roots:
+        fail("Plugin `{}` is in plugins_metadata.json but has no entry in package_config.json.".format(name))
+    root = rctx.path(roots[name])
+    candidates = main_class_candidates(plugin["package"], plugin["plugin_class"])
+    for candidate in candidates:
+        path = root.get_child(*candidate.split("/"))
+        if path.exists:
+            return supports_embedding_v2(rctx.read(path))
+    fail(("The plugin `{}` doesn't have a main class defined in {}. This is likely due to an " +
+          "incorrect `package: {}` or `pluginClass` entry in the plugin's pubspec.yaml.").format(
+        name,
+        " or ".join([roots[name] + "/" + c for c in candidates]),
+        plugin["package"],
+    ))

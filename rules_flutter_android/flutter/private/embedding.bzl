@@ -20,14 +20,14 @@ regardless of version, so a plugin could silently downgrade an artifact declared
 here.
 """
 
+load("@rules_flutter_core//flutter:abis.bzl", "embedding_repo")
 load("@rules_java//java:defs.bzl", "java_import")
-load(":abis.bzl", "embedding_repo")
 load(":maven.bzl", "maven_label")
 
 visibility(["//flutter"])
 
-_MODE_DEBUG = Label("//flutter:mode_debug")
-_MODE_RELEASE = Label("//flutter:mode_release")
+_MODE_DEBUG = Label("@rules_flutter_core//flutter:mode_debug")
+_MODE_RELEASE = Label("@rules_flutter_core//flutter:mode_release")
 
 FLUTTER_EMBEDDING_ARTIFACTS = [
     "androidx.lifecycle:lifecycle-common:2.7.0",

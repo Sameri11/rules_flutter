@@ -10,7 +10,7 @@ mechanical exceptions need a label, and only those:
     resolves an implicit dependency against the package of the `.bzl` that
     defines the rule, so `//flutter:__subpackages__` is enough even though the
     rules are instantiated in another module's packages.
-  * The eleven `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
+  * The `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
     That guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
@@ -18,9 +18,8 @@ mechanical exceptions need a label, and only those:
 host-compatible registration points at the public static toolchain target.
 """
 
-load("@rules_java//java:defs.bzl", "java_binary", "java_test")
+load("//flutter:abis.bzl", "ABIS")
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
-load(":abis.bzl", "ABIS")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":toolchain.bzl", "flutter_toolchain")
 
@@ -30,8 +29,6 @@ exports_files(
     [
         "check_bundle_pubspec.py",
         "check_path_deps.py",
-        "check_native_assets.py",
-        "inject_version.py",
         "lib_entry.py",
         "merge_native_assets.py",
         "read_pubspec.py",
@@ -63,26 +60,15 @@ genrule(
 
 exports_files(
     [
-        "android.bzl",
-        "android_inputs_rules.bzl",
-        "apk_check.bzl",
         "core.bzl",
         "dart_registrant.bzl",
         "flutter_test.bzl",
-        "ndk.bzl",
-        "plugins.bzl",
+        "pub_lock.bzl",
         "repo.bzl",
         "rules.bzl",
         "test_kernel_driver.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
-)
-
-# The empty registrant flutter_android_binary compiles for a plugin-free app.
-# The macro expands in the consumer's package, so the file must be public.
-exports_files(
-    ["registrant/GeneratedPluginRegistrant.java"],
-    visibility = ["//visibility:public"],
 )
 
 flutter_toolchain(
@@ -123,16 +109,6 @@ expect_label_equal(
     ABIS["armeabi-v7a"].cpu_constraint,
     "@platforms//cpu:armv7",
     "armeabi-v7a cpu_constraint",
-)
-
-# Excluded from wildcard checks because resolving it requires @androidsdk.
-alias(
-    name = "_android_sdk_marker",
-    actual = select({
-        "@androidsdk//:has_androidsdk": "@androidsdk//:platform-tools/adb",
-        "//conditions:default": "@androidsdk//:sdk",
-    }),
-    tags = ["manual"],
 )
 
 # What the pub lock reader accepts and, as importantly, refuses.
@@ -200,25 +176,4 @@ config_setting(
     ],
     flag_values = {"//flutter:mode": "debug"},
     visibility = ["//visibility:public"],
-)
-
-# The APK native-payload checker. It runs on the rules_java JDK, so the check
-# action needs no host python3.
-java_binary(
-    name = "apk_check_tool",
-    srcs = ["ApkCheck.java"],
-    main_class = "ApkCheck",
-    visibility = ["//flutter:__subpackages__"],
-)
-
-# The checker's collision, deflate and missing/stray rules. main() asserts, so no
-# test framework is pulled in.
-java_test(
-    name = "apk_check_unit_test",
-    srcs = [
-        "ApkCheck.java",
-        "ApkCheckTest.java",
-    ],
-    main_class = "ApkCheckTest",
-    use_testrunner = False,
 )

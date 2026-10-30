@@ -6,6 +6,7 @@ load("@rules_flutter_core//flutter:defs.bzl", "flutter_app", "flutter_test", "fl
 package(default_visibility = ["//visibility:public"])
 
 flutter_app(
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     # A generated lib source, compiled with the package's other lib/ sources.
     srcs = glob(["lib/**/*.dart"]) + [":lib/gen_info.dart"],
     # Keep this list aligned with the Android target.

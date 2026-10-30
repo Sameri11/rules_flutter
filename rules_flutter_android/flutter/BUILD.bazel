@@ -1,0 +1,7 @@
+load("//flutter:native_build_env.bzl", "native_build_env")
+
+package(default_visibility = ["//visibility:public"])
+
+# The Android SDK a native build hook reads. Pass it as `native_build_env` to a
+# flutter_app or flutter_core whose plugins run native build hooks.
+native_build_env(name = "native_build_env")

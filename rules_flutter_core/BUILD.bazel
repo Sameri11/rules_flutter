@@ -1,6 +1,4 @@
 load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
-load("//flutter:defs.bzl", "flutter_assets_dir")
-load("//tools/ci:assertions.bzl", "expect_equal")
 
 # The root package exists so //:buildifier_test has a label in it to locate the
 # tree it should check. Nothing reads MODULE.bazel's contents through this
@@ -12,15 +10,6 @@ load("//tools/ci:assertions.bzl", "expect_equal")
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["MODULE.bazel"])
-
-# Asserted rather than merely called: a silently wrong prefix is the failure
-# this helper exists to prevent, and the root package is the case with no
-# separator. Checked here so the root case stays covered.
-expect_equal(
-    flutter_assets_dir(assets = ":assets"),
-    "assets",
-    "flutter_assets_dir in the root package",
-)
 
 _EXCLUDE_PATTERNS = [
     "./bazel-*",

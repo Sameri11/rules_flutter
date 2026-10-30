@@ -1,4 +1,4 @@
-# The pub hub's GeneratedPluginRegistrant.java against flutter_tools' own, per
+# The Android registrant each pub hub's metadata renders, against flutter_tools' own, per
 # case and mode. The goldens are recaptured with capture.py (see README.md); CI
 # runs `capture.py --check`, so a Flutter template change fails there rather
 # than silently here.
@@ -20,7 +20,7 @@ exports_files(glob(["*/app/pubspec.*"]))
     diff_test(
         name = "{}_{}_test".format(case, mode),
         file1 = "{}/expected/{}/GeneratedPluginRegistrant.java".format(case, mode),
-        file2 = "@registrant_parity_{}//:android/{}/GeneratedPluginRegistrant.java".format(case, mode),
+        file2 = "@registrant_parity_{}_android//:android/{}/GeneratedPluginRegistrant.java".format(case, mode),
     )
     for case in CASES
     for mode in [

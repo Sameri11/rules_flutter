@@ -37,12 +37,13 @@ load(
     "android_library",
 )
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
+load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "check_abis", "check_platform_abi", "engine_jar_label")
+load("@rules_flutter_core//flutter:defs.bzl", "FlutterPubspecInfo")
 load("@rules_java//java:defs.bzl", "JavaInfo", "java_import")
-load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MIN_SDK", "check_abis", "check_platform_abi", "engine_jar_label", "plugin_repo_target")
+load(":abis.bzl", "MIN_SDK", "bazel_platform", "plugin_repo_target")
 load(":archive.bzl", "ZIPPER_ATTRS", "deterministic_jar")
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
-load(":pubspec.bzl", "FlutterPubspecInfo")
 
 # `//flutter` holds the public facades. `flutter_assets_dir` is public through
 # `//flutter:defs.bzl`; it gives the assets prefix a bundle is placed under.
@@ -50,8 +51,8 @@ visibility([
     "//flutter",
 ])
 
-_MODE_DEBUG = Label("//flutter:mode_debug")
-_MODE_RELEASE = Label("//flutter:mode_release")
+_MODE_DEBUG = Label("@rules_flutter_core//flutter:mode_debug")
+_MODE_RELEASE = Label("@rules_flutter_core//flutter:mode_release")
 
 def _jni_lib_jar_impl(ctx):
     jar = ctx.actions.declare_file(ctx.label.name + ".jar")
@@ -206,7 +207,7 @@ def android_native_lib_jar(name, src, abi, **kwargs):
         name = name,
         src = src,
         abi = abi,
-        platform = ABIS[abi].bazel_platform,
+        platform = bazel_platform(abi),
         **kwargs
     )
 
@@ -334,7 +335,7 @@ def strip_native_libs(name, jar, abi, **kwargs):
         name = name,
         jar = jar,
         abi = abi,
-        platform = ABIS[abi].bazel_platform,
+        platform = bazel_platform(abi),
         **kwargs
     )
 
@@ -570,7 +571,7 @@ def _flutter_bundle_check_impl(ctx):
 
 # Pin release builds to `opt`; preserve explicitly non-fastbuild modes.
 def _pin_release_compilation_mode_impl(settings, _attr):
-    mode = settings["//flutter:mode"]
+    mode = settings["@rules_flutter_core//flutter:mode"]
     compilation_mode = str(settings["//command_line_option:compilation_mode"])
     if mode == "release" and compilation_mode == "fastbuild":
         compilation_mode = "opt"
@@ -579,7 +580,7 @@ def _pin_release_compilation_mode_impl(settings, _attr):
 _pin_release_compilation_mode = transition(
     implementation = _pin_release_compilation_mode_impl,
     inputs = [
-        "//flutter:mode",
+        "@rules_flutter_core//flutter:mode",
         "//command_line_option:compilation_mode",
     ],
     outputs = ["//command_line_option:compilation_mode"],
@@ -633,7 +634,7 @@ APK does not package.""",
             allow_single_file = True,
         ),
         "_mode": attr.label(
-            default = "//flutter:mode",
+            default = "@rules_flutter_core//flutter:mode",
             providers = [BuildSettingInfo],
         ),
     },
@@ -693,7 +694,7 @@ def _flutter_debug_assets_impl(ctx):
     # Named flutter_assets, as flutter_assets' own tree is: flutter_assets_dir
     # derives the in-APK path from the artifact path.
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
-    flutter = ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
+    flutter = ctx.toolchains["@rules_flutter_core//flutter/private:flutter_toolchain_type"].flutter
     ctx.actions.run_shell(
         command = _OVERLAY_COMMAND,
         arguments = [
@@ -729,7 +730,7 @@ files flutter_tools' debug bundle carries and the release bundle does not.""",
             doc = "The app's debug kernel, `<aot>_jit_kernel`, shipped as kernel_blob.bin.",
         ),
     },
-    toolchains = ["//flutter/private:flutter_toolchain_type"],
+    toolchains = ["@rules_flutter_core//flutter/private:flutter_toolchain_type"],
 )
 
 # The repository these rules generate for a project's plugins. Its name is

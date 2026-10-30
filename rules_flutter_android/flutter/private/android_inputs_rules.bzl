@@ -16,9 +16,9 @@ load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
+load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo")
 load("@rules_java//java:defs.bzl", "java_import")
-load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
-load(":core.bzl", "FlutterArtifactInfo")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
 
@@ -208,7 +208,7 @@ platform. The ABI comes from that platform.""",
                 doc = "The plugin repository's flutter_native_files_by_abi. None for an app without plugins.",
             ),
             "_mode": attr.label(
-                default = Label("//flutter:mode"),
+                default = Label("@rules_flutter_core//flutter:mode"),
                 providers = [BuildSettingInfo],
             ),
         },

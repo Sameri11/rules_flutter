@@ -4,6 +4,7 @@ module(
 )
 
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
 
 # The hub of the app's lock. Hub names are unique across modules.
 pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
@@ -14,7 +15,7 @@ pub.lock(
 use_repo(pub, "external_app_pub")
 
 # Report and ignore unmatched dependency recipes.
-plugins = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.package(
     name = "absent_package",
     bzl_file = "//:absent_package.bzl",

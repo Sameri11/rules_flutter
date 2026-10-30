@@ -10,6 +10,11 @@ local_path_override(
     module_name = "sameri11_rules_flutter_core",
     path = "../../rules_flutter_core",
 )
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../../rules_flutter_android",
+)
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")

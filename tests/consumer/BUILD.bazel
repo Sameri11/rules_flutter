@@ -5,14 +5,17 @@ All supported symbols load from @rules_flutter_core//flutter:defs.bzl.
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load(
-    "@rules_flutter_core//flutter:defs.bzl",
+    "@rules_flutter_android//flutter:defs.bzl",
     "android_native_lib_jar",
     "flutter_android_binary",
-    "flutter_aot_library",
-    "flutter_assets",
     "flutter_embedding_library",
     "flutter_native_contribution",
     "flutter_native_libs",
+)
+load(
+    "@rules_flutter_core//flutter:defs.bzl",
+    "flutter_aot_library",
+    "flutter_assets",
     "flutter_package",
     "flutter_pubspec",
     "flutter_test",
@@ -92,6 +95,7 @@ flutter_aot_library(
 )
 
 flutter_assets(
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     name = "assets",
     abis = ["arm64-v8a"],
     assets = [],

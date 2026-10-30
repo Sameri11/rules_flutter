@@ -28,7 +28,7 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS", "aot_target_compatible_with", "check_abis")
+load("//flutter:abis.bzl", "ABIS", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
 visibility(["//flutter"])
@@ -1396,6 +1396,7 @@ def flutter_app(
         plugin_deps = "//:plugin_deps.MODULE.bazel",
         target_os = "android",
         dart_defines = {},
+        native_build_env = None,
         **kwargs):
     """The Dart half of a Flutter app: one call, in the app's own package.
 
@@ -1476,6 +1477,8 @@ def flutter_app(
       dart_defines: `-D` constants both kernels compile with, e.g. {"FOO": "bar"}.
         Read only through `const String.fromEnvironment(...)`; see
         dart_aot_kernel.dart_defines.
+      native_build_env: a `native_build_env` target whose shell exports the native
+        build hooks run under, e.g. the Android SDK's. None exports nothing.
       **kwargs: visibility, tags -- passed to every target declared here.
     """
     check_abis(abis, "flutter_app")
@@ -1546,6 +1549,7 @@ def flutter_app(
         name = "assets",
         abis = abis,
         assets = assets,
+        native_build_env = native_build_env,
         pubspec = ":pubspec",
         package_config = project_package_config,
         pub_srcs = [pub_all],
@@ -1758,6 +1762,17 @@ chmod -R u+w "$STAGE"
     )
     return struct(files = files, manifest = manifest, command = command)
 
+# What a native build hook needs from its environment. `exports` is shell text run
+# before the hook; `files` are the inputs that text reads, so the action running it
+# must depend on them.
+FlutterNativeBuildEnvInfo = provider(
+    doc = "Shell exports and input files a native build environment provides.",
+    fields = {
+        "exports": "String: newline-terminated shell statements, or empty.",
+        "files": "depset of File: inputs the exports read.",
+    },
+)
+
 def _flutter_assets_impl(ctx):
     # The directory must be named flutter_assets: android_binary derives the
     # in-APK path from the artifact path with assets_dir stripped, and Flutter
@@ -1765,10 +1780,8 @@ def _flutter_assets_impl(ctx):
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
 
     toolchain = _flutter_toolchain(ctx)
-    android_env = """export ANDROID_HOME="$(python3 -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' "$EXECROOT/{android_sdk}")"
-export ANDROID_SDK_ROOT="$ANDROID_HOME"
-""".format(android_sdk = ctx.file._android_sdk.path)
-    staged = _stage_flutter_assets(ctx, toolchain, android_env)
+    build_env = ctx.attr.native_build_env[FlutterNativeBuildEnvInfo] if ctx.attr.native_build_env else None
+    staged = _stage_flutter_assets(ctx, toolchain, build_env.exports if build_env else "")
 
     # Code assets belong in APK JNI libraries, not the asset tree. Packaging
     # recipes install them under lib/<abi>/; discard flutter_tools' duplicate.
@@ -1799,7 +1812,8 @@ python3 "$EXECROOT/{merger}" {merge_args}
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = staged.files + [staged.manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot, ctx.file._android_sdk],
+            direct = staged.files + [staged.manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot],
+            transitive = [build_env.files] if build_env else [],
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
@@ -1866,10 +1880,12 @@ exactly one file it produces -- NativeAssetsManifest.json -- is keyed by
 architecture. The manifests are merged and everything else is compared, so a
 bundle that started varying by architecture fails here rather than shipping.""",
         ),
-        "_android_sdk": attr.label(
-            default = "//flutter/private:_android_sdk_marker",
-            allow_single_file = True,
-            cfg = "exec",
+        "native_build_env": attr.label(
+            providers = [FlutterNativeBuildEnvInfo],
+            doc = """The native build environment: shell exports and the input files they read,
+provided by a native build environment rule. Android builds pass the rule from
+rules_flutter_android so that native build hooks find the Android SDK. Omit it for a
+build that has no Android SDK.""",
         ),
         "_merger": attr.label(
             default = "//flutter/private:merge_native_assets.py",

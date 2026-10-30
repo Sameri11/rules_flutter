@@ -85,6 +85,7 @@ jobs:
       # The registrant parity goldens, recaptured from this Flutter SDK, must
       # still match: a template change in flutter_tools fails here.
       - name: Registrant parity recapture
+        working-directory: rules_flutter_android
         run: python3 tests/registrant_parity/capture.py --check
 
       - name: Dynamic namespace rejection

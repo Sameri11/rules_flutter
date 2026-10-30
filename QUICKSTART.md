@@ -316,7 +316,7 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter_core//flutter:extensions.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
@@ -399,7 +399,7 @@ Create `android/app/BUILD.bazel`, replacing the application ID and Kotlin source
 path with the ones Flutter generated for your app:
 
 ```python
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -562,7 +562,7 @@ proxy and import, then add the plugin extension and generated segment:
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 use_repo(maven, "flutter_maven")
 
-plugins = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a", "x86_64"],
     embedding = "//android/app:flutter_embedding",
@@ -784,14 +784,14 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter_core//flutter:extensions.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 use_repo(maven, "flutter_maven")
 
-plugins = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//packages/host_app/android/app:flutter_embedding",
@@ -1035,7 +1035,7 @@ the consumer's declared repository while the recipe file is loaded.
 A concise arm64 `rive_native` recipe is:
 
 ```python
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_native_contribution")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_native_contribution")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 _LIBRARIES = {
@@ -1073,7 +1073,7 @@ Flutter's native-assets manifest uses, then creates the empty conventional
 package target:
 
 ```python
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_native_contribution")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_native_contribution")
 
 _LIBRARIES = {
     "arm64-v8a": Label("@libsqlite3_android_arm64_v8a//file"),

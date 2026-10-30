@@ -1,7 +1,7 @@
 """One table mapping an Android ABI to every name the build needs for it.
 
 The same architecture is spelled differently by the NDK, by `flutter build
-bundle`, by the engine cache, by Maven, by rules_android's platforms and by the
+bundle`, by the engine cache, by Maven and by the
 native-assets manifest. **The ABI name is the public spelling** -- it is what
 appears in the APK and what a consumer writes; the rest are derived here and
 never typed by hand.
@@ -15,14 +15,14 @@ there is no `gen_snapshot` to pair with an x86 library however many a package
 publishes.
 """
 
-visibility(["//flutter"])
+visibility("public")
 
 MODES = ["release", "debug"]
 
 # Modes that require gen_snapshot.
 AOT_MODES = ["release"]
 
-def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platform, cpu_constraint, snapshot_flags = []):
+def _abi(target_platform, engine_dir, maven_artifact, manifest_key, cpu_constraint, snapshot_flags = []):
     return struct(
         # `flutter build bundle --target-platform`.
         target_platform = target_platform,
@@ -31,9 +31,6 @@ def _abi(target_platform, engine_dir, maven_artifact, manifest_key, bazel_platfo
         # The key the engine reads in NativeAssetsManifest.json. Baked in at
         # engine-compile time, so it is the engine that decides, not the build.
         manifest_key = manifest_key,
-        # rules_android's platform, which selects the NDK cc_toolchain that
-        # cross-strips this ABI's libraries.
-        bazel_platform = bazel_platform,
         # CPU constraint used to identify the ABI after a platform transition.
         cpu_constraint = cpu_constraint,
         # Extra gen_snapshot flags. Empty for everything but armv7.
@@ -49,7 +46,6 @@ ABIS = {
             "debug": "arm64_v8a_debug",
         },
         manifest_key = "android_arm64",
-        bazel_platform = "@rules_android//:arm64-v8a",
         cpu_constraint = Label("@platforms//cpu:arm64"),
     ),
     "x86_64": _abi(
@@ -60,7 +56,6 @@ ABIS = {
             "debug": "x86_64_debug",
         },
         manifest_key = "android_x64",
-        bazel_platform = "@rules_android//:x86_64",
         cpu_constraint = Label("@platforms//cpu:x86_64"),
     ),
     "armeabi-v7a": _abi(
@@ -71,7 +66,6 @@ ABIS = {
             "debug": "armeabi_v7a_debug",
         },
         manifest_key = "android_arm",
-        bazel_platform = "@rules_android//:armeabi-v7a",
         cpu_constraint = Label("@platforms//cpu:armv7"),
         # The only ABI needing flags, and the reason they live in a table rather
         # than a rule body. flutter_tools passes both for armv7 (softfp, and no
@@ -95,24 +89,13 @@ _UNSUPPORTED_ANDROID_CPU_CONSTRAINTS = {
 def abi_cpu_constraints():
     """Build and validate the CPU-constraint-to-ABI mapping.
 
-    Checks platform target names against ABI keys and rejects overlap with
-    unsupported CPU constraints. Duplicate ABI constraints are checked after the
-    platform transition.
+    Rejects a CPU constraint that names both an ABI and an unsupported CPU.
 
     Returns:
       A dict from CPU constraint Label to ABI or unsupported-CPU name.
     """
     constraints = {}
     for abi, entry in ABIS.items():
-        platform_name = Label(entry.bazel_platform).name
-        if platform_name != abi:
-            fail((
-                "abis.bzl: ABIS['{}'].bazel_platform names platform '{}', not " +
-                "'{}'. rules_android packages native libraries under " +
-                "lib/<platform name>/ (native_deps.bzl:49-51), so a mismatched " +
-                "name would place this ABI's libraries under another ABI's " +
-                "directory."
-            ).format(abi, platform_name, abi))
         constraints[entry.cpu_constraint] = abi
     for constraint, name in _UNSUPPORTED_ANDROID_CPU_CONSTRAINTS.items():
         if constraint in constraints:
@@ -179,15 +162,14 @@ def check_platform_abi(ctx):
     if found != ctx.attr.abi:
         fail((
             "{}: abi = '{}' but target platform '{}' carries the CPU " +
-            "constraint for '{}'. ABIS['{}'].bazel_platform = '{}' and " +
-            ".cpu_constraint = {} -- one of the two names the wrong ABI."
+            "constraint for '{}'. ABIS['{}'].cpu_constraint = {} names the " +
+            "wrong ABI."
         ).format(
             ctx.label,
             ctx.attr.abi,
             ctx.attr.platform,
             found,
             ctx.attr.abi,
-            ABIS[ctx.attr.abi].bazel_platform,
             ABIS[ctx.attr.abi].cpu_constraint,
         ))
     return found
@@ -269,44 +251,6 @@ def aot_target_compatible_with():
     for mode in AOT_MODES:
         conditions[Label("//flutter:mode_" + mode)] = []
     return select(conditions)
-
-# The API level the whole Android build targets: the `minSdkVersion` an APK
-# declares, and the `ANDROID_PLATFORM` a plugin's CMake build compiles against.
-# One constant because the two have to agree, and they are read from two
-# different files -- android.bzl for the manifest, plugins.bzl for CMake.
-#
-# What an APK finally declares can be *higher*: rules_android applies its own
-# min-SDK floor during resource processing (`bump_min_sdk`, currently 23) and
-# clamps `manifest_values` against it, so this is the floor these rules ask for,
-# not the floor that ships. See docs_internal/api-surface.md.
-MIN_SDK = 21
-
-# The generated plugin repository's per-slice aggregates. plugins.bzl emits these
-# target names and android.bzl derives labels for them, so the contract lives
-# here rather than as a string that happens to match in two files.
-_PLUGIN_REPO_TARGETS = {
-    # Every .so a package *recipe* contributed for one ABI.
-    "recipe_libraries": "native_libs_{}",
-    # Every .so the native *plugins* built for one ABI.
-    "plugin_native_libraries": "plugin_libs_{}",
-}
-
-def plugin_repo_target(kind, abi):
-    """Target name in @flutter_plugins holding one ABI's libraries.
-
-    Args:
-      kind: a key of _PLUGIN_REPO_TARGETS -- the contribution kind it feeds.
-      abi: the ABI whose aggregate is wanted.
-
-    Returns:
-      A bare target name, without a repository or package.
-    """
-    if kind not in _PLUGIN_REPO_TARGETS:
-        fail("plugin_repo_target: unknown kind '{}'. Known: {}.".format(
-            kind,
-            sorted(_PLUGIN_REPO_TARGETS),
-        ))
-    return _PLUGIN_REPO_TARGETS[kind].format(abi)
 
 def check_abis(abis, where):
     """Fails with the supported set listed, rather than a KeyError.

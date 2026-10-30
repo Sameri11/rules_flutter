@@ -1,6 +1,6 @@
 """Provider and implementation target for the host Flutter SDK toolchain."""
 
-load(":abis.bzl", "ABIS", "AOT_MODES")
+load("//flutter:abis.bzl", "ABIS", "AOT_MODES")
 
 visibility(["//flutter"])
 
