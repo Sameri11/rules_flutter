@@ -221,6 +221,21 @@ def engine_jar_label(abi, mode):
     """
     return Label("@{}//jar:file".format(engine_repo(abi, mode)))
 
+def engine_libs_label(abi, mode):
+    """The native libraries extracted from one ABI's engine jar in one mode.
+
+    Same repository-mapping reason as engine_jar_label: resolve here, not in
+    the caller's package.
+
+    Args:
+      abi: an Android ABI name, a key of ABIS.
+      mode: "release" or "debug".
+
+    Returns:
+      A Label for the glob of the jar's lib/**/*.so files.
+    """
+    return Label("@{}//jar:libs".format(engine_repo(abi, mode)))
+
 def embedding_repo(mode):
     """Name of the repository holding the Java embedding jar for one mode.
 
