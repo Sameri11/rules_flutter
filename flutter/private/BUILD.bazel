@@ -144,42 +144,60 @@ pub_lock_parser_test_suite(name = "pub_lock_parser_test")
 # Spelled out: Bazel does not allow `for` in BUILD files.
 config_setting(
     name = "split_arm64_v8a_release",
-    constraint_values = ["@platforms//os:android", "@platforms//cpu:arm64"],
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
     flag_values = {"//flutter:mode": "release"},
     visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "split_arm64_v8a_debug",
-    constraint_values = ["@platforms//os:android", "@platforms//cpu:arm64"],
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
     flag_values = {"//flutter:mode": "debug"},
     visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "split_x86_64_release",
-    constraint_values = ["@platforms//os:android", "@platforms//cpu:x86_64"],
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
     flag_values = {"//flutter:mode": "release"},
     visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "split_x86_64_debug",
-    constraint_values = ["@platforms//os:android", "@platforms//cpu:x86_64"],
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
     flag_values = {"//flutter:mode": "debug"},
     visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "split_armeabi_v7a_release",
-    constraint_values = ["@platforms//os:android", "@platforms//cpu:armv7"],
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
     flag_values = {"//flutter:mode": "release"},
     visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "split_armeabi_v7a_debug",
-    constraint_values = ["@platforms//os:android", "@platforms//cpu:armv7"],
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
     flag_values = {"//flutter:mode": "debug"},
     visibility = ["//visibility:public"],
 )

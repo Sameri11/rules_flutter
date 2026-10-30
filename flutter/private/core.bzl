@@ -12,7 +12,7 @@ The android_binary side takes the artifact through `FlutterArtifactInfo`. See
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABI_PLATFORM_ATTRS", "ABIS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_repo", "engine_libs_label")
+load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_repo", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
 

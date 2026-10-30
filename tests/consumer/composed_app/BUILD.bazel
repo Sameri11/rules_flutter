@@ -27,12 +27,12 @@ exports_files(["pubspec.lock"])
 
 flutter_core(
     name = "core",
+    srcs = glob(["lib/**/*.dart"]),
     assets = ["assets/composed-marker.txt"],
-    pub = "@composed_pub",
     # Sources of the path plugin, declared so pub_path_deps_check accepts it.
     path_deps = ["//:composed_plugin_srcs"],
-    srcs = glob(["lib/**/*.dart"]),
     plugins = "@composed_plugins",
+    pub = "@composed_pub",
 )
 
 flutter_android_inputs(
@@ -62,8 +62,8 @@ cc_binary(
 # The jar pins the platform, so the library is arm64 whatever split reaches it.
 android_native_lib_jar(
     name = "aar_native_jar",
-    abi = "arm64-v8a",
     src = [":libaar_native.so"],
+    abi = "arm64-v8a",
 )
 
 # The aar is a zip built with a fixed entry order and timestamps, so the same
@@ -118,16 +118,16 @@ android_binary(
     name = "apk",
     assets = [":inputs_bundle"],
     assets_dir = flutter_assets_dir(assets = ":inputs_bundle"),
-    deps = [
-        ":composed_aar",
-        ":inputs",
-        ":composed_jni",
-    ],
     manifest = ":apk_manifest",
     manifest_values = {
         "applicationId": "com.example.composed_app",
     },
     nocompress_extensions = [".so"],
+    deps = [
+        ":composed_aar",
+        ":composed_jni",
+        ":inputs",
+    ],
 )
 
 flutter_apk_check(

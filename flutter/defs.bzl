@@ -17,6 +17,13 @@ load(
     _flutter_android_manifest = "flutter_android_manifest",
     _flutter_assets_dir = "flutter_assets_dir",
 )
+load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
+load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
+load(
+    "//flutter/private:core.bzl",
+    _FlutterArtifactInfo = "FlutterArtifactInfo",
+    _flutter_core = "flutter_core",
+)
 load(
     "//flutter/private:embedding.bzl",
     _flutter_embedding_library = "flutter_embedding_library",
@@ -41,13 +48,6 @@ load(
     _flutter_package = "flutter_package",
     _pub_path_deps_check = "pub_path_deps_check",
     _pub_plugins_check = "pub_plugins_check",
-)
-load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
-load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
-load(
-    "//flutter/private:core.bzl",
-    _FlutterArtifactInfo = "FlutterArtifactInfo",
-    _flutter_core = "flutter_core",
 )
 
 # Explicit assignments make the curated names exports of this module. Merely

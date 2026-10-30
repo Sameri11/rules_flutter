@@ -7,8 +7,8 @@ files), the libraries the android_binary links for that split, plus the lib/<abi
 entries of the AARs and library archives the android_binary packages for that split.
 """
 
-load("@rules_android//rules:android_split_transition.bzl", "android_split_transition")
 load("@rules_android//providers:providers.bzl", "AndroidBinaryNativeLibsInfo")
+load("@rules_android//rules:android_split_transition.bzl", "android_split_transition")
 load(":abis.bzl", "ABIS")
 load(":android_inputs_rules.bzl", "FlutterSplitNativeInfo")
 

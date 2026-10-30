@@ -29,6 +29,6 @@ pub.lock(
     name = "composed_pub",
     lock = "//composed_app:pubspec.lock",
 )
-use_repo(pub, "pub", "standard_layout_pub", "composed_pub")
+use_repo(pub, "composed_pub", "pub", "standard_layout_pub")
 
 include("//android:config.MODULE.bazel")

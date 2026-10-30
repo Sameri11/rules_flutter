@@ -17,7 +17,7 @@ load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolch
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_java//java:defs.bzl", "java_import")
-load(":abis.bzl", "ABI_PLATFORM_ATTRS", "ABIS", "abi_from_platform")
+load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
 load(":core.bzl", "FlutterArtifactInfo")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
