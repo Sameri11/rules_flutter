@@ -29,6 +29,7 @@ import java.util.zip.ZipFile;
  *   abi     ABI                            every ABI the spec covers
  *   expect  ABI BASENAME PATH              lib/ABI/BASENAME required; CRC-32 read from the file
  *   archive ABI PATH                       lib/ABI/*.so of an AAR or library archive; CRC-32 from the archive
+ *   native  ABI BASENAME PATH              a library the binary links for the split; CRC-32 read from the file
  */
 public class ApkCheck {
   private static final String LIB = "lib/";
@@ -51,6 +52,7 @@ public class ApkCheck {
     final Set<String> abis = new TreeSet<>();
     final Map<String, Map<String, Expected>> expect = new TreeMap<>();
     final List<String[]> archives = new ArrayList<>();
+    final List<String[]> natives = new ArrayList<>();
   }
 
   // A failed check. The message is the full line the build prints.
@@ -156,6 +158,10 @@ public class ApkCheck {
           arity(f, 3, label, where);
           s.archives.add(new String[] {f[1], f[2]});
           break;
+        case "native":
+          arity(f, 4, label, where);
+          s.natives.add(new String[] {f[1], f[2], f[3]});
+          break;
         default:
           fail(label, where + ": unknown record " + f[0]);
       }
@@ -169,6 +175,10 @@ public class ApkCheck {
     for (String[] a : s.archives) {
       requireDeclared(s, a[0], label);
     }
+    for (String[] n : s.natives) {
+      requireDeclared(s, n[0], label);
+    }
+    addNatives(s, label);
     addArchives(s, label);
     return s;
   }
@@ -207,6 +217,13 @@ public class ApkCheck {
     }
     fail(label, name + " is in " + prev.source + " and in " + e.source
         + "; a library name must come from one source");
+  }
+
+  // The libraries the binary links for each split, read by CRC-32 like the Flutter files.
+  private static void addNatives(Spec s, String label) throws IOException {
+    for (String[] n : s.natives) {
+      addExpected(s, n[0], n[1], new Expected(fileCrc(n[2]), n[2], false), label);
+    }
   }
 
   // Adds each archive's lib/<abi>/ entries with the CRC-32 the archive records.

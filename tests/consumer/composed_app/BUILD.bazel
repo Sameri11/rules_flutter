@@ -1,12 +1,13 @@
 """A composed app: one flutter_core artifact packaged through flutter_android_inputs.
 
-The Android inputs come from two places: an arm64-only AAR, which also carries the
-app's JNI library, and flutter_android_inputs over the composed_plugins hub. Both reach the APK
-through the android_binary deps, so the apk check sees all of them.
+The Android inputs come from two places: an arm64-only AAR, and flutter_android_inputs
+over the composed_plugins hub. The app's JNI library is linked into the binary. Each
+reaches the APK through the android_binary deps, so the apk check sees all of them.
 """
 
 load("@rules_android//rules:rules.bzl", "aar_import", "android_binary")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(
     "@rules_flutter//flutter:defs.bzl",
     "android_native_lib_jar",
@@ -69,7 +70,6 @@ genrule(
     srcs = [
         "aar/AndroidManifest.xml",
         ":aar_native_jar",
-        ":composed_jni_jar",
         ":composed_aar_classes_jar",
     ],
     outs = ["composed_aar.aar"],
@@ -81,11 +81,10 @@ mkdir -p "$$stage/jni/arm64-v8a"
 cp "$(location aar/AndroidManifest.xml)" "$$stage/AndroidManifest.xml"
 cp "$(location :composed_aar_classes_jar)" "$$stage/classes.jar"
 unzip -p "$(location :aar_native_jar)" lib/arm64-v8a/libaar_native.so > "$$stage/jni/arm64-v8a/libaar_native.so"
-unzip -p "$(location :composed_jni_jar)" lib/arm64-v8a/libcomposed_jni.so > "$$stage/jni/arm64-v8a/libcomposed_jni.so"
-chmod 644 "$$stage/AndroidManifest.xml" "$$stage/classes.jar" "$$stage/jni/arm64-v8a/libaar_native.so" "$$stage/jni/arm64-v8a/libcomposed_jni.so"
+chmod 644 "$$stage/AndroidManifest.xml" "$$stage/classes.jar" "$$stage/jni/arm64-v8a/libaar_native.so"
 find "$$stage" -exec touch -t 198001010000 {} +
 cd "$$stage"
-zip -X -D -q "$$out" AndroidManifest.xml classes.jar jni/arm64-v8a/libaar_native.so jni/arm64-v8a/libcomposed_jni.so
+zip -X -D -q "$$out" AndroidManifest.xml classes.jar jni/arm64-v8a/libaar_native.so
 """,
 )
 
@@ -94,19 +93,13 @@ aar_import(
     aar = ":composed_aar.aar",
 )
 
-# The app's own JNI library. It is packed into the AAR, not linked into the APK:
-# flutter_apk_check treats a linked shared library as undeclared, and accepts
-# archive entries.
-cc_binary(
-    name = "libcomposed_jni.so",
+# The app's own JNI library. android_binary links it into the APK's lib<apk>.so, which
+# the apk check accepts as a native of the binary. alwayslink keeps the JNI entry points,
+# which only the VM and the plugin reference.
+cc_library(
+    name = "composed_jni",
     srcs = ["native/composed_jni.cc"],
-    linkshared = True,
-)
-
-android_native_lib_jar(
-    name = "composed_jni_jar",
-    abi = "arm64-v8a",
-    src = [":libcomposed_jni.so"],
+    alwayslink = True,
 )
 
 # The bundle is the core's `_assets_bundle` tree, named by that target's package
@@ -118,6 +111,7 @@ android_binary(
     deps = [
         ":composed_aar",
         ":inputs",
+        ":composed_jni",
     ],
     manifest = "AndroidManifest.xml",
     manifest_values = {

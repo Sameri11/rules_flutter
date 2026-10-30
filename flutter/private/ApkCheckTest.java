@@ -22,7 +22,7 @@ public class ApkCheckTest {
     fileAndArchiveFails();
     deflatedLibraryIsReported();
     missingAndStrayAreReported();
-    linkedLibraryIsNotDeclared();
+    linkedLibraryIsDeclared();
     System.out.println("ApkCheckTest: all passed");
   }
 
@@ -91,21 +91,24 @@ public class ApkCheckTest {
         "missing and stray entries");
   }
 
-  // A library linked into a split's CcInfo is not a declared input: the spec holds only
-  // the split's FlutterSplitNativeInfo files, so the APK's copy is stray.
-  private static void linkedLibraryIsNotDeclared() throws IOException {
+  // A library the binary links for a split is declared the way a Flutter library is: the
+  // spec holds it, and the APK's copy must match. A library neither set declares still fails.
+  private static void linkedLibraryIsDeclared() throws IOException {
     byte[] declared = "declared".getBytes(StandardCharsets.UTF_8);
     byte[] linked = "linked".getBytes(StandardCharsets.UTF_8);
+    byte[] stray = "stray".getBytes(StandardCharsets.UTF_8);
     ApkCheck.Spec s = new ApkCheck.Spec();
     s.mode = "release";
     s.abis.add(ABI);
     ApkCheck.addExpected(s, ABI, "libdeclared.so", new ApkCheck.Expected(crc(declared), "d.so", false), LABEL);
+    ApkCheck.addExpected(s, ABI, "libapk.so", new ApkCheck.Expected(crc(linked), "apk.so", false), LABEL);
     List<String> bad = checkApk(s, entry("lib/" + ABI + "/libdeclared.so", declared, true),
-        entry("lib/" + ABI + "/libstray_probe.so", linked, true));
+        entry("lib/" + ABI + "/libapk.so", linked, true),
+        entry("lib/" + ABI + "/libstray_probe.so", stray, true));
     assertEquals(
         Arrays.asList("lib/arm64-v8a/libstray_probe.so is not declared by the native inputs"),
         bad,
-        "linked library not declared");
+        "linked library declared, stray not");
   }
 
   // One entry to write into a test APK: its name, bytes, and whether it is stored.
