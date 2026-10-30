@@ -41,7 +41,7 @@ public class ApkCheckTest {
     assertEquals(1, s.expect.get(ABI).size(), "same CRC from two archives keeps one entry");
   }
 
-  private static void differentCrcFromTwoArchivesFails() {
+  private static void differentCrcFromTwoArchivesFails() throws IOException {
     ApkCheck.Spec s = new ApkCheck.Spec();
     ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(7, "a.zip", true), LABEL);
     expectFailure(
@@ -49,7 +49,7 @@ public class ApkCheckTest {
         () -> ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(8, "b.zip", true), LABEL));
   }
 
-  private static void fileAndArchiveFails() {
+  private static void fileAndArchiveFails() throws IOException {
     ApkCheck.Spec s = new ApkCheck.Spec();
     ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(7, "a.so", false), LABEL);
     expectFailure(
@@ -190,10 +190,10 @@ public class ApkCheckTest {
   }
 
   private interface Body {
-    void run();
+    void run() throws IOException;
   }
 
-  private static void expectFailure(String want, Body body) {
+  private static void expectFailure(String want, Body body) throws IOException {
     try {
       body.run();
     } catch (ApkCheck.CheckFailure e) {
