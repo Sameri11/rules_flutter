@@ -1,0 +1,54 @@
+load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
+load("//flutter:defs.bzl", "flutter_assets_dir")
+load("//tools/ci:assertions.bzl", "expect_equal")
+
+# The root package exists so //:buildifier_test has a label in it to locate the
+# tree it should check. Nothing reads MODULE.bazel's contents through this
+# export.
+#
+# `plugin_deps.MODULE.bazel` used to be exported here too, for the include() in
+# this module's own MODULE.bazel. Both moved to //examples/demo_app: the segment
+# describes one app's Maven graph, not the ruleset's.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["MODULE.bazel"])
+
+# Asserted rather than merely called: a silently wrong prefix is the failure
+# this helper exists to prevent, and the root package is the case with no
+# separator. Checked here so the root case stays covered.
+expect_equal(
+    flutter_assets_dir(assets = ":assets"),
+    "assets",
+    "flutter_assets_dir in the root package",
+)
+
+_EXCLUDE_PATTERNS = [
+    "./bazel-*",
+    "./.git/*",
+]
+
+buildifier(
+    name = "buildifier",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "fix",
+    mode = "fix",
+)
+
+buildifier(
+    name = "buildifier.check",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+)
+
+# Run buildifier under `bazel test` to check files outside the build graph.
+buildifier_test(
+    name = "buildifier_test",
+    size = "small",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+    # A whole-tree scan needs the workspace root and no sandbox.
+    no_sandbox = True,
+    workspace = "//:MODULE.bazel",
+)

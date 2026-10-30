@@ -59,7 +59,7 @@ Bazel would descend in and evaluate these packages as *root* packages, where
 ## What it covers
 
 Loading and analysis — `--nobuild` — of every supported BUILD symbol through
-`@rules_flutter//flutter:defs.bzl`, plus focused behavior checks:
+`@rules_flutter_core//flutter:defs.bzl`, plus focused behavior checks:
 
 | entry point | symbols |
 | --- | --- |

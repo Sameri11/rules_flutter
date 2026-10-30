@@ -1,5 +1,5 @@
 module(
-    name = "sameri11_rules_flutter",
+    name = "sameri11_rules_flutter_core",
 )
 
 # The rules' own .bzl files name @flutter_sdk and the engine repositories, so

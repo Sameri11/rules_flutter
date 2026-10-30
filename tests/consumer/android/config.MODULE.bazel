@@ -63,7 +63,7 @@ local_path_override(
     path = "external_app",
 )
 
-android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter_core//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 
 register_toolchains("@androidndk//:all")
@@ -80,7 +80,7 @@ namespace_plugin_metadata(
     guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
 )
 
-plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.build_config_field(
     name = "STRING_VALUE",
     package = "build_config_plugin",
@@ -161,5 +161,5 @@ use_repo(plugins, "composed_plugins", "flutter_plugins")
 
 # Public Flutter extension repositories used to test explicit embedding
 # debug/release labels in this fixture.
-flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")

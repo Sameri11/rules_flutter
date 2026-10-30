@@ -173,7 +173,7 @@ def _pub_labels(pub, who):
     if not pub or not pub.startswith("@") or "//" in pub or ":" in pub:
         fail((
             "{}: `pub` must be the repository of a `pub.lock` hub, e.g. \"@pub\" " +
-            "(from `pub = use_extension(\"@rules_flutter//flutter:extensions.bzl\", \"pub\")`), got {}."
+            "(from `pub = use_extension(\"@rules_flutter_core//flutter:extensions.bzl\", \"pub\")`), got {}."
         ).format(who, repr(pub)))
     return (pub + "//:package_config.json", pub + "//:project_package_config.json", pub + "//:lib", pub + "//:all")
 

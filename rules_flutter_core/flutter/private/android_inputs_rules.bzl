@@ -136,7 +136,7 @@ def _split_native_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value
     compilation_mode = ctx.var["COMPILATION_MODE"]
     if mode == "release" and compilation_mode != "opt":
-        fail("{}: mode=release needs -c opt, but this build is -c {}. Build with -c opt, or build debug with --@rules_flutter//flutter:mode=debug.".format(
+        fail("{}: mode=release needs -c opt, but this build is -c {}. Build with -c opt, or build debug with --@rules_flutter_core//flutter:mode=debug.".format(
             ctx.label,
             compilation_mode,
         ))

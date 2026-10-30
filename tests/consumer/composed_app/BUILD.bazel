@@ -9,7 +9,7 @@ load("@rules_android//rules:rules.bzl", "aar_import", "android_binary")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(
-    "@rules_flutter//flutter:defs.bzl",
+    "@rules_flutter_core//flutter:defs.bzl",
     "android_native_lib_jar",
     "flutter_android_inputs",
     "flutter_android_manifest",

@@ -1039,7 +1039,7 @@ def _pub_hub_labels(pub, who):
     if not pub or not pub.startswith("@") or "//" in pub or ":" in pub:
         fail((
             "{}: `pub` must be the repository of a `pub.lock` hub, e.g. \"@pub\" " +
-            "(from `pub = use_extension(\"@rules_flutter//flutter:extensions.bzl\", \"pub\")`), got {}."
+            "(from `pub = use_extension(\"@rules_flutter_core//flutter:extensions.bzl\", \"pub\")`), got {}."
         ).format(who, repr(pub)))
     return (
         pub + "//:package_config.json",
@@ -1411,7 +1411,7 @@ def flutter_app(
 
     `pub` is the hub of the app's `pubspec.lock`, declared in MODULE.bazel:
 
-        pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+        pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
         pub.lock(name = "pub", lock = "//:pubspec.lock")
         use_repo(pub, "pub")
 
@@ -1435,7 +1435,7 @@ def flutter_app(
     | `:dart_registrant_update` | writes the generated registrant into the workspace |
     | `:guards_test` | the guards, under `bazel test` |
 
-    Under `--@rules_flutter//flutter:mode=debug`, `:app_<abi>` reports
+    Under `--@rules_flutter_core//flutter:mode=debug`, `:app_<abi>` reports
     incompatibility. The debug overlay in `flutter_android_binary` ships
     `:app_jit_kernel` and the host-engine snapshots next to `:assets`; see
     docs_internal/build-modes-plan.md.

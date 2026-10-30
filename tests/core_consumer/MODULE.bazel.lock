@@ -42,8 +42,7 @@
     "https://bcr.bazel.build/modules/bazel_features/1.39.0/MODULE.bazel": "28739425c1fc283c91931619749c832b555e60bcd1010b40d8441ce0a5cf726d",
     "https://bcr.bazel.build/modules/bazel_features/1.4.1/MODULE.bazel": "e45b6bb2350aff3e442ae1111c555e27eac1d915e77775f6fdc4b351b758b5d7",
     "https://bcr.bazel.build/modules/bazel_features/1.42.1/MODULE.bazel": "275a59b5406ff18c01739860aa70ad7ccb3cfb474579411decca11c93b951080",
-    "https://bcr.bazel.build/modules/bazel_features/1.45.0/MODULE.bazel": "7daec6d87ab0703417486d4cb948af0b06f55d4d7c08cbb5978c80e79b538edf",
-    "https://bcr.bazel.build/modules/bazel_features/1.45.0/source.json": "635e4536e09ff125b8972e0fa239c135fde5f18701f7d5115680560651dfb41d",
+    "https://bcr.bazel.build/modules/bazel_features/1.42.1/source.json": "fcd4396b2df85f64f2b3bb436ad870793ecf39180f1d796f913cc9276d355309",
     "https://bcr.bazel.build/modules/bazel_features/1.9.0/MODULE.bazel": "885151d58d90d8d9c811eb75e3288c11f850e1d6b481a8c9f766adee4712358b",
     "https://bcr.bazel.build/modules/bazel_features/1.9.1/MODULE.bazel": "8f679097876a9b609ad1f60249c49d68bfab783dd9be012faf9d82547b14815a",
     "https://bcr.bazel.build/modules/bazel_lib/3.1.0/MODULE.bazel": "6809765c14e3c766a9b9286c7b0ec56ed87a73326e48fe01749f0c0fdcfe3287",
@@ -68,8 +67,6 @@
     "https://bcr.bazel.build/modules/bazel_worker_java/0.0.11/MODULE.bazel": "1ee9e4c28ce455dbacdff8e007e133ea209e6f673a9e97cf20e99b161bc17548",
     "https://bcr.bazel.build/modules/bazel_worker_java/0.0.11/source.json": "48b9b9c55f69cc360a54a712f47b889dd3d367ce2d45c3ccec242e9af86fe9cd",
     "https://bcr.bazel.build/modules/bazel_worker_java/0.0.8/MODULE.bazel": "e76479eae70bd4e8f5f4c2dfc5d03ab971cfb18750246c7b3f3454c5c2ee6629",
-    "https://bcr.bazel.build/modules/buildifier_prebuilt/8.5.1.3/MODULE.bazel": "033a5e73ebb940aee2cadba01b8c3d6682ea228ad64647f4c2a45f55bfe04435",
-    "https://bcr.bazel.build/modules/buildifier_prebuilt/8.5.1.3/source.json": "86ae47fcfc649ec06a5523b8ef4362b2aaabc108aae8c1de77e639550d702523",
     "https://bcr.bazel.build/modules/buildozer/8.5.1/MODULE.bazel": "a35d9561b3fc5b18797c330793e99e3b834a473d5fbd3d7d7634aafc9bdb6f8f",
     "https://bcr.bazel.build/modules/buildozer/8.5.1/source.json": "e3386e6ff4529f2442800dee47ad28d3e6487f36a1f75ae39ae56c70f0cd2fbd",
     "https://bcr.bazel.build/modules/gazelle/0.32.0/MODULE.bazel": "b499f58a5d0d3537f3cf5b76d8ada18242f64ec474d8391247438bf04f58c7b8",
@@ -258,158 +255,6 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
-    "//flutter:extensions.bzl%android_ndk": {
-      "general": {
-        "bzlTransitiveDigest": "/2GPKUWkmHVUXtct2zVSGm46SNoIGnX8AR9xyPTz5KY=",
-        "usagesDigest": "u+HEkcGg21uv1v1Y5n7OFzVXl5/8Fi8W5y561YLsmWA=",
-        "recordedInputs": [
-          "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",
-          "REPO_MAPPING:,platforms platforms",
-          "REPO_MAPPING:,rules_android rules_android+",
-          "REPO_MAPPING:,rules_android_ndk rules_android_ndk+",
-          "REPO_MAPPING:,rules_java rules_java+",
-          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
-          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
-          "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
-          "REPO_MAPPING:protobuf+,rules_java rules_java+",
-          "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
-          "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
-          "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
-          "REPO_MAPPING:rules_cc+,platforms platforms",
-          "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_java+,bazel_features bazel_features+",
-          "REPO_MAPPING:rules_java+,bazel_skylib bazel_skylib+",
-          "REPO_MAPPING:rules_java+,bazel_tools bazel_tools",
-          "REPO_MAPPING:rules_java+,com_google_protobuf protobuf+",
-          "REPO_MAPPING:rules_java+,compatibility_proxy rules_java++compatibility_proxy+compatibility_proxy",
-          "REPO_MAPPING:rules_java+,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_java++compatibility_proxy+compatibility_proxy,rules_java rules_java+"
-        ],
-        "generatedRepoSpecs": {
-          "androidndk": {
-            "repoRuleId": "@@rules_android_ndk+//:rules.bzl%android_ndk_repository",
-            "attributes": {}
-          },
-          "androidndk_cmake": {
-            "repoRuleId": "@@//flutter/private:ndk.bzl%_androidndk_cmake_repository",
-            "attributes": {}
-          }
-        }
-      }
-    },
-    "//flutter:extensions.bzl%flutter": {
-      "general": {
-        "bzlTransitiveDigest": "/2GPKUWkmHVUXtct2zVSGm46SNoIGnX8AR9xyPTz5KY=",
-        "usagesDigest": "l2s/+a1uG8SnjBS3HPA+pioDgtoWaM6VxYd/UsNTuMc=",
-        "recordedInputs": [
-          "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",
-          "REPO_MAPPING:,platforms platforms",
-          "REPO_MAPPING:,rules_android rules_android+",
-          "REPO_MAPPING:,rules_android_ndk rules_android_ndk+",
-          "REPO_MAPPING:,rules_java rules_java+",
-          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
-          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
-          "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
-          "REPO_MAPPING:protobuf+,rules_java rules_java+",
-          "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
-          "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
-          "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
-          "REPO_MAPPING:rules_cc+,platforms platforms",
-          "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_java+,bazel_features bazel_features+",
-          "REPO_MAPPING:rules_java+,bazel_skylib bazel_skylib+",
-          "REPO_MAPPING:rules_java+,bazel_tools bazel_tools",
-          "REPO_MAPPING:rules_java+,com_google_protobuf protobuf+",
-          "REPO_MAPPING:rules_java+,compatibility_proxy rules_java++compatibility_proxy+compatibility_proxy",
-          "REPO_MAPPING:rules_java+,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_java++compatibility_proxy+compatibility_proxy,rules_java rules_java+"
-        ],
-        "generatedRepoSpecs": {
-          "flutter_sdk": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_sdk",
-            "attributes": {
-              "version": "3.47.3"
-            }
-          },
-          "flutter_tools_packages": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_tools_packages",
-            "attributes": {}
-          },
-          "flutter_embedding_release": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "flutter_embedding_release"
-            }
-          },
-          "flutter_embedding_debug": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "flutter_embedding_debug"
-            }
-          },
-          "flutter_engine_arm64_v8a_release": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "arm64_v8a_release",
-              "extract_libs": true
-            }
-          },
-          "flutter_engine_arm64_v8a_debug": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "arm64_v8a_debug",
-              "extract_libs": true
-            }
-          },
-          "flutter_engine_x86_64_release": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "x86_64_release",
-              "extract_libs": true
-            }
-          },
-          "flutter_engine_x86_64_debug": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "x86_64_debug",
-              "extract_libs": true
-            }
-          },
-          "flutter_engine_armeabi_v7a_release": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "armeabi_v7a_release",
-              "extract_libs": true
-            }
-          },
-          "flutter_engine_armeabi_v7a_debug": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "armeabi_v7a_debug",
-              "extract_libs": true
-            }
-          }
-        }
-      }
-    },
-    "//flutter/private:toolchain_repo.bzl%flutter_toolchains": {
-      "general": {
-        "bzlTransitiveDigest": "VYXSJyUy+fg49VC4uQo7cEm4X57ktEMcOns+dR2TG5Q=",
-        "usagesDigest": "e34Oyjda7ngNIE4XB/Zd5yAlGX3OFqANSgbDQAzDGfo=",
-        "recordedInputs": [],
-        "generatedRepoSpecs": {
-          "flutter_toolchains": {
-            "repoRuleId": "@@//flutter/private:toolchain_repo.bzl%_flutter_toolchains_repo",
-            "attributes": {
-              "toolchain_target": "'@@//flutter/private:flutter_toolchain'",
-              "toolchain_type": "'@@//flutter/private:flutter_toolchain_type'"
-            }
-          }
-        }
-      }
-    },
     "@@pybind11_bazel+//:internal_configure.bzl%internal_configure_extension": {
       "general": {
         "bzlTransitiveDigest": "NRXra7941UfmNUyIxnLt82V5hULluVGL2nBsijTl4j4=",
@@ -477,7 +322,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "DUD1FTsZyv0xJrLKsQORrkRZGrlHVzkOzgyEbP2nelA=",
+        "usagesDigest": "VG6ldBZDxHycVQ1uWlliLdXnwSOHT3gj7HvQEeMA81g=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
@@ -680,6 +525,158 @@
                 ]
               },
               "toolchain_target_settings": {}
+            }
+          }
+        }
+      }
+    },
+    "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%android_ndk": {
+      "general": {
+        "bzlTransitiveDigest": "cT1GfIzrnbAlFCm8orBTKQ+m9iRr370vVZkfRlx8IyM=",
+        "usagesDigest": "kbhD1I5yHzcXOajzweQ0uVx/Iqgd5H+CWZxsiwsbuHA=",
+        "recordedInputs": [
+          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
+          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
+          "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
+          "REPO_MAPPING:protobuf+,rules_java rules_java+",
+          "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
+          "REPO_MAPPING:rules_cc+,platforms platforms",
+          "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java+,bazel_features bazel_features+",
+          "REPO_MAPPING:rules_java+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_java+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_java+,com_google_protobuf protobuf+",
+          "REPO_MAPPING:rules_java+,compatibility_proxy rules_java++compatibility_proxy+compatibility_proxy",
+          "REPO_MAPPING:rules_java+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java++compatibility_proxy+compatibility_proxy,rules_java rules_java+",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,platforms platforms",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,rules_android rules_android+",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,rules_android_ndk rules_android_ndk+",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,rules_java rules_java+"
+        ],
+        "generatedRepoSpecs": {
+          "androidndk": {
+            "repoRuleId": "@@rules_android_ndk+//:rules.bzl%android_ndk_repository",
+            "attributes": {}
+          },
+          "androidndk_cmake": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:ndk.bzl%_androidndk_cmake_repository",
+            "attributes": {}
+          }
+        }
+      }
+    },
+    "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
+      "general": {
+        "bzlTransitiveDigest": "cT1GfIzrnbAlFCm8orBTKQ+m9iRr370vVZkfRlx8IyM=",
+        "usagesDigest": "M9zv5xCGzmNUd7ho3lam884NDO9+c0DK/RoIPwdODYA=",
+        "recordedInputs": [
+          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
+          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
+          "REPO_MAPPING:protobuf+,proto_bazel_features bazel_features+",
+          "REPO_MAPPING:protobuf+,rules_java rules_java+",
+          "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
+          "REPO_MAPPING:rules_cc+,platforms platforms",
+          "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java+,bazel_features bazel_features+",
+          "REPO_MAPPING:rules_java+,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_java+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_java+,com_google_protobuf protobuf+",
+          "REPO_MAPPING:rules_java+,compatibility_proxy rules_java++compatibility_proxy+compatibility_proxy",
+          "REPO_MAPPING:rules_java+,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_java++compatibility_proxy+compatibility_proxy,rules_java rules_java+",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,platforms platforms",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,rules_android rules_android+",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,rules_android_ndk rules_android_ndk+",
+          "REPO_MAPPING:sameri11_rules_flutter_core+,rules_java rules_java+"
+        ],
+        "generatedRepoSpecs": {
+          "flutter_sdk": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_sdk",
+            "attributes": {
+              "version": ""
+            }
+          },
+          "flutter_tools_packages": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_tools_packages",
+            "attributes": {}
+          },
+          "flutter_embedding_release": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "flutter_embedding_release"
+            }
+          },
+          "flutter_embedding_debug": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "flutter_embedding_debug"
+            }
+          },
+          "flutter_engine_arm64_v8a_release": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "arm64_v8a_release",
+              "extract_libs": true
+            }
+          },
+          "flutter_engine_arm64_v8a_debug": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "arm64_v8a_debug",
+              "extract_libs": true
+            }
+          },
+          "flutter_engine_x86_64_release": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "x86_64_release",
+              "extract_libs": true
+            }
+          },
+          "flutter_engine_x86_64_debug": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "x86_64_debug",
+              "extract_libs": true
+            }
+          },
+          "flutter_engine_armeabi_v7a_release": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "armeabi_v7a_release",
+              "extract_libs": true
+            }
+          },
+          "flutter_engine_armeabi_v7a_debug": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_engine_jar",
+            "attributes": {
+              "artifact": "armeabi_v7a_debug",
+              "extract_libs": true
+            }
+          }
+        }
+      }
+    },
+    "@@sameri11_rules_flutter_core+//flutter/private:toolchain_repo.bzl%flutter_toolchains": {
+      "general": {
+        "bzlTransitiveDigest": "VYXSJyUy+fg49VC4uQo7cEm4X57ktEMcOns+dR2TG5Q=",
+        "usagesDigest": "ZB8eIlmLVk1dTB2r+oz3INr2pr+/jqpxtrhqN+u7ago=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "flutter_toolchains": {
+            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:toolchain_repo.bzl%_flutter_toolchains_repo",
+            "attributes": {
+              "toolchain_target": "'@@sameri11_rules_flutter_core+//flutter/private:flutter_toolchain'",
+              "toolchain_type": "'@@sameri11_rules_flutter_core+//flutter/private:flutter_toolchain_type'"
             }
           }
         }

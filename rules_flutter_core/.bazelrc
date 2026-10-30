@@ -2,9 +2,9 @@
 # spawn strategy here.
 common --enable_bzlmod
 
-import %workspace%/.bazelrc.cache
+import %workspace%/../.bazelrc.cache
 
 # Shared Android flags; each nested module imports this file and opts in locally.
-import %workspace%/.bazelrc.android
+import %workspace%/../.bazelrc.android
 
 common --config=android

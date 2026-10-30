@@ -3,10 +3,10 @@ module(
     version = "0.0.1",
 )
 
-bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
 local_path_override(
-    module_name = "sameri11_rules_flutter",
-    path = "../..",
+    module_name = "sameri11_rules_flutter_core",
+    path = "../../rules_flutter_core",
 )
 
 bazel_dep(name = "rules_cc", version = "0.2.17")

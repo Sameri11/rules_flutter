@@ -42,16 +42,17 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: buildifier
-        run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/format:buildifier_test
+        working-directory: rules_flutter_core
+        run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //:buildifier_test
 
       - name: Key portability contract
+        working-directory: rules_flutter_core
         run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/ci:key_portability_test
 
       - name: Committed lock portability guard
         run: |
           set -euo pipefail
-          env -u ANDROID_HOME -u ANDROID_NDK_HOME \
-            bazel test //tools/ci:committed_lock_guard_selftest_test
+          python3 tools/ci/committed_lock_guard.py --selftest
           python3 tools/ci/committed_lock_guard.py
 
   core:
@@ -159,7 +160,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build --@rules_flutter//flutter:mode=debug -c fastbuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test 2>&1 | tee ../../bazel_composed_debug.log
+          bazel build --@rules_flutter_core//flutter:mode=debug -c fastbuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test 2>&1 | tee ../../bazel_composed_debug.log
 
       # The 3-ABI build keeps one kernel and asset bundle and one ELF per ABI.
       - name: Consumer composed app 3-ABI graph guard
@@ -236,14 +237,14 @@ jobs:
       - name: Test kernel invariants
         working-directory: ${{ matrix.example.directory }}
         run: |
-          ../../tools/ci/test_kernel_invariants.sh ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }}
+          ../../tools/ci/test_kernel_invariants.sh ${{ matrix.example.mode && format('--@rules_flutter_core//flutter:mode={0}', matrix.example.mode) || '' }}
 
       # Hash gate builds the APKs below; tests run their target guards.
       - name: bazel test //...
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+          bazel test //... --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter_core//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Host tests must not reach the Android SDK or NDK through any action input or environment.
       - name: Host test closure has no Android SDK or NDK
@@ -262,7 +263,7 @@ jobs:
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel build //:test/golden_test_update_goldens --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_golden_${{ matrix.example.name }}.log
+          bazel build //:test/golden_test_update_goldens --lockfile_mode=error ${{ matrix.example.mode && format('--@rules_flutter_core//flutter:mode={0}', matrix.example.mode) || '' }} 2>&1 | tee ../../bazel_example_golden_${{ matrix.example.name }}.log
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout

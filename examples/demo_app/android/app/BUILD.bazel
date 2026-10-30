@@ -6,7 +6,7 @@
 # `flutter migrate` rewrite files under app/android/. They do not delete unknown
 # files, so this BUILD survives, but keep that in mind when upgrading templates.
 
-load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
