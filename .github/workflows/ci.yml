@@ -148,6 +148,42 @@ jobs:
           set -o pipefail
           bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_test.log
 
+      # Composed app: the APK check fails the build on a planted mismatch.
+      - name: Consumer composed app release APK check
+        working-directory: tests/consumer
+        run: |
+          set -o pipefail
+          bazel build -c opt --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test 2>&1 | tee ../../bazel_composed_release.log
+
+      - name: Consumer composed app debug APK check
+        working-directory: tests/consumer
+        run: |
+          set -o pipefail
+          bazel build --@rules_flutter//flutter:mode=debug -c fastbuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test 2>&1 | tee ../../bazel_composed_debug.log
+
+      # The 3-ABI build keeps one kernel and asset bundle and one ELF per ABI.
+      - name: Consumer composed app 3-ABI graph guard
+        working-directory: tests/consumer
+        run: |
+          set -euo pipefail
+          bazel aquery 'mnemonic("DartAotKernel|FlutterAssetBundle|DartAotElf", //composed_app:apk)' \
+            --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+            --android_platforms=@rules_android//:arm64-v8a,@rules_android//:x86_64,@rules_android//:armeabi-v7a \
+            --output=jsonproto > "$RUNNER_TEMP/composed_aquery.json"
+          python3 - "$RUNNER_TEMP/composed_aquery.json" <<'PY'
+          import collections, json, sys
+
+          with open(sys.argv[1]) as f:
+              actions = json.load(f).get("actions", [])
+          if not actions:
+              sys.exit("composed app aquery returned no actions")
+          counts = collections.Counter(a.get("mnemonic") for a in actions)
+          expected = {"DartAotKernel": 1, "FlutterAssetBundle": 1, "DartAotElf": 3}
+          for mnemonic, want in expected.items():
+              if counts[mnemonic] != want:
+                  sys.exit(f"{mnemonic}: expected {want}, got {counts[mnemonic]}")
+          PY
+
       - name: Report cache statistics
         if: always()
         run: python3 tools/ci/cache_stats.py bazel_test_root.log bazel_consumer_api.log bazel_consumer_test.log
