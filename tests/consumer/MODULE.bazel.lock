@@ -557,7 +557,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "6W4GmVWj3CmXPpbYIYIB4GpG5JygOsR7TN8reXNcZ/8=",
+        "bzlTransitiveDigest": "R6W0XYWYlSxk1wkjxj4pKNtNGWlcB6h9NgJ82+4SHm4=",
         "usagesDigest": "CE2Z/tOTJqwioicux0yXg4nzWLIvZDfcM/KtRNy1Og4=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -597,7 +597,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "6W4GmVWj3CmXPpbYIYIB4GpG5JygOsR7TN8reXNcZ/8=",
+        "bzlTransitiveDigest": "R6W0XYWYlSxk1wkjxj4pKNtNGWlcB6h9NgJ82+4SHm4=",
         "usagesDigest": "wXMxCLpKAkR6DPg5JLjrCGaqTqLXqMpXVS3aFRC2GpA=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -649,37 +649,43 @@
           "flutter_engine_arm64_v8a_release": {
             "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_engine_jar",
             "attributes": {
-              "artifact": "arm64_v8a_release"
+              "artifact": "arm64_v8a_release",
+              "extract_libs": true
             }
           },
           "flutter_engine_arm64_v8a_debug": {
             "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_engine_jar",
             "attributes": {
-              "artifact": "arm64_v8a_debug"
+              "artifact": "arm64_v8a_debug",
+              "extract_libs": true
             }
           },
           "flutter_engine_x86_64_release": {
             "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_engine_jar",
             "attributes": {
-              "artifact": "x86_64_release"
+              "artifact": "x86_64_release",
+              "extract_libs": true
             }
           },
           "flutter_engine_x86_64_debug": {
             "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_engine_jar",
             "attributes": {
-              "artifact": "x86_64_debug"
+              "artifact": "x86_64_debug",
+              "extract_libs": true
             }
           },
           "flutter_engine_armeabi_v7a_release": {
             "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_engine_jar",
             "attributes": {
-              "artifact": "armeabi_v7a_release"
+              "artifact": "armeabi_v7a_release",
+              "extract_libs": true
             }
           },
           "flutter_engine_armeabi_v7a_debug": {
             "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_engine_jar",
             "attributes": {
-              "artifact": "armeabi_v7a_debug"
+              "artifact": "armeabi_v7a_debug",
+              "extract_libs": true
             }
           }
         }
@@ -687,7 +693,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "6W4GmVWj3CmXPpbYIYIB4GpG5JygOsR7TN8reXNcZ/8=",
+        "bzlTransitiveDigest": "R6W0XYWYlSxk1wkjxj4pKNtNGWlcB6h9NgJ82+4SHm4=",
         "usagesDigest": "7idiv0d3kGbQTm9rX6TQB0g96F4qO0K8vyWb2iqmLmE=",
         "recordedInputs": [
           "REPO_MAPPING:,composed_pub sameri11_rules_flutter++pub+composed_pub",
