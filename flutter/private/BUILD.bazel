@@ -19,7 +19,7 @@ host-compatible registration points at the public static toolchain target.
 """
 
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
-load(":abis.bzl", "ABIS")
+load(":abis.bzl", "ABIS", "MODES")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":toolchain.bzl", "flutter_toolchain")
 
@@ -132,3 +132,18 @@ alias(
 
 # What the pub lock reader accepts and, as importantly, refuses.
 pub_lock_parser_test_suite(name = "pub_lock_parser_test")
+
+# One split per ABI and mode. The core selects its per-ABI libraries on these,
+# so a 3-ABI build gets exactly one split per ABI rather than one per platform.
+# Public because the core's select() is expanded in the consumer's package.
+for abi in ABIS:
+    for mode in MODES:
+        config_setting(
+            name = "split_{}_{}".format(abi.replace("-", "_"), mode),
+            constraint_values = [
+                "@platforms//os:android",
+                ABIS[abi].cpu_constraint,
+            ],
+            flag_values = {"//flutter:mode": mode},
+            visibility = ["//visibility:public"],
+        )
