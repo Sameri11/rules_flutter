@@ -2,11 +2,16 @@
 
 Platform-neutral rules load from `@rules_flutter_core//flutter:defs.bzl`. This
 entrypoint adds the Android macros; a Consumer Module that builds an APK loads
-both. The `native_build_env` target lives in this package: pass
-`@rules_flutter_android//flutter:native_build_env` as the `native_build_env` of a
-flutter_app or flutter_core whose native build hooks need the Android SDK.
+both. `flutter_app` and `flutter_assets` are wrapped here so their native build
+hooks see the Android SDK by default. `flutter_core` is not wrapped; pass
+`@rules_flutter_android//flutter:native_build_env` as its `native_build_env`.
 """
 
+load(
+    "@rules_flutter_core//flutter:defs.bzl",
+    _core_flutter_app = "flutter_app",
+    _core_flutter_assets = "flutter_assets",
+)
 load(
     "//flutter/private:android.bzl",
     _android_native_lib_jar = "android_native_lib_jar",
@@ -22,6 +27,18 @@ load(
     _flutter_native_contribution = "flutter_native_contribution",
     _flutter_native_libs = "flutter_native_libs",
 )
+
+# The Android SDK as the default native build environment. Label() resolves
+# against this repository, not the consuming BUILD file's repository.
+_ANDROID_NATIVE_BUILD_ENV = Label("//flutter:native_build_env")
+
+def flutter_app(native_build_env = _ANDROID_NATIVE_BUILD_ENV, **kwargs):
+    """flutter_app from @rules_flutter_core, with the Android SDK as the default native build environment."""
+    _core_flutter_app(native_build_env = native_build_env, **kwargs)
+
+def flutter_assets(native_build_env = _ANDROID_NATIVE_BUILD_ENV, **kwargs):
+    """flutter_assets from @rules_flutter_core, with the Android SDK as the default native build environment."""
+    _core_flutter_assets(native_build_env = native_build_env, **kwargs)
 
 # Explicit assignments make the curated names exports of this module. Merely
 # importing names with load() does not re-export them to downstream BUILD files.

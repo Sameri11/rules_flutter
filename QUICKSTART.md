@@ -363,7 +363,7 @@ arm64 device slice and an x86_64 emulator slice; use one identical list in all
 three locations if you choose a different supported set.
 
 ```python
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -844,7 +844,7 @@ dependency, so omitting `path_deps` would leave an undeclared input and make the
 path-dependency guard fail. `pub = "@pub"` is mandatory.
 
 ```python
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 

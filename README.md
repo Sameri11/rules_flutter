@@ -222,7 +222,7 @@ use_repo(maven, "flutter_maven")
 Create `BUILD.bazel` at the project root:
 
 ```python
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
