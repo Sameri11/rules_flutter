@@ -158,7 +158,7 @@ def _pub_labels(pub, who):
             "{}: `pub` must be the repository of a `pub.lock` hub, e.g. \"@pub\" " +
             "(from `pub = use_extension(\"@rules_flutter//flutter:extensions.bzl\", \"pub\")`), got {}."
         ).format(who, repr(pub)))
-    return (pub + "//:package_config.json", pub + "//:lib")
+    return (pub + "//:package_config.json", pub + "//:project_package_config.json", pub + "//:lib", pub + "//:all")
 
 def flutter_core(
         name,
@@ -196,7 +196,7 @@ def flutter_core(
     if target_os != "android":
         fail("flutter_core {}: target_os must be \"android\", got {}.".format(name, repr(target_os)))
 
-    package_config, pub_lib = _pub_labels(pub, "flutter_core " + name)
+    package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
 
     flutter_pubspec(name = "pubspec", src = "pubspec.yaml")
 
@@ -243,8 +243,8 @@ def flutter_core(
         abis = list(ABIS),
         assets = assets,
         pubspec = ":pubspec",
-        package_config = package_config,
-        pub_srcs = [pub_lib],
+        package_config = project_package_config,
+        pub_srcs = [pub_all],
         path_deps = path_deps,
     )
 

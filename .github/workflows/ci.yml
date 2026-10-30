@@ -166,7 +166,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -euo pipefail
-          bazel aquery 'mnemonic("DartAotKernel|FlutterAssetBundle|DartAotElf", //composed_app:apk)' \
+          bazel aquery -c opt 'mnemonic("DartAotKernel|FlutterAssetBundle|DartAotElf", deps(//composed_app:apk))' \
             --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
             --android_platforms=@rules_android//:arm64-v8a,@rules_android//:x86_64,@rules_android//:armeabi-v7a \
             --output=jsonproto > "$RUNNER_TEMP/composed_aquery.json"
