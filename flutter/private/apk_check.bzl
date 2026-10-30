@@ -32,7 +32,7 @@ def _provider_records(ctx, abis):
     for split in by_cpu.keys() + linked.keys():
         # A custom Android platform names its own cpu, which no Flutter split configures.
         if split not in ABIS:
-            fail("{}: the binary packages natives for split {}, which is not a stock ABI. Custom Android platform names are unsupported; use the ABI keys of flutter/private/abis.bzl.".format(ctx.label, split))
+            fail("{}: the binary packages natives for split {}, which is not a stock ABI. Custom Android platform names are unsupported; use @rules_android//:arm64-v8a, @rules_android//:x86_64 or @rules_android//:armeabi-v7a.".format(ctx.label, split))
         if split not in abis:
             fail("{}: the binary packages natives for split {}, which no native split configures.".format(ctx.label, split))
     records = []
