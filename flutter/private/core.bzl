@@ -206,7 +206,7 @@ def flutter_core(
       dart_defines: `-D` constants the kernel compiles with.
       dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
       plugin_deps: the committed Maven plugin file, checked against the hub.
-      plugins: the plugin hub the guards check against, e.g. "@flutter_plugins".
+      plugins: the plugin hub the guards check against, e.g. "@flutter_plugins"; required with plugin_deps.
       target_os: OS the kernel is compiled for; must be "android".
       **kwargs: visibility and tags of `<name>`.
     """
@@ -214,6 +214,8 @@ def flutter_core(
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
     if target_os != "android":
         fail("flutter_core {}: target_os must be \"android\", got {}.".format(name, repr(target_os)))
+    if plugin_deps and plugins == None:
+        fail("flutter_core {}: plugin_deps needs plugins = \"<hub>\", the plugin repository such as \"@flutter_plugins\"; plugins is None.".format(name))
 
     package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
 
