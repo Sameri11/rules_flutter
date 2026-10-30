@@ -37,20 +37,37 @@ def _split_label(abi, mode):
     # repo mapping, and these config_settings belong to this ruleset.
     return Label("//flutter/private:split_{}_{}".format(abi.replace("-", "_"), mode))
 
+_ANDROID_SPLIT_OUTPUTS = [
+    # The options rules_android's android_split_transition writes. The kernel
+    # and the bundle must not inherit any of them from whichever split asked.
+    "//command_line_option:Android configuration distinguisher",
+    "//command_line_option:android_compiler",
+    "//command_line_option:android_platforms",
+    "//command_line_option:compiler",
+    "//command_line_option:dynamic_mode",
+    "//command_line_option:platforms",
+    "@rules_android//rules/flags:bytecode_transformer",
+]
+
 def _platform_neutral_transition_impl(_settings, _attr):
     # One configuration for the kernel and the bundle, whichever split asks.
+    # Each value is the one a non-Android host configuration has. Setting only
+    # the platform left the distinguisher and dynamic_mode from the split, so
+    # the bundle was built twice.
     return {
-        "//command_line_option:platforms": ["@platforms//host:host"],
+        "//command_line_option:Android configuration distinguisher": "main",
+        "//command_line_option:android_compiler": None,
         "//command_line_option:android_platforms": [],
+        "//command_line_option:compiler": None,
+        "//command_line_option:dynamic_mode": "default",
+        "//command_line_option:platforms": ["@platforms//host:host"],
+        "@rules_android//rules/flags:bytecode_transformer": "@rules_android//rules/flags:dummy",
     }
 
 _platform_neutral_transition = transition(
     implementation = _platform_neutral_transition_impl,
     inputs = [],
-    outputs = [
-        "//command_line_option:platforms",
-        "//command_line_option:android_platforms",
-    ],
+    outputs = _ANDROID_SPLIT_OUTPUTS,
 )
 
 def _platform_neutral_files_impl(ctx):
