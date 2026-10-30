@@ -75,7 +75,7 @@ def _assets_bundle_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
 
-    src = ctx.file.src
+    (src,) = ctx.files.src
     inputs = [src]
     command = 'mkdir -p "{out}" && cp -RL "{src}"/. "{out}"/'.format(out = out.path, src = src.path)
 
