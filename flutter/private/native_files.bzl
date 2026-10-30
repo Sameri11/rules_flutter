@@ -9,6 +9,9 @@ contributions and keys them with `flutter_native_files_by_abi`.
 load(":abis.bzl", "ABIS")
 load(":recipe.bzl", "FlutterNativeInfo")
 
+# Generated hub repositories load this file across a repository boundary.
+visibility("public")
+
 FlutterNativeFilesByAbiInfo = provider(
     doc = "One plugin repository's native libraries as Files, keyed by the ABIs it declares.",
     fields = {
