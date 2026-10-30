@@ -12,7 +12,9 @@ load(
     "@rules_flutter//flutter:defs.bzl",
     "android_native_lib_jar",
     "flutter_android_inputs",
+    "flutter_android_manifest",
     "flutter_apk_check",
+    "flutter_assets_dir",
     "flutter_core",
 )
 load("@rules_java//java:defs.bzl", "java_library")
@@ -102,22 +104,27 @@ cc_library(
     alwayslink = True,
 )
 
-# The bundle is the core's `_assets_bundle` tree, named by that target's package
-# path. android_binary strips assets_dir to place the bundle under assets/.
+# The versioned manifest: versionCode and versionName come from pubspec.yaml.
+flutter_android_manifest(
+    name = "apk_manifest",
+    manifest = "AndroidManifest.xml",
+    pubspec = ":pubspec",
+)
+
+# The bundle is a copy of the core's flutter_assets tree, under the inputs target's name.
+# android_binary strips assets_dir to place the bundle under assets/.
 android_binary(
     name = "apk",
     assets = [":inputs_bundle"],
-    assets_dir = "composed_app/core_bundle_action",
+    assets_dir = flutter_assets_dir(assets = ":inputs_bundle"),
     deps = [
         ":composed_aar",
         ":inputs",
         ":composed_jni",
     ],
-    manifest = "AndroidManifest.xml",
+    manifest = ":apk_manifest",
     manifest_values = {
         "applicationId": "com.example.composed_app",
-        "versionCode": "1",
-        "versionName": "1.0.0",
     },
     nocompress_extensions = [".so"],
 )

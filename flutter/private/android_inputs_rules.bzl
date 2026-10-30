@@ -43,14 +43,36 @@ def _core_file_impl(ctx):
     return [DefaultInfo(files = depset([getattr(info, ctx.attr.field)]))]
 
 # Passes one File of the core's provider through unchanged, so a java_import or
-# a consumer can name it. The embedding jar and the asset tree are the core's
-# own outputs, so nothing here runs an action.
+# a consumer can name it. The embedding jar is the core's own output, so nothing here
+# runs an action.
 _core_file = rule(
     implementation = _core_file_impl,
     doc = "One File of a flutter_core split's FlutterArtifactInfo.",
     attrs = {
         "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
-        "field": attr.string(mandatory = True, values = ["assets", "embedding_jar"]),
+        "field": attr.string(mandatory = True, values = ["embedding_jar"]),
+    },
+)
+
+def _inputs_bundle_impl(ctx):
+    src = ctx.attr.core[FlutterArtifactInfo].assets
+    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+    ctx.actions.run_shell(
+        outputs = [out],
+        inputs = [src],
+        command = 'mkdir -p "{out}" && cp -RL "{src}"/. "{out}"/'.format(out = out.path, src = src.path),
+        mnemonic = "FlutterAssetCopy",
+        progress_message = "Copying the Flutter assets of %{label}",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+# The copy puts the tree at <name>/flutter_assets, so flutter_assets_dir of this target
+# gives its prefix, whatever the core is named.
+_inputs_bundle = rule(
+    implementation = _inputs_bundle_impl,
+    doc = "The core's flutter_assets tree, copied under this target's name.",
+    attrs = {
+        "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
     },
 )
 
@@ -262,10 +284,9 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
         native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None,
     )
 
-    _core_file(
+    _inputs_bundle(
         name = name + "_bundle",
         core = core,
-        field = "assets",
     )
 
     android_library(

@@ -14,6 +14,8 @@ load(
     "//flutter/private:android.bzl",
     _android_native_lib_jar = "android_native_lib_jar",
     _flutter_android_binary = "flutter_android_binary",
+    _flutter_android_manifest = "flutter_android_manifest",
+    _flutter_assets_dir = "flutter_assets_dir",
 )
 load(
     "//flutter/private:embedding.bzl",
@@ -80,3 +82,7 @@ flutter_core = _flutter_core
 FlutterArtifactInfo = _FlutterArtifactInfo
 flutter_android_inputs = _flutter_android_inputs
 flutter_apk_check = _flutter_apk_check
+
+# Part of the composition route: the composed android_binary's assets_dir and manifest.
+flutter_android_manifest = _flutter_android_manifest
+flutter_assets_dir = _flutter_assets_dir
