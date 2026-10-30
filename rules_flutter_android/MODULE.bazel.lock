@@ -300,7 +300,7 @@
     },
     "//tests/registrant_parity:extensions.bzl%registrant_parity": {
       "general": {
-        "bzlTransitiveDigest": "Rkm0gGB37BLWa0V5lxM0OFdreFqEeUTRUti9nMF5o4I=",
+        "bzlTransitiveDigest": "52LvPlDePiFga2OlhE0nZLHtVR+3jhFt2R4rsMWpAcI=",
         "usagesDigest": "xZ1lTxlYC1XJwYT9IrBvyo3E5G5yxdcwYt6q/Mx+3o4=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
