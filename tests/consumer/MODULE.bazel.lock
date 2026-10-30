@@ -557,7 +557,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "mVIkH0B0GlrjPhrQ02aOudsFK6y3pbEn7WcZp/WSkHk=",
+        "bzlTransitiveDigest": "0HalF3OEteVsDdU/VrHDBRk/M+HZ8po13/6NLATGF+8=",
         "usagesDigest": "CE2Z/tOTJqwioicux0yXg4nzWLIvZDfcM/KtRNy1Og4=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -597,7 +597,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "mVIkH0B0GlrjPhrQ02aOudsFK6y3pbEn7WcZp/WSkHk=",
+        "bzlTransitiveDigest": "0HalF3OEteVsDdU/VrHDBRk/M+HZ8po13/6NLATGF+8=",
         "usagesDigest": "wXMxCLpKAkR6DPg5JLjrCGaqTqLXqMpXVS3aFRC2GpA=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
@@ -629,6 +629,10 @@
             "attributes": {
               "version": "3.47.3"
             }
+          },
+          "flutter_tools_packages": {
+            "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_tools_packages",
+            "attributes": {}
           },
           "flutter_embedding_release": {
             "repoRuleId": "@@sameri11_rules_flutter+//flutter/private:repo.bzl%flutter_engine_jar",
@@ -683,7 +687,7 @@
     },
     "@@sameri11_rules_flutter+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "mVIkH0B0GlrjPhrQ02aOudsFK6y3pbEn7WcZp/WSkHk=",
+        "bzlTransitiveDigest": "0HalF3OEteVsDdU/VrHDBRk/M+HZ8po13/6NLATGF+8=",
         "usagesDigest": "J/heeACuHFK9gW6jxnzsv8nJUDHGGb9JLmaGCD2xgwE=",
         "recordedInputs": [
           "REPO_MAPPING:,namespace_plugin_metadata +namespace_plugin_metadata+namespace_plugin_metadata",

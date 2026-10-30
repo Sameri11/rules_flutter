@@ -1,2 +1,4 @@
 name: build_config_plugin
 version: 1.2.3
+environment:
+  sdk: ^3.12.2

@@ -1,0 +1,136 @@
+"""A composed app: one flutter_core artifact packaged through flutter_android_inputs.
+
+The Android inputs come from two places: an arm64-only AAR, which also carries the
+app's JNI library, and flutter_android_inputs with no plugins. Both reach the APK
+through the android_binary deps, so the apk check sees all of them.
+"""
+
+load("@rules_android//rules:rules.bzl", "aar_import", "android_binary")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load(
+    "@rules_flutter//flutter:defs.bzl",
+    "android_native_lib_jar",
+    "flutter_android_inputs",
+    "flutter_apk_check",
+    "flutter_core",
+)
+load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_java//java:java_single_jar.bzl", "java_single_jar")
+
+package(default_visibility = ["//visibility:private"])
+
+# MODULE.bazel reads the pub lock from outside this package.
+exports_files(["pubspec.lock"])
+
+flutter_core(
+    name = "core",
+    assets = ["assets/composed-marker.txt"],
+    pub = "@composed_pub",
+    # Sources of the path plugin, declared so pub_path_deps_check accepts it.
+    path_deps = ["//:build_config_plugin_srcs"],
+    srcs = glob(["lib/**/*.dart"]),
+)
+
+flutter_android_inputs(
+    name = "inputs",
+    core = ":core",
+    plugins = None,
+)
+
+# The AAR's classes, as a jar whose entries are timestamp-normalized.
+java_library(
+    name = "composed_aar_classes",
+    srcs = ["aar/java/com/example/composed/aar/AarMarker.java"],
+)
+
+java_single_jar(
+    name = "composed_aar_classes_jar",
+    deps = [":composed_aar_classes"],
+)
+
+# A linkshared cc_binary, named for the library it produces.
+cc_binary(
+    name = "libaar_native.so",
+    srcs = ["native/aar_native.cc"],
+    linkshared = True,
+)
+
+# The jar pins the platform, so the library is arm64 whatever split reaches it.
+android_native_lib_jar(
+    name = "aar_native_jar",
+    abi = "arm64-v8a",
+    src = [":libaar_native.so"],
+)
+
+# The aar is a zip built with a fixed entry order and timestamps, so the same
+# inputs always give the same bytes.
+genrule(
+    name = "composed_aar_zip",
+    srcs = [
+        "aar/AndroidManifest.xml",
+        ":aar_native_jar",
+        ":composed_jni_jar",
+        ":composed_aar_classes_jar",
+    ],
+    outs = ["composed_aar.aar"],
+    cmd = """set -euo pipefail
+out="$$PWD/$@"
+stage="$$(mktemp -d)"
+trap 'rm -rf "$$stage"' EXIT
+mkdir -p "$$stage/jni/arm64-v8a"
+cp "$(location aar/AndroidManifest.xml)" "$$stage/AndroidManifest.xml"
+cp "$(location :composed_aar_classes_jar)" "$$stage/classes.jar"
+unzip -p "$(location :aar_native_jar)" lib/arm64-v8a/libaar_native.so > "$$stage/jni/arm64-v8a/libaar_native.so"
+unzip -p "$(location :composed_jni_jar)" lib/arm64-v8a/libcomposed_jni.so > "$$stage/jni/arm64-v8a/libcomposed_jni.so"
+chmod 644 "$$stage/AndroidManifest.xml" "$$stage/classes.jar" "$$stage/jni/arm64-v8a/libaar_native.so" "$$stage/jni/arm64-v8a/libcomposed_jni.so"
+find "$$stage" -exec touch -t 198001010000 {} +
+cd "$$stage"
+zip -X -D -q "$$out" AndroidManifest.xml classes.jar jni/arm64-v8a/libaar_native.so jni/arm64-v8a/libcomposed_jni.so
+""",
+)
+
+aar_import(
+    name = "composed_aar",
+    aar = ":composed_aar.aar",
+)
+
+# The app's own JNI library. It is packed into the AAR, not linked into the APK:
+# flutter_apk_check treats a linked shared library as undeclared, and accepts
+# archive entries.
+cc_binary(
+    name = "libcomposed_jni.so",
+    srcs = ["native/composed_jni.cc"],
+    linkshared = True,
+)
+
+android_native_lib_jar(
+    name = "composed_jni_jar",
+    abi = "arm64-v8a",
+    src = [":libcomposed_jni.so"],
+)
+
+# The bundle is the core's `_assets_bundle` tree, named by that target's package
+# path. android_binary strips assets_dir to place the bundle under assets/.
+android_binary(
+    name = "apk",
+    assets = [":inputs_bundle"],
+    assets_dir = "composed_app/core_bundle_action",
+    deps = [
+        ":composed_aar",
+        ":inputs",
+    ],
+    manifest = "AndroidManifest.xml",
+    manifest_values = {
+        "applicationId": "com.example.composed_app",
+        "versionCode": "1",
+        "versionName": "1.0.0",
+    },
+    nocompress_extensions = [".so"],
+)
+
+flutter_apk_check(
+    name = "apk_check_test",
+    binary = ":apk",
+    native = [":inputs_native"],
+    tags = ["manual"],
+)

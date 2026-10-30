@@ -14,7 +14,8 @@ local_path_override(
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")
 
-# Separate pub hubs for the root fixtures and standard-layout app.
+# Separate pub hubs for the root fixtures, the standard-layout app and the
+# composed app.
 pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
 pub.lock(
     name = "pub",
@@ -24,6 +25,10 @@ pub.lock(
     name = "standard_layout_pub",
     lock = "//standard_layout:pubspec.lock",
 )
-use_repo(pub, "pub", "standard_layout_pub")
+pub.lock(
+    name = "composed_pub",
+    lock = "//composed_app:pubspec.lock",
+)
+use_repo(pub, "pub", "standard_layout_pub", "composed_pub")
 
 include("//android:config.MODULE.bazel")
