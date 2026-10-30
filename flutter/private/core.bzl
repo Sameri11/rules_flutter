@@ -82,7 +82,7 @@ def _assets_bundle_impl(ctx):
     if mode == "debug":
         # The debug overlay: the JIT kernel and the host engine's snapshots,
         # under the names the engine looks for. Release ships no overlay.
-        kernel = ctx.file.kernel
+        (kernel,) = ctx.files.kernel
         inputs += [kernel, toolchain.vm_isolate_snapshot, toolchain.isolate_snapshot]
         command += ' && cp "{k}" "{out}/kernel_blob.bin" && cp "{vm}" "{out}/vm_snapshot_data" && cp "{iso}" "{out}/isolate_snapshot_data"'.format(
             k = kernel.path,
