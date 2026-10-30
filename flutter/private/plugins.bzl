@@ -294,7 +294,8 @@ PACKAGE_INFO = struct(
 '''
 
 # Loads used only by the aggregate BUILD.
-_NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_files", "flutter_native_files_by_abi", "flutter_native_libs")
+_NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_libs")
+load("{native_files}", "flutter_native_files", "flutter_native_files_by_abi")
 load("@rules_java//java:defs.bzl", "java_import", "java_library")
 """
 
@@ -1947,7 +1948,10 @@ def _flutter_plugins_impl(ctx):
     ctx.file(
         "BUILD.bazel",
         _BUILD_LOADS +
-        _NATIVE_LIBS_LOADS.format(recipe = ctx.attr.recipe_bzl) +
+        _NATIVE_LIBS_LOADS.format(
+            recipe = ctx.attr.recipe_bzl,
+            native_files = str(Label("//flutter/private:native_files.bzl")),
+        ) +
         _BUILD_PACKAGE +
         "exports_files([\"plugin_deps.MODULE.bazel\", \"plugins.json\", \"dart_plugin_registrant.dart\"])\n\n" +
         "android_library(\n    name = \"all\",\n    exports = {},\n)\n".format(
@@ -2053,6 +2057,13 @@ Flutter plugin, which the plugin metadata does not list.""",
 
 _project = tag_class(
     attrs = {
+        "name": attr.string(
+            default = "flutter_plugins",
+            doc = """The hub repository's name, `@<name>`.
+
+Each hub is its own repository. A `package` or `build_config_field` tag names the
+hub it applies to in its `project` attribute.""",
+        ),
         "metadata": attr.label(
             doc = """The pub hub's plugin metadata, `@<hub>//:plugins_metadata.json`.
 
@@ -2213,6 +2224,10 @@ Defaults to `<name>_recipe`, which is what every recipe written against these
 rules is called -- one consuming project already computes the name that way
 rather than repeating it per package.""",
         ),
+        "project": attr.string(
+            default = "flutter_plugins",
+            doc = "The `plugins.project` name of the hub this applies to.",
+        ),
     },
 )
 
@@ -2222,6 +2237,7 @@ _build_config_field = tag_class(
     attrs = {
         "package": attr.string(mandatory = True),
         "name": attr.string(mandatory = True),
+        "project": attr.string(default = "flutter_plugins"),
         "type": attr.string(mandatory = True),
         # A sentinel distinguishes omission from an explicitly empty String.
         "value": attr.string(default = _BUILD_CONFIG_MISSING),
@@ -2230,6 +2246,8 @@ _build_config_field = tag_class(
 )
 
 def _flutter_plugins_ext_impl(ctx):
+    # Settings are keyed by the project they name. Each hub receives only its
+    # own, because a hub fails on a setting for a package it does not contain.
     overrides = {}
     build_config_fields = {}
     recipes = {}
@@ -2245,9 +2263,10 @@ def _flutter_plugins_ext_impl(ctx):
                     field.package,
                     field.name,
                 ))
-            if field.package not in build_config_fields:
-                build_config_fields[field.package] = []
-            build_config_fields[field.package].append({
+            hub_fields = build_config_fields.setdefault(field.project, {})
+            if field.package not in hub_fields:
+                hub_fields[field.package] = []
+            hub_fields[field.package].append({
                 "name": field.name,
                 "type": field.type,
                 "value": field.value if has_value else None,
@@ -2257,14 +2276,15 @@ def _flutter_plugins_ext_impl(ctx):
     # Dependencies may provide recipes; root-module settings take precedence.
     for mod in [m for m in ctx.modules if not m.is_root] + [m for m in ctx.modules if m.is_root]:
         for package in mod.tags.package:
+            hub_overrides = overrides.setdefault(package.project, {})
             if package.artifacts:
-                overrides[package.name] = json.encode(package.artifacts)
+                hub_overrides[package.name] = json.encode(package.artifacts)
             if package.macro and not package.bzl_file:
                 fail("plugins.package(name = \"{}\") gives macro but no bzl_file".format(
                     package.name,
                 ))
             if package.bzl_file:
-                recipes[package.name] = json.encode({
+                recipes.setdefault(package.project, {})[package.name] = json.encode({
                     # Generated repositories need canonical labels; root recipes
                     # must match this app's resolved packages.
                     "bzl": str(package.bzl_file),
@@ -2273,10 +2293,14 @@ def _flutter_plugins_ext_impl(ctx):
                 })
 
     # Only the root may declare a project; dependency recipes remain valid.
+    declared = {}
     for mod in ctx.modules:
         if not mod.is_root:
             continue
         for project in mod.tags.project:
+            if project.name in declared:
+                fail("plugins.project(name = \"{}\") is declared twice".format(project.name))
+            declared[project.name] = True
             check_abis(project.abis, "plugins.project")
 
             # Generated repositories need the caller-resolved canonical label.
@@ -2284,7 +2308,7 @@ def _flutter_plugins_ext_impl(ctx):
             maven_repo = "@@" + project.maven_repo.repo_name
 
             flutter_plugins(
-                name = "flutter_plugins",
+                name = project.name,
                 abis = project.abis,
                 embedding = str(project.embedding),
                 metadata = project.metadata,
@@ -2294,12 +2318,12 @@ def _flutter_plugins_ext_impl(ctx):
                 maven_resolver = project.maven_resolver,
                 maven_lock_file = project.maven_lock_file,
                 maven_repo = maven_repo,
-                overrides = overrides,
+                overrides = overrides.get(project.name, {}),
                 build_config_fields = {
                     n: json.encode(v)
-                    for n, v in build_config_fields.items()
+                    for n, v in build_config_fields.get(project.name, {}).items()
                 },
-                recipes = recipes,
+                recipes = recipes.get(project.name, {}),
                 android_bzl = str(Label("//flutter:defs.bzl")),
                 mode_debug = str(Label("//flutter:mode_debug")),
                 mode_release = str(Label("//flutter:mode_release")),

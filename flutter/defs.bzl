@@ -47,11 +47,6 @@ load(
     _FlutterArtifactInfo = "FlutterArtifactInfo",
     _flutter_core = "flutter_core",
 )
-load(
-    "//flutter/private:native_files.bzl",
-    _flutter_native_files = "flutter_native_files",
-    _flutter_native_files_by_abi = "flutter_native_files_by_abi",
-)
 
 # Explicit assignments make the curated names exports of this module. Merely
 # importing names with load() does not re-export them to downstream BUILD files.
@@ -85,8 +80,3 @@ flutter_core = _flutter_core
 FlutterArtifactInfo = _FlutterArtifactInfo
 flutter_android_inputs = _flutter_android_inputs
 flutter_apk_check = _flutter_apk_check
-
-# Named by the hub BUILD files the plugin extension generates, which load them
-# across a repository boundary from this entrypoint.
-flutter_native_files = _flutter_native_files
-flutter_native_files_by_abi = _flutter_native_files_by_abi
