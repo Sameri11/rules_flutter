@@ -2331,6 +2331,26 @@ def _flutter_plugins_ext_impl(ctx):
                 ndk_source_properties = str(Label("@androidndk_cmake//:ndk_source_properties")),
             )
 
+    # Keyed by project, a tag that names no declared hub would be dropped silently.
+    for mod in ctx.modules:
+        if not mod.is_root:
+            continue
+        for package in mod.tags.package:
+            if package.project not in declared:
+                fail("plugins.package(name = \"{}\") names project \"{}\", which no plugins.project declares; declared: {}".format(
+                    package.name,
+                    package.project,
+                    sorted(declared.keys()),
+                ))
+        for field in mod.tags.build_config_field:
+            if field.project not in declared:
+                fail("plugins.build_config_field {}.{} names project \"{}\", which no plugins.project declares; declared: {}".format(
+                    field.package,
+                    field.name,
+                    field.project,
+                    sorted(declared.keys()),
+                ))
+
 flutter_plugins_ext = module_extension(
     implementation = _flutter_plugins_ext_impl,
     tag_classes = {
