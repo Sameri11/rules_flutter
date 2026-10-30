@@ -2,9 +2,9 @@
 
 Packaging can drop an engine library, ship a stray one or replace one with a file
 of the same name. flutter_apk_check fails the build when an ABI's lib/ entries
-differ from the declared set: each split's own libraries, plus the libraries of
-the AARs, library archives and linked dependencies the android_binary packages
-for that split.
+differ from the declared set: each split's own libraries (its FlutterSplitNativeInfo
+files), plus the lib/<abi>/*.so entries of the AARs and library archives the
+android_binary packages for that split.
 """
 
 load("@rules_android//rules:android_split_transition.bzl", "android_split_transition")
@@ -14,11 +14,11 @@ load(":android_inputs_rules.bzl", "FlutterSplitNativeInfo")
 
 _CHECKER = "//flutter/private:apk_check_tool"
 
-# The libraries the android_binary packages for each split, from the provider. Two
-# fields: the AAR and library archives (native_libs.zip, jars), whose lib/<abi>/*.so
-# entries the checker reads with their CRC-32, and the files the binary links
-# (lib<binary>.so, plus the shared libraries of the deps' CcInfo, Flutter's included).
-# Fails closed: a missing provider, field or split key is an error, not an empty set.
+# The split's own libraries come from its FlutterSplitNativeInfo, not from the binary's
+# CcInfo: a library linked into a split's CcInfo would otherwise count as declared. The
+# provider contributes only the AAR and library archives (native_libs.zip, jars), whose
+# lib/<abi>/*.so entries the checker reads with their CRC-32.
+# Fails closed: a missing provider or split key is an error, not an empty set.
 def _provider_records(ctx, abis):
     if AndroidBinaryNativeLibsInfo not in ctx.attr.binary:
         fail("{}: {} does not return AndroidBinaryNativeLibsInfo, so its natives cannot be derived. flutter_apk_check needs an android_binary.".format(ctx.label, ctx.attr.binary.label))
@@ -26,10 +26,7 @@ def _provider_records(ctx, abis):
     by_cpu = getattr(info, "transitive_native_libs_by_cpu_architecture", None)
     if by_cpu == None:
         fail("{}: AndroidBinaryNativeLibsInfo of {} has no transitive_native_libs_by_cpu_architecture.".format(ctx.label, ctx.attr.binary.label))
-    linked = getattr(info, "native_libs", None)
-    if linked == None:
-        fail("{}: AndroidBinaryNativeLibsInfo of {} has no native_libs.".format(ctx.label, ctx.attr.binary.label))
-    for split in by_cpu.keys() + linked.keys():
+    for split in by_cpu.keys():
         # A custom Android platform names its own cpu, which no Flutter split configures.
         if split not in ABIS:
             fail("{}: the binary packages natives for split {}, which is not a stock ABI. Custom Android platform names are unsupported; use the ABI keys of flutter/private/abis.bzl.".format(ctx.label, split))
@@ -38,13 +35,10 @@ def _provider_records(ctx, abis):
     records = []
     inputs = []
     for abi in sorted(abis):
-        if abi not in by_cpu or abi not in linked:
+        if abi not in by_cpu:
             fail("{}: AndroidBinaryNativeLibsInfo has no natives entry for split {}.".format(ctx.label, abi))
         for f in by_cpu[abi].to_list():
             records.append(["archive", abi, f.path])
-            inputs.append(f)
-        for f in linked[abi].to_list():
-            records.append(["native", abi, f.basename, f.path])
             inputs.append(f)
     return records, inputs
 
@@ -136,8 +130,9 @@ flutter_apk_check = rule(
     doc = """Fails unless the APK's native libraries are exactly the ones the build declared.
 
 `binary` is the android_binary whose APK is checked. Its AndroidBinaryNativeLibsInfo
-names the libraries it packages for each split. `native` is the `<name>_native`
-target of each flutter_android_inputs the binary depends on, read in each split.
+supplies the AAR and library archives it packages for each split. `native` is the
+`<name>_native` target of each flutter_android_inputs the binary depends on, read in
+each split; its files, not the binary's linked CcInfo, are the split's declared libraries.
 
 Per ABI, lib/<abi>/ must hold exactly the declared names, each with the declared
 file's CRC-32, and its .so entries must be stored, so a missing, extra, changed or
