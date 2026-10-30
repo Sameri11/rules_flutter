@@ -18,6 +18,7 @@ mechanical exceptions need a label, and only those:
 host-compatible registration points at the public static toolchain target.
 """
 
+load("@rules_java//java:defs.bzl", "java_binary", "java_test")
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
 load(":abis.bzl", "ABIS", "MODES")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
@@ -147,3 +148,24 @@ for abi in ABIS:
             flag_values = {"//flutter:mode": mode},
             visibility = ["//visibility:public"],
         )
+
+# The APK native-payload checker. It runs on the rules_java JDK, so the check
+# action needs no host python3.
+java_binary(
+    name = "apk_check_tool",
+    srcs = ["ApkCheck.java"],
+    main_class = "ApkCheck",
+    visibility = ["//flutter:__subpackages__"],
+)
+
+# The checker's collision, deflate and missing/stray rules. main() asserts, so no
+# test framework is pulled in.
+java_test(
+    name = "apk_check_unit_test",
+    srcs = [
+        "ApkCheck.java",
+        "ApkCheckTest.java",
+    ],
+    main_class = "ApkCheckTest",
+    use_testrunner = False,
+)
