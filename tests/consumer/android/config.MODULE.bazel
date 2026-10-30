@@ -48,6 +48,7 @@ maven.install(
     name = "plugin_maven",
     artifacts = [
         "androidx.annotation:annotation-experimental:1.4.1",
+        "androidx.annotation:annotation:1.8.1",
     ],
     repositories = [
         "https://maven.google.com",
@@ -141,7 +142,22 @@ plugins.project(
     metadata = "@namespace_plugin_metadata//:plugins_metadata.json",
     package_config = "@namespace_plugin_metadata//:package_config.json",
 )
-use_repo(plugins, "flutter_plugins")
+
+# The composed app's own hub. Its lock names only the composed plugin, so the
+# namespace fixtures of `flutter_plugins` cannot reach its APK.
+plugins.project(
+    name = "composed_plugins",
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+        "armeabi-v7a",
+    ],
+    embedding = "//:flutter_embedding_no_plugins",
+    maven_repo = "@plugin_maven//:pin",
+    metadata = "@composed_pub//:plugins_metadata.json",
+    package_config = "@composed_pub//:package_config.json",
+)
+use_repo(plugins, "composed_plugins", "flutter_plugins")
 
 # Public Flutter extension repositories used to test explicit embedding
 # debug/release labels in this fixture.

@@ -1,7 +1,7 @@
 """A composed app: one flutter_core artifact packaged through flutter_android_inputs.
 
 The Android inputs come from two places: an arm64-only AAR, which also carries the
-app's JNI library, and flutter_android_inputs with no plugins. Both reach the APK
+app's JNI library, and flutter_android_inputs over the composed_plugins hub. Both reach the APK
 through the android_binary deps, so the apk check sees all of them.
 """
 
@@ -27,14 +27,14 @@ flutter_core(
     assets = ["assets/composed-marker.txt"],
     pub = "@composed_pub",
     # Sources of the path plugin, declared so pub_path_deps_check accepts it.
-    path_deps = ["//:build_config_plugin_srcs"],
+    path_deps = ["//:composed_plugin_srcs"],
     srcs = glob(["lib/**/*.dart"]),
 )
 
 flutter_android_inputs(
     name = "inputs",
     core = ":core",
-    plugins = None,
+    plugins = "@composed_plugins",
 )
 
 # The AAR's classes, as a jar whose entries are timestamp-normalized.

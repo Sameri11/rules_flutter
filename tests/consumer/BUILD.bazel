@@ -29,8 +29,8 @@ exports_files(["build_config_probe.py"])
 # requires every `path:` dependency's files to be declared, and a package cannot
 # glob another package's directory.
 filegroup(
-    name = "build_config_plugin_srcs",
-    srcs = glob(["fixtures/build_config_plugin/**"]),
+    name = "composed_plugin_srcs",
+    srcs = glob(["fixtures/composed_plugin/**"]),
     visibility = ["//composed_app:__pkg__"],
 )
 

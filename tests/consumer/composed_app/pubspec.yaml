@@ -8,9 +8,9 @@ dependencies:
   flutter:
     sdk: flutter
   # Path, not hosted: a hosted plugin would make the fixture depend on pub.dev.
-  # The plugin is the Java-carrying fixture the consumer already uses.
-  build_config_plugin:
-    path: ../fixtures/build_config_plugin
+  # The plugin carries the one Android class the composed APK must contain.
+  composed_plugin:
+    path: ../fixtures/composed_plugin
 flutter:
   assets:
     - assets/composed-marker.txt
