@@ -13,7 +13,7 @@ without an `android/` module.
 """
 
 load(":abis.bzl", "MIN_SDK", "check_abis", "plugin_repo_target")
-load(":embedding.bzl", "FLUTTER_EMBEDDING_ARTIFACTS")
+load(":embedding.bzl", "ANNOTATION_JVM", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
 visibility(["//flutter"])
@@ -293,7 +293,7 @@ PACKAGE_INFO = struct(
 '''
 
 # Loads used only by the aggregate BUILD.
-_NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_libs")
+_NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_files", "flutter_native_files_by_abi", "flutter_native_libs")
 load("@rules_java//java:defs.bzl", "java_import", "java_library")
 """
 
@@ -347,6 +347,42 @@ filegroup(
         "{debug}": ["{debug_src}"],
         "{release}": ["{release_src}"],
     }}),
+)
+"""
+
+# The file-level twin of native_libs_<abi>_jar, for the split route. Both read
+# the same contributions, so the jar and the Files cannot disagree.
+_NATIVE_FILES_TARGET = "native_files_{}"
+
+_NATIVE_FILES_TEMPLATE = """
+flutter_native_files(
+    name = "{target}",
+    slice = "{abi}",
+    deps = {deps},
+)
+"""
+
+# The aggregate the split route reads. Its keys are the ABIs the project
+# declares, so no per-ABI label is listed by hand.
+_NATIVE_FILES_BY_ABI_TEMPLATE = """
+flutter_native_files_by_abi(
+    name = "flutter_native_files_by_abi",
+    abis = {abis},
+    libs = {libs},
+)
+"""
+
+# GeneratedPluginRegistrant as a library of its own. The app depends on this
+# one target, so its classpath does not depend on which plugins are in `:all`.
+_REGISTRANT_LIB_TEMPLATE = """
+android_library(
+    name = "generated_plugin_registrant",
+    srcs = [":generated_plugin_registrant_src"],
+    deps = [
+        ":all",
+        "{embedding}",
+        "{maven_repo}{annotation}",
+    ],
 )
 """
 
@@ -1462,6 +1498,29 @@ def _plugin_native_libs_target(ctx, manifest, abi, dev):
         )
     )
 
+def _recipe_contributions(ctx, manifest, dev):
+    """A BUILD list of every recipe's flutter_native_contribution, mode-selected."""
+    return _mode_list([
+        (p["name"], "//{n}:{n}_flutter_native".format(n = p["name"]))
+        for p in manifest
+        if p["strategy"].startswith("recipe:")
+    ], dev, ctx)
+
+def _native_files_target(ctx, manifest, abi, dev):
+    """Return this ABI's file-level aggregate of the recipe libraries."""
+    return _NATIVE_FILES_TEMPLATE.format(
+        target = _NATIVE_FILES_TARGET.format(abi),
+        abi = abi,
+        deps = _recipe_contributions(ctx, manifest, dev),
+    )
+
+def _native_files_by_abi_target(ctx):
+    """Return the aggregate of every ABI this project declares, keyed by ABI."""
+    return _NATIVE_FILES_BY_ABI_TEMPLATE.format(
+        abis = repr(ctx.attr.abis),
+        libs = repr({":" + _NATIVE_FILES_TARGET.format(abi): abi for abi in ctx.attr.abis}),
+    )
+
 def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
     plugins = metadata.get("plugins", {}).get("android", [])
@@ -1950,6 +2009,11 @@ def _flutter_plugins_impl(ctx):
             debug_src = registrant["debug"],
             release_src = registrant["release"],
         ) +
+        _REGISTRANT_LIB_TEMPLATE.format(
+            embedding = ctx.attr.embedding,
+            maven_repo = ctx.attr.maven_repo,
+            annotation = ANNOTATION_JVM,
+        ) +
         "".join([
             _NATIVE_LIBS_TEMPLATE.format(
                 abi = abi,
@@ -1957,14 +2021,10 @@ def _flutter_plugins_impl(ctx):
                 # halves read it from plugin_repo_target, so neither file can
                 # rename it alone.
                 target = plugin_repo_target("recipe_libraries", abi),
-                deps = _mode_list([
-                    (p["name"], "//{n}:{n}_flutter_native".format(n = p["name"]))
-                    for p in manifest
-                    if p["strategy"].startswith("recipe:")
-                ], dev, ctx),
-            ) + _plugin_native_libs_target(ctx, manifest, abi, dev)
+                deps = _recipe_contributions(ctx, manifest, dev),
+            ) + _plugin_native_libs_target(ctx, manifest, abi, dev) + _native_files_target(ctx, manifest, abi, dev)
             for abi in ctx.attr.abis
-        ]),
+        ]) + _native_files_by_abi_target(ctx),
     )
 
 flutter_plugins = repository_rule(
