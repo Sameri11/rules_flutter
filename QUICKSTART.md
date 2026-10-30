@@ -177,6 +177,16 @@ local_path_override(
 )
 ```
 
+Android consumers add the Android module the same way:
+
+```python
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../rules_flutter/rules_flutter_android",
+)
+```
+
 The `path = "../../rules_flutter_core"` spelling in the in-repository fixtures is specific to their
 location two levels below this checkout. An outside sibling consumer normally
 uses `path = "../rules_flutter/rules_flutter_core"`; change the path only to match your layout.
@@ -253,7 +263,12 @@ module(name = "hello_bazel", version = "0.0.1")
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
 local_path_override(
     module_name = "sameri11_rules_flutter_core",
-    path = "../rules_flutter",
+    path = "../rules_flutter/rules_flutter_core",
+)
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../rules_flutter/rules_flutter_android",
 )
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
@@ -741,6 +756,11 @@ bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "
 local_path_override(
     module_name = "sameri11_rules_flutter_core",
     path = "../../rules_flutter_core",
+)
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../../rules_flutter_android",
 )
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")

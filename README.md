@@ -55,7 +55,7 @@ detail behind each one.
 Compared with the stock [`flutter` CLI](https://docs.flutter.dev/reference/flutter-cli).
 **Implemented** = supported by the rules; **Partial** = limited support or extra
 configuration/tooling; **Not implemented** = no public Bazel workflow.
-Standalone Flutter commands and prototypes do not count as Bazel support.
+Standalone Flutter commands and experiments do not count as Bazel support.
 
 | Feature | Stock Flutter | rules_flutter | Notes |
 | --- | --- | --- | --- |
@@ -95,7 +95,7 @@ monorepos, and consumer recipes/native assets, see the
 
 Start with the [CI-tested](#ci-tested-toolchains) Flutter and Bazel versions, Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The documented `.bazelrc` selects Bazel's remote JDK 17 toolchain, so no local JDK installation is required.
 
-Without `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed. A consumer module must explicitly register NDK toolchains in its `MODULE.bazel` and inherit the stable repositories from `rules_flutter`'s NDK extension. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a stub declaring no toolchains; the failure surfaces only when a target needs an Android toolchain.
+Without `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed. A consumer module must explicitly register NDK toolchains in its `MODULE.bazel` and inherit the stable repositories from `rules_flutter_android`'s NDK extension. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a stub declaring no toolchains; the failure surfaces only when a target needs an Android toolchain.
 
 ### Create the project
 
@@ -140,6 +140,11 @@ local_path_override(
     module_name = "sameri11_rules_flutter_core",
     path = "../rules_flutter/rules_flutter_core",
 )
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../rules_flutter/rules_flutter_android",
+)
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")
@@ -154,6 +159,8 @@ use_repo(pub, "pub")
 
 include("//android:config.MODULE.bazel")
 ```
+
+Android consumers also declare `sameri11_rules_flutter_android` in the root module, as shown above, because the `include()`d Android configuration loads its `extensions.bzl`.
 
 The `pub` extension turns the committed `pubspec.lock` into the `@pub` repository: hosted packages pinned by the lock's sha256, Flutter SDK packages, and a package config with no absolute paths. `pubspec.yaml` must sit beside the lock. Git sources in the lock are rejected.
 
