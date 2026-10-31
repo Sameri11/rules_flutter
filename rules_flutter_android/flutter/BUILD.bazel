@@ -1,0 +1,10 @@
+load("//flutter:native_build_env.bzl", "native_build_env")
+
+package(default_visibility = ["//visibility:public"])
+
+# Named as a source by //tools/ci:key_portability_check.
+exports_files(["native_build_env.bzl"])
+
+# The Android SDK a native build hook reads. flutter_app and flutter_assets
+# from this module default to it; pass it to a flutter_core call explicitly.
+native_build_env(name = "native_build_env")

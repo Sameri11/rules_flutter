@@ -32,7 +32,7 @@ EXAMPLES = (
         "demo_app_debug",
         "examples/demo_app",
         DEMO_APP_TARGETS,
-        ("--@rules_flutter//flutter:mode=debug",),
+        ("--@rules_flutter_core//flutter:mode=debug",),
     ),
     ("no_plugins", "examples/no_plugins", ("//android/app:no_plugins",), ()),
     ("pub_plugins", "examples/pub_plugins", ("//android/app:pub_plugins",), ()),

@@ -10,7 +10,7 @@ work=$(mktemp -d)
 probe_dir=""
 probe_backup=""
 hint='hint: declare test-local imports in `srcs`'
-frontend=--@rules_flutter//flutter:test_kernel_compiler=frontend_server
+frontend=--@rules_flutter_core//flutter:test_kernel_compiler=frontend_server
 # Remote and disk hits would hide the runner and the compile being compared.
 build_flags=(--disk_cache= --noremote_accept_cached --lockfile_mode=error)
 
@@ -108,7 +108,7 @@ fi
 probe_dir=$(dirname "$app_build")
 app_pkg=${probe_dir#.}
 app_pkg=${app_pkg#/}
-probe_load='load("@rules_flutter//flutter:defs.bzl", "flutter_test")'
+probe_load='load("@rules_flutter_core//flutter:defs.bzl", "flutter_test")'
 if grep -q '"flutter_test"' "$app_build"; then
   probe_load=""
 fi

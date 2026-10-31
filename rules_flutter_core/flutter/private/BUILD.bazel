@@ -1,0 +1,179 @@
+"""Implementation of the Flutter rules.
+
+Nothing here is supported API: Consumer Modules load //flutter:defs.bzl and
+//flutter:extensions.bzl. The `.bzl` files beside this file declare
+`visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
+allows it to be loaded from the ruleset's root MODULE.bazel only. Two
+mechanical exceptions need a label, and only those:
+
+  * The Python helpers are attribute defaults of rules defined here. Bazel
+    resolves an implicit dependency against the package of the `.bzl` that
+    defines the rule, so `//flutter:__subpackages__` is enough even though the
+    rules are instantiated in another module's packages.
+  * The `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
+    That guard parses their source for action-key portability contracts, which
+    requires a label, not a load.
+
+`repo.bzl` is loaded through the public module extension. The generated
+host-compatible registration points at the public static toolchain target.
+"""
+
+load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
+load(":abis.bzl", "ABIS")
+load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
+load(":toolchain.bzl", "flutter_toolchain")
+
+package(default_visibility = ["//visibility:private"])
+
+exports_files(
+    [
+        "check_bundle_pubspec.py",
+        "check_path_deps.py",
+        "lib_entry.py",
+        "merge_native_assets.py",
+        "read_pubspec.py",
+        "tester_assets.dart",
+    ],
+    visibility = ["//flutter:__subpackages__"],
+)
+
+# The test-asset builder, compiled once per SDK from the flutter_tools closure in
+# its own repository. Test bundles run this dill, so no action compiles
+# flutter_tools or reads the pub cache. frontend_server names every source
+# through the execroot scheme, so the dill carries no machine-specific paths.
+genrule(
+    name = "tester_assets_dill",
+    srcs = [
+        "tester_assets.dart",
+        "@flutter_tools_packages//:flutter_tools_package_config.json",
+        "@flutter_tools_packages",
+        "@flutter_sdk//:vm_platform_strong.dill",
+    ],
+    outs = ["tester_assets.dill"],
+    cmd = "d=$$PWD/$$(dirname $(execpath @flutter_sdk//:vm_platform_strong.dill)) && $(execpath @flutter_sdk//:dartaotruntime) $(execpath @flutter_sdk//:frontend_server.snapshot) --target=vm --sdk-root=$$d/ --platform=$$d/vm_platform_strong.dill --filesystem-root . --filesystem-scheme org-dartlang-root --packages=org-dartlang-root:///$(execpath @flutter_tools_packages//:flutter_tools_package_config.json) --no-print-incremental-dependencies --output-dill=$@ org-dartlang-root:///$(execpath tester_assets.dart)",
+    tools = [
+        "@flutter_sdk//:dartaotruntime",
+        "@flutter_sdk//:frontend_server.snapshot",
+    ],
+    visibility = ["//flutter:__subpackages__"],
+)
+
+exports_files(
+    [
+        "core.bzl",
+        "dart_registrant.bzl",
+        "flutter_test.bzl",
+        "pub_lock.bzl",
+        "repo.bzl",
+        "rules.bzl",
+        "test_kernel_driver.bzl",
+    ],
+    visibility = ["//tools/ci:__pkg__"],
+)
+
+flutter_toolchain(
+    name = "flutter_toolchain",
+    visibility = ["//visibility:public"],
+)
+
+toolchain_type(
+    name = "flutter_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+# The ABI table is implementation, so these assertions live beside it rather
+# than in the Consumer Module fixture: a wrong snapshot flag or CPU constraint
+# mislabels a platform, and nothing else in the build would notice.
+expect_equal(
+    ABIS["armeabi-v7a"].snapshot_flags,
+    [
+        "--no-sim-use-hardfp",
+        "--no-use-integer-division",
+    ],
+    "armeabi-v7a snapshot_flags",
+)
+
+expect_label_equal(
+    ABIS["arm64-v8a"].cpu_constraint,
+    "@platforms//cpu:arm64",
+    "arm64-v8a cpu_constraint",
+)
+
+expect_label_equal(
+    ABIS["x86_64"].cpu_constraint,
+    "@platforms//cpu:x86_64",
+    "x86_64 cpu_constraint",
+)
+
+expect_label_equal(
+    ABIS["armeabi-v7a"].cpu_constraint,
+    "@platforms//cpu:armv7",
+    "armeabi-v7a cpu_constraint",
+)
+
+# What the pub lock reader accepts and, as importantly, refuses.
+pub_lock_parser_test_suite(name = "pub_lock_parser_test")
+
+# One split per ABI and mode. The core selects its per-ABI libraries on these,
+# so a 3-ABI build gets exactly one split per ABI rather than one per platform.
+# Public because the core's select() is expanded in the consumer's package.
+# Spelled out: Bazel does not allow `for` in BUILD files.
+config_setting(
+    name = "split_arm64_v8a_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {"//flutter:mode": "release"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_arm64_v8a_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {"//flutter:mode": "debug"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_x86_64_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {"//flutter:mode": "release"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_x86_64_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {"//flutter:mode": "debug"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_armeabi_v7a_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
+    flag_values = {"//flutter:mode": "release"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_armeabi_v7a_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
+    flag_values = {"//flutter:mode": "debug"},
+    visibility = ["//visibility:public"],
+)

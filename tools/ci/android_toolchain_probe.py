@@ -24,32 +24,27 @@ SCENARIOS = (
 )
 EM_AARCH64 = 183
 
-CORE_FORBIDDEN_MARKERS = (
-    "androidndk",
-    "rules_android_ndk",
+# Repository-name fragments that only the Android module registers.
+RULESET_ANDROID_REPO_MARKERS = (
     "android_gmaven",
     "android_tools",
-)
-
-# Measured transitive module registrations that remain.
-CORE_DEPENDENCY_REGISTRATIONS = (
-    "rules_android+",
-    "rules_android++android_sdk_repository_extension+androidsdk",
-    "rules_foreign_cc+",
-    "rules_foreign_cc++tools+cmake_3.31.8_toolchains",
-    "rules_foreign_cc++tools+ninja_1.13.0_toolchains",
-    "rules_foreign_cc++tools+rules_foreign_cc_framework_toolchains",
-    "rules_kotlin+",
-    "rules_kotlin++rules_kotlin_extensions+com_github_jetbrains_kotlin",
-)
-
-ANDROID_REPO_MARKERS = CORE_FORBIDDEN_MARKERS + (
+    "androidndk",
     "androidsdk",
+    "rules_flutter_android",
+)
+
+# Repository-name fragments of dependency modules. The core Consumer's own graph
+# reaches them through rules_cc -> protobuf, so they are recorded, not forbidden.
+DEPENDENCY_REPO_MARKERS = (
     "rules_android",
     "rules_foreign_cc",
     "rules_jvm_external",
     "rules_kotlin",
 )
+
+# The core module's subtree in the core Consumer's module graph is exactly this set.
+CORE_MODULE_SUBTREE = ("bazel_skylib", "platforms", "rules_license")
+
 
 # Pre-cutover baseline: e485184^ with Android variables unset.
 PRE_CUTOVER_ANDROID_REPOSITORIES = (
@@ -153,6 +148,90 @@ def _fresh_output_base(output_base):
         raise ProbeError("core-isolation requires a fresh output base: {}".format(output_base))
 
 
+def _core_module_subtree(workspace, output_base, environment):
+    output = _run_bazel(
+        workspace,
+        output_base,
+        [
+            "mod",
+            "graph",
+            "--lockfile_mode=off",
+            "--from=sameri11_rules_flutter_core@_",
+            "--output=json",
+        ],
+        environment=environment,
+    )
+    start = re.search(r"^\{", output, re.MULTILINE)
+    if start is None:
+        raise ProbeError("the module graph printed no JSON object")
+    try:
+        graph, _ = json.JSONDecoder().raw_decode(output[start.start() :])
+    except json.JSONDecodeError as error:
+        raise ProbeError("the module graph is not JSON: {}".format(error)) from error
+    core = [
+        node
+        for node in graph.get("dependencies", [])
+        if node.get("name") == "sameri11_rules_flutter_core"
+    ]
+    if len(core) != 1:
+        raise ProbeError("the module graph has no single sameri11_rules_flutter_core node")
+    names = set()
+    pending = list(core[0].get("dependencies", []))
+    while pending:
+        node = pending.pop()
+        name = node["name"]
+        if name not in names:
+            names.add(name)
+            pending.extend(node.get("dependencies", []))
+    subtree = sorted(names)
+    if subtree != sorted(CORE_MODULE_SUBTREE):
+        raise ProbeError(
+            "the core module subtree must be {} but is {}".format(
+                sorted(CORE_MODULE_SUBTREE),
+                subtree,
+            ),
+        )
+    return subtree
+
+
+# Quoted labels and module names that only the Android module owns. Core sources must not
+# use them; an unquoted mention in prose does not count.
+CORE_HELPER_REFERENCES = (
+    '"@rules_flutter_android',
+    "'@rules_flutter_android",
+    '"sameri11_rules_flutter_android"',
+    '"rules_flutter_android"',
+)
+
+
+def _core_helper_references():
+    core = ROOT / "rules_flutter_core"
+    hits = []
+    for directory, subdirectories, names in os.walk(core):
+        subdirectories[:] = [name for name in subdirectories if not name.startswith("bazel-")]
+        for name in names:
+            if not (name.endswith(".bzl") or name.startswith("BUILD") or name == "MODULE.bazel"):
+                continue
+            path = Path(directory) / name
+            if path.is_symlink():
+                continue
+            text = path.read_text(encoding="utf-8")
+            if any(marker in text for marker in CORE_HELPER_REFERENCES):
+                hits.append(str(path.relative_to(core)))
+    return sorted(hits)
+
+
+def _shutdown_output_base(workspace, output_base):
+    """Stop the Bazel server of an output base before its directory is removed."""
+    subprocess.run(
+        _bazel_command(workspace, output_base, ["shutdown"]),
+        cwd=str(workspace),
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def run_core_isolation(workspace, output_base):
     environment = os.environ.copy()
     environment.pop("ANDROID_HOME", None)
@@ -166,6 +245,11 @@ def run_core_isolation(workspace, output_base):
         output_base = Path(output_base)
 
     try:
+        helper_references = _core_helper_references()
+        if helper_references:
+            raise ProbeError(
+                "the core module references the Android module: {}".format(helper_references),
+            )
         _fresh_output_base(output_base)
         _run_bazel(
             workspace,
@@ -174,30 +258,23 @@ def run_core_isolation(workspace, output_base):
             environment=environment,
         )
         repositories = _external_repositories(output_base)
-        materialized = [
+        ruleset_registered = sorted(
             name.lstrip("@").removesuffix(".marker")
             for name in repositories
-            if any(marker in name for marker in ANDROID_REPO_MARKERS)
-        ]
-        forbidden = sorted(
-            {
-                name
-                for name in materialized
-                if any(marker in name for marker in CORE_FORBIDDEN_MARKERS)
-            },
+            if any(marker in name for marker in RULESET_ANDROID_REPO_MARKERS)
         )
-        if forbidden:
+        if ruleset_registered:
             raise ProbeError(
-                "the core Consumer materialised ruleset-registered Android "
-                "repositories: {}".format(forbidden),
+                "the core Consumer materialised ruleset-registered Android repositories: {}".format(
+                    ruleset_registered,
+                ),
             )
-
-        unexpected = sorted(set(materialized) - set(CORE_DEPENDENCY_REGISTRATIONS))
-        if unexpected:
-            raise ProbeError(
-                "the core Consumer materialised unrecorded Android-adjacent "
-                "repositories: {}".format(unexpected),
-            )
+        dependency_registered = sorted(
+            name.lstrip("@").removesuffix(".marker")
+            for name in repositories
+            if any(marker in name for marker in DEPENDENCY_REPO_MARKERS)
+        )
+        core_subtree = _core_module_subtree(workspace, output_base, environment)
 
         return {
             "scenario": "core-isolation",
@@ -208,7 +285,7 @@ def run_core_isolation(workspace, output_base):
             },
             "pre_cutover": {
                 "source": (
-                    "prototype e485184^, fresh external core Consumer, host cc_binary, "
+                    "e485184^, fresh external core Consumer, host cc_binary, "
                     "both Android env vars unset"
                 ),
                 "android_repository_count": len(PRE_CUTOVER_ANDROID_REPOSITORIES),
@@ -216,15 +293,19 @@ def run_core_isolation(workspace, output_base):
             },
             "post_cutover": {
                 "materialized_repository_count": len(repositories),
-                "ruleset_registered_android_repositories": forbidden,
-                "dependency_registered_repositories": sorted(set(materialized)),
+                "ruleset_registered_android_repositories": ruleset_registered,
+                "forbidden_markers": list(RULESET_ANDROID_REPO_MARKERS),
+                "dependency_registered_repositories": dependency_registered,
+                "core_module_subtree": core_subtree,
+                "core_helper_references": helper_references,
             },
             "result": (
-                "no ruleset-registered Android repository; only the recorded "
-                "dependency-module toolchain registrations remain"
+                "no ruleset-registered Android repository and an exact core module subtree; "
+                "dependency-module repositories are recorded, not forbidden"
             ),
         }
     finally:
+        _shutdown_output_base(workspace, output_base)
         if temporary is not None:
             temporary.cleanup()
 
@@ -370,6 +451,7 @@ def run_missing_ndk(workspace, output_base):
             "result": "upstream repository fetch failed with an actionable diagnostic",
         }
     finally:
+        _shutdown_output_base(workspace, output_base)
         if temporary is not None:
             temporary.cleanup()
 
@@ -380,10 +462,15 @@ module(
     version = "0.0.1",
 )
 
-bazel_dep(name = "sameri11_rules_flutter", repo_name = "rules_flutter", version = "0.1.0")
+bazel_dep(name = "sameri11_rules_flutter_core", repo_name = "rules_flutter_core", version = "0.1.0")
 local_path_override(
-    module_name = "sameri11_rules_flutter",
-    path = "{ruleset}",
+    module_name = "sameri11_rules_flutter_core",
+    path = "{core}",
+)
+bazel_dep(name = "sameri11_rules_flutter_android", repo_name = "rules_flutter_android", version = "0.1.0")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "{android}",
 )
 
 include("//android:config.MODULE.bazel")
@@ -403,7 +490,7 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 """
@@ -412,7 +499,9 @@ register_toolchains("@androidndk//:all")
 def _lock_consumer(directory):
     android = directory / "android"
     android.mkdir(parents=True, exist_ok=True)
-    (directory / "MODULE.bazel").write_text(_LOCK_CONSUMER_MODULE.format(ruleset=ROOT))
+    (directory / "MODULE.bazel").write_text(
+        _LOCK_CONSUMER_MODULE.format(core=ROOT / "rules_flutter_core", android=ROOT / "rules_flutter_android"),
+    )
     (directory / "BUILD.bazel").write_text("")
     (android / "BUILD.bazel").write_text('exports_files(["config.MODULE.bazel"])\n')
     (android / "config.MODULE.bazel").write_text(_LOCK_ANDROID_MODULE)
@@ -422,12 +511,15 @@ def _lock_consumer(directory):
 def _resolved_lock(scratch, name, environment):
     workspace = _lock_consumer(scratch / name)
     output_base = scratch / "{}-output-base".format(name)
-    _run_bazel(
-        workspace,
-        output_base,
-        ["mod", "graph", "--lockfile_mode=update"],
-        environment=environment,
-    )
+    try:
+        _run_bazel(
+            workspace,
+            output_base,
+            ["mod", "graph", "--lockfile_mode=update"],
+            environment=environment,
+        )
+    finally:
+        _shutdown_output_base(workspace, output_base)
     lock = workspace / "MODULE.bazel.lock"
     if not lock.is_file():
         raise ProbeError("module resolution wrote no lock at {}".format(lock))

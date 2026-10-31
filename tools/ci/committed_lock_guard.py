@@ -9,13 +9,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 COMMITTED_LOCKS = (
-    "MODULE.bazel.lock",
+    "rules_flutter_core/MODULE.bazel.lock",
+    "rules_flutter_android/MODULE.bazel.lock",
     "examples/demo_app/MODULE.bazel.lock",
     "examples/local_plugin/MODULE.bazel.lock",
     "examples/no_plugins/MODULE.bazel.lock",
     "examples/pub_plugins/MODULE.bazel.lock",
     "tests/consumer/MODULE.bazel.lock",
     "tests/namespace_dynamic/MODULE.bazel.lock",
+    "tests/core_consumer/MODULE.bazel.lock",
 )
 
 FORBIDDEN_SUBSTRINGS = (
@@ -71,7 +73,7 @@ def _selftest():
                 "//flutter:extensions.bzl%android_ndk": {
                     "general": {
                         "recordedInputs": [
-                            "REPO_MAPPING:sameri11_rules_flutter+,rules_android_ndk rules_android_ndk+",
+                            "REPO_MAPPING:sameri11_rules_flutter_core+,rules_android_ndk rules_android_ndk+",
                         ],
                         "generatedRepoSpecs": {
                             "androidndk": {
@@ -88,7 +90,7 @@ def _selftest():
         raise SystemExit("FAIL: selftest rejected a portable lock")
 
     captured = clean.replace(
-        '"REPO_MAPPING:sameri11_rules_flutter+,rules_android_ndk rules_android_ndk+"',
+        '"REPO_MAPPING:sameri11_rules_flutter_core+,rules_android_ndk rules_android_ndk+"',
         '"ENV:ANDROID_NDK_HOME /Users/someone/Library/Android/sdk/ndk/28.2.13676358"',
     )
     findings = check_lock("captured", captured)

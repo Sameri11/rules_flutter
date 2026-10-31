@@ -1,0 +1,65 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_test")
+
+package(default_visibility = ["//visibility:private"])
+
+# The action sources //tools/ci:key_portability_check reads as srcs. That guard
+# parses their source, which requires a label, not a load.
+exports_files(
+    [
+        "android.bzl",
+        "android_inputs_rules.bzl",
+        "apk_check.bzl",
+        "ndk.bzl",
+        "plugins.bzl",
+    ],
+    visibility = ["//tools/ci:__pkg__"],
+)
+
+# Attribute defaults of rules defined under //flutter. Those rules are
+# instantiated in consumer packages, so //flutter:__subpackages__ is enough.
+exports_files(
+    [
+        "check_native_assets.py",
+        "inject_version.py",
+    ],
+    visibility = ["//flutter:__subpackages__"],
+)
+
+# The empty registrant flutter_android_binary compiles for a plugin-free app.
+# The macro expands in the consumer's package, so the file must be public.
+exports_files(
+    ["registrant/GeneratedPluginRegistrant.java"],
+    visibility = ["//visibility:public"],
+)
+
+# Excluded from wildcard checks because resolving it requires @androidsdk.
+alias(
+    name = "_android_sdk_marker",
+    actual = select({
+        "@androidsdk//:has_androidsdk": "@androidsdk//:platform-tools/adb",
+        "//conditions:default": "@androidsdk//:sdk",
+    }),
+    tags = ["manual"],
+    visibility = ["//flutter:__subpackages__"],
+)
+
+# The APK native-payload checker. It runs on the rules_java JDK, so the check
+# action needs no host python3.
+java_binary(
+    name = "apk_check_tool",
+    srcs = ["ApkCheck.java"],
+    main_class = "ApkCheck",
+    visibility = ["//flutter:__subpackages__"],
+)
+
+# The checker's collision, deflate and missing/stray rules. main() asserts, so no
+# test framework is pulled in.
+java_test(
+    name = "apk_check_unit_test",
+    srcs = [
+        "ApkCheck.java",
+        "ApkCheckTest.java",
+    ],
+    main_class = "ApkCheckTest",
+    use_testrunner = False,
+)

@@ -1,0 +1,5 @@
+# Action execution policy lives in flutter/private/rules.bzl; do not set a global
+# spawn strategy here.
+common --enable_bzlmod
+
+import %workspace%/../.bazelrc.cache

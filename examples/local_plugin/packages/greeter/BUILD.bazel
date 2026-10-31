@@ -1,4 +1,4 @@
-load("@rules_flutter//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")
 
 package(default_visibility = ["//visibility:public"])
 

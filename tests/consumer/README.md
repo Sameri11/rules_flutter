@@ -50,21 +50,21 @@ separate scratch state with `ANDROID_NDK_HOME` unset and set, and requires
 byte-identical locks that name neither the variable nor the local NDK path.
 `core-isolation` uses `tests/core_consumer`; the others use this fixture.
 
-It is **not** part of the root workspace's `//...`. It cannot be: a nested
-`MODULE.bazel` is not a repo boundary, so without the root `.bazelignore` entry
-Bazel would descend in and evaluate these packages as *root* packages, where
-`local_path_override` never applies.
+It is **not** part of any `//...` target set. The repository root has no module,
+so no `bazel test //...` reaches it: it is a separate module with its own
+`MODULE.bazel`, and its `local_path_override` entries resolve against that module's graph.
 
 
 ## What it covers
 
-Loading and analysis — `--nobuild` — of every supported BUILD symbol through
-`@rules_flutter//flutter:defs.bzl`, plus focused behavior checks:
+Loading and analysis — `--nobuild` — of every supported BUILD symbol through the
+core and Android entrypoints below, plus focused behavior checks:
 
 | entry point | symbols |
 | --- | --- |
-| `defs.bzl` | `flutter_app`, `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `flutter_aot_library`, `flutter_assets`, `pub_path_deps_check`, `pub_plugins_check` |
-| `extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`/`plugins.build_config_field()`) over real, checked-in external plugin graphs — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test`, `:build_config_plugin_jar_test`, `:build_config_plugin_values_test` |
+| `@rules_flutter_core//flutter:defs.bzl` | `flutter_aot_library`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `pub_path_deps_check`, `pub_plugins_check` |
+| `@rules_flutter_android//flutter:defs.bzl` | `flutter_android_binary`, `flutter_app`, `flutter_assets`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs` |
+| `@rules_flutter_android//flutter:extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`/`plugins.build_config_field()`) over real, checked-in external plugin graphs — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test`, `:build_config_plugin_jar_test`, `:build_config_plugin_values_test` |
 
 Remaining implementation rules and helpers are covered indirectly by the
 supported macros; the Consumer BUILD file loads no private implementation file.
@@ -126,7 +126,7 @@ describes them. `fixtures/plugin_fixture.bzl` is a small repository rule that
 writes the two hub files `plugins.project` reads (`plugins_metadata.json`,
 `package_config.json`) for this fixture set, with repository-relative rootUris.
 This proves two
-things nothing else here can, because this module reaches `rules_flutter` the
+things nothing else here can, because this module reaches the ruleset the
 same way `hello_bazel` and `smooth-app` do and those two are external to this
 repository:
 
@@ -144,7 +144,7 @@ repository:
   ..., but no such package is in the resolution`.
 
   This case used to arrive for free: every consumer inherited
-  `rules_flutter`'s own root `rive_native`/`sqlite3` recipes the moment it
+  the ruleset's own root `rive_native`/`sqlite3` recipes the moment it
   called `plugins.project()`, because the ruleset shipped a demo app inside its
   own module. That app is now `//examples/demo_app`, a separate module absent
   from this graph, so nothing is inherited and the case is declared on purpose.
@@ -152,7 +152,7 @@ repository:
   ruleset having an app inside it.
 - A generated plugin's Maven coordinate resolves through the **canonical**
   repository `plugins.project(maven_repo = ...)` named, not through whichever
-  repository happens to be named `@flutter_maven` in `rules_flutter`'s own
+  repository happens to be named `@flutter_maven` in the ruleset's own
   mapping. `MODULE.bazel` declares a second, distinctly-named install,
   `plugin_maven`, containing a coordinate absent from every `flutter_maven`
   install in the graph; `fake_plugin`'s `build.gradle` depends on it, and

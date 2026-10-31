@@ -1,0 +1,28 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+
+# The Android half of the key portability contract (contracts E, F, G, L, M,
+# and P for native_build_env.bzl). The script is the one core publishes, and it
+# is a dev-only dependency here: @rules_flutter_core//tools/ci is not a runtime
+# dependency of this module. It checks only the Android files because --root is
+# not given, so the core files need not be present.
+genrule(
+    name = "key_portability_check",
+    srcs = [
+        "@rules_flutter_core//tools/ci:key_portability_test.py",
+        "//flutter:native_build_env.bzl",
+        "//flutter/private:android.bzl",
+        "//flutter/private:android_inputs_rules.bzl",
+        "//flutter/private:apk_check.bzl",
+        "//flutter/private:ndk.bzl",
+        "//flutter/private:plugins.bzl",
+    ],
+    outs = ["key_portability_check.checked"],
+    cmd = """set -euo pipefail
+python3 $(location @rules_flutter_core//tools/ci:key_portability_test.py) --android-root . > "$@"
+""",
+)
+
+build_test(
+    name = "key_portability_test",
+    targets = [":key_portability_check"],
+)

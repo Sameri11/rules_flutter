@@ -1,0 +1,39 @@
+load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
+
+# The root package exists so //:buildifier_test has a label in it to locate the
+# tree it should check. Nothing reads MODULE.bazel's contents through this
+# export.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["MODULE.bazel"])
+
+_EXCLUDE_PATTERNS = [
+    "./bazel-*",
+    "./.git/*",
+]
+
+buildifier(
+    name = "buildifier",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "fix",
+    mode = "fix",
+)
+
+buildifier(
+    name = "buildifier.check",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+)
+
+# Run buildifier under `bazel test` to check files outside the build graph.
+buildifier_test(
+    name = "buildifier_test",
+    size = "small",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+    # A whole-tree scan needs the workspace root and no sandbox.
+    no_sandbox = True,
+    workspace = "//:MODULE.bazel",
+)

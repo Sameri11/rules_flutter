@@ -1,18 +1,21 @@
 """The supported BUILD API for a Consumer Module.
 
-All supported symbols load from @rules_flutter//flutter:defs.bzl.
+Core rules load from @rules_flutter_core//flutter:defs.bzl. Android macros load from @rules_flutter_android//flutter:defs.bzl.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load(
-    "@rules_flutter//flutter:defs.bzl",
+    "@rules_flutter_android//flutter:defs.bzl",
     "android_native_lib_jar",
     "flutter_android_binary",
-    "flutter_aot_library",
     "flutter_assets",
     "flutter_embedding_library",
     "flutter_native_contribution",
     "flutter_native_libs",
+)
+load(
+    "@rules_flutter_core//flutter:defs.bzl",
+    "flutter_aot_library",
     "flutter_package",
     "flutter_pubspec",
     "flutter_test",
@@ -484,12 +487,12 @@ genrule(
     name = "build_config_plugin_values_check",
     outs = ["build_config_plugin_values.checked"],
     cmd = select({
-        "@rules_flutter//flutter:mode_debug": """set -eu
+        "@rules_flutter_core//flutter:mode_debug": """set -eu
 actual="$$( $(location :build_config_plugin_values) )"
 test "$$actual" = "true:debug:com.example.build_config_plugin:explicit-value:1.2.3:true:127:-32768:2147483640:9223372036854775807:3.4028235E38:4.9E-324"
 printf '%s\\n' "$$actual" > "$@"
 """,
-        "@rules_flutter//flutter:mode_release": """set -eu
+        "@rules_flutter_core//flutter:mode_release": """set -eu
 actual="$$( $(location :build_config_plugin_values) )"
 test "$$actual" = "false:release:com.example.build_config_plugin:explicit-value:1.2.3:true:127:-32768:2147483640:9223372036854775807:3.4028235E38:4.9E-324"
 printf '%s\\n' "$$actual" > "$@"
@@ -507,8 +510,8 @@ build_test(
 alias(
     name = "embedding_mode_hazard_expected",
     actual = select({
-        "@rules_flutter//flutter:mode_debug": "@flutter_embedding_debug//jar:file",
-        "@rules_flutter//flutter:mode_release": "@flutter_embedding_release//jar:file",
+        "@rules_flutter_core//flutter:mode_debug": "@flutter_embedding_debug//jar:file",
+        "@rules_flutter_core//flutter:mode_release": "@flutter_embedding_release//jar:file",
     }),
 )
 

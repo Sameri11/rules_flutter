@@ -1,0 +1,47 @@
+load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
+load("//flutter:defs.bzl", "flutter_assets_dir")
+
+# The root package exists so //:buildifier_test has a label in it to locate the
+# tree it should check.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["MODULE.bazel"])
+
+# Asserted rather than merely called: a silently wrong prefix is the failure
+# this helper exists to prevent, and the root package is the case with no
+# separator.
+_ROOT_ASSETS_DIR = flutter_assets_dir(assets = ":assets")
+
+# buildifier: disable=unused-variable
+_ = fail("flutter_assets_dir in the root package returned '{}', not 'assets'".format(_ROOT_ASSETS_DIR)) if _ROOT_ASSETS_DIR != "assets" else None
+
+_EXCLUDE_PATTERNS = [
+    "./bazel-*",
+    "./.git/*",
+]
+
+buildifier(
+    name = "buildifier",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "fix",
+    mode = "fix",
+)
+
+buildifier(
+    name = "buildifier.check",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+)
+
+# Run buildifier under `bazel test` to check files outside the build graph.
+buildifier_test(
+    name = "buildifier_test",
+    size = "small",
+    exclude_patterns = _EXCLUDE_PATTERNS,
+    lint_mode = "warn",
+    mode = "check",
+    # A whole-tree scan needs the workspace root and no sandbox.
+    no_sandbox = True,
+    workspace = "//:MODULE.bazel",
+)

@@ -58,7 +58,7 @@ CI.
 
 The rules use Flutter's bundled Dart toolchain; a standalone Dart SDK is not
 selected. Build modes are `release` (default) and `debug`, selected with
-`--@rules_flutter//flutter:mode=debug`; there is no profile mode.
+`--@rules_flutter_core//flutter:mode=debug`; there is no profile mode.
 AOT is release-only. Supported Android ABIs: `arm64-v8a`, `x86_64`, and
 `armeabi-v7a`. 32-bit `x86` (`@platforms//cpu:x86_32`), `riscv64`, and other
 ABI values are unsupported.
@@ -170,16 +170,26 @@ Until `rules_flutter` is published to the Bazel Central Registry, create a
 consumer as a sibling of a checkout and retain a development override:
 
 ```python
-bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
 local_path_override(
-    module_name = "sameri11_rules_flutter",
-    path = "../rules_flutter",
+    module_name = "sameri11_rules_flutter_core",
+    path = "../rules_flutter/rules_flutter_core",
 )
 ```
 
-The `path = "../.."` spelling in the in-repository fixtures is specific to their
+Android consumers add the Android module the same way:
+
+```python
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../rules_flutter/rules_flutter_android",
+)
+```
+
+The `path = "../../rules_flutter_core"` spelling in the in-repository fixtures is specific to their
 location two levels below this checkout. An outside sibling consumer normally
-uses `path = "../rules_flutter"`; change the path only to match your layout.
+uses `path = "../rules_flutter/rules_flutter_core"`; change the path only to match your layout.
 
 Start with the CI-tested Bazel version in `.bazelversion`:
 
@@ -250,17 +260,22 @@ details out of the root `MODULE.bazel`:
 ```python
 module(name = "hello_bazel", version = "0.0.1")
 
-bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
 local_path_override(
-    module_name = "sameri11_rules_flutter",
-    path = "../rules_flutter",
+    module_name = "sameri11_rules_flutter_core",
+    path = "../rules_flutter/rules_flutter_core",
+)
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../rules_flutter/rules_flutter_android",
 )
 
-flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")
 
 # Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
-pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
 pub.lock(
     name = "pub",
     lock = "//:pubspec.lock",
@@ -316,7 +331,7 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
@@ -348,7 +363,7 @@ arm64 device slice and an x86_64 emulator slice; use one identical list in all
 three locations if you choose a different supported set.
 
 ```python
-load("@rules_flutter//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -399,7 +414,7 @@ Create `android/app/BUILD.bazel`, replacing the application ID and Kotlin source
 path with the ones Flutter generated for your app:
 
 ```python
-load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -446,7 +461,7 @@ build does not prove that the APK launches.
 To build the debug-shaped APK, select debug mode on the APK target:
 
 ```sh
-bazel build //android/app:hello_bazel --@rules_flutter//flutter:mode=debug
+bazel build //android/app:hello_bazel --@rules_flutter_core//flutter:mode=debug
 ```
 
 #### Hot reload with `flutter run`
@@ -562,7 +577,7 @@ proxy and import, then add the plugin extension and generated segment:
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 use_repo(maven, "flutter_maven")
 
-plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a", "x86_64"],
     embedding = "//android/app:flutter_embedding",
@@ -737,17 +752,22 @@ module(
     version = "0.0.1",
 )
 
-bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
 local_path_override(
-    module_name = "sameri11_rules_flutter",
-    path = "../..",
+    module_name = "sameri11_rules_flutter_core",
+    path = "../../rules_flutter_core",
+)
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+local_path_override(
+    module_name = "sameri11_rules_flutter_android",
+    path = "../../rules_flutter_android",
 )
 
-flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
+flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")
 
 # Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
-pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
 pub.lock(
     name = "pub",
     lock = "//packages/host_app:pubspec.lock",
@@ -784,14 +804,14 @@ android_sdk.configure(
 use_repo(android_sdk, "androidsdk")
 register_toolchains("@androidsdk//:all")
 
-android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
+android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
 use_repo(android_ndk, "androidndk", "androidndk_cmake")
 register_toolchains("@androidndk//:all")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 use_repo(maven, "flutter_maven")
 
-plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
     embedding = "//packages/host_app/android/app:flutter_embedding",
@@ -824,7 +844,7 @@ dependency, so omitting `path_deps` would leave an undeclared input and make the
 path-dependency guard fail. `pub = "@pub"` is mandatory.
 
 ```python
-load("@rules_flutter//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -1035,7 +1055,7 @@ the consumer's declared repository while the recipe file is loaded.
 A concise arm64 `rive_native` recipe is:
 
 ```python
-load("@rules_flutter//flutter:defs.bzl", "flutter_native_contribution")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_native_contribution")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 _LIBRARIES = {
@@ -1073,7 +1093,7 @@ Flutter's native-assets manifest uses, then creates the empty conventional
 package target:
 
 ```python
-load("@rules_flutter//flutter:defs.bzl", "flutter_native_contribution")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_native_contribution")
 
 _LIBRARIES = {
     "arm64-v8a": Label("@libsqlite3_android_arm64_v8a//file"),
@@ -1130,7 +1150,7 @@ target device.
 suite to the package's `BUILD.bazel`:
 
 ```python
-load("@rules_flutter//flutter:defs.bzl", "flutter_test_suite")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_test_suite")
 
 flutter_test_suite(
     name = "tests",
@@ -1223,7 +1243,7 @@ kernel compiles once, and its result is reused while nothing it reads changes.
 - On the default worker path, a helper edit under `test/` re-compiles and
   re-runs only the tests that read it, locally. The compiler reports what it
   read, so unread files do not invalidate other tests.
-- With `--@rules_flutter//flutter:test_kernel_compiler=frontend_server`, every
+- With `--@rules_flutter_core//flutter:test_kernel_compiler=frontend_server`, every
   test in the suite re-runs after a helper edit.
 - On another machine, the kernels recompile after a helper edit, but a test's
   cached result is reused when its kernel output is unchanged.
@@ -1283,7 +1303,7 @@ bazel build //android/app:demo_app
 For the debug-shaped APK, select debug on the Android target:
 
 ```sh
-bazel build //android/app:demo_app --@rules_flutter//flutter:mode=debug
+bazel build //android/app:demo_app --@rules_flutter_core//flutter:mode=debug
 ```
 
 Debug APKs add the debug kernel and the host engine's debug snapshots to the
@@ -1327,11 +1347,11 @@ log reports the runner as `worker`. No flags are needed.
 To opt out, for example to compare outputs (a Flutter version without a driver pin uses frontend_server automatically, with a warning):
 
 ```sh
-bazel test //... --@rules_flutter//flutter:test_kernel_compiler=frontend_server
+bazel test //... --@rules_flutter_core//flutter:test_kernel_compiler=frontend_server
 ```
 
 Each worker reserves 2048 MB by default. Large apps need more: override it with
-`--@rules_flutter//flutter:test_kernel_memory_mb=N`; the reservation rounds up
+`--@rules_flutter_core//flutter:test_kernel_memory_mb=N`; the reservation rounds up
 to 1024, 2048, 3072, 4096, 6144, or 8192 MB. Bazel runs as many workers as fit
 in `--local_resources=memory` (by default two thirds of RAM), so on small hosts
 raise the reservation or lower `--worker_max_instances` to avoid swapping.

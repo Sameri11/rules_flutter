@@ -1,0 +1,76 @@
+module(
+    name = "sameri11_rules_flutter_core",
+)
+
+# The rules' own .bzl files name @flutter_sdk and the engine repositories, so
+# this module imports them. Which SDK version they hold is the root module's
+# choice: the extension reads flutter.sdk only from the root module.
+flutter = use_extension("//flutter:extensions.bzl", "flutter")
+
+# Pin for developing this repository as the root module. A dev dependency, so
+# consumers ignore it and their MODULE.bazel.lock does not change when it does.
+flutter_dev = use_extension("//flutter:extensions.bzl", "flutter", dev_dependency = True)
+flutter_dev.sdk(version = "3.47.3")
+
+# The test-kernel driver's source closure, at the pins of the SDK it is built with.
+test_kernel_driver_src = use_repo_rule("//flutter/private:test_kernel_driver.bzl", "test_kernel_driver_src")
+
+test_kernel_driver_src(
+    name = "test_kernel_driver_src",
+    driver_source = "//flutter/private/test_kernel_driver:driver.dart",
+    sdk_revision = "@flutter_sdk//:dart_sdk_revision",
+    version_file = "@flutter_sdk//:flutter.version.json",
+)
+
+# The metadata parser's source closure, at the pins of the SDK it is used with.
+test_metadata_parser_src = use_repo_rule("//flutter/private:test_kernel_driver.bzl", "metadata_parser_src")
+
+test_metadata_parser_src(
+    name = "test_metadata_parser_src",
+    parser_source = "//flutter/private/test_metadata:parser.dart",
+    version_file = "@flutter_sdk//:flutter.version.json",
+)
+
+use_repo(
+    flutter,
+    "flutter_embedding_debug",
+    "flutter_embedding_release",
+    "flutter_engine_arm64_v8a_debug",
+    "flutter_engine_arm64_v8a_release",
+    "flutter_engine_armeabi_v7a_debug",
+    "flutter_engine_armeabi_v7a_release",
+    "flutter_engine_x86_64_debug",
+    "flutter_engine_x86_64_release",
+    "flutter_sdk",
+    "flutter_tools_packages",
+)
+
+flutter_toolchains = use_extension("//flutter/private:toolchain_repo.bzl", "flutter_toolchains")
+use_repo(flutter_toolchains, "flutter_toolchains")
+
+register_toolchains("@flutter_toolchains//:all")
+
+bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = True)
+
+# For build_test, which is what makes the guard rules runnable under
+# `bazel test`. The guards fail as *actions*, which is stronger than a test --
+# anything depending on them fails too -- so they are wrapped rather than
+# converted. Not a dev_dependency: //flutter/private:rules.bzl loads it, so it has
+# to be visible to every consumer of the rules, which also means no consumer
+# declares it for this purpose themselves.
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+
+bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
+
+# The ABI table and the split config_settings name @platforms constraints
+# (os:android, cpu:*), so the platforms module is a core dependency.
+bazel_dep(name = "platforms", version = "1.0.0")
+
+pub_dev = use_extension("//flutter:extensions.bzl", "pub", dev_dependency = True)
+
+# Pub hub for the conformance fixture (//tests/flutter_test_conformance).
+pub_dev.lock(
+    name = "flutter_test_conformance",
+    lock = "//tests/flutter_test_conformance:pubspec.lock",
+)
+use_repo(pub_dev, "flutter_test_conformance")

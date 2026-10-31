@@ -1,6 +1,7 @@
 # Dart targets for the flat pub-plugin example.
 
-load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_test_suite")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 

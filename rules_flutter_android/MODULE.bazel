@@ -1,0 +1,109 @@
+module(
+    name = "sameri11_rules_flutter_android",
+)
+
+# The core module owns the Flutter SDK and the platform-neutral rules. This
+# module loads only its public surface. The root module's flutter.sdk tag picks
+# the SDK for both.
+bazel_dep(name = "sameri11_rules_flutter_core", repo_name = "rules_flutter_core")
+local_path_override(
+    module_name = "sameri11_rules_flutter_core",
+    path = "../rules_flutter_core",
+)
+
+flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
+
+# The embedding jars the Android rules compile against, by mode.
+use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")
+
+# Pin for developing this repository as the root module. A dev dependency, so
+# consumers ignore it, as they ignore core's own pin.
+flutter_dev = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter", dev_dependency = True)
+flutter_dev.sdk(version = "3.47.3")
+
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "platforms", version = "1.0.0")
+
+# The embedding rule wraps the selected SDK-derived jar with rules_java's
+# java_import, so rules_java must be a ruleset dependency.
+bazel_dep(name = "rules_java", version = "9.3.0")
+bazel_dep(name = "rules_android", version = "0.7.3")
+
+# Kotlin is the default language of the flutter Android template; MainActivity
+# is generated as .kt. Compiling it directly avoids maintaining a Java twin.
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+
+# `externalNativeBuild` plugins ship C/C++ that AGP compiles by running CMake.
+# We run the plugin's own CMakeLists too, rather than translating it: a
+# CMakeLists we cannot accommodate then fails at build time instead of yielding
+# a .so that loads and misbehaves.
+#
+# The NDK's own build/cmake/android.toolchain.cmake is what plugin CMakeLists
+# are written and tested against, and it is handed to cmake() through a
+# CMAKE_TOOLCHAIN_FILE cache entry -- a documented rules_foreign_cc attribute
+# that suppresses its synthesized crosstool. Letting it synthesize one instead
+# does not link the NDK C++ STL and dies at link time.
+bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
+
+# Explicit rather than inherited: the native cc rules were removed from Bazel,
+# so `rules_cc` has to be visible to this module for //flutter/private:android.bzl
+# to load find_cc_toolchain.bzl -- which is how the strip rules reach the NDK's
+# llvm-strip instead of hardcoding a path.
+bazel_dep(name = "rules_cc", version = "0.2.17")
+
+# Supplies the cc_toolchain that cmake() resolves for the Android platform and
+# locates the NDK. The marker repository gives generated CMake targets a stable
+# handle without embedding the installation path.
+#
+# NDK 28 is the enforced minimum -- see the version guard in ndk.bzl.
+bazel_dep(name = "rules_android_ndk", version = "0.1.5")
+
+bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3", dev_dependency = True)
+
+android_ndk = use_extension("//flutter:extensions.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+
+remote_android_extensions = use_extension(
+    "@bazel_tools//tools/android:android_extensions.bzl",
+    "remote_android_tools_extensions",
+)
+use_repo(remote_android_extensions, "android_gmaven_r8", "android_tools")
+
+android_sdk_repository_extension = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+use_repo(android_sdk_repository_extension, "androidsdk")
+
+# Registrant parity fixtures: one pub hub per //tests/registrant_parity case.
+# Path-only locks, so nothing is downloaded. Each hub writes its Android
+# registrant, which is diffed against flutter_tools' expected output.
+pub_dev = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub", dev_dependency = True)
+pub_dev.lock(
+    name = "registrant_parity_no_plugins",
+    lock = "//tests/registrant_parity:no_plugins/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_mixed",
+    lock = "//tests/registrant_parity:mixed/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_federated_default",
+    lock = "//tests/registrant_parity:federated_default/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_federated_direct",
+    lock = "//tests/registrant_parity:federated_direct/app/pubspec.lock",
+)
+pub_dev.lock(
+    name = "registrant_parity_federated_dev_override",
+    lock = "//tests/registrant_parity:federated_dev_override/app/pubspec.lock",
+)
+use_repo(
+    pub_dev,
+    "registrant_parity_federated_default",
+    "registrant_parity_federated_dev_override",
+    "registrant_parity_federated_direct",
+    "registrant_parity_mixed",
+    "registrant_parity_no_plugins",
+)

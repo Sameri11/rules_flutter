@@ -1,5 +1,7 @@
 # Bazel output-base symlinks.
 /bazel-*
+/rules_flutter_core/bazel-*
+/rules_flutter_android/bazel-*
 
 # Nested-module output-base symlinks.
 /tests/consumer/bazel-*
