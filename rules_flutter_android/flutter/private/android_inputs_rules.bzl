@@ -254,6 +254,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", t
         deps = flutter_embedding_deps(maven_repo),
         tags = ["manual"],
     )
+
     # An alias to the core package's pubspec, not a rule over the core: the
     # binary's version read must not analyze the core's AOT outputs.
     native.alias(
