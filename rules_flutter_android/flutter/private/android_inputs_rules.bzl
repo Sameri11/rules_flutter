@@ -218,7 +218,7 @@ platform. The ABI comes from that platform.""",
     toolchains = use_cc_toolchain(),
 )
 
-def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
+def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", tags = [], visibility = None):
     """Declares a flutter_core artifact's Android inputs as the target `<name>`.
 
     The consumer lists `<name>` in its android_binary deps. It exports the
@@ -228,11 +228,15 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
 
     Args:
       name: the target a consumer lists. Also the prefix of `<name>_registrant`,
-        `<name>_embedding`, `<name>_native` and `<name>_bundle`.
+        `<name>_embedding`, `<name>_native`, `<name>_bundle` and `<name>_pubspec`,
+        the core's pubspec alias.
       core: the flutter_core target. Its split is selected by the platform.
       plugins: the plugin repository, e.g. `"@flutter_plugins"`, or None for an
         app without plugins.
       maven_repo: the repository holding the embedding's Maven dependencies.
+      tags: tags for `<name>`. Each helper gets them plus `manual`.
+      visibility: for `<name>`, `<name>_native`, `<name>_bundle` and `<name>_pubspec`,
+        which a consumer in another package names.
     """
     if plugins != None and not plugins.startswith("@"):
         fail("flutter_android_inputs {}: plugins must be a repository label such as \"@flutter_plugins\", or None; got {}.".format(
@@ -240,21 +244,37 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
             repr(plugins),
         ))
 
+    # The caller's tags reach the helpers too, so a tag such as no-remote-cache
+    # applies to the whole target set.
+    helper_tags = tags if "manual" in tags else tags + ["manual"]
+
     _core_file(
         name = name + "_core_embedding",
         core = core,
         field = "embedding_jar",
+        tags = helper_tags,
     )
     java_import(
         name = name + "_embedding",
         jars = [":" + name + "_core_embedding"],
         deps = flutter_embedding_deps(maven_repo),
+        tags = helper_tags,
+    )
+
+    # An alias to the core package's pubspec, not a rule over the core: the
+    # binary's version read must not analyze the core's AOT outputs.
+    native.alias(
+        name = name + "_pubspec",
+        actual = native.package_relative_label(core).same_package_label("pubspec"),
+        tags = helper_tags,
+        visibility = visibility,
     )
 
     if plugins:
         android_library(
             name = name + "_registrant",
             exports = [plugins + "//:generated_plugin_registrant"],
+            tags = helper_tags,
         )
     else:
         android_library(
@@ -264,19 +284,26 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
                 ":" + name + "_embedding",
                 maven_repo + ANNOTATION_JVM,
             ],
+            tags = helper_tags,
         )
 
     _split_native(
         name = name + "_native",
         core = core,
         native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None,
+        tags = helper_tags,
+        visibility = visibility,
     )
 
     _inputs_bundle(
         name = name + "_bundle",
         core = core,
+        tags = helper_tags,
+        visibility = visibility,
     )
 
+    # The engine's keep rules. They apply only to a binary that shrinks, so a
+    # binary that sets no proguard_specs is unaffected.
     android_library(
         name = name,
         exports = [
@@ -284,4 +311,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
             ":" + name + "_embedding",
             ":" + name + "_native",
         ] + flutter_embedding_deps(maven_repo),
+        proguard_specs = [Label("//flutter/private:engine_keep.pro")],
+        tags = tags,
+        visibility = visibility,
     )

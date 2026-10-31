@@ -1557,7 +1557,7 @@ def flutter_app(
         **kwargs
     )
 
-    _flutter_test_assets(
+    flutter_test_assets(
         name = "test_assets",
         assets = assets,
         pubspec = ":pubspec",
@@ -1926,7 +1926,7 @@ def _flutter_test_assets_impl(ctx):
 
     return [DefaultInfo(files = depset([out]))]
 
-_flutter_test_assets = rule(
+flutter_test_assets = rule(
     implementation = _flutter_test_assets_impl,
     doc = """The asset bundle host tests read, built for flutter_tester's platform.
 

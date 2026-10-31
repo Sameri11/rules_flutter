@@ -14,7 +14,7 @@ load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
+load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "pub_path_deps_check", "pub_plugins_check")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -196,7 +196,10 @@ def flutter_core(
 
     Declares `:pubspec` and the targets the artifact is built from, and the
     guards `<name>_guards_test` runs. Internal targets keep the package's
-    default visibility; `kwargs` (visibility, tags) reach `<name>` only.
+    default visibility. `visibility` also reaches `:pubspec`, which a consumer in
+    another package reads through its flutter_android_inputs. `<name>_test_package`
+    and its `<name>_test_assets` are the package host tests read, as flutter_app's
+    `:app` is; both are `manual`.
 
     Args:
       name: the artifact's target name. `pubspec` is reserved.
@@ -211,7 +214,7 @@ def flutter_core(
       plugins: the plugin hub the guards check against, e.g. "@flutter_plugins"; required with plugin_deps.
       target_os: OS the kernel is compiled for; must be "android".
       native_build_env: the native build environment for the asset bundle's flutter build action, or None. Android builds pass rules_flutter_android's `native_build_env` rule.
-      **kwargs: visibility and tags of `<name>`.
+      **kwargs: visibility, which also applies to `:pubspec`, and tags of `<name>`.
     """
     if name == "pubspec":
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
@@ -222,7 +225,7 @@ def flutter_core(
 
     package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
 
-    flutter_pubspec(name = "pubspec", src = "pubspec.yaml")
+    flutter_pubspec(name = "pubspec", src = "pubspec.yaml", visibility = kwargs.get("visibility"))
 
     dart_aot_kernel(
         name = name + "_kernel",
@@ -271,6 +274,28 @@ def flutter_core(
         package_config = project_package_config,
         pub_srcs = [pub_all],
         path_deps = path_deps,
+    )
+
+    # The host test reads this bundle and package, built for flutter_tester. It
+    # takes no ABI and no Android build environment, as flutter_app's do.
+    flutter_test_assets(
+        name = name + "_test_assets",
+        assets = assets,
+        pubspec = ":pubspec",
+        package_config = project_package_config,
+        pub_srcs = [pub_all],
+        path_deps = path_deps,
+        tags = ["manual"],
+    )
+
+    flutter_package(
+        name = name + "_test_package",
+        pub = pub,
+        pubspec = ":pubspec",
+        srcs = srcs,
+        path_deps = path_deps,
+        assets = ":" + name + "_test_assets",
+        tags = ["manual"],
     )
 
     _assets_bundle(
