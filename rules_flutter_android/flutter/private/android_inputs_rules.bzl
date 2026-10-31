@@ -17,7 +17,7 @@ load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolch
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
-load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
+load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
@@ -51,19 +51,6 @@ _core_file = rule(
     attrs = {
         "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
         "field": attr.string(mandatory = True, values = ["embedding_jar"]),
-    },
-)
-
-def _pubspec_impl(ctx):
-    return [ctx.attr.core[FlutterPubspecInfo]]
-
-# Forwards the core's pubspec, so a binary that reuses this inputs target reads
-# its version from the same pubspec the inputs were built from.
-_pubspec = rule(
-    implementation = _pubspec_impl,
-    doc = "The core's FlutterPubspecInfo.",
-    attrs = {
-        "core": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
     },
 )
 
@@ -267,9 +254,11 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", t
         deps = flutter_embedding_deps(maven_repo),
         tags = ["manual"],
     )
-    _pubspec(
+    # An alias to the core package's pubspec, not a rule over the core: the
+    # binary's version read must not analyze the core's AOT outputs.
+    native.alias(
         name = name + "_pubspec",
-        core = core,
+        actual = native.package_relative_label(core).same_package_label("pubspec"),
         tags = ["manual"],
     )
 
