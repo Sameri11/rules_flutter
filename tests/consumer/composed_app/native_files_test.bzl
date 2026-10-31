@@ -1,5 +1,7 @@
 """Analysis checks for the generated native carrier."""
 
+# The generated hub exposes this provider to packaging rules.
+# buildifier: disable=bzl-visibility
 load("@rules_flutter_android//flutter/private:native_files.bzl", "FlutterNativeFilesByAbiInfo")
 
 def _native_files_check_impl(ctx):
