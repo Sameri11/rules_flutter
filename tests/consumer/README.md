@@ -57,8 +57,8 @@ so no `bazel test //...` reaches it: it is a separate module with its own
 
 ## What it covers
 
-Loading and analysis — `--nobuild` — of every supported BUILD symbol through
-`@rules_flutter_core//flutter:defs.bzl`, plus focused behavior checks:
+Loading and analysis — `--nobuild` — of every supported BUILD symbol through the
+core and Android entrypoints below, plus focused behavior checks:
 
 | entry point | symbols |
 | --- | --- |

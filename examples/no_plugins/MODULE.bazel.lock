@@ -558,7 +558,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "5zcqN/2CEWCsOkw4QdBooh1PqgGP2jubQFBn7D864PQ=",
+        "bzlTransitiveDigest": "JihtMZstXoDF+3E8LQB32XBhmV6iPPSJ1bndkBH/K6A=",
         "usagesDigest": "gihfLsx8YMM+v3GPdKHQB+XDY0mBmcT3vsEGUwsp5YE=",
         "recordedInputs": [
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",

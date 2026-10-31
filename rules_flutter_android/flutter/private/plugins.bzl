@@ -339,8 +339,8 @@ alias(
 )
 """
 
-# GeneratedPluginRegistrant.java for the build's mode, written by this repository
-# (registrant.bzl). flutter_android_binary compiles it against `:all`.
+# GeneratedPluginRegistrant.java for the build's mode, written by the pub hub
+# (rules_flutter_core's registrant.bzl). flutter_android_binary compiles it against `:all`.
 _REGISTRANT_SRC_TEMPLATE = """
 filegroup(
     name = "generated_plugin_registrant_src",

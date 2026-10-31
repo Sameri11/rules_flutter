@@ -282,7 +282,8 @@ def run_core_isolation(workspace, output_base):
             },
             "post_cutover": {
                 "materialized_repository_count": len(repositories),
-                "ruleset_registered_android_repositories": list(RULESET_ANDROID_REPO_MARKERS),
+                "ruleset_registered_android_repositories": ruleset_registered,
+                "forbidden_markers": list(RULESET_ANDROID_REPO_MARKERS),
                 "dependency_registered_repositories": dependency_registered,
                 "core_module_subtree": core_subtree,
                 "core_helper_references": helper_references,

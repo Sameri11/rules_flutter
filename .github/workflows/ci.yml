@@ -55,7 +55,7 @@ jobs:
           set -euo pipefail
           root="$(cd .. && pwd)"
           files=$(find "$root/examples" "$root/tests" "$root/tools/ci" \
-            \( -name BUILD -o -name BUILD.bazel -o -name '*.bzl' -o -name MODULE.bazel -o -name WORKSPACE -o -name WORKSPACE.bazel \) \
+            \( -name BUILD -o -name '*.bazel' -o -name '*.bzl' -o -name '*.star' -o -name '*.sky' -o -name '*.BUILD' -o -name 'WORKSPACE*' \) \
             -not -path '*/bazel-*' -not -path '*/.gradle/*' -not -path '*/build/*' \
             -not -path '*/.git/*' -not -path '*/third_party/*')
           env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel run @buildifier_prebuilt//:buildifier -- -mode=check -lint=warn $files
