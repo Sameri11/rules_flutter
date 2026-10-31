@@ -184,20 +184,21 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build -c opt --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test 2>&1 | tee ../../bazel_composed_release.log
+          bazel build -c opt --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test 2>&1 | tee ../../bazel_composed_release.log
 
       - name: Consumer composed app debug APK check
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build --@rules_flutter_core//flutter:mode=debug -c fastbuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test 2>&1 | tee ../../bazel_composed_debug.log
+          bazel build --@rules_flutter_core//flutter:mode=debug -c fastbuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test 2>&1 | tee ../../bazel_composed_debug.log
 
-      # The 3-ABI build keeps one kernel and asset bundle and one ELF per ABI.
+      # The 3-ABI build keeps one kernel, asset bundle and ELF per ABI, and the
+      # variant that reuses the inputs target adds none.
       - name: Consumer composed app 3-ABI graph guard
         working-directory: tests/consumer
         run: |
           set -euo pipefail
-          bazel aquery -c opt 'mnemonic("DartAotKernel|FlutterAssetBundle|DartAotElf", deps(//composed_app:apk))' \
+          bazel aquery -c opt 'mnemonic("DartAotKernel|FlutterAssetBundle|DartAotElf|FlutterEngineStrip", deps(//composed_app:apk) + deps(//composed_app:apk_variant))' \
             --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
             --android_platforms=@rules_android//:arm64-v8a,@rules_android//:x86_64,@rules_android//:armeabi-v7a \
             --output=jsonproto > "$RUNNER_TEMP/composed_aquery.json"
@@ -209,7 +210,7 @@ jobs:
           if not actions:
               sys.exit("composed app aquery returned no actions")
           counts = collections.Counter(a.get("mnemonic") for a in actions)
-          expected = {"DartAotKernel": 1, "FlutterAssetBundle": 1, "DartAotElf": 3}
+          expected = {"DartAotKernel": 1, "FlutterAssetBundle": 1, "DartAotElf": 3, "FlutterEngineStrip": 3}
           for mnemonic, want in expected.items():
               if counts[mnemonic] != want:
                   sys.exit(f"{mnemonic}: expected {want}, got {counts[mnemonic]}")

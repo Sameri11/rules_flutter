@@ -43,14 +43,18 @@ def flutter_android_app(
     """A stock android_binary `name` with Flutter's defaults for a standard layout.
 
     Declares `<name>_inputs` from `core` and `plugins` unless `inputs` names an
-    existing flutter_android_inputs target. Every macro-declared target is `manual`;
-    `<name>` and `<name>_check_test` are not.
+    existing flutter_android_inputs target. The macro's own targets carry the
+    caller's tags plus `manual`. `<name>` and `<name>_check_test` carry the caller's
+    tags and visibility.
 
     Args:
       name: the APK's target name.
-      core: the flutter_core target. Required without `inputs`, unset with it.
+      core: the flutter_core target the app runs. Required without `inputs`.
       inputs: a flutter_android_inputs target to reuse, for variants of one app.
-        Its `core` and `plugins` are the ones it was declared with.
+        It must be declared by flutter_android_inputs: the macro derives
+        `<inputs>_bundle`, `<inputs>_native` and `<inputs>_pubspec` from its name.
+        Its `core` and `plugins` are the ones it was declared with, and it must be
+        visible from this package.
       plugins: the plugin repository, e.g. "@flutter_plugins", or None for an app
         without plugins. Required without `inputs`; unset with it.
       manifest: the app's AndroidManifest.xml. Stamped with the core's version.
@@ -66,9 +70,15 @@ def flutter_android_app(
       apk_check: whether to declare `<name>_check_test`, the APK's native-library
         check.
       deps: the app's own targets. The inputs target is appended.
-      **kwargs: forwarded to android_binary. `assets` and `assets_dir` are set by
-        the macro and refused here.
+      **kwargs: forwarded to android_binary, and tags and visibility also to
+        `<name>_check_test`. `assets` and `assets_dir` are set by the macro and
+        refused here.
     """
+
+    # The caller's tags reach every target the macro declares, not only `<name>`.
+    internal_tags = list(kwargs.get("tags", []))
+    if "manual" not in internal_tags:
+        internal_tags.append("manual")
     if inputs != None:
         if core != None:
             fail("flutter_android_app {}: `inputs` is set, so `core` belongs to that inputs target. Pass core = None.".format(name))
@@ -84,7 +94,7 @@ def flutter_android_app(
             name = name + "_inputs",
             core = core,
             plugins = plugins,
-            tags = ["manual"],
+            tags = internal_tags,
         )
 
     for owned in ["assets", "assets_dir"]:
@@ -109,7 +119,7 @@ def flutter_android_app(
         name = name + "_manifest",
         manifest = manifest,
         pubspec = pubspec,
-        tags = ["manual"],
+        tags = internal_tags,
     )
 
     if resource_files == None:
@@ -134,7 +144,7 @@ def flutter_android_app(
             # Manifest merging needs a package.
             custom_package = values["applicationId"],
             resource_files = [],
-            tags = ["manual"],
+            tags = internal_tags,
         )
         debug_manifest_deps = select({
             _MODE_DEBUG: [":" + name + "_debug_manifest"],
@@ -158,4 +168,6 @@ def flutter_android_app(
             name = name + "_check_test",
             binary = ":" + name,
             native = [native_label],
+            tags = kwargs.get("tags", []),
+            visibility = kwargs.get("visibility"),
         )

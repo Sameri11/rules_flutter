@@ -98,12 +98,22 @@ fi
 # (c) An undeclared import, of a source or a generated file, must fail under the worker with the test import hint.
 # The probe goes in the app's package, since tests must sit under its pubspec;
 # its BUILD.bazel is restored on exit.
-app_build=$(find . -name BUILD.bazel -not -path './bazel-*' -print | LC_ALL=C sort | while read -r f; do
-  if grep -q '^flutter_app(' "$f" || { grep -q '^flutter_package(' "$f" && grep -q '^    name = "app",' "$f"; }; then echo "$f"; fi
-done | sed -n 1p)
+find_build() {
+  find . -name BUILD.bazel -not -path './bazel-*' -print | LC_ALL=C sort | while read -r f; do
+    if grep -q "$1" "$f"; then echo "$f"; fi
+  done | sed -n 1p
+}
+app_build=$(find_build '^flutter_app(')
+app_target=":app"
 if [ -z "$app_build" ]; then
-  echo "FAIL: no flutter_app package for the undeclared-import probe" >&2
-  exit 1
+  # Without an app, the host test reads the test package flutter_core declares.
+  app_build=$(find_build '^flutter_core(')
+  if [ -z "$app_build" ]; then
+    echo "FAIL: no flutter_app or flutter_core package for the undeclared-import probe" >&2
+    exit 1
+  fi
+  core_name=$(awk '/^flutter_core\(/ { f = 1 } f && /name = "/ { match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit }' "$app_build")
+  app_target=":${core_name}_test_package"
 fi
 probe_dir=$(dirname "$app_build")
 app_pkg=${probe_dir#.}
@@ -120,9 +130,9 @@ mkdir -p "$probe_dir/test"
     echo "$probe_load"
   fi
   cat "$probe_backup"
-  printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    app = ":app",\n    tags = ["manual"],\n)\n'
+  printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    app = "%s",\n    tags = ["manual"],\n)\n' "$app_target"
   printf '\ngenrule(\n    name = "undeclared_generated_import_probe_helper",\n    outs = ["test/undeclared_generated_import_probe_helper.dart"],\n    cmd = "touch $@",\n    tags = ["manual"],\n)\n'
-  printf '\nflutter_test(\n    name = "undeclared_generated_import_probe",\n    src = "test/undeclared_generated_import_probe_test.dart",\n    app = ":app",\n    tags = ["manual"],\n)\n'
+  printf '\nflutter_test(\n    name = "undeclared_generated_import_probe",\n    src = "test/undeclared_generated_import_probe_test.dart",\n    app = "%s",\n    tags = ["manual"],\n)\n' "$app_target"
 } > "$app_build"
 printf "import 'undeclared_import_probe_helper.dart';\n\nvoid main() {}\n" > "$probe_dir/test/undeclared_import_probe_test.dart"
 printf 'const undeclaredImportProbe = 1;\n' > "$probe_dir/test/undeclared_import_probe_helper.dart"
