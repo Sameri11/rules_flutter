@@ -452,6 +452,13 @@ class Checker:
             if function is None or not _has_call(function, "find_cpp_toolchain", ["ctx"]):
                 self.fail("E", "{} must resolve C++ tools through find_cpp_toolchain(ctx)".format(function_name))
 
+        bridge = _function(tree, "_android_native_lib_jar_impl")
+        action = _action_call(bridge, "run") if bridge is not None else None
+        if action is None or _attr_path(_keyword(action, "executable")) != ["cc_toolchain", "strip_executable"]:
+            self.fail("E", "native bridge strip must use the declared C++ toolchain executable")
+        if action is None or _attr_path(_keyword(action, "tools")) != ["cc_toolchain", "all_files"]:
+            self.fail("E", "native bridge strip must declare the C++ toolchain files")
+
         if _contains_string(tree, "ANDROID_NDK_HOME"):
             self.fail("E", "Android action source must not use an NDK environment path")
 

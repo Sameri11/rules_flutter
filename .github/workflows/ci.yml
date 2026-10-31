@@ -184,7 +184,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build -c opt --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test 2>&1 | tee ../../bazel_composed_release.log
+          bazel build -c opt --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test //composed_app:apk_override_contents_check 2>&1 | tee ../../bazel_composed_release.log
 
       - name: Consumer composed app debug APK check
         working-directory: tests/consumer

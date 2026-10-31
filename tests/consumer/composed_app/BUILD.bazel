@@ -22,7 +22,10 @@ load(":native_files_test.bzl", "native_files_check")
 
 package(default_visibility = ["//visibility:private"])
 
-exports_files(["pubspec.lock", "recipe_package.bzl"])
+exports_files([
+    "pubspec.lock",
+    "recipe_package.bzl",
+])
 
 flutter_core(
     name = "core",
@@ -148,8 +151,8 @@ cc_binary(
 cc_library(
     name = "composed_jni",
     srcs = ["native/composed_jni.cc"],
-    alwayslink = True,
     deps = [":marker_dependency_shared"],
+    alwayslink = True,
 )
 
 # The binary. The macro declares apk_inputs over the core and the plugin hub, and the
@@ -188,7 +191,10 @@ flutter_android_app(
 native_files_check(
     name = "native_files_coexistence_check",
     carrier = "@composed_plugins//:flutter_native_files_by_abi",
-    expected = ["libcmake_marker.so", "librecipe_marker.so"] + select({
+    expected = [
+        "libcmake_marker.so",
+        "librecipe_marker.so",
+    ] + select({
         "@rules_flutter_core//flutter:mode_debug": ["libdev_cmake_marker.so"],
         "@rules_flutter_core//flutter:mode_release": [],
     }),
@@ -198,7 +204,10 @@ native_files_check(
 native_files_check(
     name = "native_files_override_check",
     carrier = "@composed_override_plugins//:flutter_native_files_by_abi",
-    expected = ["libcmake_marker.so", "librecipe_marker.so"] + select({
+    expected = [
+        "libcmake_marker.so",
+        "librecipe_marker.so",
+    ] + select({
         "@rules_flutter_core//flutter:mode_debug": ["libdev_cmake_marker.so"],
         "@rules_flutter_core//flutter:mode_release": [],
     }),
@@ -207,7 +216,10 @@ native_files_check(
 
 build_test(
     name = "native_files_test",
-    targets = [":native_files_coexistence_check", ":native_files_override_check"],
+    targets = [
+        ":native_files_coexistence_check",
+        ":native_files_override_check",
+    ],
 )
 
 flutter_android_app(
@@ -217,7 +229,10 @@ flutter_android_app(
     manifest_values = {"applicationId": "com.example.composed_app.override"},
     plugins = "@composed_override_plugins",
     resource_files = [],
-    deps = [":composed_aar", ":composed_jni"],
+    deps = [
+        ":composed_aar",
+        ":composed_jni",
+    ],
 )
 
 genrule(
@@ -235,5 +250,6 @@ printf 'native libraries present\\n' > "$@"
 
 build_test(
     name = "apk_override_contents_test",
+    tags = ["manual"],
     targets = [":apk_override_contents_check"],
 )

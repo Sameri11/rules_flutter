@@ -142,7 +142,6 @@ plugins.project(
     metadata = "@namespace_plugin_metadata//:plugins_metadata.json",
     package_config = "@namespace_plugin_metadata//:package_config.json",
 )
-
 plugins.package(
     name = "recipe_package",
     bzl_file = "//composed_app:recipe_package.bzl",
@@ -175,7 +174,11 @@ plugins.package(
 )
 plugins.project(
     name = "composed_override_plugins",
-    abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+        "armeabi-v7a",
+    ],
     embedding = "//:flutter_embedding_no_plugins",
     maven_repo = "@plugin_maven//:pin",
     metadata = "@composed_pub//:plugins_metadata.json",
