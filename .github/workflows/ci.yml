@@ -110,6 +110,11 @@ jobs:
         working-directory: rules_flutter_core
         run: python3 tests/flutter_test_conformance/rebaseline.py --check
 
+      # The core output base is not read by later steps; release it before the consumer builds.
+      - name: Release core output base
+        working-directory: rules_flutter_core
+        run: bazel clean --expunge
+
       - name: Dynamic namespace rejection
         working-directory: tests/namespace_dynamic
         run: |
@@ -136,6 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           core_output_base="$(mktemp -d)"
+          trap 'chmod -R u+w "$core_output_base" 2>/dev/null; rm -rf "$core_output_base"' EXIT
           env -u ANDROID_HOME -u ANDROID_NDK_HOME \
             python3 ../../tools/ci/android_toolchain_probe.py \
             --scenario core-isolation --output-base "$core_output_base"
@@ -145,6 +151,7 @@ jobs:
         run: |
           set -euo pipefail
           missing_output_base="$(mktemp -d)"
+          trap 'chmod -R u+w "$missing_output_base" 2>/dev/null; rm -rf "$missing_output_base"' EXIT
           python3 ../../tools/ci/android_toolchain_probe.py \
             --scenario missing-ndk --output-base "$missing_output_base"
 

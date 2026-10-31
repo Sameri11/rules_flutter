@@ -221,6 +221,17 @@ def _core_helper_references():
     return sorted(hits)
 
 
+def _shutdown_output_base(workspace, output_base):
+    """Stop the Bazel server of an output base before its directory is removed."""
+    subprocess.run(
+        _bazel_command(workspace, output_base, ["shutdown"]),
+        cwd=str(workspace),
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def run_core_isolation(workspace, output_base):
     environment = os.environ.copy()
     environment.pop("ANDROID_HOME", None)
@@ -294,6 +305,7 @@ def run_core_isolation(workspace, output_base):
             ),
         }
     finally:
+        _shutdown_output_base(workspace, output_base)
         if temporary is not None:
             temporary.cleanup()
 
@@ -439,6 +451,7 @@ def run_missing_ndk(workspace, output_base):
             "result": "upstream repository fetch failed with an actionable diagnostic",
         }
     finally:
+        _shutdown_output_base(workspace, output_base)
         if temporary is not None:
             temporary.cleanup()
 
@@ -498,12 +511,15 @@ def _lock_consumer(directory):
 def _resolved_lock(scratch, name, environment):
     workspace = _lock_consumer(scratch / name)
     output_base = scratch / "{}-output-base".format(name)
-    _run_bazel(
-        workspace,
-        output_base,
-        ["mod", "graph", "--lockfile_mode=update"],
-        environment=environment,
-    )
+    try:
+        _run_bazel(
+            workspace,
+            output_base,
+            ["mod", "graph", "--lockfile_mode=update"],
+            environment=environment,
+        )
+    finally:
+        _shutdown_output_base(workspace, output_base)
     lock = workspace / "MODULE.bazel.lock"
     if not lock.is_file():
         raise ProbeError("module resolution wrote no lock at {}".format(lock))

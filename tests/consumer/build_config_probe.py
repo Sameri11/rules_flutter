@@ -137,6 +137,13 @@ def run_case(name: str, declarations: list[str], expected: str) -> None:
             stderr=subprocess.STDOUT,
             check=False,
         )
+        subprocess.run(
+            ["bazel", "--output_user_root=" + str(output_root), "shutdown"],
+            cwd=workspace,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         if result.returncode == 0:
             raise AssertionError("{} unexpectedly succeeded".format(name))
         if expected not in result.stdout:
