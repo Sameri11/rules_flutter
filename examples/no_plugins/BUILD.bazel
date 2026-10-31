@@ -1,20 +1,39 @@
 # Dart targets for a plugin-free app.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_test_suite")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_assets", "flutter_core", "flutter_package", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_app(
-    # Keep this fixture single-ABI.
-    abis = ["arm64-v8a"],
+flutter_core(
+    name = "core",
     # flutter create declares no assets.
     assets = [],
-    plugin_deps = None,
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     pub = "@pub",
+    srcs = glob(["lib/**/*.dart"]),
+)
+
+# flutter_core builds no test bundle, and flutter_test reads the Material shaders
+# from one. The bundle is the same flutter_assets tree the APK ships.
+flutter_assets(
+    name = "test_assets",
+    abis = ["arm64-v8a"],
+    assets = [],
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    package_config = "@pub//:project_package_config.json",
+    pub_srcs = ["@pub//:all"],
+    pubspec = ":pubspec",
+)
+
+# The package the host tests read; flutter_core does not declare one.
+flutter_package(
+    name = "app",
+    assets = ":test_assets",
+    pub = "@pub",
+    pubspec = ":pubspec",
 )
 
 flutter_test_suite(
     name = "tests",
-    app = "//:app",
+    app = ":app",
 )

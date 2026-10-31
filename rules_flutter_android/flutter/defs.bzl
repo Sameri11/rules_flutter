@@ -19,6 +19,7 @@ load(
     _flutter_android_manifest = "flutter_android_manifest",
     _flutter_assets_dir = "flutter_assets_dir",
 )
+load("//flutter/private:android_app.bzl", _flutter_android_app = "flutter_android_app")
 load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
 load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
 load("//flutter/private:embedding.bzl", _flutter_embedding_library = "flutter_embedding_library")
@@ -59,3 +60,6 @@ flutter_android_inputs = _flutter_android_inputs
 flutter_apk_check = _flutter_apk_check
 flutter_android_manifest = _flutter_android_manifest
 flutter_assets_dir = _flutter_assets_dir
+
+# The consumer-facing app macro: a stock android_binary with Flutter's defaults.
+flutter_android_app = _flutter_android_app

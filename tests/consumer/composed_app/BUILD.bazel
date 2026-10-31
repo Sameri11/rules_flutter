@@ -1,8 +1,8 @@
-"""A composed app: one flutter_core artifact packaged through flutter_android_inputs.
+"""A composed app: one flutter_core artifact packaged by flutter_android_app.
 
-The Android inputs come from two places: an arm64-only AAR, and flutter_android_inputs
-over the composed_plugins hub. The app's JNI library is linked into the binary. Each
-reaches the APK through the android_binary deps, so the apk check sees all of them.
+The app's inputs come from the macro's inputs target over the composed_plugins hub, and
+from an arm64-only AAR. The app's JNI library is linked into the binary. Each reaches the
+APK through the android_binary deps, so the apk check sees all of them.
 """
 
 load("@rules_android//rules:rules.bzl", "aar_import", "android_binary")
@@ -11,10 +11,7 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(
     "@rules_flutter_android//flutter:defs.bzl",
     "android_native_lib_jar",
-    "flutter_android_inputs",
-    "flutter_android_manifest",
-    "flutter_apk_check",
-    "flutter_assets_dir",
+    "flutter_android_app",
 )
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 load("@rules_java//java:defs.bzl", "java_library")
@@ -34,12 +31,6 @@ flutter_core(
     path_deps = ["//:composed_plugin_srcs"],
     plugins = "@composed_plugins",
     pub = "@composed_pub",
-)
-
-flutter_android_inputs(
-    name = "inputs",
-    core = ":core",
-    plugins = "@composed_plugins",
 )
 
 # The AAR's classes, as a jar whose entries are timestamp-normalized.
@@ -106,34 +97,35 @@ cc_library(
     alwayslink = True,
 )
 
-# The versioned manifest: versionCode and versionName come from pubspec.yaml.
-flutter_android_manifest(
-    name = "apk_manifest",
-    manifest = "AndroidManifest.xml",
-    pubspec = ":pubspec",
-)
-
-# The bundle is a copy of the core's flutter_assets tree, under the inputs target's name.
-# android_binary strips assets_dir to place the bundle under assets/.
-android_binary(
+# The binary. The macro declares apk_inputs over the core and the plugin hub, and the
+# version comes from pubspec.yaml through that inputs target.
+flutter_android_app(
     name = "apk",
-    assets = [":inputs_bundle"],
-    assets_dir = flutter_assets_dir(assets = ":inputs_bundle"),
-    manifest = ":apk_manifest",
+    core = ":core",
+    manifest = "AndroidManifest.xml",
     manifest_values = {
         "applicationId": "com.example.composed_app",
     },
-    nocompress_extensions = [".so"],
+    # The fixture has no src/main/res.
+    plugins = "@composed_plugins",
+    resource_files = [],
     deps = [
         ":composed_aar",
         ":composed_jni",
-        ":inputs",
     ],
 )
 
-flutter_apk_check(
-    name = "apk_check_test",
-    binary = ":apk",
-    native = [":inputs_native"],
-    tags = ["manual"],
+# A second binary over the same inputs: the engine, AOT library and assets are built once.
+flutter_android_app(
+    name = "apk_variant",
+    inputs = ":apk_inputs",
+    manifest = "AndroidManifest.xml",
+    manifest_values = {
+        "applicationId": "com.example.composed_app.variant",
+    },
+    resource_files = [],
+    deps = [
+        ":composed_aar",
+        ":composed_jni",
+    ],
 )

@@ -17,7 +17,7 @@ load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolch
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
-load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo")
+load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
@@ -51,6 +51,19 @@ _core_file = rule(
     attrs = {
         "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
         "field": attr.string(mandatory = True, values = ["embedding_jar"]),
+    },
+)
+
+def _pubspec_impl(ctx):
+    return [ctx.attr.core[FlutterPubspecInfo]]
+
+# Forwards the core's pubspec, so a binary that reuses this inputs target reads
+# its version from the same pubspec the inputs were built from.
+_pubspec = rule(
+    implementation = _pubspec_impl,
+    doc = "The core's FlutterPubspecInfo.",
+    attrs = {
+        "core": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
     },
 )
 
@@ -218,7 +231,7 @@ platform. The ABI comes from that platform.""",
     toolchains = use_cc_toolchain(),
 )
 
-def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
+def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", tags = []):
     """Declares a flutter_core artifact's Android inputs as the target `<name>`.
 
     The consumer lists `<name>` in its android_binary deps. It exports the
@@ -233,6 +246,8 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
       plugins: the plugin repository, e.g. `"@flutter_plugins"`, or None for an
         app without plugins.
       maven_repo: the repository holding the embedding's Maven dependencies.
+      tags: tags for `<name>` only. The other targets are plumbing and always
+        carry `manual`.
     """
     if plugins != None and not plugins.startswith("@"):
         fail("flutter_android_inputs {}: plugins must be a repository label such as \"@flutter_plugins\", or None; got {}.".format(
@@ -244,17 +259,25 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
         name = name + "_core_embedding",
         core = core,
         field = "embedding_jar",
+        tags = ["manual"],
     )
     java_import(
         name = name + "_embedding",
         jars = [":" + name + "_core_embedding"],
         deps = flutter_embedding_deps(maven_repo),
+        tags = ["manual"],
+    )
+    _pubspec(
+        name = name + "_pubspec",
+        core = core,
+        tags = ["manual"],
     )
 
     if plugins:
         android_library(
             name = name + "_registrant",
             exports = [plugins + "//:generated_plugin_registrant"],
+            tags = ["manual"],
         )
     else:
         android_library(
@@ -264,19 +287,24 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
                 ":" + name + "_embedding",
                 maven_repo + ANNOTATION_JVM,
             ],
+            tags = ["manual"],
         )
 
     _split_native(
         name = name + "_native",
         core = core,
         native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None,
+        tags = ["manual"],
     )
 
     _inputs_bundle(
         name = name + "_bundle",
         core = core,
+        tags = ["manual"],
     )
 
+    # The engine's keep rules. They apply only to a binary that shrinks, so a
+    # binary that sets no proguard_specs is unaffected.
     android_library(
         name = name,
         exports = [
@@ -284,4 +312,6 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven"):
             ":" + name + "_embedding",
             ":" + name + "_native",
         ] + flutter_embedding_deps(maven_repo),
+        proguard_specs = [Label("//flutter/private:engine_keep.pro")],
+        tags = tags,
     )

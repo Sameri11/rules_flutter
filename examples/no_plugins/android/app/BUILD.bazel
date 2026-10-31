@@ -1,27 +1,22 @@
 # Android targets for the plugin-free app.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# The embedding resolves AndroidX through this module's Maven repository.
-flutter_embedding_library(name = "flutter_embedding")
-
-flutter_android_binary(
+flutter_android_app(
     name = "no_plugins",
-    abis = ["arm64-v8a"],
-    # Root packages require an explicit target name.
-    app = "//:app",
-    manifest_values = {"applicationId": "com.example.no_plugins"},
+    core = "//:core",
     # Do not construct labels in the absent @flutter_plugins repository. The
     # macro still compiles the empty GeneratedPluginRegistrant stock Flutter does.
     plugins = None,
+    manifest_values = {"applicationId": "com.example.no_plugins"},
     deps = [":main_activity"],
 )
 
 kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/no_plugins/MainActivity.kt"],
-    deps = [":flutter_embedding"],
+    deps = [":no_plugins_inputs"],
 )

@@ -150,12 +150,12 @@ def declared_apk_targets(bazel: str, module: Path) -> set[str]:
     emitted by a macro. Querying it is resilient to formatting, aliases, and
     generated per-ABI names; parsing BUILD source would not be.
 
-    Queries the macro's public `_flutter_apk` wrapper, not its private
-    `android_binary`.
+    Queries the public APK targets of both macros: the wrapper's `_flutter_apk`
+    and `flutter_android_app`'s android_binary. Their private helpers are excluded.
     """
     query = (
-        'attr("generator_function", "^flutter_android_binary$", '
-        'kind("_flutter_apk rule", //...))'
+        'kind("_flutter_apk rule|android_binary rule", '
+        'attr("generator_function", "^(flutter_android_binary|flutter_android_app)$", //...))'
     )
     return set(run([bazel, "query", "--output=label", query], module).splitlines())
 
