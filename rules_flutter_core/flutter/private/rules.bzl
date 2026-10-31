@@ -28,7 +28,7 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("//flutter:abis.bzl", "ABIS", "aot_target_compatible_with", "check_abis")
+load(":abis.bzl", "ABIS", "aot_target_compatible_with", "check_abis")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 
 visibility(["//flutter"])

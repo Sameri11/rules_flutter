@@ -6,7 +6,7 @@ ABI's NDK toolchain, the minimum SDK, and the names of the plugin repository's
 per-ABI aggregates.
 """
 
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
+load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "abi_from_platform")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -75,3 +75,64 @@ def plugin_repo_target(kind, abi):
             sorted(_PLUGIN_REPO_TARGETS),
         ))
     return _PLUGIN_REPO_TARGETS[kind].format(abi)
+
+def check_abis(abis, where):
+    """Fails with the supported set listed, rather than a KeyError.
+
+    Args:
+      abis: the ABI names a caller asked for.
+      where: what to name in the failure, usually the calling target.
+    """
+    if not abis:
+        fail("{}: `abis` must name at least one ABI, one of {}.".format(
+            where,
+            sorted(ABIS),
+        ))
+    for abi in abis:
+        if abi not in ABIS:
+            fail("{}: unknown ABI '{}'. Supported: {}.".format(
+                where,
+                abi,
+                sorted(ABIS),
+            ))
+
+def check_platform_abi(ctx):
+    """Verify that a platform transition selected the platform for `ctx.attr.abi`.
+
+    Only valid on rules that transition `--platforms` from `abi`; returns
+    `ctx.attr.abi`.
+
+    Args:
+      ctx: the rule context; must carry ABI_PLATFORM_ATTRS and an `abi` attribute.
+
+    Returns:
+      `ctx.attr.abi`, after verifying it against the target platform.
+    """
+    found = abi_from_platform(ctx)
+    if found == None:
+        fail((
+            "{}: target platform '{}' is not Android, or names no CPU " +
+            "constraint this ruleset recognizes, so it cannot be checked " +
+            "against abi = '{}'. This rule transitions --platforms from its " +
+            "own `abi` attribute; if that transition is ever removed, this " +
+            "check should go with it."
+        ).format(ctx.label, ctx.attr.platform, ctx.attr.abi))
+    if found not in ABIS:
+        fail((
+            "{}: target platform '{}' is Android/{}, which this ruleset does " +
+            "not support (abi = '{}'). Supported: {}."
+        ).format(ctx.label, ctx.attr.platform, found, ctx.attr.abi, sorted(ABIS)))
+    if found != ctx.attr.abi:
+        fail((
+            "{}: abi = '{}' but target platform '{}' carries the CPU " +
+            "constraint for '{}'. ABIS['{}'].cpu_constraint = {} names the " +
+            "wrong ABI."
+        ).format(
+            ctx.label,
+            ctx.attr.abi,
+            ctx.attr.platform,
+            found,
+            ctx.attr.abi,
+            ABIS[ctx.attr.abi].cpu_constraint,
+        ))
+    return found

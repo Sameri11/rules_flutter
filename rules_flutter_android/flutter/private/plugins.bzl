@@ -12,11 +12,9 @@ cannot describe. Recipes are keyed by pub package so they also support packages
 without an `android/` module.
 """
 
-load("@rules_flutter_core//flutter:abis.bzl", "check_abis")
-load(":abis.bzl", "MIN_SDK", "plugin_repo_target")
+load(":abis.bzl", "MIN_SDK", "check_abis", "plugin_repo_target")
 load(":embedding.bzl", "ANNOTATION_JVM", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
-load(":registrant.bzl", "package_roots", "write_android_registrants")
 
 visibility(["//flutter"])
 
@@ -1370,6 +1368,55 @@ def _native_files_by_abi_target(ctx):
         libs = repr({":" + _NATIVE_FILES_TARGET.format(abi): abi for abi in ctx.attr.abis}),
     )
 
+def _package_roots(ctx):
+    """Every pub package in the resolution, name -> real directory.
+
+    The plugin metadata lists only what Gradle would see: packages with an
+    `android/` module. A recipe has to be able to name a package that is not a
+    plugin at all -- `sqlite3` ships a Dart build hook and no Android module, so
+    nothing in the metadata refers to it -- and the pub hub's `package_config.json`
+    resolves every package by name.
+
+    Its rootUris are relative to the hub directory, `<output_base>/external/<hub>`,
+    which is also where the execroot's `external/` sits. A root therefore lands in
+    a sibling repository (a hosted package, an SDK package) or climbs out of
+    `external/` into the workspace (the project and its path packages). An
+    absolute `file://` root means the config is one `flutter pub get` wrote, which
+    names host paths this rule refuses to read.
+    """
+    roots = {}
+    config_label = ctx.attr.package_config
+    config_path = ctx.path(config_label)
+    hub = config_path.dirname
+    output_base = hub.dirname.dirname
+    config = json.decode(ctx.read(config_path))
+    for package in config.get("packages", []):
+        name = package["name"]
+        root = package.get("rootUri", "")
+        if "://" in root:
+            fail(
+                ("plugins.project package_config {} has the absolute rootUri {} for package `{}`. " +
+                 "Pass the pub hub's config, `@<hub>//:package_config.json` from `pub.lock`, " +
+                 "not the `.dart_tool/package_config.json` `flutter pub get` writes.").format(
+                    config_label,
+                    root,
+                    name,
+                ),
+            )
+        segments = ["external", hub.basename]
+        for segment in root.split("/"):
+            if segment in ["", "."]:
+                continue
+            if segment == "..":
+                if not segments:
+                    fail("package_config {}: rootUri {} of `{}` leaves the execroot".format(config_label, root, name))
+                segments.pop()
+            else:
+                segments.append(segment)
+        base = output_base if segments and segments[0] == "external" else ctx.workspace_root
+        roots[name] = str(base.get_child(*segments))
+    return roots
+
 def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
     plugins = metadata.get("plugins", {}).get("android", [])
@@ -1390,7 +1437,7 @@ def _flutter_plugins_impl(ctx):
     used_overrides = []
     used_build_config_packages = []
     stale_overrides = []
-    roots = package_roots(ctx)
+    roots = _package_roots(ctx)
     for plugin in plugins:
         name = plugin["name"]
         package_root = roots.get(name)
@@ -1811,11 +1858,11 @@ def _flutter_plugins_impl(ctx):
     # contributes only a .so.
     dev = {p["name"]: p.get("dev_dependency", False) for p in plugins}
 
-    # Rendered here from the metadata the pub hub wrote. The Dart registrant
-    # comes from the hub; the Java one is written by this repository.
-    write_android_registrants(ctx, metadata, roots)
+    # The pub hub writes both registrants: the Dart one and the Java one per mode.
     registrant = {
-        mode: "android/{}/GeneratedPluginRegistrant.java".format(mode)
+        mode: str(ctx.attr.package_config.same_package_label(
+            "android/{}/GeneratedPluginRegistrant.java".format(mode),
+        ))
         for mode in ["debug", "release"]
     }
     ctx.file(

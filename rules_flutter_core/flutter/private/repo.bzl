@@ -7,7 +7,7 @@ artifacts are fetched lazily by `flutter precache`, so a fully hermetic
 download rule is a separate concern. See README for that tradeoff.
 """
 
-load("//flutter:abis.bzl", "ABIS", "AOT_MODES", "MODES", "embedding_repo", "engine_repo")
+load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "embedding_repo", "engine_repo")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])

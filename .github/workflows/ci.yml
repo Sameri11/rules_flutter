@@ -49,6 +49,17 @@ jobs:
         working-directory: rules_flutter_android
         run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //:buildifier_test
 
+      - name: buildifier (examples, tests, tools/ci)
+        working-directory: rules_flutter_core
+        run: |
+          set -euo pipefail
+          root="$(cd .. && pwd)"
+          files=$(find "$root/examples" "$root/tests" "$root/tools/ci" \
+            \( -name BUILD -o -name BUILD.bazel -o -name '*.bzl' -o -name MODULE.bazel -o -name WORKSPACE -o -name WORKSPACE.bazel \) \
+            -not -path '*/bazel-*' -not -path '*/.gradle/*' -not -path '*/build/*' \
+            -not -path '*/.git/*' -not -path '*/third_party/*')
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel run @buildifier_prebuilt//:buildifier -- -mode=check -lint=warn $files
+
       - name: Key portability contract (core)
         working-directory: rules_flutter_core
         run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tools/ci:key_portability_test
@@ -373,7 +384,7 @@ jobs:
         working-directory: rules_flutter_core
         run: |
           set -o pipefail
-          bazel test //tests/flutter_test_conformance/... //flutter/private/test_kernel_driver/... //tests/test_kernel_driver/... 2>&1 | tee ../bazel_test_conformance.log
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //tests/flutter_test_conformance/... //flutter/private/test_kernel_driver/... //tests/test_kernel_driver/... 2>&1 | tee ../bazel_test_conformance.log
 
       # A helper edit re-runs only the tests that read it, on the worker path.
       - name: Test suite helper edit re-runs importers only

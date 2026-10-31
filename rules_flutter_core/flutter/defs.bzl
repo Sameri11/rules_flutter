@@ -4,9 +4,10 @@ Consumer BUILD files load this one entrypoint rather than the implementation
 under ``//flutter/private``. Every name here is either written by hand in a
 Consumer Module or named by a BUILD file these rules generate; nothing is
 exported merely because it exists. Rules composed by the macros below --
-``dart_aot_kernel``, ``dart_jit_kernel``, ``dart_test_kernel`` and the ``ABIS``
-table stay private, so their attributes remain free to change without a
-consumer migration.
+``dart_aot_kernel``, ``dart_jit_kernel`` and ``dart_test_kernel`` stay private,
+so their attributes remain free to change without a consumer migration. The
+ABI names are public through ``@rules_flutter_core//flutter:abis.bzl``, which
+re-exports the consumer-facing subset.
 
 The Android macros (``flutter_android_binary`` and the rest) load from
 ``@rules_flutter_android//flutter:defs.bzl``.

@@ -1,10 +1,10 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 
-# The Android half of the key portability contract. The script is the one core
-# publishes; it checks only the Android files because --root is not given, so
-# the core files need not be present. native_build_env.bzl is declared so the
-# slice covers every Android action source, though the script has no contract
-# for it yet.
+# The Android half of the key portability contract (contracts E, F, G, L, M,
+# and P for native_build_env.bzl). The script is the one core publishes, and it
+# is a dev-only dependency here: @rules_flutter_core//tools/ci is not a runtime
+# dependency of this module. It checks only the Android files because --root is
+# not given, so the core files need not be present.
 genrule(
     name = "key_portability_check",
     srcs = [

@@ -21,10 +21,11 @@ FILES = {
     "apk_check": "flutter/private/apk_check.bzl",
     "dart_registrant": "flutter/private/dart_registrant.bzl",
     "pub_lock": "flutter/private/pub_lock.bzl",
+    "native_build_env": "flutter/native_build_env.bzl",
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
-ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check"))
+ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env"))
 
 
 class Checker:
@@ -86,6 +87,7 @@ class Checker:
         self.check_m()
         self.check_n()
         self.check_o()
+        self.check_p()
         return self.failures
 
     def tree(self, name, contract):
@@ -360,6 +362,8 @@ class Checker:
             for name in ("sdk_version", "flutter"):
                 if not _contains_attr(inputs, ["toolchain", name]):
                     self.fail("D", "FlutterAssets inputs must declare toolchain.{}".format(name))
+            if not _contains_attr(inputs, ["build_env", "files"]):
+                self.fail("D", "FlutterAssets inputs must declare the native build environment's files (build_env.files)")
             if _keyword(action, "tools") is not None:
                 self.fail("D", "FlutterAssets must not declare tools: it runs the host flutter tool, an undeclared input (see _ASSETS_EXEC)")
             for path in (
@@ -401,8 +405,8 @@ class Checker:
         if tester is None:
             self.fail("D", "{} must define _flutter_test_assets_impl".format(FILES["defs"]))
         else:
-            if _contains_attr(tester, ["ctx", "file", "_android_sdk"]) or _contains_attr(tester, ["ctx", "attr", "abis"]):
-                self.fail("D", "the test assets bundle must not depend on the Android SDK or ABIs")
+            if _contains_attr(tester, ["ctx", "attr", "abis"]):
+                self.fail("D", "the test assets bundle must not depend on ABIs")
             if any(isinstance(node, ast.Constant) and isinstance(node.value, str) and "ANDROID" in node.value for node in ast.walk(tester)):
                 self.fail("D", "the test assets bundle must not set an Android environment")
 
@@ -451,7 +455,7 @@ class Checker:
         if _contains_string(tree, "ANDROID_NDK_HOME"):
             self.fail("E", "Android action source must not use an NDK environment path")
 
-        if not _rule_uses_toolchain(tree, "_flutter_debug_assets", "@rules_flutter_core//flutter/private:flutter_toolchain_type"):
+        if not _rule_uses_toolchain(tree, "_flutter_debug_assets", "@rules_flutter_core//flutter:toolchain_type"):
             self.fail("E", "_flutter_debug_assets must declare the Flutter toolchain type: it reads the host engine snapshots through it")
 
     def check_f(self):
@@ -841,6 +845,29 @@ class Checker:
                     self.fail("O", "{} must not write a host path or PUB_CACHE into the hub's text".format(FILES[name]))
                     break
 
+    def check_p(self):
+        # The Android SDK as a native build environment: exports and the action input.
+        tree = self.tree("native_build_env", "P")
+        if tree is None:
+            return
+        if not _rule_attr_default(tree, "native_build_env", "_android_sdk", "//flutter/private:_android_sdk_marker"):
+            self.fail("P", "native_build_env must default _android_sdk to //flutter/private:_android_sdk_marker")
+        function = _function(tree, "_native_build_env_impl")
+        if function is None:
+            self.fail("P", "{} must define _native_build_env_impl".format(FILES["native_build_env"]))
+            return
+        source = self.sources["native_build_env"]
+        for token, description in (
+            ("export ANDROID_HOME=", "the ANDROID_HOME export"),
+            ('export ANDROID_SDK_ROOT="$ANDROID_HOME"', "ANDROID_SDK_ROOT set from ANDROID_HOME"),
+            ("$EXECROOT/{android_sdk}", "the SDK path under $EXECROOT"),
+        ):
+            if token not in source:
+                self.fail("P", "native_build_env exports must contain {}".format(description))
+        infos = [node for node in ast.walk(function) if isinstance(node, ast.Call) and _call_path(node) == ["FlutterNativeBuildEnvInfo"]]
+        if not any(_keyword(call, "files") is not None and _contains_name(_keyword(call, "files"), "sdk") for call in infos):
+            self.fail("P", "FlutterNativeBuildEnvInfo must carry the SDK file in files, so the action declares it as an input")
+
 
 _HOST_PATH = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")
 
@@ -1206,7 +1233,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
-    print("OK: key portability contracts A-O hold")
+    print("OK: key portability contracts A-P hold")
     return 0
 
 

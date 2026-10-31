@@ -18,7 +18,6 @@ def _dynamic_namespace_metadata_impl(ctx):
                 "dependencies": [],
                 "dev_dependency": False,
             }]},
-            "registrant": [],
         }),
     )
     ctx.file(

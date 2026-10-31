@@ -18,8 +18,8 @@ mechanical exceptions need a label, and only those:
 host-compatible registration points at the public static toolchain target.
 """
 
-load("//flutter:abis.bzl", "ABIS")
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
+load(":abis.bzl", "ABIS")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":toolchain.bzl", "flutter_toolchain")
 

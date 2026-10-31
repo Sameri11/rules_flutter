@@ -62,8 +62,8 @@ Loading and analysis — `--nobuild` — of every supported BUILD symbol through
 
 | entry point | symbols |
 | --- | --- |
-| `@rules_flutter_core//flutter:defs.bzl` | `flutter_app`, `flutter_aot_library`, `flutter_assets`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `pub_path_deps_check`, `pub_plugins_check` |
-| `@rules_flutter_android//flutter:defs.bzl` | `flutter_android_binary`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs` |
+| `@rules_flutter_core//flutter:defs.bzl` | `flutter_aot_library`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `pub_path_deps_check`, `pub_plugins_check` |
+| `@rules_flutter_android//flutter:defs.bzl` | `flutter_android_binary`, `flutter_app`, `flutter_assets`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs` |
 | `@rules_flutter_android//flutter:extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`/`plugins.build_config_field()`) over real, checked-in external plugin graphs — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test`, `:build_config_plugin_jar_test`, `:build_config_plugin_values_test` |
 
 Remaining implementation rules and helpers are covered indirectly by the

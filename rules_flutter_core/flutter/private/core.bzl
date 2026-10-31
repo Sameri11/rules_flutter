@@ -12,7 +12,7 @@ The android_binary side takes the artifact through `FlutterArtifactInfo`. See
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_repo", "engine_libs_label")
+load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "pub_path_deps_check", "pub_plugins_check")
 
@@ -38,8 +38,11 @@ def _split_label(abi, mode):
     return Label("//flutter/private:split_{}_{}".format(abi.replace("-", "_"), mode))
 
 _ANDROID_SPLIT_OUTPUTS = [
-    # The options the Android split transition writes. The kernel
-    # and the bundle must not inherit any of them from whichever split asked.
+    # The options the Android split transition writes. The kernel and the bundle
+    # must not inherit any of them from whichever split asked. rules_android's
+    # bytecode_transformer flag is not in this list: core cannot name a
+    # rules_android label (D9). A consumer that sets it gets a second kernel and
+    # bundle configuration beside the split's, rather than one shared with the host.
     "//command_line_option:Android configuration distinguisher",
     "//command_line_option:android_compiler",
     "//command_line_option:android_platforms",
@@ -334,8 +337,8 @@ def flutter_core(
             [("//conditions:default", [])],
         )),
         embedding = select({
-            Label("//flutter:mode_release"): Label("@{}//jar:file".format(embedding_repo("release"))),
-            Label("//flutter:mode_debug"): Label("@{}//jar:file".format(embedding_repo("debug"))),
+            Label("//flutter:mode_release"): embedding_jar_label("release"),
+            Label("//flutter:mode_debug"): embedding_jar_label("debug"),
         }),
         assets = ":" + name + "_bundle",
         pubspec = ":pubspec",

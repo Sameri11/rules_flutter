@@ -26,10 +26,10 @@ package(default_visibility = ["//visibility:private"])
 exports_files(["pubspec.lock"])
 
 flutter_core(
-    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     name = "core",
     srcs = glob(["lib/**/*.dart"]),
     assets = ["assets/composed-marker.txt"],
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     # Sources of the path plugin, declared so pub_path_deps_check accepts it.
     path_deps = ["//:composed_plugin_srcs"],
     plugins = "@composed_plugins",

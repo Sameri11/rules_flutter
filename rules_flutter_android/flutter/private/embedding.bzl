@@ -20,7 +20,7 @@ regardless of version, so a plugin could silently downgrade an artifact declared
 here.
 """
 
-load("@rules_flutter_core//flutter:abis.bzl", "embedding_repo")
+load("@rules_flutter_core//flutter:abis.bzl", "embedding_jar_label")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":maven.bzl", "maven_label")
 
@@ -99,8 +99,8 @@ def flutter_embedding_library(name = "flutter_embedding", maven_repo = "@flutter
         name = name,
         # Engine jars resolve here; Maven dependencies resolve in the consumer.
         jars = select({
-            _MODE_DEBUG: [Label("@{}//jar:file".format(embedding_repo("debug")))],
-            _MODE_RELEASE: [Label("@{}//jar:file".format(embedding_repo("release")))],
+            _MODE_DEBUG: [embedding_jar_label("debug")],
+            _MODE_RELEASE: [embedding_jar_label("release")],
         }),
         deps = deps,
         exports = deps,

@@ -1,6 +1,6 @@
 """The supported BUILD API for a Consumer Module.
 
-All supported symbols load from @rules_flutter_core//flutter:defs.bzl.
+Core rules load from @rules_flutter_core//flutter:defs.bzl. Android macros load from @rules_flutter_android//flutter:defs.bzl.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")

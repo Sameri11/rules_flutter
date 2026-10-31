@@ -37,10 +37,10 @@ load(
     "android_library",
 )
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "check_abis", "check_platform_abi", "engine_jar_label")
+load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "engine_jar_label")
 load("@rules_flutter_core//flutter:defs.bzl", "FlutterPubspecInfo")
 load("@rules_java//java:defs.bzl", "JavaInfo", "java_import")
-load(":abis.bzl", "MIN_SDK", "bazel_platform", "plugin_repo_target")
+load(":abis.bzl", "MIN_SDK", "bazel_platform", "check_abis", "check_platform_abi", "plugin_repo_target")
 load(":archive.bzl", "ZIPPER_ATTRS", "deterministic_jar")
 load(":bundle.bzl", "ASSETS", "CLASSES", "FlutterBundleContributionInfo", "NATIVE_LIB", "flutter_bundle_contribution")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
@@ -694,7 +694,7 @@ def _flutter_debug_assets_impl(ctx):
     # Named flutter_assets, as flutter_assets' own tree is: flutter_assets_dir
     # derives the in-APK path from the artifact path.
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
-    flutter = ctx.toolchains["@rules_flutter_core//flutter/private:flutter_toolchain_type"].flutter
+    flutter = ctx.toolchains["@rules_flutter_core//flutter:toolchain_type"].flutter
     ctx.actions.run_shell(
         command = _OVERLAY_COMMAND,
         arguments = [
@@ -730,7 +730,7 @@ files flutter_tools' debug bundle carries and the release bundle does not.""",
             doc = "The app's debug kernel, `<aot>_jit_kernel`, shipped as kernel_blob.bin.",
         ),
     },
-    toolchains = ["@rules_flutter_core//flutter/private:flutter_toolchain_type"],
+    toolchains = ["@rules_flutter_core//flutter:toolchain_type"],
 )
 
 # The repository these rules generate for a project's plugins. Its name is

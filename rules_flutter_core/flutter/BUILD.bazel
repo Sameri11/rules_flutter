@@ -8,6 +8,14 @@ exports_files([
     "extensions.bzl",
 ])
 
+# The Flutter SDK toolchain type, for rules outside this module. The type is
+# declared in flutter/private; this alias is the name other modules use.
+alias(
+    name = "toolchain_type",
+    actual = "//flutter/private:flutter_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
 # Flutter runtime mode, independent of --compilation_mode.
 string_flag(
     name = "mode",
