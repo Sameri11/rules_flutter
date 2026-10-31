@@ -190,7 +190,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build --@rules_flutter_core//flutter:mode=debug -c fastbuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test 2>&1 | tee ../../bazel_composed_debug.log
+          bazel build --@rules_flutter_core//flutter:mode=debug -c fastbuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test //composed_app:native_files_coexistence_check //composed_app:native_files_override_check 2>&1 | tee ../../bazel_composed_debug.log
 
       # The 3-ABI union shares its kernel, asset bundle, ELF, engine strip and
       # CMake build actions between both APKs.

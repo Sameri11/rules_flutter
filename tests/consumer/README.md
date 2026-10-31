@@ -69,15 +69,15 @@ core and Android entrypoints below, plus focused behavior checks:
 Remaining implementation rules and helpers are covered indirectly by the
 supported macros; the Consumer BUILD file loads no private implementation file.
 
+That catches the two things a refactor of these rules actually breaks: a symbol
+moving between files (load phase) and an attribute renamed, removed or made
+mandatory (analysis phase). Both were verified by being made to fail.
+
 `//composed_app:native_files_test` checks the generated carrier for all three
 ABIs, including automatic CMake and recipe libraries, a recipe override, and
 debug-only native plugin filtering. Run it in both debug and release modes.
 `//composed_app:apk_override_contents_test` checks the override APK's native
 library contents.
-
-That catches the two things a refactor of these rules actually breaks: a symbol
-moving between files (load phase) and an attribute renamed, removed or made
-mandatory (analysis phase). Both were verified by being made to fail.
 
 The join is instantiated over **two** ABIs, so its per-ABI shape is exercised
 rather than collapsing to the single-entry case. It passes `engine_jars`, which

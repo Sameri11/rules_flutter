@@ -1,9 +1,9 @@
 """The plugin repository's native libraries as Files, one aggregate per ABI.
 
-`flutter_native_libs` packs the same libraries into a jar for the jar carrier.
-The split route packages them through CcInfo, which needs each library as its
-own File, so the hub emits one `flutter_native_files` per ABI from the same
-contributions and keys them with `flutter_native_files_by_abi`.
+The split route packages recipe contributions and generated CMake libraries
+through CcInfo, which needs each library as its own File. The hub emits one
+`flutter_native_files` per ABI and keys them with `flutter_native_files_by_abi`.
+The legacy jar carrier remains separate.
 """
 
 load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
