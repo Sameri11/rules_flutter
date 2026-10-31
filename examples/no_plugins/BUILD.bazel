@@ -6,11 +6,11 @@ package(default_visibility = ["//visibility:public"])
 
 flutter_core(
     name = "core",
+    srcs = glob(["lib/**/*.dart"]),
     # flutter create declares no assets.
     assets = [],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
     pub = "@pub",
-    srcs = glob(["lib/**/*.dart"]),
 )
 
 # flutter_core builds no test bundle, and flutter_test reads the Material shaders

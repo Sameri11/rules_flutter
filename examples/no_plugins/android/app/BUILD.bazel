@@ -8,10 +8,10 @@ package(default_visibility = ["//visibility:public"])
 flutter_android_app(
     name = "no_plugins",
     core = "//:core",
+    manifest_values = {"applicationId": "com.example.no_plugins"},
     # Do not construct labels in the absent @flutter_plugins repository. The
     # macro still compiles the empty GeneratedPluginRegistrant stock Flutter does.
     plugins = None,
-    manifest_values = {"applicationId": "com.example.no_plugins"},
     deps = [":main_activity"],
 )
 
