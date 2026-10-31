@@ -369,22 +369,41 @@ def _flutter_engine_jar_impl(ctx):
         version["engineRevision"],
         version["engineContentHash"],
     )
-    ctx.file("jar/BUILD.bazel", """filegroup(
-    name = "file",
-    srcs = ["{}.jar"],
-    visibility = ["//visibility:public"],
-)
-""".format(ctx.attr.artifact))
     ctx.download(
         url = url,
         output = "jar/{}.jar".format(ctx.attr.artifact),
         canonical_id = url,
     )
 
+    # Only an ABI's engine jar carries the .so files that :libs globs; the embedding
+    # jar stays a file.
+    if ctx.attr.extract_libs:
+        ctx.extract(
+            archive = ctx.path("jar/{}.jar".format(ctx.attr.artifact)),
+            output = "jar",
+        )
+
+    # The jar's members are unknown until it is extracted, so the core takes each
+    # ABI's .so files through this glob rather than a list it would have to hardcode.
+    # The embedding jar carries no .so files, hence allow_empty.
+    ctx.file("jar/BUILD.bazel", """filegroup(
+    name = "file",
+    srcs = ["{}.jar"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libs",
+    srcs = glob(["lib/**/*.so"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+""".format(ctx.attr.artifact))
+
 flutter_engine_jar = repository_rule(
     implementation = _flutter_engine_jar_impl,
     attrs = {
         "artifact": attr.string(mandatory = True),
+        "extract_libs": attr.bool(default = False),
         "version_file": attr.label(
             allow_single_file = True,
             default = Label("@flutter_sdk//:flutter.version.json"),
@@ -421,6 +440,7 @@ def _flutter_impl(ctx):
             flutter_engine_jar(
                 name = engine_repo(abi, mode),
                 artifact = info.maven_artifact[mode],
+                extract_libs = True,
             )
 
 _flutter_sdk_tag = tag_class(

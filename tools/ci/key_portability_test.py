@@ -16,6 +16,10 @@ FILES = {
     "ndk": "flutter/private/ndk.bzl",
     "test": "flutter/private/flutter_test.bzl",
     "test_driver": "flutter/private/test_kernel_driver.bzl",
+    "core": "flutter/private/core.bzl",
+    "android_inputs": "flutter/private/android_inputs_rules.bzl",
+    "apk_check": "flutter/private/apk_check.bzl",
+    "dart_registrant": "flutter/private/dart_registrant.bzl",
 }
 
 
@@ -64,6 +68,11 @@ class Checker:
         self.check_h()
         self.check_i()
         self.check_j()
+        self.check_k()
+        self.check_l()
+        self.check_m()
+        self.check_n()
+        self.check_o()
         return self.failures
 
     def tree(self, name, contract):
@@ -160,7 +169,7 @@ class Checker:
                 self.fail("A", "every repository rule in repo.bzl must declare environ [\"FLUTTER_ROOT\", \"PATH\"]")
 
     def check_b(self):
-        for name in ("defs", "android", "test", "test_driver"):
+        for name in ("defs", "android", "test", "test_driver", "core", "android_inputs", "apk_check"):
             tree = self.tree(name, "B")
             if tree is None:
                 continue
@@ -574,7 +583,7 @@ class Checker:
 
     def check_h(self):
         regions = []
-        for name in ("defs", "android", "plugins"):
+        for name in ("defs", "android", "plugins", "core", "android_inputs", "apk_check"):
             tree = self.trees.get(name)
             if tree is None:
                 continue
@@ -672,9 +681,208 @@ class Checker:
                     if text is not None and (host_path.search(text) or host_variable.search(text)):
                         self.fail("J", "{} must not bake a host path or variable into its action".format(function_name))
 
+    def check_k(self):
+        # Core actions declare every file they read, and stay sandboxed and cacheable.
+        tree = self.tree("core", "K")
+        if tree is None:
+            return
+        bundle = _function(tree, "_assets_bundle_impl")
+        if bundle is None:
+            self.fail("K", "{} must define _assets_bundle_impl".format(FILES["core"]))
+        else:
+            action = _action_call(bundle, "run_shell")
+            if action is None:
+                self.fail("K", "_assets_bundle_impl must create its bundle with ctx.actions.run_shell")
+            else:
+                if _name(_keyword(action, "inputs")) != "inputs":
+                    self.fail("K", "the bundle action must take the inputs list it builds")
+                declared = _assigned_values(bundle, "inputs")
+                if not _any_contains_name(declared, "src"):
+                    self.fail("K", "the bundle inputs must declare the asset tree (src)")
+                if not _any_contains_name(declared, "kernel"):
+                    self.fail("K", "the bundle inputs must declare the JIT kernel under debug (kernel)")
+                for path, description in (
+                    (["toolchain", "vm_isolate_snapshot"], "the engine's vm snapshot"),
+                    (["toolchain", "isolate_snapshot"], "the engine's isolate snapshot"),
+                ):
+                    if not _any_contains_attr(declared, path):
+                        self.fail("K", "the bundle inputs must declare {}".format(description))
+                if _keyword(action, "execution_requirements") is not None:
+                    self.fail("K", "the bundle action must not set execution_requirements: it is sandboxed and cacheable")
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and _call_path(node) in (["ctx", "actions", "run"], ["ctx", "actions", "run_shell"])
+                and _keyword(node, "execution_requirements") is not None
+            ):
+                self.fail("K", "core.bzl actions must not set execution_requirements")
+        for token in ("no-sandbox", "local", "no-cache"):
+            if _contains_string(tree, token):
+                self.fail("K", "core.bzl must not use the {} execution requirement".format(token))
+
+    def check_l(self):
+        # The engine strip declares the toolchain it runs, and the placeholder fails on purpose.
+        tree = self.tree("android_inputs", "L")
+        if tree is None:
+            return
+        split = _function(tree, "_split_native_impl")
+        if split is None:
+            self.fail("L", "{} must define _split_native_impl".format(FILES["android_inputs"]))
+        else:
+            strips = [
+                node
+                for node in ast.walk(split)
+                if isinstance(node, ast.Call) and _call_path(node) == ["ctx", "actions", "run"]
+            ]
+            if len(strips) != 1:
+                self.fail("L", "_split_native_impl must run exactly one action, the engine strip")
+            else:
+                strip = strips[0]
+                if not _contains_attr(_keyword(strip, "executable"), ["cc_toolchain", "strip_executable"]):
+                    self.fail("L", "the engine strip must run cc_toolchain.strip_executable")
+                if not _contains_attr(_keyword(strip, "tools"), ["cc_toolchain", "all_files"]):
+                    self.fail("L", "the engine strip must declare cc_toolchain.all_files as tools")
+                if not _contains_name(_keyword(strip, "inputs"), "f"):
+                    self.fail("L", "the engine strip must declare each engine library as an input")
+            placeholder = _action_call(split, "run_shell")
+            if placeholder is None or "exit 1" not in (_formatted_template(_keyword(placeholder, "command")) or ""):
+                self.fail("L", "a split without an ABI must link a placeholder whose action fails")
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and _call_path(node) in (["ctx", "actions", "run"], ["ctx", "actions", "run_shell"])
+                and _keyword(node, "execution_requirements") is not None
+            ):
+                self.fail("L", "android_inputs actions must not set execution_requirements: they are sandboxed and cacheable")
+
+    def check_m(self):
+        # The check's action runs its checker on the APK and every library it names.
+        tree = self.tree("apk_check", "M")
+        if tree is None:
+            return
+        function = _function(tree, "_flutter_apk_check_impl")
+        if function is None:
+            self.fail("M", "{} must define _flutter_apk_check_impl".format(FILES["apk_check"]))
+            return
+        action = _action_call(function, "run")
+        if action is None:
+            self.fail("M", "_flutter_apk_check_impl must create its check with ctx.actions.run")
+        else:
+            if not _contains_attr(_keyword(action, "executable"), ["ctx", "executable", "_checker"]):
+                self.fail("M", "the check must run ctx.executable._checker")
+            if not _contains_attr(_keyword(action, "tools"), ["ctx", "attr", "_checker"]):
+                self.fail("M", "the check must declare the checker's files as tools")
+            for name, description in (("apk", "the APK"), ("spec", "the spec"), ("inputs", "every library the spec names")):
+                if not _contains_name(_keyword(action, "inputs"), name):
+                    self.fail("M", "the check's inputs must declare {}".format(description))
+            if _keyword(action, "execution_requirements") is not None:
+                self.fail("M", "the check must not set execution_requirements: it is sandboxed and cacheable")
+        if _action_call(function, "write") is None:
+            self.fail("M", "the spec must be an action output written with ctx.actions.write")
+
+    def check_n(self):
+        # The registrant is a pure function of its plugins, and the hub renders it through that function.
+        tree = self.tree("dart_registrant", "N")
+        if tree is not None:
+            render = _function(tree, "render_dart_registrant")
+            if render is None:
+                self.fail("N", "{} must define render_dart_registrant".format(FILES["dart_registrant"]))
+            elif not _returns_registrant_format(render):
+                self.fail("N", "render_dart_registrant must return _DART_REGISTRANT_TEMPLATE.format(...)")
+            if _contains_name(tree, "ctx"):
+                self.fail("N", "{} must not read a repository context: rendering takes only its arguments".format(FILES["dart_registrant"]))
+            for name in ("_DART_REGISTRANT_TEMPLATE", "_DART_REGISTRATION"):
+                text = _string(_named_value(tree, name))
+                if text is None:
+                    self.fail("N", "{} must define {} as a string template".format(FILES["dart_registrant"], name))
+                elif _HOST_PATH.search(text) or "PUB_CACHE" in text:
+                    self.fail("N", "{} must not contain a host path or PUB_CACHE".format(name))
+        plugins = self.tree("plugins", "N")
+        if plugins is not None:
+            for name in ("_DART_REGISTRANT_TEMPLATE", "_DART_REGISTRATION"):
+                if _named_value(plugins, name) is not None:
+                    self.fail("N", "plugins.bzl must not keep {}: render_dart_registrant owns the template".format(name))
+            if not _has_call_with_string(plugins, ["load"], ":dart_registrant.bzl"):
+                self.fail("N", "plugins.bzl must load render_dart_registrant from :dart_registrant.bzl")
+            if not _has_call(plugins, "render_dart_registrant"):
+                self.fail("N", "plugins.bzl must write dart_plugin_registrant.dart with render_dart_registrant")
+
+    def check_o(self):
+        # Hub targets named by the core and the Android inputs must be generated, with no host state.
+        plugins = self.tree("plugins", "O")
+        if plugins is None:
+            return
+        for target, consumer in _HUB_TARGETS:
+            consumer_tree = self.tree(consumer, "O")
+            if consumer_tree is not None and not _contains_string_part(consumer_tree, "//:" + target):
+                self.fail("O", "{} must name the hub target //:{}".format(FILES[consumer], target))
+            if not _contains_string_part(plugins, target):
+                self.fail("O", "plugins.bzl must generate the hub target {}".format(target))
+        for node in ast.walk(plugins):
+            text = _string(node)
+            if text is not None and (_HOST_PATH.search(text) or "PUB_CACHE" in text):
+                self.fail("O", "plugins.bzl must not write a host path or PUB_CACHE into the hub's text")
+                break
+
+
+_HOST_PATH = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")
+
+# Hub targets that a consumer .bzl names: (target, consumer file key).
+_HUB_TARGETS = (
+    ("dart_plugin_registrant.dart", "core"),
+    ("plugin_deps.MODULE.bazel", "core"),
+    ("generated_plugin_registrant", "android_inputs"),
+    ("flutter_native_files_by_abi", "android_inputs"),
+)
+
+
+def _assigned_values(node, name):
+    """Every value bound to `name` under `node`, by plain or augmented assignment."""
+    values = []
+    for child in ast.walk(node):
+        if isinstance(child, ast.Assign) and any(_name(target) == name for target in child.targets):
+            values.append(child.value)
+        elif isinstance(child, ast.AugAssign) and _name(child.target) == name:
+            values.append(child.value)
+    return values
+
+
+def _any_contains_name(nodes, name):
+    return any(_contains_name(node, name) for node in nodes)
+
+
+def _any_contains_attr(nodes, path):
+    return any(_contains_attr(node, path) for node in nodes)
+
+
+def _returns_registrant_format(function):
+    for node in ast.walk(function):
+        if (
+            isinstance(node, ast.Return)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "format"
+            and _name(node.value.func.value) == "_DART_REGISTRANT_TEMPLATE"
+        ):
+            return True
+    return False
+
+
 
 def _file_contract(name):
-    return {"repo": "A", "defs": "B", "android": "E", "plugins": "F", "ndk": "G", "test": "I", "test_driver": "I"}[name]
+    return {
+        "repo": "A",
+        "defs": "B",
+        "android": "E",
+        "plugins": "F",
+        "ndk": "G",
+        "test": "I",
+        "test_driver": "I",
+        "core": "K",
+        "android_inputs": "L",
+        "apk_check": "M",
+        "dart_registrant": "N",
+    }[name]
 
 
 def _string(node):
@@ -977,7 +1185,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures))
         return 1
-    print("OK: key portability contracts A-J hold")
+    print("OK: key portability contracts A-O hold")
     return 0
 
 

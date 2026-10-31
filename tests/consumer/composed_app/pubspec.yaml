@@ -1,0 +1,16 @@
+name: composed_app
+description: Composition fixture for flutter_core with Android inputs.
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: ^3.12.2
+dependencies:
+  flutter:
+    sdk: flutter
+  # Path, not hosted: a hosted plugin would make the fixture depend on pub.dev.
+  # The plugin carries the one Android class the composed APK must contain.
+  composed_plugin:
+    path: ../fixtures/composed_plugin
+flutter:
+  assets:
+    - assets/composed-marker.txt

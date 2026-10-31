@@ -1,0 +1,138 @@
+"""A composed app: one flutter_core artifact packaged through flutter_android_inputs.
+
+The Android inputs come from two places: an arm64-only AAR, and flutter_android_inputs
+over the composed_plugins hub. The app's JNI library is linked into the binary. Each
+reaches the APK through the android_binary deps, so the apk check sees all of them.
+"""
+
+load("@rules_android//rules:rules.bzl", "aar_import", "android_binary")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load(
+    "@rules_flutter//flutter:defs.bzl",
+    "android_native_lib_jar",
+    "flutter_android_inputs",
+    "flutter_android_manifest",
+    "flutter_apk_check",
+    "flutter_assets_dir",
+    "flutter_core",
+)
+load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_java//java:java_single_jar.bzl", "java_single_jar")
+
+package(default_visibility = ["//visibility:private"])
+
+# MODULE.bazel reads the pub lock from outside this package.
+exports_files(["pubspec.lock"])
+
+flutter_core(
+    name = "core",
+    srcs = glob(["lib/**/*.dart"]),
+    assets = ["assets/composed-marker.txt"],
+    # Sources of the path plugin, declared so pub_path_deps_check accepts it.
+    path_deps = ["//:composed_plugin_srcs"],
+    plugins = "@composed_plugins",
+    pub = "@composed_pub",
+)
+
+flutter_android_inputs(
+    name = "inputs",
+    core = ":core",
+    plugins = "@composed_plugins",
+)
+
+# The AAR's classes, as a jar whose entries are timestamp-normalized.
+java_library(
+    name = "composed_aar_classes",
+    srcs = ["aar/java/com/example/composed/aar/AarMarker.java"],
+)
+
+java_single_jar(
+    name = "composed_aar_classes_jar",
+    deps = [":composed_aar_classes"],
+)
+
+# A linkshared cc_binary, named for the library it produces.
+cc_binary(
+    name = "libaar_native.so",
+    srcs = ["native/aar_native.cc"],
+    linkshared = True,
+)
+
+# The jar pins the platform, so the library is arm64 whatever split reaches it.
+android_native_lib_jar(
+    name = "aar_native_jar",
+    src = [":libaar_native.so"],
+    abi = "arm64-v8a",
+)
+
+# The aar is a zip built with a fixed entry order and timestamps, so the same
+# inputs always give the same bytes.
+genrule(
+    name = "composed_aar_zip",
+    srcs = [
+        "aar/AndroidManifest.xml",
+        ":aar_native_jar",
+        ":composed_aar_classes_jar",
+    ],
+    outs = ["composed_aar.aar"],
+    cmd = """set -euo pipefail
+out="$$PWD/$@"
+stage="$$(mktemp -d)"
+trap 'rm -rf "$$stage"' EXIT
+mkdir -p "$$stage/jni/arm64-v8a"
+cp "$(location aar/AndroidManifest.xml)" "$$stage/AndroidManifest.xml"
+cp "$(location :composed_aar_classes_jar)" "$$stage/classes.jar"
+unzip -p "$(location :aar_native_jar)" lib/arm64-v8a/libaar_native.so > "$$stage/jni/arm64-v8a/libaar_native.so"
+chmod 644 "$$stage/AndroidManifest.xml" "$$stage/classes.jar" "$$stage/jni/arm64-v8a/libaar_native.so"
+find "$$stage" -exec touch -t 198001010000 {} +
+cd "$$stage"
+zip -X -D -q "$$out" AndroidManifest.xml classes.jar jni/arm64-v8a/libaar_native.so
+""",
+)
+
+aar_import(
+    name = "composed_aar",
+    aar = ":composed_aar.aar",
+)
+
+# The app's own JNI library. android_binary links it into the APK's lib<apk>.so, which
+# the apk check accepts as a native of the binary. alwayslink keeps the JNI entry points,
+# which only the VM and the plugin reference.
+cc_library(
+    name = "composed_jni",
+    srcs = ["native/composed_jni.cc"],
+    alwayslink = True,
+)
+
+# The versioned manifest: versionCode and versionName come from pubspec.yaml.
+flutter_android_manifest(
+    name = "apk_manifest",
+    manifest = "AndroidManifest.xml",
+    pubspec = ":pubspec",
+)
+
+# The bundle is a copy of the core's flutter_assets tree, under the inputs target's name.
+# android_binary strips assets_dir to place the bundle under assets/.
+android_binary(
+    name = "apk",
+    assets = [":inputs_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":inputs_bundle"),
+    manifest = ":apk_manifest",
+    manifest_values = {
+        "applicationId": "com.example.composed_app",
+    },
+    nocompress_extensions = [".so"],
+    deps = [
+        ":composed_aar",
+        ":composed_jni",
+        ":inputs",
+    ],
+)
+
+flutter_apk_check(
+    name = "apk_check_test",
+    binary = ":apk",
+    native = [":inputs_native"],
+    tags = ["manual"],
+)

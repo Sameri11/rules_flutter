@@ -1,0 +1,217 @@
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.zip.CRC32;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipOutputStream;
+
+/** Plain-assertion tests for ApkCheck's collision, deflate and missing/stray rules. */
+public class ApkCheckTest {
+  private static final String ABI = "arm64-v8a";
+  private static final String LABEL = "//app:app";
+
+  public static void main(String[] args) throws IOException {
+    sameSourceIsOk();
+    sameCrcFromTwoArchivesIsOk();
+    differentCrcFromTwoArchivesFails();
+    fileAndArchiveFails();
+    deflatedLibraryIsReported();
+    missingAndStrayAreReported();
+    sharedNativeFileIsOneEntry();
+    nativeAndArchiveNameFails();
+    System.out.println("ApkCheckTest: all passed");
+  }
+
+  private static void sameSourceIsOk() {
+    ApkCheck.Spec s = new ApkCheck.Spec();
+    ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(1, "a.so", false), LABEL);
+    ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(1, "a.so", false), LABEL);
+    assertEquals(1, s.expect.get(ABI).size(), "same source keeps one entry");
+  }
+
+  private static void sameCrcFromTwoArchivesIsOk() {
+    ApkCheck.Spec s = new ApkCheck.Spec();
+    ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(7, "a.zip", true), LABEL);
+    ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(7, "b.zip", true), LABEL);
+    assertEquals(1, s.expect.get(ABI).size(), "same CRC from two archives keeps one entry");
+  }
+
+  private static void differentCrcFromTwoArchivesFails() throws IOException {
+    ApkCheck.Spec s = new ApkCheck.Spec();
+    ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(7, "a.zip", true), LABEL);
+    expectFailure(
+        "flutter_apk_check: //app:app: lib/arm64-v8a/libx.so is in a.zip and in b.zip with different CRC-32s",
+        () -> ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(8, "b.zip", true), LABEL));
+  }
+
+  private static void fileAndArchiveFails() throws IOException {
+    ApkCheck.Spec s = new ApkCheck.Spec();
+    ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(7, "a.so", false), LABEL);
+    expectFailure(
+        "flutter_apk_check: //app:app: lib/arm64-v8a/libx.so is in a.so and in b.zip; a library name must come from one source",
+        () -> ApkCheck.addExpected(s, ABI, "libx.so", new ApkCheck.Expected(7, "b.zip", true), LABEL));
+  }
+
+  private static void deflatedLibraryIsReported() throws IOException {
+    byte[] stored = "stored".getBytes(StandardCharsets.UTF_8);
+    byte[] deflated = "deflated".getBytes(StandardCharsets.UTF_8);
+    ApkCheck.Spec s = new ApkCheck.Spec();
+    s.mode = "release";
+    s.abis.add(ABI);
+    ApkCheck.addExpected(s, ABI, "libstored.so", new ApkCheck.Expected(crc(stored), "s.so", false), LABEL);
+    ApkCheck.addExpected(s, ABI, "libdeflated.so", new ApkCheck.Expected(crc(deflated), "d.so", false), LABEL);
+    List<String> bad = checkApk(s, entry("lib/" + ABI + "/libstored.so", stored, true),
+        entry("lib/" + ABI + "/libdeflated.so", deflated, false));
+    assertEquals(
+        Arrays.asList(
+            "lib/arm64-v8a/ has deflated .so entries (libdeflated.so); set nocompress_extensions = [\".so\"] on the android_binary"),
+        bad,
+        "deflated .so entry");
+  }
+
+  private static void missingAndStrayAreReported() throws IOException {
+    byte[] present = "present".getBytes(StandardCharsets.UTF_8);
+    byte[] stray = "stray".getBytes(StandardCharsets.UTF_8);
+    ApkCheck.Spec s = new ApkCheck.Spec();
+    s.mode = "release";
+    s.abis.add(ABI);
+    ApkCheck.addExpected(s, ABI, "libpresent.so", new ApkCheck.Expected(crc(present), "p.so", false), LABEL);
+    ApkCheck.addExpected(s, ABI, "libmissing.so", new ApkCheck.Expected(1, "m.so", false), LABEL);
+    List<String> bad = checkApk(s, entry("lib/" + ABI + "/libpresent.so", present, true),
+        entry("lib/" + ABI + "/stray.so", stray, true));
+    assertEquals(
+        Arrays.asList(
+            "missing lib/arm64-v8a/libmissing.so",
+            "lib/arm64-v8a/stray.so is not declared by the native inputs"),
+        bad,
+        "missing and stray entries");
+  }
+
+  // A spec read through parseSpec: an expect and a native record for one file are one entry,
+  // and a native record with a new basename adds its own.
+  private static void sharedNativeFileIsOneEntry() throws IOException {
+    Path dir = Files.createTempDirectory("apk_check_spec");
+    Path shared = file(dir, "libx.so", "shared");
+    Path linked = file(dir, "libnew.so", "linked");
+    Path spec = spec(dir,
+        "mode\trelease",
+        "abi\t" + ABI,
+        "expect\t" + ABI + "\tlibx.so\t" + shared,
+        "native\t" + ABI + "\tlibx.so\t" + shared,
+        "native\t" + ABI + "\tlibnew.so\t" + linked);
+    ApkCheck.Spec s = ApkCheck.parseSpec(spec, LABEL);
+    assertEquals(2, s.expect.get(ABI).size(), "shared basename is one entry");
+    assertEquals(shared.toString(), s.expect.get(ABI).get("libx.so").source, "shared basename source");
+  }
+
+  // A native record and an archive record may not name one basename: the library has two sources.
+  private static void nativeAndArchiveNameFails() throws IOException {
+    Path dir = Files.createTempDirectory("apk_check_spec");
+    Path native_ = file(dir, "libx.so", "native");
+    Path aar = dir.resolve("lib.zip");
+    try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(aar))) {
+      out.putNextEntry(new ZipEntry("lib/" + ABI + "/libx.so"));
+      out.write("archived".getBytes(StandardCharsets.UTF_8));
+      out.closeEntry();
+    }
+    Path spec = spec(dir,
+        "mode\trelease",
+        "abi\t" + ABI,
+        "native\t" + ABI + "\tlibx.so\t" + native_,
+        "archive\t" + ABI + "\t" + aar);
+    expectFailure(
+        "flutter_apk_check: //app:app: lib/arm64-v8a/libx.so is in " + native_ + " and in " + aar
+            + "; a library name must come from one source",
+        () -> ApkCheck.parseSpec(spec, LABEL));
+  }
+
+  private static Path file(Path dir, String name, String text) throws IOException {
+    Path p = dir.resolve(name);
+    Files.write(p, text.getBytes(StandardCharsets.UTF_8));
+    return p;
+  }
+
+  private static Path spec(Path dir, String... lines) throws IOException {
+    Path p = dir.resolve("spec.tsv");
+    Files.write(p, (String.join("\n", lines) + "\n").getBytes(StandardCharsets.UTF_8));
+    return p;
+  }
+
+  // One entry to write into a test APK: its name, bytes, and whether it is stored.
+  private static final class Entry {
+    final String name;
+    final byte[] data;
+    final boolean stored;
+
+    Entry(String name, byte[] data, boolean stored) {
+      this.name = name;
+      this.data = data;
+      this.stored = stored;
+    }
+  }
+
+  private static Entry entry(String name, byte[] data, boolean stored) {
+    return new Entry(name, data, stored);
+  }
+
+  private static List<String> checkApk(ApkCheck.Spec s, Entry... entries) throws IOException {
+    Path dir = Files.createTempDirectory("apk_check_test");
+    Path apk = dir.resolve("app.apk");
+    try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(apk))) {
+      for (Entry e : entries) {
+        ZipEntry z = new ZipEntry(e.name);
+        if (e.stored) {
+          z.setMethod(ZipEntry.STORED);
+          z.setSize(e.data.length);
+          z.setCompressedSize(e.data.length);
+          z.setCrc(crc(e.data));
+        }
+        out.putNextEntry(z);
+        out.write(e.data);
+        out.closeEntry();
+      }
+    }
+    List<String> bad = new ArrayList<>();
+    try (ZipFile zip = new ZipFile(apk.toFile())) {
+      ApkCheck.check(s, zip, bad);
+    }
+    return bad;
+  }
+
+  private static long crc(byte[] data) {
+    CRC32 crc = new CRC32();
+    crc.update(data);
+    return crc.getValue();
+  }
+
+  private interface Body {
+    void run() throws IOException;
+  }
+
+  private static void expectFailure(String want, Body body) throws IOException {
+    try {
+      body.run();
+    } catch (ApkCheck.CheckFailure e) {
+      assertEquals(want, e.getMessage(), "failure message");
+      return;
+    }
+    throw new AssertionError("no failure; want: " + want);
+  }
+
+  private static void assertEquals(Object want, Object got, String what) {
+    if (!want.equals(got)) {
+      throw new AssertionError(what + ": want " + want + ", got " + got);
+    }
+  }
+
+  private static void assertEquals(int want, int got, String what) {
+    if (want != got) {
+      throw new AssertionError(what + ": want " + want + ", got " + got);
+    }
+  }
+}

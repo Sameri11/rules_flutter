@@ -25,6 +25,15 @@ package(default_visibility = ["//visibility:private"])
 
 exports_files(["build_config_probe.py"])
 
+# The sources of the path plugin composed_app depends on. pub_path_deps_check
+# requires every `path:` dependency's files to be declared, and a package cannot
+# glob another package's directory.
+filegroup(
+    name = "composed_plugin_srcs",
+    srcs = glob(["fixtures/composed_plugin/**"]),
+    visibility = ["//composed_app:__pkg__"],
+)
+
 # `//standard_layout` exercises `flutter_app` defaults. This fixture names every
 # attribute explicitly to catch removed defaults.
 

@@ -10,7 +10,7 @@ mechanical exceptions need a label, and only those:
     resolves an implicit dependency against the package of the `.bzl` that
     defines the rule, so `//flutter:__subpackages__` is enough even though the
     rules are instantiated in another module's packages.
-  * The seven `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
+  * The eleven `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
     That guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
@@ -18,6 +18,7 @@ mechanical exceptions need a label, and only those:
 host-compatible registration points at the public static toolchain target.
 """
 
+load("@rules_java//java:defs.bzl", "java_binary", "java_test")
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
 load(":abis.bzl", "ABIS")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
@@ -63,6 +64,10 @@ genrule(
 exports_files(
     [
         "android.bzl",
+        "android_inputs_rules.bzl",
+        "apk_check.bzl",
+        "core.bzl",
+        "dart_registrant.bzl",
         "flutter_test.bzl",
         "ndk.bzl",
         "plugins.bzl",
@@ -132,3 +137,88 @@ alias(
 
 # What the pub lock reader accepts and, as importantly, refuses.
 pub_lock_parser_test_suite(name = "pub_lock_parser_test")
+
+# One split per ABI and mode. The core selects its per-ABI libraries on these,
+# so a 3-ABI build gets exactly one split per ABI rather than one per platform.
+# Public because the core's select() is expanded in the consumer's package.
+# Spelled out: Bazel does not allow `for` in BUILD files.
+config_setting(
+    name = "split_arm64_v8a_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {"//flutter:mode": "release"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_arm64_v8a_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {"//flutter:mode": "debug"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_x86_64_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {"//flutter:mode": "release"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_x86_64_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {"//flutter:mode": "debug"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_armeabi_v7a_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
+    flag_values = {"//flutter:mode": "release"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "split_armeabi_v7a_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
+    flag_values = {"//flutter:mode": "debug"},
+    visibility = ["//visibility:public"],
+)
+
+# The APK native-payload checker. It runs on the rules_java JDK, so the check
+# action needs no host python3.
+java_binary(
+    name = "apk_check_tool",
+    srcs = ["ApkCheck.java"],
+    main_class = "ApkCheck",
+    visibility = ["//flutter:__subpackages__"],
+)
+
+# The checker's collision, deflate and missing/stray rules. main() asserts, so no
+# test framework is pulled in.
+java_test(
+    name = "apk_check_unit_test",
+    srcs = [
+        "ApkCheck.java",
+        "ApkCheckTest.java",
+    ],
+    main_class = "ApkCheckTest",
+    use_testrunner = False,
+)
