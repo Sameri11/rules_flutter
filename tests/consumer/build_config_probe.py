@@ -109,12 +109,13 @@ def run_case(name: str, declarations: list[str], expected: str) -> None:
             ),
         )
         module = workspace / "MODULE.bazel"
-        module.write_text(
-            module.read_text().replace(
-                'path = "../.."',
-                'path = "{}"'.format(ROOT),
-            ),
-        )
+        text = module.read_text()
+        for name in ("rules_flutter_core", "rules_flutter_android"):
+            text = text.replace(
+                'path = "../../{}"'.format(name),
+                'path = "{}"'.format(ROOT / name),
+            )
+        module.write_text(text)
         (workspace / ".bazelrc").write_text("common --enable_bzlmod\n")
         config_path = workspace / "android" / "config.MODULE.bazel"
         config_path.write_text(replace_tags(config_path.read_text(), declarations))
