@@ -37,6 +37,24 @@ filegroup(
     visibility = ["//composed_app:__pkg__"],
 )
 
+filegroup(
+    name = "cmake_plugin_srcs",
+    srcs = glob(["fixtures/cmake_plugin/**"]),
+    visibility = ["//composed_app:__pkg__"],
+)
+
+filegroup(
+    name = "recipe_package_srcs",
+    srcs = glob(["fixtures/recipe_package/**"]),
+    visibility = ["//composed_app:__pkg__"],
+)
+
+filegroup(
+    name = "dev_cmake_plugin_srcs",
+    srcs = glob(["fixtures/dev_cmake_plugin/**"]),
+    visibility = ["//composed_app:__pkg__"],
+)
+
 # `//standard_layout` exercises `flutter_app` defaults. This fixture names every
 # attribute explicitly to catch removed defaults.
 

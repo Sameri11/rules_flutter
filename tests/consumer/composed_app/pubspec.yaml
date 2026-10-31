@@ -8,9 +8,16 @@ dependencies:
   flutter:
     sdk: flutter
   # Path, not hosted: a hosted plugin would make the fixture depend on pub.dev.
-  # The plugin carries the one Android class the composed APK must contain.
+  # These local packages exercise Android plugin and native recipe composition.
   composed_plugin:
     path: ../fixtures/composed_plugin
+  cmake_plugin:
+    path: ../fixtures/cmake_plugin
+  recipe_package:
+    path: ../fixtures/recipe_package
+dev_dependencies:
+  dev_cmake_plugin:
+    path: ../fixtures/dev_cmake_plugin
 flutter:
   assets:
     - assets/composed-marker.txt

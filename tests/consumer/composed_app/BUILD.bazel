@@ -1,12 +1,14 @@
 """A composed app: one flutter_core artifact packaged by flutter_android_app.
 
 The app's inputs come from the macro's inputs target over the composed_plugins hub, and
-from an arm64-only AAR. The app's JNI library is linked into the binary. Each reaches the
+from a native AAR. The app's JNI library is linked into the binary. Each reaches the
 APK through the android_binary deps, so the apk check sees all of them.
 """
 
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_android//rules:rules.bzl", "aar_import")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(
     "@rules_flutter_android//flutter:defs.bzl",
@@ -16,11 +18,11 @@ load(
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 load("@rules_java//java:defs.bzl", "java_library")
 load("@rules_java//java:java_single_jar.bzl", "java_single_jar")
+load(":native_files_test.bzl", "native_files_check")
 
 package(default_visibility = ["//visibility:private"])
 
-# MODULE.bazel reads the pub lock from outside this package.
-exports_files(["pubspec.lock"])
+exports_files(["pubspec.lock", "recipe_package.bzl"])
 
 flutter_core(
     name = "core",
@@ -28,7 +30,12 @@ flutter_core(
     assets = ["assets/composed-marker.txt"],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
     # Sources of the path plugin, declared so pub_path_deps_check accepts it.
-    path_deps = ["//:composed_plugin_srcs"],
+    path_deps = [
+        "//:cmake_plugin_srcs",
+        "//:composed_plugin_srcs",
+        "//:dev_cmake_plugin_srcs",
+        "//:recipe_package_srcs",
+    ],
     plugins = "@composed_plugins",
     pub = "@composed_pub",
 )
@@ -51,11 +58,23 @@ cc_binary(
     linkshared = True,
 )
 
-# The jar pins the platform, so the library is arm64 whatever split reaches it.
+# Each jar pins its Android platform regardless of the requesting split.
 android_native_lib_jar(
     name = "aar_native_jar",
     src = [":libaar_native.so"],
     abi = "arm64-v8a",
+)
+
+android_native_lib_jar(
+    name = "aar_native_jar_x86_64",
+    src = [":libaar_native.so"],
+    abi = "x86_64",
+)
+
+android_native_lib_jar(
+    name = "aar_native_jar_armeabi_v7a",
+    src = [":libaar_native.so"],
+    abi = "armeabi-v7a",
 )
 
 # The aar is a zip built with a fixed entry order and timestamps, so the same
@@ -65,6 +84,8 @@ genrule(
     srcs = [
         "aar/AndroidManifest.xml",
         ":aar_native_jar",
+        ":aar_native_jar_x86_64",
+        ":aar_native_jar_armeabi_v7a",
         ":composed_aar_classes_jar",
     ],
     outs = ["composed_aar.aar"],
@@ -72,20 +93,53 @@ genrule(
 out="$$PWD/$@"
 stage="$$(mktemp -d)"
 trap 'rm -rf "$$stage"' EXIT
-mkdir -p "$$stage/jni/arm64-v8a"
+mkdir -p "$$stage/jni/arm64-v8a" "$$stage/jni/x86_64" "$$stage/jni/armeabi-v7a"
 cp "$(location aar/AndroidManifest.xml)" "$$stage/AndroidManifest.xml"
 cp "$(location :composed_aar_classes_jar)" "$$stage/classes.jar"
 unzip -p "$(location :aar_native_jar)" lib/arm64-v8a/libaar_native.so > "$$stage/jni/arm64-v8a/libaar_native.so"
-chmod 644 "$$stage/AndroidManifest.xml" "$$stage/classes.jar" "$$stage/jni/arm64-v8a/libaar_native.so"
+unzip -p "$(location :aar_native_jar_x86_64)" lib/x86_64/libaar_native.so > "$$stage/jni/x86_64/libaar_native.so"
+unzip -p "$(location :aar_native_jar_armeabi_v7a)" lib/armeabi-v7a/libaar_native.so > "$$stage/jni/armeabi-v7a/libaar_native.so"
+chmod 644 "$$stage/AndroidManifest.xml" "$$stage/classes.jar" "$$stage"/jni/*/libaar_native.so
 find "$$stage" -exec touch -t 198001010000 {} +
 cd "$$stage"
-zip -X -D -q "$$out" AndroidManifest.xml classes.jar jni/arm64-v8a/libaar_native.so
+zip -X -D -q "$$out" AndroidManifest.xml classes.jar jni/arm64-v8a/libaar_native.so jni/x86_64/libaar_native.so jni/armeabi-v7a/libaar_native.so
 """,
 )
 
 aar_import(
     name = "composed_aar",
     aar = ":composed_aar.aar",
+)
+
+cc_library(
+    name = "marker_dependency_objects",
+    srcs = ["native/marker_dependency.cc"],
+    alwayslink = True,
+)
+
+cc_binary(
+    name = "libmarker_dependency.so",
+    linkshared = True,
+    deps = [":marker_dependency_objects"],
+)
+
+cc_import(
+    name = "marker_dependency_shared",
+    shared_library = ":libmarker_dependency.so",
+)
+
+cc_binary(
+    name = "librecipe_marker.so",
+    srcs = ["native/recipe_marker.cc"],
+    linkshared = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "libcmake_marker.so",
+    srcs = ["native/override_marker.cc"],
+    linkshared = True,
+    visibility = ["//visibility:public"],
 )
 
 # The app's own JNI library. android_binary links it into the APK's lib<apk>.so, which
@@ -95,6 +149,7 @@ cc_library(
     name = "composed_jni",
     srcs = ["native/composed_jni.cc"],
     alwayslink = True,
+    deps = [":marker_dependency_shared"],
 )
 
 # The binary. The macro declares apk_inputs over the core and the plugin hub, and the
@@ -128,4 +183,57 @@ flutter_android_app(
         ":composed_aar",
         ":composed_jni",
     ],
+)
+
+native_files_check(
+    name = "native_files_coexistence_check",
+    carrier = "@composed_plugins//:flutter_native_files_by_abi",
+    expected = ["libcmake_marker.so", "librecipe_marker.so"] + select({
+        "@rules_flutter_core//flutter:mode_debug": ["libdev_cmake_marker.so"],
+        "@rules_flutter_core//flutter:mode_release": [],
+    }),
+    override = False,
+)
+
+native_files_check(
+    name = "native_files_override_check",
+    carrier = "@composed_override_plugins//:flutter_native_files_by_abi",
+    expected = ["libcmake_marker.so", "librecipe_marker.so"] + select({
+        "@rules_flutter_core//flutter:mode_debug": ["libdev_cmake_marker.so"],
+        "@rules_flutter_core//flutter:mode_release": [],
+    }),
+    override = True,
+)
+
+build_test(
+    name = "native_files_test",
+    targets = [":native_files_coexistence_check", ":native_files_override_check"],
+)
+
+flutter_android_app(
+    name = "apk_override",
+    core = ":core",
+    manifest = "AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.composed_app.override"},
+    plugins = "@composed_override_plugins",
+    resource_files = [],
+    deps = [":composed_aar", ":composed_jni"],
+)
+
+genrule(
+    name = "apk_override_contents_check",
+    srcs = [":apk_override.apk"],
+    outs = ["apk_override_contents.checked"],
+    cmd = """set -eu
+listing="$$(unzip -Z1 $(location :apk_override.apk))"
+for lib in libcmake_marker.so librecipe_marker.so libaar_native.so libmarker_dependency.so; do
+  echo "$$listing" | grep -E "^lib/[^/]+/$$lib$$" > /dev/null
+done
+printf 'native libraries present\\n' > "$@"
+""",
+)
+
+build_test(
+    name = "apk_override_contents_test",
+    targets = [":apk_override_contents_check"],
 )

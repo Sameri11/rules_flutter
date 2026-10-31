@@ -2,8 +2,8 @@
 
 Reads the pub hub's plugin metadata (`@pub//:plugins_metadata.json`), stages plugin
 packages from the hub's package config in an external repository, and generates
-one target per plugin. CMake-based plugins are built
-with the NDK and their shared libraries are attached to the same target.
+one target per plugin. CMake-based plugins contribute their shared libraries to
+the native aggregates.
 
 Plugin labels stay stable across build strategies. Unsupported reason codes are
 gated centrally in `_GATED_REASONS`. Consumers can provide
@@ -118,14 +118,8 @@ _PLUGIN_TEMPLATE = """
 # its cmake() never runs unless something demands the output, so a single-ABI
 # APK pays for a single cross-compile.
 #
-# The .so are *not* attached to the plugin's android_library. They reach the APK
-# through //:plugin_libs_<abi>, which the app names once per ABI it ships --
-# exactly the path a recipe's libraries take.
-#
-# Attaching them to the library instead is the obvious arrangement and is wrong:
-# `:all` is ABI-independent, so every ABI built here would ride into every APK,
-# and an app declaring one ABI would ship three without saying so. Which ABIs an
-# APK carries is the app's decision, and this keeps it there.
+# The jar route collects native libraries through //:plugin_libs_<abi>; the
+# split route selects the matching ABI's stripped files.
 _NATIVE_SRCS_TEMPLATE = """
 # {name}'s native half: {libs}, from the plugin's own CMakeLists.
 #
@@ -191,6 +185,12 @@ android_native_lib_jar(
     # one ABI while the cross-compile resolves another's toolchain is exactly
     # what two separate values allowed.
     abi = "{abi}",
+)
+
+filegroup(
+    name = "{name}_native_files_{abi}",
+    srcs = [":{name}_native_jar_{abi}"],
+    output_group = "native_libraries",
 )
 
 java_import(
@@ -351,8 +351,7 @@ filegroup(
 )
 """
 
-# The file-level twin of native_libs_<abi>_jar, for the split route. Both read
-# the same contributions, so the jar and the Files cannot disagree.
+# Generated libraries reuse the strip outputs of the source-built plugin jar.
 _NATIVE_FILES_TARGET = "native_files_{}"
 
 _NATIVE_FILES_TEMPLATE = """
@@ -360,6 +359,7 @@ flutter_native_files(
     name = "{target}",
     slice = "{abi}",
     deps = {deps},
+    generated = {generated},
 )
 """
 
@@ -1354,11 +1354,17 @@ def _recipe_contributions(ctx, manifest, dev):
     ], dev, ctx)
 
 def _native_files_target(ctx, manifest, abi, dev):
-    """Return this ABI's file-level aggregate of the recipe libraries."""
+    """Return this ABI's file-level aggregate of native libraries."""
+    generated = [
+        (p["name"], "//{n}:{n}_native_files_{a}".format(n = p["name"], a = abi))
+        for p in manifest
+        if p["strategy"] == "source+cmake"
+    ]
     return _NATIVE_FILES_TEMPLATE.format(
         target = _NATIVE_FILES_TARGET.format(abi),
         abi = abi,
         deps = _recipe_contributions(ctx, manifest, dev),
+        generated = _mode_list(generated, dev, ctx),
     )
 
 def _native_files_by_abi_target(ctx):

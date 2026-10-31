@@ -9,6 +9,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  cmake_plugin:
+    dependency: "direct main"
+    description:
+      path: "../fixtures/cmake_plugin"
+      relative: true
+    source: path
+    version: "1.0.0"
   collection:
     dependency: transitive
     description:
@@ -21,6 +28,13 @@ packages:
     dependency: "direct main"
     description:
       path: "../fixtures/composed_plugin"
+      relative: true
+    source: path
+    version: "1.0.0"
+  dev_cmake_plugin:
+    dependency: "direct dev"
+    description:
+      path: "../fixtures/dev_cmake_plugin"
       relative: true
     source: path
     version: "1.0.0"
@@ -45,6 +59,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.0"
+  recipe_package:
+    dependency: "direct main"
+    description:
+      path: "../fixtures/recipe_package"
+      relative: true
+    source: path
+    version: "1.0.0"
   sky_engine:
     dependency: transitive
     description: flutter

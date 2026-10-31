@@ -1,3 +1,9 @@
-// The AAR's only native library. It is packaged for arm64-v8a alone, so the
-// other splits of the composed app receive no AAR natives.
+// The AAR supplies a native library for every ABI.
+#include <jni.h>
+
 extern "C" int composed_aar_native_version() { return 1; }
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_composed_1plugin_ComposedPlugin_aarMarker(JNIEnv*, jclass) {
+  return composed_aar_native_version();
+}

@@ -163,7 +163,10 @@ def _android_native_lib_jar_impl(ctx):
         progress_message = "Packaging native libraries %{label} for Android",
     )
 
-    return [DefaultInfo(files = depset([jar]))]
+    return [
+        DefaultInfo(files = depset([jar])),
+        OutputGroupInfo(native_libraries = depset(entries.values())),
+    ]
 
 _android_native_lib_jar = rule(
     implementation = _android_native_lib_jar_impl,
