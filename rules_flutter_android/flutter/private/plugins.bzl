@@ -72,6 +72,7 @@ _KOTLIN_BUILD_LOADS = """load("@rules_kotlin//kotlin:android.bzl", "kt_android_l
 _NATIVE_BUILD_LOADS = """load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 load("@rules_java//java:defs.bzl", "java_import")
 load("{android_bzl}", "android_native_lib_jar")
+load("{native_strip}", "android_native_files")
 """
 
 _BUILD_PACKAGE = """
@@ -187,10 +188,10 @@ android_native_lib_jar(
     abi = "{abi}",
 )
 
-filegroup(
+android_native_files(
     name = "{name}_native_files_{abi}",
-    srcs = [":{name}_native_jar_{abi}"],
-    output_group = "native_libraries",
+    src = [":{name}_native_{abi}"],
+    abi = "{abi}",
 )
 
 java_import(
@@ -1690,7 +1691,10 @@ def _flutter_plugins_impl(ctx):
             "{}/BUILD.bazel".format(name),
             _BUILD_LOADS +
             (_KOTLIN_BUILD_LOADS if kotlin_srcs else "") +
-            (_NATIVE_BUILD_LOADS.format(android_bzl = ctx.attr.android_bzl) if native else "") +
+            (_NATIVE_BUILD_LOADS.format(
+                android_bzl = ctx.attr.android_bzl,
+                native_strip = str(Label("//flutter/private:native_strip.bzl")),
+            ) if native else "") +
             _BUILD_PACKAGE +
             native +
             _PLUGIN_TEMPLATE.format(

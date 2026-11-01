@@ -1,0 +1,30 @@
+name: Composition checks
+
+on: push
+
+permissions:
+  contents: read
+
+concurrency:
+  group: composition-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  composition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+      - name: Run composition checks
+        run: python3 tools/ci/composition_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: composition-results
+          path: ${{ runner.temp }}/composition-results

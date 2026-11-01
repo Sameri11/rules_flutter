@@ -22,7 +22,6 @@ load(
 load("//flutter/private:android_app.bzl", _flutter_android_app = "flutter_android_app")
 load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
 load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
-load("//flutter/private:embedding.bzl", _flutter_embedding_library = "flutter_embedding_library")
 load(
     "//flutter/private:recipe.bzl",
     _flutter_native_contribution = "flutter_native_contribution",
@@ -46,7 +45,6 @@ def flutter_assets(native_build_env = _ANDROID_NATIVE_BUILD_ENV, **kwargs):
 #
 # Written by hand in a Consumer Module.
 flutter_android_binary = _flutter_android_binary
-flutter_embedding_library = _flutter_embedding_library
 flutter_native_contribution = _flutter_native_contribution
 
 # Named by the BUILD files the plugin extension generates, so they are loaded

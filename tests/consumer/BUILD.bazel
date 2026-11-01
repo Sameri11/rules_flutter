@@ -9,7 +9,6 @@ load(
     "android_native_lib_jar",
     "flutter_android_binary",
     "flutter_assets",
-    "flutter_embedding_library",
     "flutter_native_contribution",
     "flutter_native_libs",
 )
@@ -23,6 +22,7 @@ load(
     "pub_plugins_check",
 )
 load("@rules_java//java:defs.bzl", "java_binary", "java_import")
+load(":embedding_deps.bzl", "EMBEDDING_DEPS")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -204,9 +204,16 @@ flutter_native_libs(
 # supplied by the consuming project -- the embedding and its Maven deps cannot
 # be resolved inside the rules -- so a signature change is a consumer break.
 
-# Production embedding path for the no-plugin APK below. It derives the
-# AndroidX labels from this consumer's @flutter_maven repository.
-flutter_embedding_library(name = "flutter_embedding_no_plugins")
+java_import(
+    name = "flutter_embedding_no_plugins",
+    jars = select({
+        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
+        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
+    }),
+    deps = EMBEDDING_DEPS,
+    exports = EMBEDDING_DEPS,
+    visibility = ["//visibility:public"],
+)
 
 java_import(
     name = "fake_embedding",

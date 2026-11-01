@@ -140,9 +140,20 @@ def _flutter_core_impl(ctx):
         fail("{}: expected one assets directory, got {}".format(ctx.label, len(assets)))
     if len(libapp) > 1:
         fail("{}: expected at most one libapp.so, got {}".format(ctx.label, len(libapp)))
+    if abi != None:
+        if not engine_libs:
+            fail("{}: ABI '{}' has no engine libraries".format(ctx.label, abi))
+        if mode == "release" and len(libapp) != 1:
+            fail("{}: ABI '{}' in release needs one libapp.so".format(ctx.label, abi))
 
     return [
         DefaultInfo(files = depset(libapp + engine_libs + [embedding_jar, assets[0]])),
+        OutputGroupInfo(
+            flutter_assets = depset(assets),
+            flutter_engine = depset(engine_libs),
+            flutter_libapp = depset(libapp),
+            flutter_embedding = depset([embedding_jar]),
+        ),
         FlutterArtifactInfo(
             mode = mode,
             abi = abi,
