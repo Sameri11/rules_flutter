@@ -65,6 +65,7 @@ cc_binary(
     name = "libaar_native.so",
     srcs = ["native/aar_native.cc"],
     linkshared = True,
+    tags = ["manual"],
 )
 
 # Each raw output is built and stripped with its Android ABI's toolchain.
@@ -165,6 +166,7 @@ cc_binary(
     name = "librecipe_marker.so",
     srcs = ["native/recipe_marker.cc"],
     linkshared = True,
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
@@ -172,6 +174,7 @@ cc_binary(
     name = "libcmake_marker.so",
     srcs = ["native/override_marker.cc"],
     linkshared = True,
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
@@ -181,6 +184,7 @@ cc_binary(
 cc_library(
     name = "composed_jni",
     srcs = ["native/composed_jni.cc"],
+    tags = ["manual"],
     deps = [":marker_dependency_shared"],
     alwayslink = True,
 )
