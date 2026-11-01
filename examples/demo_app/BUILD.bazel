@@ -1,23 +1,17 @@
-# Dart targets for the flat demo app. Standard flutter_app paths are derived
-# from the flutter create layout.
+# Dart targets for the flat demo app. The core owns the standard Flutter package
+# layout, and its outputs are composed into Android targets in android/app.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_test", "flutter_test_suite")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_app(
-    # A generated lib source, compiled with the package's other lib/ sources.
+flutter_core(
+    name = "app",
     srcs = glob(["lib/**/*.dart"]) + [":lib/gen_info.dart"],
-    # Keep this list aligned with the Android target.
-    abis = [
-        "arm64-v8a",
-        "x86_64",
-        "armeabi-v7a",
-    ],
-    # Declare sources of the local path dependency.
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     path_deps = ["//packages/mylib:srcs"],
-    # The hub of pubspec.lock, declared in MODULE.bazel.
+    plugin_deps = "//:plugin_deps.MODULE.bazel",
+    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     pub = "@pub",
 )
 
@@ -33,7 +27,7 @@ flutter_test_suite(
             "test/materialize_test.dart",
         ],
     ),
-    app = ":app",
+    app = ":app_test_package",
     tests = [
         ":defines_test",
         ":generated_lib_test",
@@ -44,7 +38,7 @@ flutter_test_suite(
 flutter_test(
     name = "materialize_test",
     src = "test/materialize_test.dart",
-    app = ":app",
+    app = ":app_test_package",
     data = glob(["test/fixtures/materialize/**"]),
     materialize = ["test/fixtures/materialize"],
 )
@@ -52,7 +46,7 @@ flutter_test(
 flutter_test(
     name = "defines_test",
     src = "test/defines_test.dart",
-    app = ":app",
+    app = ":app_test_package",
     dart_defines = {"DEMO_FLAVOR": "staging"},
 )
 
@@ -65,5 +59,5 @@ genrule(
 flutter_test(
     name = "generated_lib_test",
     src = "test/generated_lib_test.dart",
-    app = ":app",
+    app = ":app_test_package",
 )

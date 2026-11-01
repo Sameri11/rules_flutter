@@ -81,7 +81,13 @@ def _bazel_command(workspace, output_base, args):
     command = ["bazel"]
     if output_base is not None:
         command.append("--output_base={}".format(output_base))
-    command.extend(args)
+    bazel_args = list(args)
+    if len(bazel_args) > 1 and not any(
+        arg.startswith("--lockfile_mode=") for arg in bazel_args[1:]
+    ):
+        lockfile_mode = os.environ.get("BAZEL_LOCKFILE_MODE", "error")
+        bazel_args.insert(1, "--lockfile_mode=" + lockfile_mode)
+    command.extend(bazel_args)
     return command
 
 

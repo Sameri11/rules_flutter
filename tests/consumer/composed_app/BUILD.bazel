@@ -6,19 +6,22 @@ APK through the android_binary deps, so the apk check sees all of them.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@rules_android//rules:rules.bzl", "aar_import")
+load("@rules_android//rules:rules.bzl", "aar_import", "android_binary")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(
     "@rules_flutter_android//flutter:defs.bzl",
-    "android_native_lib_jar",
     "flutter_android_app",
 )
+load("@rules_flutter_android//flutter/private:native_strip.bzl", "android_native_files")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
-load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_java//java:defs.bzl", "java_import", "java_library")
 load("@rules_java//java:java_single_jar.bzl", "java_single_jar")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+load(":direct_native.bzl", "direct_native")
 load(":native_files_test.bzl", "native_files_check")
+load("//:embedding_deps.bzl", "EMBEDDING_DEPS")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -61,23 +64,47 @@ cc_binary(
     linkshared = True,
 )
 
-# Each jar pins its Android platform regardless of the requesting split.
-android_native_lib_jar(
-    name = "aar_native_jar",
+# Each raw output is built and stripped with its Android ABI's toolchain.
+android_native_files(
+    name = "aar_native_files",
     src = [":libaar_native.so"],
     abi = "arm64-v8a",
 )
 
-android_native_lib_jar(
-    name = "aar_native_jar_x86_64",
+android_native_files(
+    name = "aar_native_files_x86_64",
     src = [":libaar_native.so"],
     abi = "x86_64",
 )
 
-android_native_lib_jar(
-    name = "aar_native_jar_armeabi_v7a",
+android_native_files(
+    name = "aar_native_files_armeabi_v7a",
     src = [":libaar_native.so"],
     abi = "armeabi-v7a",
+)
+
+# These negative targets plant an input with no native payload for every
+# supported fixture ABI. Each requested ABI must fail rather than yield an
+# empty AAR library directory.
+android_native_files(
+    name = "aar_missing_native_arm64",
+    src = [":composed_aar_classes_jar"],
+    abi = "arm64-v8a",
+    tags = ["manual"],
+)
+
+android_native_files(
+    name = "aar_missing_native_x86_64",
+    src = [":composed_aar_classes_jar"],
+    abi = "x86_64",
+    tags = ["manual"],
+)
+
+android_native_files(
+    name = "aar_missing_native_armeabi_v7a",
+    src = [":composed_aar_classes_jar"],
+    abi = "armeabi-v7a",
+    tags = ["manual"],
 )
 
 # The aar is a zip built with a fixed entry order and timestamps, so the same
@@ -86,9 +113,9 @@ genrule(
     name = "composed_aar_zip",
     srcs = [
         "aar/AndroidManifest.xml",
-        ":aar_native_jar",
-        ":aar_native_jar_x86_64",
-        ":aar_native_jar_armeabi_v7a",
+        ":aar_native_files",
+        ":aar_native_files_x86_64",
+        ":aar_native_files_armeabi_v7a",
         ":composed_aar_classes_jar",
     ],
     outs = ["composed_aar.aar"],
@@ -99,9 +126,9 @@ trap 'rm -rf "$$stage"' EXIT
 mkdir -p "$$stage/jni/arm64-v8a" "$$stage/jni/x86_64" "$$stage/jni/armeabi-v7a"
 cp "$(location aar/AndroidManifest.xml)" "$$stage/AndroidManifest.xml"
 cp "$(location :composed_aar_classes_jar)" "$$stage/classes.jar"
-unzip -p "$(location :aar_native_jar)" lib/arm64-v8a/libaar_native.so > "$$stage/jni/arm64-v8a/libaar_native.so"
-unzip -p "$(location :aar_native_jar_x86_64)" lib/x86_64/libaar_native.so > "$$stage/jni/x86_64/libaar_native.so"
-unzip -p "$(location :aar_native_jar_armeabi_v7a)" lib/armeabi-v7a/libaar_native.so > "$$stage/jni/armeabi-v7a/libaar_native.so"
+cp "$(location :aar_native_files)" "$$stage/jni/arm64-v8a/libaar_native.so"
+cp "$(location :aar_native_files_x86_64)" "$$stage/jni/x86_64/libaar_native.so"
+cp "$(location :aar_native_files_armeabi_v7a)" "$$stage/jni/armeabi-v7a/libaar_native.so"
 chmod 644 "$$stage/AndroidManifest.xml" "$$stage/classes.jar" "$$stage"/jni/*/libaar_native.so
 find "$$stage" -exec touch -t 198001010000 {} +
 cd "$$stage"
@@ -252,4 +279,88 @@ build_test(
     name = "apk_override_contents_test",
     tags = ["manual"],
     targets = [":apk_override_contents_check"],
+)
+
+filegroup(
+    name = "direct_assets",
+    srcs = [":core"],
+    output_group = "flutter_assets",
+    tags = ["manual"],
+)
+
+filegroup(
+    name = "direct_engine",
+    srcs = [":core"],
+    output_group = "flutter_engine",
+    tags = ["manual"],
+)
+
+filegroup(
+    name = "direct_libapp",
+    srcs = [":core"],
+    output_group = "flutter_libapp",
+    tags = ["manual"],
+)
+
+filegroup(
+    name = "direct_embedding_jar",
+    srcs = [":core"],
+    output_group = "flutter_embedding",
+    tags = ["manual"],
+)
+
+java_import(
+    name = "direct_embedding",
+    jars = [":direct_embedding_jar"],
+    deps = EMBEDDING_DEPS,
+    exports = EMBEDDING_DEPS,
+    tags = ["manual"],
+    visibility = ["//:__pkg__"],
+)
+
+direct_native(
+    name = "direct_native_files",
+    engine = ":direct_engine",
+    libapp = ":direct_libapp",
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "direct_native",
+    srcs = [":direct_native_files"] + select({
+        "@platforms//cpu:arm64": ["@composed_plugins//:native_files_arm64-v8a"],
+        "@platforms//cpu:x86_64": ["@composed_plugins//:native_files_x86_64"],
+        "@platforms//cpu:armv7": ["@composed_plugins//:native_files_armeabi-v7a"],
+        "//conditions:default": [],
+    }),
+    tags = ["manual"],
+)
+
+kt_android_library(
+    name = "direct_activity",
+    srcs = ["DirectActivity.kt"],
+    deps = [":direct_embedding"],
+    tags = ["manual"],
+)
+
+android_binary(
+    name = "direct_apk",
+    manifest = "AndroidManifest.xml",
+    manifest_values = {
+        "applicationId": "com.example.composed_app.direct",
+        "minSdkVersion": "24",
+        "targetSdkVersion": "36",
+    },
+    assets = [":direct_assets"],
+    assets_dir = "core_bundle_action",
+    resource_files = [],
+    nocompress_extensions = [".so"],
+    deps = [
+        ":direct_activity",
+        ":direct_embedding",
+        ":direct_native",
+        ":composed_aar",
+        ":composed_jni",
+        "@composed_plugins//:generated_plugin_registrant",
+    ],
 )

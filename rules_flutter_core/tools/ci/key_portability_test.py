@@ -22,10 +22,11 @@ FILES = {
     "dart_registrant": "flutter/private/dart_registrant.bzl",
     "pub_lock": "flutter/private/pub_lock.bzl",
     "native_build_env": "flutter/native_build_env.bzl",
+    "native_strip": "flutter/private/native_strip.bzl",
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
-ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env"))
+ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip"))
 
 
 class Checker:
@@ -88,6 +89,7 @@ class Checker:
         self.check_n()
         self.check_o()
         self.check_p()
+        self.check_q()
         return self.failures
 
     def tree(self, name, contract):
@@ -436,34 +438,11 @@ class Checker:
         tree = self.tree("android", "E")
         if tree is None:
             return
-        transition = _function(tree, "_android_platform_transition_impl")
-        if transition is None or not _returns_platform_attr(transition):
-            self.fail("E", "platform transition must return the selected attr.platform")
 
-        for rule_name in ("_android_native_lib_jar", "_strip_native_libs"):
-            call = _named_call(tree, rule_name)
-            if call is None or not _keyword_is_name(call, "cfg", "_android_platform_transition"):
-                self.fail("E", "{} must retain cfg = _android_platform_transition".format(rule_name))
-            if call is None or not _keyword_is_call(call, "toolchains", "use_cc_toolchain"):
-                self.fail("E", "{} must retain use_cc_toolchain()".format(rule_name))
-
-        for function_name in ("_android_native_lib_jar_impl", "_strip_native_libs_impl"):
-            function = _function(tree, function_name)
-            if function is None or not _has_call(function, "find_cpp_toolchain", ["ctx"]):
-                self.fail("E", "{} must resolve C++ tools through find_cpp_toolchain(ctx)".format(function_name))
-
-        bridge = _function(tree, "_android_native_lib_jar_impl")
-        action = _action_call(bridge, "run") if bridge is not None else None
-        if action is None or _attr_path(_keyword(action, "executable")) != ["cc_toolchain", "strip_executable"]:
-            self.fail("E", "native bridge strip must use the declared C++ toolchain executable")
-        if action is None or _attr_path(_keyword(action, "tools")) != ["cc_toolchain", "all_files"]:
-            self.fail("E", "native bridge strip must declare the C++ toolchain files")
 
         if _contains_string(tree, "ANDROID_NDK_HOME"):
             self.fail("E", "Android action source must not use an NDK environment path")
 
-        if not _rule_uses_toolchain(tree, "_flutter_debug_assets", "@rules_flutter_core//flutter:toolchain_type"):
-            self.fail("E", "_flutter_debug_assets must declare the Flutter toolchain type: it reads the host engine snapshots through it")
 
     def check_f(self):
         tree = self.tree("plugins", "F")
@@ -874,6 +853,40 @@ class Checker:
         infos = [node for node in ast.walk(function) if isinstance(node, ast.Call) and _call_path(node) == ["FlutterNativeBuildEnvInfo"]]
         if not any(_keyword(call, "files") is not None and _contains_name(_keyword(call, "files"), "sdk") for call in infos):
             self.fail("P", "FlutterNativeBuildEnvInfo must carry the SDK file in files, so the action declares it as an input")
+
+    def check_q(self):
+        tree = self.tree("native_strip", "Q")
+        if tree is None:
+            return
+        function = _function(tree, "_native_files_impl")
+        if function is None or not _has_call(function, "find_cpp_toolchain", ["ctx"]):
+            self.fail("Q", "raw native stripping must resolve the declared C++ toolchain")
+            return
+        rule = _named_call(tree, "_android_native_files")
+        if rule is None or not _keyword_is_name(rule, "cfg", "_platform"):
+            self.fail("Q", "raw native stripping must keep its ABI platform transition")
+        if rule is None or not _keyword_is_call(rule, "toolchains", "use_cc_toolchain"):
+            self.fail("Q", "raw native stripping must resolve the C++ toolchain")
+        action = _action_call(function, "run")
+        if action is None:
+            self.fail("Q", "raw native stripping must declare an action")
+            return
+        if _attr_path(_keyword(action, "executable")) != ["toolchain", "strip_executable"]:
+            self.fail("Q", "raw native stripping must use the declared strip executable")
+        if _attr_path(_keyword(action, "tools")) != ["toolchain", "all_files"]:
+            self.fail("Q", "raw native stripping must declare all C++ toolchain files")
+        if not _contains_name(_keyword(action, "inputs"), "src"):
+            self.fail("Q", "raw native stripping must declare each source library as an input")
+        if _contains_string(tree, "ANDROID_NDK_HOME"):
+            self.fail("Q", "raw native stripping must not read an NDK environment path")
+        if any(
+            isinstance(node, ast.Call)
+            and _call_path(node) in (["ctx", "actions", "run"], ["ctx", "actions", "run_shell"])
+            and any(keyword.arg in ("env", "environment", "use_default_shell_env")
+                    for keyword in node.keywords)
+            for node in ast.walk(tree)
+        ):
+            self.fail("Q", "raw native stripping must not use ambient action environment")
 
 
 _HOST_PATH = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")

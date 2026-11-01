@@ -140,9 +140,20 @@ def _flutter_core_impl(ctx):
         fail("{}: expected one assets directory, got {}".format(ctx.label, len(assets)))
     if len(libapp) > 1:
         fail("{}: expected at most one libapp.so, got {}".format(ctx.label, len(libapp)))
+    if abi != None:
+        if not engine_libs:
+            fail("{}: ABI '{}' has no engine libraries".format(ctx.label, abi))
+        if mode == "release" and len(libapp) != 1:
+            fail("{}: release ABI '{}' needs one libapp.so".format(ctx.label, abi))
 
     return [
         DefaultInfo(files = depset(libapp + engine_libs + [embedding_jar, assets[0]])),
+        OutputGroupInfo(
+            flutter_assets = depset([assets[0]]),
+            flutter_engine = depset(engine_libs),
+            flutter_libapp = depset(libapp),
+            flutter_embedding = depset([embedding_jar]),
+        ),
         FlutterArtifactInfo(
             mode = mode,
             abi = abi,
@@ -181,9 +192,9 @@ def _pub_labels(pub, who):
 def flutter_core(
         name,
         pub,
-        assets = [],
+        assets = None,
         entrypoint = "lib/main.dart",
-        srcs = [],
+        srcs = None,
         path_deps = [],
         dart_defines = {},
         native_build_env = None,
@@ -192,30 +203,31 @@ def flutter_core(
         plugins = "@flutter_plugins",
         target_os = "android",
         **kwargs):
-    """Declares an app's platform-neutral artifact as the target `<name>`.
+    """Declares an app's Flutter artifacts and host-test inputs.
 
-    Declares `:pubspec` and the targets the artifact is built from, and the
-    guards `<name>_guards_test` runs. Internal targets keep the package's
-    default visibility. `visibility` also reaches `:pubspec`, which a consumer in
-    another package reads through its flutter_android_inputs. `<name>_test_package`
-    and its `<name>_test_assets` are the package host tests read, as flutter_app's
-    `:app` is; both are `manual`.
+    Standard-layout packages derive Dart sources from `lib/` and assets from
+    `assets/`. The fixed `pubspec.yaml`, package/test targets, and guards are
+    declared with the artifacts so the package has one core.
 
     Args:
       name: the artifact's target name. `pubspec` is reserved.
       pub: the `pub.lock` hub repository, e.g. `"@pub"`.
-      assets: asset files the bundle packages, as labels.
-      entrypoint: the app's entrypoint under lib/, as a label.
-      srcs: Dart sources, for change detection.
+      assets: asset files the bundle packages; defaults to `glob(["assets/**"])`.
+      entrypoint: the app's entrypoint under lib/.
+      srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies.
-      dart_defines: `-D` constants the kernel compiles with.
-      dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
-      plugin_deps: the committed Maven plugin file, checked against the hub.
-      plugins: the plugin hub the guards check against, e.g. "@flutter_plugins"; required with plugin_deps.
-      target_os: OS the kernel is compiled for; must be "android".
-      native_build_env: the native build environment for the asset bundle's flutter build action, or None. Android builds pass rules_flutter_android's `native_build_env` rule.
-      **kwargs: visibility, which also applies to `:pubspec`, and tags of `<name>`.
+      dart_defines: `-D` constants the kernels compile with.
+      native_build_env: the native build environment for asset bundle hooks, or None.
+      dart_plugin_registrant: the Dart plugin registrant under lib/, or None.
+      plugin_deps: the committed Maven plugin file checked against the hub.
+      plugins: the plugin hub guards check against, e.g. `"@flutter_plugins"`.
+      target_os: OS the kernel is compiled for; must be `"android"`.
+      **kwargs: visibility and tags passed to declared targets.
     """
+    if srcs == None:
+        srcs = native.glob(["lib/**/*.dart"])
+    if assets == None:
+        assets = native.glob(["assets/**"])
     if name == "pubspec":
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
     if target_os != "android":
@@ -276,8 +288,8 @@ def flutter_core(
         path_deps = path_deps,
     )
 
-    # The host test reads this bundle and package, built for flutter_tester. It
-    # takes no ABI and no Android build environment, as flutter_app's do.
+    # The host test reads this bundle and package, built for flutter_tester.
+    # It takes no ABI and no Android build environment.
     flutter_test_assets(
         name = name + "_test_assets",
         assets = assets,

@@ -6,3 +6,5 @@ import %workspace%/../../.bazelrc.android
 
 # Enable Android targets.
 common --config=android
+build -c opt
+build --@rules_flutter_core//flutter:mode=release

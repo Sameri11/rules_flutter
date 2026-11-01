@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build example APKs and gate on their recorded digests.
 
-EXAMPLES must cover every flutter_android_binary target. Record unsigned APK
-hashes and canonical ZIP entry hashes to distinguish layout from content changes.
+EXAMPLES lists every Flutter-generated Android APK label. Each configured
+row records its mode and selected ABI set. Unsigned APK hashes and canonical ZIP
+entry hashes distinguish bytes from content/layout changes.
 Baselines require the CI toolchain, including RECORDED_NDK for native libraries.
 """
 
@@ -11,6 +12,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -18,31 +20,46 @@ import sys
 import zipfile
 from pathlib import Path
 
-# Exact (example, module, declared Flutter APK targets, build flags) inventory,
-# checked against query. Flags select the configuration the rows record.
-DEMO_APP_TARGETS = (
-    "//android/app:demo_app",
-    "//android/app:demo_app_arm64-v8a",
-    "//android/app:demo_app_x86_64",
-    "//android/app:demo_app_armeabi-v7a",
+# Each row is (example, module, target, mode, ABI selection, Bazel flags).
+ANDROID_ABIS = ("arm64-v8a", "x86_64", "armeabi-v7a")
+DEMO_TARGET = "//android/app:demo_app"
+DEMO_RELEASE_FLAGS = (
+    "-c", "opt", "--@rules_flutter_core//flutter:mode=release",
 )
+DEMO_DEBUG_FLAGS = (
+    "-c", "fastbuild", "--@rules_flutter_core//flutter:mode=debug",
+)
+
+
+def demo_rows(example: str, mode: str, flags: tuple[str, ...]):
+    return tuple(
+        (example, "examples/demo_app", DEMO_TARGET, mode, abi, flags + platform)
+        for abi, platform in (
+            ("fat", (
+                "--android_platforms=@rules_android//:arm64-v8a,"
+                "@rules_android//:x86_64,@rules_android//:armeabi-v7a",
+            )),
+            ("arm64-v8a", ("--android_platforms=@rules_android//:arm64-v8a",)),
+            ("x86_64", ("--android_platforms=@rules_android//:x86_64",)),
+            ("armeabi-v7a", ("--android_platforms=@rules_android//:armeabi-v7a",)),
+        )
+    )
+
+
 EXAMPLES = (
-    ("demo_app", "examples/demo_app", DEMO_APP_TARGETS, ()),
-    (
-        "demo_app_debug",
-        "examples/demo_app",
-        DEMO_APP_TARGETS,
-        ("--@rules_flutter_core//flutter:mode=debug",),
-    ),
-    ("no_plugins", "examples/no_plugins", ("//android/app:no_plugins",), ()),
-    ("pub_plugins", "examples/pub_plugins", ("//android/app:pub_plugins",), ()),
-    (
-        "local_plugin",
-        "examples/local_plugin",
-        ("//packages/host_app/android/app:host_app",),
-        (),
-    ),
+    *demo_rows("demo_app", "release", DEMO_RELEASE_FLAGS),
+    *demo_rows("demo_app_debug", "debug", DEMO_DEBUG_FLAGS),
+    ("no_plugins", "examples/no_plugins", "//android/app:no_plugins",
+     "release", "arm64-v8a",
+     DEMO_RELEASE_FLAGS + ("--android_platforms=@rules_android//:arm64-v8a",)),
+    ("pub_plugins", "examples/pub_plugins", "//android/app:pub_plugins",
+     "release", "arm64-v8a",
+     DEMO_RELEASE_FLAGS + ("--android_platforms=@rules_android//:arm64-v8a",)),
+    ("local_plugin", "examples/local_plugin",
+     "//packages/host_app/android/app:host_app", "release", "arm64-v8a",
+     DEMO_RELEASE_FLAGS + ("--android_platforms=@rules_android//:arm64-v8a",)),
 )
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GOLDEN = REPO_ROOT / "tools" / "ci" / "example_hashes_macos.txt"
@@ -53,18 +70,23 @@ DEFAULT_MANIFESTS = REPO_ROOT / "_ci_hashes"
 RECORDED_NDK = "28.2.13676358"
 
 HEADER = """\
-# Recorded APK hashes, one line per declared APK:
-#
-#   <example> <target> apk=<unsigned APK sha256> entries=<canonical entry-listing sha256>
+# Recorded APK hashes by example, target, build mode and selected ABIs:
+#   <example> <target> mode=<release|debug> abi=<fat|ABI> apk=<sha256> entries=<sha256>
 #
 # Valid for Android NDK 28.2.13676358, CI's: another NDK changes every
 # NDK-compiled library. See the docstring of tools/ci/example_hashes.py.
 #
 # Regenerate with `tools/ci/example_hashes.py --record` and commit intentional byte changes.
 """
+BAZEL_LOCKFILE_MODE = os.environ.get("BAZEL_LOCKFILE_MODE", "error")
+if BAZEL_LOCKFILE_MODE not in ("error", "update"):
+    sys.exit("FAIL: BAZEL_LOCKFILE_MODE must be error or update.")
 
 
 def run(argv: list[str], cwd: Path) -> str:
+    if len(argv) > 1 and argv[1] in ("aquery", "build", "cquery", "info", "query"):
+        if not any(arg.startswith("--lockfile_mode=") for arg in argv[2:]):
+            argv.insert(2, "--lockfile_mode=" + BAZEL_LOCKFILE_MODE)
     proc = subprocess.run(
         argv,
         cwd=cwd,
@@ -106,64 +128,50 @@ def entry_listing(apk: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def unsigned_apks(
-        bazel: str, module: Path, targets: tuple[str, ...],
-        flags: tuple[str, ...]) -> dict[str, Path]:
-    suffixes = {}
-    output_labels = []
-    for target in targets:
-        package, _, name = target.removeprefix("//").partition(":")
-        suffixes[target] = Path(package) / (name + "_unsigned.apk")
-        output_labels.append("//{}:{}_unsigned.apk".format(package, name))
-
-    outputs = [
-        Path(line)
-        for line in run(
-            [bazel, "cquery", *flags, "--output=files", "set({})".format(
-                " ".join(output_labels)
-            )],
-            module,
-        ).splitlines()
+def unsigned_apk(
+        bazel: str, module: Path, target: str,
+        flags: tuple[str, ...]) -> Path:
+    package, _, name = target.removeprefix("//").partition(":")
+    output_label = "//{}:{}_unsigned.apk".format(package, name)
+    outputs = run(
+        [bazel, "cquery", *flags, "--output=files", output_label],
+        module,
+    ).splitlines()
+    matches = [
+        Path(output) for output in outputs
+        if Path(output).name == name + "_unsigned.apk"
     ]
-    execution_root = Path(run([bazel, "info", "execution_root"], module).strip())
-    resolved = {}
-    for target, suffix in suffixes.items():
-        matches = [
-            output
-            for output in outputs
-            if output.parts[-len(suffix.parts):] == suffix.parts
-        ]
-        if len(matches) != 1:
-            sys.exit(
-                "FAIL: {} resolves to {} unsigned APK outputs: {}".format(
-                    target, len(matches), matches
-                )
+    if len(matches) != 1:
+        sys.exit(
+            "FAIL: {} resolves to {} unsigned APK outputs: {}".format(
+                target, len(matches), matches
             )
-        resolved[target] = execution_root / matches[0]
-    return resolved
+        )
+    execution_root = Path(run([bazel, "info", "execution_root"], module).strip())
+    return execution_root / matches[0]
 
 
 def declared_apk_targets(bazel: str, module: Path) -> set[str]:
-    """Return every Android binary a Flutter APK macro generated in `module`.
-
-    `generator_function` is target-graph metadata Bazel records for rules
-    emitted by a macro. Querying it is resilient to formatting, aliases, and
-    generated per-ABI names; parsing BUILD source would not be.
-
-    Queries the wrapper's `_flutter_apk` targets and `flutter_android_app`'s
-    android_binary separately. Their private helpers are excluded.
-    """
-    wrapper = run(
-        [bazel, "query", "--output=label",
-         'attr("generator_function", "^flutter_android_binary$", kind("_flutter_apk rule", //...))'],
-        module,
-    )
-    app = run(
+    """Return every APK target generated by the Flutter app helper."""
+    result = run(
         [bazel, "query", "--output=label",
          'attr("generator_function", "^flutter_android_app$", kind("android_binary rule", //...))'],
         module,
     )
-    return set(wrapper.splitlines()) | set(app.splitlines())
+    return set(result.splitlines())
+
+
+def expected_abis(selection: str) -> set[str]:
+    return set(ANDROID_ABIS if selection == "fat" else (selection,))
+
+
+def apk_abis(apk: Path) -> set[str]:
+    with zipfile.ZipFile(apk) as zf:
+        return {
+            path.split("/")[1]
+            for path in zf.namelist()
+            if path.startswith("lib/") and path.endswith(".so")
+        }
 
 
 def assert_target_inventory(
@@ -191,45 +199,113 @@ def assert_target_inventory(
 
 def collect(bazel: str, manifests: Path, build: bool, only: str | None) -> list[str]:
     rows: list[str] = []
-    for example, directory, targets, flags in EXAMPLES:
-        if only and only != example:
-            continue
+    configured_row_keys()
+    selected = [row for row in EXAMPLES if not only or row[0] == only]
+    inventories = {}
+    for example, directory in dict.fromkeys(
+            (row[0], row[1]) for row in selected):
         module = REPO_ROOT / directory
-        assert_target_inventory(
-            example, targets, declared_apk_targets(bazel, module)
+        labels = tuple(row[2] for row in selected if row[0] == example)
+        key = (example, module)
+        if key not in inventories:
+            inventories[key] = declared_apk_targets(bazel, module)
+        assert_target_inventory(example, labels, inventories[key])
+
+    for example, directory, target, mode, abi, flags in selected:
+        module = REPO_ROOT / directory
+        slug = "{}_{}_{}_{}".format(
+            example, target.replace("/", "_").replace(":", "_"), mode, abi
         )
+        manifests.mkdir(parents=True, exist_ok=True)
+        execution_log = manifests / (slug + ".execution.json")
+        print("==> {} {} {} ({})".format(example, target, mode, abi))
         if build:
-            print("==> building {} ({} APK shapes)".format(example, len(targets)))
-            run([bazel, "build", *flags, *targets], module)
-        apks = unsigned_apks(bazel, module, targets, flags)
-        for target in targets:
-            apk = apks[target]
-            if not apk.is_file():
-                sys.exit(
-                    "FAIL: {} {} built, but configured output {} is absent. "
-                    "`_flutter_apk` declares this sibling output.".format(
-                        example, target, apk
-                    )
-                )
-            listing = entry_listing(apk)
-            manifests.mkdir(parents=True, exist_ok=True)
-            slug = "{}{}".format(example, target.replace("/", "_").replace(":", "_"))
-            (manifests / (slug + ".entries.txt")).write_text(listing)
-            shutil.copyfile(apk, manifests / (slug + ".apk"))
-            rows.append(
-                "{} {} apk={} entries={}".format(
-                    example,
-                    target,
-                    hashlib.sha256(apk.read_bytes()).hexdigest(),
-                    hashlib.sha256(listing.encode()).hexdigest(),
-                )
+            run(
+                [bazel, "build",
+                 "--execution_log_json_file={}".format(execution_log),
+                 *flags, target],
+                module,
             )
+        apk = unsigned_apk(bazel, module, target, flags)
+        if not apk.is_file():
+            sys.exit(
+                "FAIL: {} {} {} {} built, but configured output {} is absent."
+                .format(example, target, mode, abi, apk)
+            )
+        captured_apk = manifests / (slug + ".apk")
+        shutil.copyfile(apk, captured_apk)
+        actual_abis = apk_abis(captured_apk)
+        wanted_abis = expected_abis(abi)
+        listing = entry_listing(captured_apk)
+        apk_bytes = captured_apk.read_bytes()
+        apk_digest = hashlib.sha256(apk_bytes).hexdigest()
+        entries_digest = hashlib.sha256(listing.encode()).hexdigest()
+        (manifests / (slug + ".entries.txt")).write_text(listing)
+        (manifests / (slug + ".meta.txt")).write_text(
+            "example={}\ntarget={}\nmode={}\nabi={}\n"
+            "android_platforms={}\nabis={}\napk_sha256={}\nentries_sha256={}\n".format(
+                example, target, mode, abi,
+                next((flag.split("=", 1)[1] for flag in flags
+                      if flag.startswith("--android_platforms=")), "default"),
+                ",".join(sorted(actual_abis)), apk_digest, entries_digest,
+            )
+        )
+        if actual_abis != wanted_abis:
+            sys.exit(
+                "FAIL: {} {} {} APK ABI inventory is {}; expected {}."
+                .format(example, target, abi, sorted(actual_abis), sorted(wanted_abis))
+            )
+        if example == "demo_app" and mode == "release":
+            expression = (
+                'mnemonic("DartAotKernel|FlutterAssetBundle|DartAotElf|'
+                'FlutterEngineStrip|AndroidNativeLibStrip|CcCmakeMakeRule", '
+                'deps({}))'.format(target)
+            )
+            graph = run(
+                [bazel, "aquery", *flags, expression, "--output=jsonproto"],
+                module,
+            )
+            graph_path = manifests / (slug + ".aquery.json")
+            graph_path.write_text(graph)
+            if not json.loads(graph).get("actions"):
+                sys.exit(
+                    "FAIL: {} {} aquery returned no shared Flutter/native actions."
+                    .format(example, abi)
+                )
+        rows.append(
+            "{} {} mode={} abi={} apk={} entries={}".format(
+                example, target, mode, abi, apk_digest, entries_digest
+            )
+        )
+
     return rows
 
 
-def row_key(row: str) -> tuple[str, str]:
-    example, target = row.split(" ")[:2]
-    return example, target
+def row_key(row: str) -> tuple[str, str, str, str]:
+    parts = row.split(" ")
+    if len(parts) < 5 or not parts[0] or not parts[1]:
+        raise ValueError("malformed hash row: {}".format(row))
+    fields = dict(part.split("=", 1) for part in parts[2:] if "=" in part)
+    return parts[0], parts[1], fields["mode"], fields["abi"]
+
+
+def assert_row_coverage(
+        rows: list[str], expected: list[tuple[str, str, str, str]],
+        source: Path) -> None:
+    try:
+        keys = [row_key(row) for row in rows]
+    except (KeyError, ValueError) as error:
+        sys.exit("FAIL: {} contains a malformed configured row: {}.".format(
+            source, error
+        ))
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    missing = [key for key in expected if key not in keys]
+    unknown = sorted(set(keys) - set(expected))
+    if duplicates or missing or unknown:
+        sys.exit(
+            "FAIL: {} configured row coverage is invalid; duplicates={}, "
+            "missing={}, unknown={}.".format(source, duplicates, missing, unknown)
+        )
 
 
 def recorded_rows(golden: Path) -> list[str]:
@@ -240,16 +316,54 @@ def recorded_rows(golden: Path) -> list[str]:
     ]
 
 
-def configured_row_keys() -> list[tuple[str, str]]:
-    return [
-        (example, target)
-        for example, _, targets, _ in EXAMPLES
-        for target in targets
+def configured_row_keys() -> list[tuple[str, str, str, str]]:
+    keys = [(example, target, mode, abi)
+            for example, _, target, mode, abi, _ in EXAMPLES]
+    if len(keys) != 11:
+        sys.exit("FAIL: EXAMPLES must contain all 11 configured APK rows.")
+    if len(keys) != len(set(keys)):
+        sys.exit("FAIL: EXAMPLES contains duplicate configured APK rows.")
+    invalid = [
+        (example, mode, abi)
+        for example, _, _, mode, abi, _ in EXAMPLES
+        if mode not in ("release", "debug")
+        or abi not in ("fat", *ANDROID_ABIS)
     ]
+    if invalid:
+        sys.exit("FAIL: EXAMPLES contains invalid mode/ABI keys: {}.".format(invalid))
+    for example, _, _, mode, abi, flags in EXAMPLES:
+        expected_build = ("-c", "opt") if mode == "release" else ("-c", "fastbuild")
+        if flags[:2] != expected_build:
+            sys.exit("FAIL: {} {} row has the wrong Bazel compilation mode.".format(
+                example, mode
+            ))
+        expected_flutter_mode = (
+            "--@rules_flutter_core//flutter:mode=" + mode
+        )
+        flutter_modes = [
+            flag for flag in flags
+            if flag.startswith("--@rules_flutter_core//flutter:mode=")
+        ]
+        if flutter_modes != [expected_flutter_mode]:
+            sys.exit("FAIL: {} {} row has Flutter mode flags {}.".format(
+                example, mode, flutter_modes
+            ))
+        selected_abis = ANDROID_ABIS if abi == "fat" else (abi,)
+        expected_platforms = "--android_platforms=" + ",".join(
+            "@rules_android//:" + selected_abi for selected_abi in selected_abis
+        )
+        platform_flags = [
+            flag for flag in flags if flag.startswith("--android_platforms=")
+        ]
+        if platform_flags != [expected_platforms]:
+            sys.exit("FAIL: {} {} row selects {} but has platform flags {}.".format(
+                example, abi, expected_platforms, platform_flags
+            ))
+    return keys
 
 
 def validate_only(only: str) -> None:
-    names = [example for example, _, _, _ in EXAMPLES]
+    names = list(dict.fromkeys(example for example, _, _, _, _, _ in EXAMPLES))
     if only not in names:
         sys.exit(
             "FAIL: --only {!r} is not a configured example; expected one of: {}."
@@ -270,6 +384,7 @@ def validate_subset_baseline(
         )
 
     order = configured_row_keys()
+    assert_row_coverage(existing, order, golden)
     present = {row_key(row) for row in existing}
     unknown = sorted(present - set(order))
     if unknown:
@@ -322,37 +437,33 @@ def selftest() -> int:
     In-process and hermetic: no Bazel, no APKs, no filesystem. Run by
     //tools/ci:example_hashes_selftest. It prevents a bad `--only` value from
     reaching Bazel, a subset record from creating or retaining a partial table,
-    and an APK shape declared by `flutter_android_binary` from being omitted
+    and an APK target declared by the Flutter app helper from being omitted
     from `EXAMPLES`.
 
     A self-check rather than a py_test: this repository does not depend on
     rules_python and Bazel 9 has no native py_binary (flutter/private/rules.bzl).
     """
     first = EXAMPLES[0][0]
-    a0, a1 = EXAMPLES[0][2][0], EXAMPLES[0][2][1]
-    second, _, second_targets, _ = EXAMPLES[1]
-    b0 = second_targets[0]
+    first_targets = tuple(row[2] for row in EXAMPLES if row[0] == first)
+    second = next(example for example, *_ in EXAMPLES if example != first)
+    second_key = next(key for key in configured_row_keys() if key[0] == second)
     golden = Path("example_hashes.txt")
 
     existing = [
-        "{} {} apk=old-{} entries=old-{}".format(
-            example, target, example, target
-        )
-        for example, _, targets, _ in EXAMPLES
-        for target in targets
+        "{} {} mode={} abi={} apk=old entries=old".format(*key)
+        for key in configured_row_keys()
     ]
     fresh = [
-        "{} {} apk=new-{} entries=new-{}".format(first, target, first, target)
-        for target in EXAMPLES[0][2]
+        "{} {} mode={} abi={} apk=new entries=new".format(*key)
+        for key in configured_row_keys() if key[0] == first
     ]
-
     # A complete baseline admits a subset update, preserves every unrelated
     # row, and returns to EXAMPLES' canonical order.
     validate_subset_baseline(existing, first, golden)
     merged = merge(existing, fresh)
     assert len(merged) == len(existing), merged
     assert all(
-        row.startswith("{} ".format(first)) and "apk=new-" in row
+        row.startswith("{} ".format(first)) and "apk=new " in row
         for row in merged[:len(fresh)]
     ), merged
     assert merged[len(fresh):] == existing[len(fresh):], merged
@@ -374,11 +485,11 @@ def selftest() -> int:
         assert "no existing" in str(exit_) and str(golden) in str(exit_), exit_
     else:
         raise AssertionError("an absent subset baseline was silently accepted")
-    incomplete = [row for row in existing if row_key(row) != (second, b0)]
+    incomplete = [row for row in existing if row_key(row) != second_key]
     try:
         validate_subset_baseline(incomplete, first, golden)
     except SystemExit as exit_:
-        assert second in str(exit_) and b0 in str(exit_), exit_
+        assert second in str(exit_) and second_key[1] in str(exit_), exit_
     else:
         raise AssertionError("an incomplete unrelated baseline was silently accepted")
 
@@ -386,7 +497,8 @@ def selftest() -> int:
     # vanish when merging.
     try:
         validate_subset_baseline(
-            existing + ["ghost //a:b apk=x entries=x"], first, golden
+            existing + ["ghost //a:b mode=release abi=fat apk=x entries=x"],
+            first, golden,
         )
     except SystemExit as exit_:
         assert "ghost" in str(exit_), exit_
@@ -395,19 +507,45 @@ def selftest() -> int:
 
     # The configured set must be exact: an omitted declared ABI shape and a
     # stale configured target both name the example and offending label.
-    declared = {a0, a1}
+    declared = {first_targets[0], "//android/app:extra"}
     try:
-        assert_target_inventory(first, (a0,), declared)
+        assert_target_inventory(first, tuple(set(first_targets)), declared)
     except SystemExit as exit_:
-        assert first in str(exit_) and a1 in str(exit_), exit_
+        assert first in str(exit_) and "//android/app:extra" in str(exit_), exit_
     else:
-        raise AssertionError("a missing declared target passed")
+        raise AssertionError("an unlisted declared target passed")
     try:
-        assert_target_inventory(first, (a0, "//ghost:apk"), {a0})
+        assert_target_inventory(
+            first, tuple(set(first_targets) | {"//ghost:apk"}), set(first_targets)
+        )
     except SystemExit as exit_:
         assert first in str(exit_) and "//ghost:apk" in str(exit_), exit_
     else:
         raise AssertionError("a stale configured target passed")
+
+    keys = configured_row_keys()
+    assert len(keys) == 11 and len(set(keys)) == 11, keys
+    assert_row_coverage(existing, keys, golden)
+    try:
+        assert_row_coverage(existing[:-1], keys, golden)
+    except SystemExit as exit_:
+        assert "missing=" in str(exit_), exit_
+    else:
+        raise AssertionError("a missing mode/ABI row passed")
+    miskeyed = existing.copy()
+    miskeyed[0] = miskeyed[0].replace("abi=fat", "abi=unknown")
+    try:
+        assert_row_coverage(miskeyed, keys, golden)
+    except SystemExit as exit_:
+        assert "unknown=" in str(exit_) and "missing=" in str(exit_), exit_
+    else:
+        raise AssertionError("a mis-keyed mode/ABI row passed")
+    try:
+        assert_row_coverage(existing + [existing[0]], keys, golden)
+    except SystemExit as exit_:
+        assert "duplicates=" in str(exit_), exit_
+    else:
+        raise AssertionError("a duplicate mode/ABI row passed")
 
     print(
         "OK: subset records require a complete baseline and APK inventory is exact"
@@ -505,6 +643,13 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+        assert_row_coverage(
+            expected,
+            [key for key in configured_row_keys() if key[0] == args.only],
+            args.golden,
+        )
+    else:
+        assert_row_coverage(expected, configured_row_keys(), args.golden)
 
     if expected == rows:
         print("\nOK: {} APK shapes match {}".format(len(rows), args.golden))

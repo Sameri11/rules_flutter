@@ -5,15 +5,15 @@
 set -euo pipefail
 
 os=$(uname -s)
-extra=("$@")
+lockfile_mode=${BAZEL_LOCKFILE_MODE:-error}
+extra=("--lockfile_mode=$lockfile_mode" "$@")
 work=$(mktemp -d)
 probe_dir=""
 probe_backup=""
 hint='hint: declare test-local imports in `srcs`'
 frontend=--@rules_flutter_core//flutter:test_kernel_compiler=frontend_server
 # Remote and disk hits would hide the runner and the compile being compared.
-build_flags=(--disk_cache= --noremote_accept_cached --lockfile_mode=error)
-
+build_flags=(--disk_cache= --noremote_accept_cached)
 restore_probe() {
   if [ -n "$probe_backup" ]; then
     cp "$probe_backup" "$probe_dir/BUILD.bazel"
@@ -103,18 +103,13 @@ find_build() {
     if grep -q "$1" "$f"; then echo "$f"; fi
   done | sed -n 1p
 }
-app_build=$(find_build '^flutter_app(')
-app_target=":app"
+app_build=$(find_build '^flutter_core(')
 if [ -z "$app_build" ]; then
-  # Without an app, the host test reads the test package flutter_core declares.
-  app_build=$(find_build '^flutter_core(')
-  if [ -z "$app_build" ]; then
-    echo "FAIL: no flutter_app or flutter_core package for the undeclared-import probe" >&2
-    exit 1
-  fi
-  core_name=$(awk '/^flutter_core\(/ { f = 1 } f && /name = "/ { match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit }' "$app_build")
-  app_target=":${core_name}_test_package"
+  echo "FAIL: no flutter_core package for the undeclared-import probe" >&2
+  exit 1
 fi
+core_name=$(awk '/^flutter_core\(/ { f = 1 } f && /name = "/ { match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit }' "$app_build")
+app_target=":${core_name}_test_package"
 probe_dir=$(dirname "$app_build")
 app_pkg=${probe_dir#.}
 app_pkg=${app_pkg#/}

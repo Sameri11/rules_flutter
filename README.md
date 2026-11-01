@@ -2,13 +2,13 @@
 
 [![CI](https://github.com/Sameri11/rules_flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/Sameri11/rules_flutter/actions/workflows/ci.yml)
 
-Bazel rules that build a Flutter application's Dart and Android halves as ordinary Bazel targets: `frontend_server` and `gen_snapshot` compile the Dart half, and `rules_android` packages the Android half.
+Bazel rules that build Flutter applications with two modules: `rules_flutter_core` for Flutter artifacts and `rules_flutter_android` for Android composition and packaging. Consumer Modules load both for helper-based packaging, or consume core outputs in a consumer-owned stock `android_binary`.
 
 Status: Community-maintained, Android-only development preview; not affiliated with, endorsed by, or supported by Google or the Flutter project.
 
 ## Why rules_flutter?
 
-Wrapping `flutter build` in one Bazel action makes the whole build opaque: Bazel cannot see the Dart compilation and Android packaging units independently. `rules_flutter` exposes those units as ordinary Bazel targets, so they can be analysed and composed separately. This project publishes no build-speed or hermeticity measurements; the constraints below are the honest picture.
+`rules_flutter` separates Flutter artifact production from Android packaging. `flutter_core` exposes typed artifacts that Android packaging can compose independently. This keeps the Android binary a normal Bazel target rather than hiding it behind a custom packaging API.
 
 ```
 lib/**.dart ──frontend_server──> app.dill ──gen_snapshot──> libapp.so ─┐
@@ -18,90 +18,79 @@ flutter_assets ─────────────────────�
        \________ Dart compilation ________/    \__ Android packaging __/
 ```
 
-### CI-tested toolchains
-
-CI currently tests the configurations below. Other versions may work, but are
-not verified; add a configuration here after it passes CI.
-
-- Flutter at the version pinned as `FLUTTER_VERSION` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), using Flutter's bundled Dart toolchain.
-- Bazel at the version in [`.bazelversion`](.bazelversion), with Bzlmod; no WORKSPACE path is implemented.
-- macOS 15 arm64 and Ubuntu Linux x64; the CI setup action rejects other hosts.
+CI tests the Flutter version pinned in `.github/workflows/ci.yml`, the Bazel
+version configured by the CI workflow, macOS 15 arm64 and Ubuntu Linux x64.
+Other versions may work but are unverified.
 
 ### Supported behavior
-- Android release (the default) and debug builds (`--@rules_flutter_core//flutter:mode=debug`) are supported; there is no profile mode, and AOT is release-only.
-- Supported Android ABIs: `arm64-v8a`, `x86_64`, and `armeabi-v7a`. 32-bit `x86` (`@platforms//cpu:x86_32`), `riscv64`, and other ABI values are unsupported.
-- The rules request `minSdkVersion` 21 (the same level a plugin's CMake half compiles against) and `targetSdkVersion` 36, but `rules_android` applies its own min-SDK floor during resource processing, so the shipped APK declares 23 today. The consumer's Android SDK pin (36 in the examples) is the compile SDK, not the minimum supported device.
-- Proven plugin shapes are pub plugins with Java/Kotlin Android halves, pub plugins with automatically built and packaged CMake native halves, local path plugins in a monorepo, consumer-written Package Recipes, and Dart build-hook packages surfaced through recipes. A recipe replaces standard generation for its package; automatic CMake outputs from other packages remain packaged alongside it. The automatic graph does not support `ndk-build` or prebuilt-JNI plugins; use a Package Recipe. Plugins whose Maven coordinates cannot be read statically require `plugins.package(artifacts = ...)`.
-- A real arm64 APK has been built, installed, and launched on an API 35 emulator.
-- Every example module builds on CI, and all seven APK shapes they declare are compared byte-for-byte against a recorded per-host table (`tools/ci/example_hashes.py`). This proves identical bytes for the same host and the same pinned SDK, not cross-machine reproducibility.
+
+- Android release (`-c opt`) and debug (`-c fastbuild` with `--@rules_flutter_core//flutter:mode=debug`) builds are supported; there is no profile mode, and AOT is release-only.
+- Supported Android ABIs: `arm64-v8a`, `x86_64`, and `armeabi-v7a`. 32-bit `x86`, `riscv64`, and other ABI values are unsupported.
+- Supported plugin shapes include pub plugins with Java/Kotlin Android halves,
+  CMake native halves, local path plugins, consumer-written Package Recipes, and
+  Dart build-hook packages surfaced through recipes. Automatic generation does
+  not support `ndk-build` or prebuilt-JNI plugins. Coordinates that cannot be
+  read statically require `plugins.package(artifacts = ...)`.
+- CI builds and hash-checks examples per host; this does not establish
+  cross-machine reproducibility.
 
 ### Before you install
 
-These are the hard constraints; [Current constraints](#current-constraints) has the
-detail behind each one.
+A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not hermetic. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. Commit `pubspec.lock`; Git pub sources are rejected, path dependencies need `path_deps`, and Dart compilation is not incremental. Bazel emits a debug-key-signed APK and an unsigned APK; release signing occurs outside Bazel. Native assets require consumer-written Package Recipes. The Consumer Module owns its Maven installation. Targets are Android-only.
 
-- A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not hermetic: use `FLUTTER_ROOT` or `flutter` on `PATH`, `ANDROID_HOME`, and `ANDROID_NDK_HOME`. The examples pin SDK platform 36 and build-tools 36.0.0; the consumer module chooses its own. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a no-toolchains stub and the build fails only when a target needs an Android toolchain.
-- Commit `pubspec.lock` with `pubspec.yaml` beside it; Bazel pins packages from it. Git pub sources are rejected, path dependencies need `path_deps`, and Dart compilation is not incremental.
-- Dart kernel and asset actions are sandboxed and cacheable; only the asset action disables remote execution.
-- Bazel emits a debug-key-signed `<name>.apk` and an unsigned `<name>_unsigned.apk`. Sign the unsigned output outside Bazel for release; custom release signing inside Bazel is not supported.
-- Native assets require consumer-written Package Recipes.
-- Building needs no `flutter pub get`; run it only to update `pubspec.lock` after dependency changes.
-- The first plugin graph needs two hand-created zero-byte placeholders; this path has no automated regression gate.
-- The consumer module owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
-- Targets are Android-only; iOS, web, and desktop packaging are not implemented.
+### Composition and ABI selection
+
+Declare one `flutter_core` from the core module per Bazel package; it owns that
+package's app outputs, package/test outputs, and conditional plugin/registrant
+guards. `flutter_android_app` is the standard helper entrypoint.
+`flutter_android_inputs`, `flutter_apk_check`, `flutter_android_manifest`,
+`flutter_assets_dir`, and `flutter_native_contribution` support custom
+composition.
+
+Select APK ABIs with ordinary `--android_platforms`. Use one APK label for each
+existing app/mode variant and separate build commands for fat or single-ABI
+configurations. Capture each APK before the next configuration because the
+materialized APK path may be shared.
+
+A consumer-owned stock `android_binary` may consume configured core targets'
+`OutputGroupInfo`: `flutter_assets` is the bundle tree, `flutter_engine` is the
+complete selected engine-library set, `flutter_libapp` is release AOT (empty in
+debug), and `flutter_embedding` is the mode-selected embedding jar. The engine
+group can contain multiple libraries for one ABI. `FlutterArtifactInfo` is a
+separate typed provider. See the checked stock-binary example in
+[`tests/consumer/composed_app/BUILD.bazel`](tests/consumer/composed_app/BUILD.bazel),
+target `//composed_app:direct_apk`. Consumers own Android packaging and native
+library handling, including strip behavior required by their packaging graph.
+
+One measured warm four-command sequence took 1.500 seconds with the former suffixed labels and 16.165 seconds with one label under successive ABI configurations. These timings are scoped to one machine/workflow, not a general speed promise. Expensive Flutter/native actions remained reusable, while Android packaging reran. Disk/remote-cache switching speed was not measured; shared materialized paths do not inherently collide in action caches.
 
 ## Compatibility with flutter_tools
 
-Compared with the stock [`flutter` CLI](https://docs.flutter.dev/reference/flutter-cli).
-**Implemented** = supported by the rules; **Partial** = limited support or extra
-configuration/tooling; **Not implemented** = no public Bazel workflow.
-Standalone Flutter commands and experiments do not count as Bazel support.
-
 | Feature | Stock Flutter | rules_flutter | Notes |
 | --- | --- | --- | --- |
-| Android release builds | `flutter build apk --release` | Implemented | Default build mode. |
-| Android debug builds | `flutter build apk --debug` | Implemented | Select `--@rules_flutter_core//flutter:mode=debug`. |
+| Android release builds | `flutter build apk --release` | Implemented | Build with `-c opt`. |
+| Android debug builds | `flutter build apk --debug` | Implemented | Build with `-c fastbuild` and `--@rules_flutter_core//flutter:mode=debug`. |
 | Android profile builds | `flutter build apk --profile` | Not implemented | Debug and release only. |
-| Split APKs by architecture | `--split-per-abi` | Implemented | Supports ARM64, ARM32, and x86-64. Unlike Flutter, all APK variants share one version code. |
+| Split APKs by architecture | `--split-per-abi` | Implemented | Select ABI set through `--android_platforms`; one APK label per app/mode variant. |
 | Android App Bundles (AAB) | `flutter build appbundle` | Not implemented | APKs only. |
-| iOS, web, and desktop builds | Platform-specific builds | Not implemented | Android only. |
-| Dart defines | `--dart-define`, `--dart-define-from-file` | Partial | `flutter_app(dart_defines = {...})` and `flutter_test(dart_defines = {...})`, read through `const String.fromEnvironment(...)`. A test's defines reach its app and test libraries, not pub packages in the shared test kernel; see QUICKSTART.md, `pub.lock`. No `--dart-define-from-file`. |
-| Icon-font tree shaking | Default in release APKs | Not implemented | Full icon fonts are bundled. |
-| Android plugins and native packages | Standard Flutter/Gradle workflow | Partial | Common Java/Kotlin and CMake plugins work. Custom build logic and native-asset packages need extra configuration or [Package Recipes](QUICKSTART.md#consumer-recipes-and-native-assets). |
-| Release signing | Gradle signing configuration | Not implemented | Development APKs are debug-key signed; sign the unsigned APK externally for distribution. |
+| Dart defines | `--dart-define`, `--dart-define-from-file` | Partial | `flutter_core(dart_defines = {...})` and `flutter_test(dart_defines = {...})`; no `--dart-define-from-file`. |
+| Android plugins and native packages | Standard Flutter/Gradle workflow | Partial | Common Java/Kotlin and CMake plugins work; custom build logic and native assets need recipes. |
+| Release signing | Gradle signing configuration | Not implemented | Sign the unsigned output outside the build. |
 | Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |
-| Dart obfuscation / split debug info | `--obfuscate`, `--split-debug-info` | Not implemented | No equivalent build options. |
-| Run, hot reload / restart, DevTools | `flutter run` / `flutter attach` | Partial | Use Flutter with the Bazel-built debug APK, without Gradle. Packaging changes require a rebuild; see the [development workflow](QUICKSTART.md#hot-reload-with-flutter-run). |
-| Unit and widget tests | `flutter test` | Partial | `flutter_test_suite(name = "tests", app = ":app")` declares one host test per file under `test/`; `flutter_test` declares one file with its own settings. Host tests need no Android SDK: they run against a host-platform `:test_assets` bundle that `flutter_package(assets = ...)` overrides, and it carries no build-hook native outputs. Goldens, `--test_filter`, sharding, caching, and differences from `flutter test` are in the [testing guide](QUICKSTART.md#testing). No devices, no integration tests. |
-| On-device integration tests | `flutter test integration_test` | Not implemented | No Bazel device-test rule; standard `integration_test/` entrypoints are unsupported. |
-| Localization generation | `flutter gen-l10n` | Not implemented | Generate Dart sources under `lib/` before building; regenerate after translation changes. |
-
-“Implemented” is not a claim of full CLI flag parity, byte-identical output to
-Gradle, or support for every plugin. The [CI-tested toolchains](#ci-tested-toolchains)
-and [current constraints](#current-constraints) still apply.
+| iOS, web, desktop | Platform-specific builds | Not implemented | Android only. |
+| Unit and widget tests | `flutter test` | Partial | `flutter_test` and `flutter_test_suite` run host tests; no devices or integration tests. |
 
 ## Quickstart
 
-This is the complete plugin-free path for a fresh Android-only Flutter
-project. For an existing project, skip only the `flutter create` command,
-make sure `pubspec.lock` is current and committed (`flutter pub get` updates it), then add the files below at the existing project root.
-The project root is also the Bazel module root, beside `pubspec.yaml`, `lib/`,
-and `android/`.
-For the expanded plugin-free walkthrough, pub plugins, local plugins in
-monorepos, and consumer recipes/native assets, see the
-[detailed quickstart](QUICKSTART.md).
+This is a complete plugin-free path for a fresh Android-only Flutter project. For the detailed plugin, monorepo and recipe walkthroughs, see [QUICKSTART.md](QUICKSTART.md).
 
 ### Prerequisites
 
-Start with the [CI-tested](#ci-tested-toolchains) Flutter and Bazel versions, Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and `ANDROID_NDK_HOME`. The documented `.bazelrc` selects Bazel's remote JDK 17 toolchain, so no local JDK installation is required.
-
-Without `api_level`, `rules_android` compiles against the highest Android platform installed, which makes the APK's manifest depend on the machine. This repository's examples therefore pin SDK platform 36 and build-tools 36.0.0; building them needs both installed. A consumer module must explicitly register NDK toolchains in its `MODULE.bazel` and inherit the stable repositories from `rules_flutter_android`'s NDK extension. With `ANDROID_NDK_HOME` unset, the NDK wrapper substitutes a stub declaring no toolchains; the failure surfaces only when a target needs an Android toolchain.
+Use the CI-tested Flutter and Bazel versions, Bzlmod, Android SDK platform 36 with build-tools 36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, plus `ANDROID_HOME` and `ANDROID_NDK_HOME`.
 
 ### Create the project
 
-Until registry publication, run these commands from a `rules_flutter` checkout.
-They create the consumer as a sibling, so the later `../rules_flutter/rules_flutter_core` override
-resolves to this repository's core module.
+From a `rules_flutter` checkout:
 
 ```sh
 cd ..
@@ -109,155 +98,45 @@ flutter create --org com.example --platforms android hello_bazel
 cd hello_bazel
 ```
 
-`flutter create` runs `flutter pub get`, which writes `pubspec.lock`. Commit it (Bazel builds from it, not `.dart_tool/`). Bazel generates the Android registrant from the lock, so building needs no `flutter pub get`; after changing dependencies, run `flutter pub get` to update the lock.
+Commit the generated `pubspec.lock`; Bazel reads it, not `.dart_tool/`.
 
 ### Bazel workspace files
 
-Create `.bazelversion`:
-
-```
-9.2.0
-```
-
-Create `.bazelrc`:
-
-```
-common --enable_bzlmod
-build:android --merge_android_manifest_permissions
-build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
-build:android --java_language_version=17 --java_runtime_version=remotejdk_17
-common:android --repo_env=ANDROID_NDK_HOME
-common --config=android
-```
-
-Create the root `MODULE.bazel` (the `local_path_override` is development-only until `rules_flutter` is published to a registry):
+Use Bazel 9.2.0 and Bzlmod. Declare both modules in the Consumer Module:
 
 ```python
-module(name = "hello_bazel", version = "0.0.1")
-
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
-local_path_override(
-    module_name = "sameri11_rules_flutter_core",
-    path = "../rules_flutter/rules_flutter_core",
-)
 bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
-local_path_override(
-    module_name = "sameri11_rules_flutter_android",
-    path = "../rules_flutter/rules_flutter_android",
-)
-
-flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
-flutter.sdk(version = "3.47.3")
-
-# Hosted packages are fetched from pubspec.lock, which `flutter pub get` updates.
-pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
-pub.lock(
-    name = "pub",
-    lock = "//:pubspec.lock",
-)
-use_repo(pub, "pub")
-
-include("//android:config.MODULE.bazel")
 ```
 
-Android consumers also declare `sameri11_rules_flutter_android` in the root module, as shown above, because the `include()`d Android configuration loads its `extensions.bzl`.
+The Consumer Module configures the Flutter SDK/pub extensions, Android SDK/NDK toolchains, and its own Maven graph. See the detailed quickstart for the full module configuration.
 
-The `pub` extension turns the committed `pubspec.lock` into the `@pub` repository: hosted packages pinned by the lock's sha256, Flutter SDK packages, and a package config with no absolute paths. `pubspec.yaml` must sit beside the lock. Git sources in the lock are rejected.
-
-The Flutter SDK is checked when Bazel fetches it; a host SDK whose version
-differs from the declared version fails with both versions in the error.
-
-Export the platform configuration from `android/BUILD.bazel`:
+Create the root BUILD file:
 
 ```python
-exports_files(["config.MODULE.bazel"])
-```
-
-Put Android dependencies, repositories, and toolchain registration in
-`android/config.MODULE.bazel`:
-
-```python
-bazel_dep(name = "rules_android", version = "0.7.3")
-bazel_dep(name = "rules_kotlin", version = "2.4.0")
-bazel_dep(name = "rules_jvm_external", version = "7.1")
-
-android_sdk = use_extension(
-    "@rules_android//rules/android_sdk_repository:rule.bzl",
-    "android_sdk_repository_extension",
-)
-android_sdk.configure(
-    api_level = 36,
-    build_tools_version = "36.0.0",
-)
-use_repo(android_sdk, "androidsdk")
-register_toolchains("@androidsdk//:all")
-
-android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
-use_repo(android_ndk, "androidndk", "androidndk_cmake")
-register_toolchains("@androidndk//:all")
-
-maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
-maven.install(
-    name = "flutter_maven",
-    artifacts = [
-        "androidx.lifecycle:lifecycle-common:2.7.0",
-        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
-        "androidx.lifecycle:lifecycle-process:2.7.0",
-        "androidx.lifecycle:lifecycle-runtime:2.7.0",
-        "androidx.fragment:fragment:1.7.1",
-        "androidx.annotation:annotation:1.8.1",
-        "androidx.tracing:tracing:1.2.0",
-        "androidx.core:core:1.13.1",
-        "androidx.window:window-java:1.2.0",
-        "androidx.window:window:1.2.0",
-        "androidx.exifinterface:exifinterface:1.4.1",
-        "com.getkeepsafe.relinker:relinker:1.4.5",
-    ],
-    repositories = ["https://maven.google.com", "https://repo1.maven.org/maven2"],
-    version_conflict_policy = "pinned",
-)
-use_repo(maven, "flutter_maven")
-```
-
-Create `BUILD.bazel` at the project root:
-
-```python
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_app")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_app(
-    abis = ["arm64-v8a", "x86_64"],
+flutter_core(
+    name = "core",
     plugin_deps = None,
     assets = [],
     pub = "@pub",
 )
 ```
 
-`pub` is mandatory: it names the hub declared in `MODULE.bazel`.
-
-### Android target
-
-Find the generated activity path (the package path depends on the organization and project name):
-
-```sh
-find android/app/src/main/kotlin -name MainActivity.kt
-```
-
-Create `android/app/BUILD.bazel`, replacing `com.example.hello_bazel`, `hello_bazel`, and the `MainActivity.kt` path when your project differs:
+Find the generated `MainActivity.kt` path, then create `android/app/BUILD.bazel`:
 
 ```python
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_embedding_library(name = "flutter_embedding")
-
-flutter_android_binary(
+flutter_android_app(
     name = "hello_bazel",
-    abis = ["arm64-v8a", "x86_64"],
-    app = "//:app",  # NOT "//"
+    core = "//:core",
     manifest_values = {"applicationId": "com.example.hello_bazel"},
     plugins = None,
     deps = [":main_activity"],
@@ -266,72 +145,21 @@ flutter_android_binary(
 kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/hello_bazel/MainActivity.kt"],
-    deps = [":flutter_embedding"],
+    deps = ["@flutter_maven//:flutter_embedding_release"],
 )
 ```
 
-The root application label must be `//:app`, not `//`. Keep the explicit ABI list in both rules.
-
-`plugins = None` compiles the ruleset's empty registrant, as stock Flutter does for a plugin-free app; no registrant target is needed. With a plugin graph, `flutter_android_binary` compiles the registrant from `@flutter_plugins`. Pass `registrant = <label>` only to replace it.
-
-### Build, install, and check
-
-The release build is the default. The APK target depends on the Dart/AOT and
-asset targets, so build it directly:
+Build release with `-c opt` and debug with `-c fastbuild` plus Flutter debug mode:
 
 ```sh
-: "${ANDROID_HOME:?set ANDROID_HOME to your Android SDK}"
-: "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME to an Android NDK 28+ installation}"
-bazel build //android/app:hello_bazel
-ls bazel-bin/android/app/
-adb install -r bazel-bin/android/app/<name>.apk
-bazel test //:guards_test
+bazel build //android/app:hello_bazel -c opt
+bazel build //android/app:hello_bazel -c fastbuild --@rules_flutter_core//flutter:mode=debug
 ```
 
-Replace `<name>.apk` with the APK discovered in `bazel-bin/android/app/`. To build the optional debug-shaped APK:
+Select the ABI set using `--android_platforms`; keep the APK label unchanged. Build and capture each configuration's APK before the next invocation. Install with `adb install -r bazel-bin/android/app/hello_bazel.apk`. For hot reload, run the Bazel-built debug APK with `flutter run --debug --use-application-binary=<apk-path>`; packaging changes require a rebuild.
 
-```sh
-bazel build //android/app:hello_bazel --@rules_flutter_core//flutter:mode=debug
-```
+## Scope and constraints
 
-Run the Bazel-built debug APK through Flutter. This installs it, launches it,
-and attaches without invoking Gradle:
+The SDK, Android NDK and Android SDK are local, non-hermetic inputs. The Consumer Module owns Maven dependency resolution. `pubspec.lock` must be committed; hosted packages are pinned by sha256, Git sources are unsupported, and path dependencies must be declared. The Android registrant is generated from the lock for each mode: debug includes dev-only plugins and release excludes them. `plugin_deps.MODULE.bazel` is the generated Maven segment; `lib/dart_plugin_registrant.dart` is the Dart registrant.
 
-```sh
-flutter run -d <device-id> --debug \
-  --use-application-binary=bazel-bin/android/app/hello_bazel.apk
-```
-
-Use `r` for hot reload and `R` for hot restart. Packaging-input changes require
-rebuilding the APK and running the command again. See the
-[detailed hot-reload workflow](QUICKSTART.md#hot-reload-with-flutter-run).
-
-Do not apply debug mode to `//:app_arm64-v8a`; AOT is release-only.
-
-### Adding plugins
-
-The first plugin setup generates and commits the Maven segment and the Dart registrant state; see the [detailed quickstart](QUICKSTART.md#root-app-with-pub-plugins). `plugins.project` reads the hub's `@pub//:plugins_metadata.json` and `@pub//:package_config.json`.
-
-## Scope, limitations, and direction
-
-### Supported today
-
-Android release and debug packaging across the supported ABIs, including fat and per-ABI APKs; pub plugin Java/Kotlin and CMake native builds; generated Dart and Android registrants; and consumer-supplied native-asset recipes.
-
-### Current constraints
-
-- The local Flutter SDK, Android SDK, and Android NDK installations are not hermetic. The SDK is located through `FLUTTER_ROOT` or `flutter` on `PATH`; the consumer supplies `ANDROID_HOME` and Android SDK API 36/build-tools 36.0.0, and `ANDROID_NDK_HOME` must point to NDK 28 or newer. If `ANDROID_NDK_HOME` is unset, the NDK wrapper substitutes a stub declaring no toolchains, so failure surfaces only when a target needs an Android toolchain.
-- The Dart kernel and asset actions are sandboxed and cacheable in release and debug builds and read no `~/.pub-cache` or `.dart_tool/`. Only the asset action disables remote execution, because it runs the host Flutter tool.
-- `pubspec.lock` must be committed and current, with `pubspec.yaml` in the same Bazel package as the lock label. `pub.lock` names are unique across modules and contain no `-`. Update the lock with `flutter pub get`; Bazel never resolves versions.
-- Hosted packages are pinned by the lock's sha256 (a wrong digest fails the fetch) and must use `https`. Flutter SDK packages come from the local SDK. Git sources are rejected. Path dependencies are not hashed and go stale unless declared with `path_deps`. Dart compilation is not incremental.
-- The Android registrant is generated from `pubspec.lock` at build time, per mode: `android/debug/GeneratedPluginRegistrant.java` (dev-only plugins included, as `flutter pub get` writes it) and `android/release/GeneratedPluginRegistrant.java` (dev-only plugins dropped, as a release `flutter build` writes it).
-- The first plugin graph needs two hand-created zero-byte placeholders: `plugin_deps.MODULE.bazel` (`include()` requires the file) and `lib/dart_plugin_registrant.dart` (the plugin guard requires its committed file). This path has no automated regression gate; follow the [plugin-graph walkthrough](QUICKSTART.md#create-generated-state-and-wire-the-plugin-graph).
-- Native assets from Dart build-hook packages require consumer-written Package Recipes. The consumer module also owns its `rules_jvm_external` installation and Maven repository; this ruleset does not own the application's Maven graph.
-- Bazel emits both a debug-key-signed `<name>.apk` and an unsigned `<name>_unsigned.apk`. Use the signed output for development, not distribution. Release signing happens outside the build so credentials never enter the action graph; custom release signing inside Bazel is not supported.
-- `ndk-build` plugins and prebuilt-JNI plugin shapes are not supported. Plugin Maven coordinates that cannot be read statically require `plugins.package(artifacts = ...)`.
-- iOS, web, and desktop packaging are not implemented; targets are Android-only.
-- A cold analysis with an empty `HOME` may leave the `Analyzing` count unchanged for minutes while Maven/Coursier, JDK, Flutter engine, Kotlin, NDK, and tool repositories are fetched; continued download or process activity indicates network-bound setup, not proof of a deadlock. When intentionally perturbing `HOME`, pin `BAZELISK_HOME` and Bazel's startup `--output_user_root` to isolate launcher and download caches from rules behavior.
-
-### Possible future direction
-
-Hermetic dependency and SDK modelling, incremental workers, more plugin systems, and other platforms are possible directions, not scheduled commitments.
+Bazel emits debug-key-signed and unsigned APKs; sign release APKs outside Bazel. `ndk-build` and prebuilt-JNI plugins are unsupported by automatic generation. See the detailed quickstart for Package Recipes and plugin configuration.

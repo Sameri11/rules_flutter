@@ -12,6 +12,7 @@ genrule(
         "//flutter:native_build_env.bzl",
         "//flutter/private:android.bzl",
         "//flutter/private:android_inputs_rules.bzl",
+        "//flutter/private:native_strip.bzl",
         "//flutter/private:apk_check.bzl",
         "//flutter/private:ndk.bzl",
         "//flutter/private:plugins.bzl",

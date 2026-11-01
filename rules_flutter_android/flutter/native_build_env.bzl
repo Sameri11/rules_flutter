@@ -1,8 +1,8 @@
 """The Android SDK as a native build environment.
 
-flutter_app and flutter_core run an app's native build hooks through
-`flutter build`. Those hooks find the SDK through ANDROID_HOME, so this rule
-exports it for the action that runs them.
+flutter_core runs an app's native build hooks through `flutter build`. Those
+hooks find the SDK through ANDROID_HOME, so this rule exports it for the action
+that runs them.
 """
 
 load("@rules_flutter_core//flutter:defs.bzl", "FlutterNativeBuildEnvInfo")

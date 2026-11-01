@@ -11,9 +11,8 @@ bazel test --build_tests_only --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //
 
 The real prerequisite is an **installed NDK named by `ANDROID_NDK_HOME`**, not the
 flag. This module owns its Android toolchains in `android/config.MODULE.bazel`,
-where it imports and registers both SDK and NDK repositories. `//...` includes
-`:apk_derived_flutter_engine_<abi>_stripped`, and stripping resolves
-`@@bazel_tools//tools/cpp:toolchain_type` through the registered NDK toolchains.
+where it imports and registers both SDK and NDK repositories. The composed
+native strip targets resolve the C++ toolchain through the registered NDK.
 
 With no NDK the failure now happens where the path is required, at the upstream
 repository fetch:
@@ -62,8 +61,8 @@ core and Android entrypoints below, plus focused behavior checks:
 
 | entry point | symbols |
 | --- | --- |
-| `@rules_flutter_core//flutter:defs.bzl` | `flutter_aot_library`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `pub_path_deps_check`, `pub_plugins_check` |
-| `@rules_flutter_android//flutter:defs.bzl` | `flutter_android_binary`, `flutter_app`, `flutter_assets`, `flutter_embedding_library`, `flutter_native_contribution`, `android_native_lib_jar`, `flutter_native_libs` |
+| `@rules_flutter_core//flutter:defs.bzl` | `flutter_core`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `pub_path_deps_check`, `pub_plugins_check` |
+| `@rules_flutter_android//flutter:defs.bzl` | `flutter_android_app`, `flutter_android_inputs`, `flutter_apk_check`, `flutter_assets`, `flutter_assets_dir`, `flutter_android_manifest`, `flutter_native_contribution` |
 | `@rules_flutter_android//flutter:extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`/`plugins.build_config_field()`) over real, checked-in external plugin graphs — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test`, `:build_config_plugin_jar_test`, `:build_config_plugin_values_test` |
 
 Remaining implementation rules and helpers are covered indirectly by the
@@ -79,58 +78,34 @@ debug-only native plugin filtering. Run it in both debug and release modes.
 `//composed_app:apk_override_contents_test` checks the override APK's native
 library contents.
 
-The join is instantiated over **two** ABIs, so its per-ABI shape is exercised
-rather than collapsing to the single-entry case. It passes `engine_jars`, which
-a real consumer never does: left to the ABI table the join names the real engine
-repositories, and analysing one downloads ~150 MB — into a test whose whole
-point is that it costs under two seconds and fetches nothing.
+`//composed_app:direct_apk` exercises a consumer-owned stock Android binary
+using the four `flutter_core` output groups directly. Its selected engine
+libraries are stripped with the Android toolchain, its plugin libraries come
+from the raw per-ABI file aggregate, and its embedding is a mode-selected Java
+import with the explicit AndroidX closure. The fixture also packages the
+three-ABI synthetic AAR and compiles a Kotlin Flutter activity. This route does
+not depend on the Android inputs helper.
 
-`flutter_android_binary` appears five times, on purpose:
+`flutter_android_app` remains covered with plugin and plugin-free apps, a
+second app variant reusing inputs, and an app from an external module.
+`//apk_external_app_contents_test` checks that the external app's declared asset
+lands at its runtime path.
 
-- `:apk` names **every** attribute, defaults included — a default that
-  disappears is exactly the kind of change this module exists to notice;
-- `:apk_derived` uses the short spelling, `app = "//:app"`, so the derivation of
-  `aot`, `assets` and `pubspec` from one package label is analysed;
-- `:apk_no_plugin_natives` passes `plugin_native_libs = {}`, the declaration an
-  app with no native plugin half makes. It cannot be derived, and this pins that
-  `{}` keeps meaning "none" rather than "derive";
-- `:apk_no_plugin_graph` derives its Dart targets from `//standard_layout`,
-  passes `plugins = None`, and uses the production
-  `flutter_embedding_library`. Analysis proves that this suppresses every
-  `@flutter_plugins` edge — classes, recipe libraries and native plugin
-  libraries; the registrant is the ruleset's empty one — while retaining the
-  engine embedding's real AndroidX graph from this fixture's `@flutter_maven`
-  install.
-- `:apk_external_app` derives every Dart target from
-  `@external_app//app`; its generated bundle check and
-  `:apk_external_app_contents_test` build the signed APK and inspect the
-  external module's declared asset at its runtime path.
-
-Attributes are named explicitly rather than left to defaults — `target_os`,
-`strip`, `abi`, `slice` — for the same reason.
-
-`flutter_app` is instantiated in **`//standard_layout`**, a second package whose
-contents are the layout `flutter create` leaves behind: `pubspec.yaml`,
+`flutter_core` is instantiated in `//standard_layout`, a second package whose
+contents follow the layout `flutter create` leaves behind: `pubspec.yaml`,
 `pubspec.lock`, `lib/main.dart`, and one asset. Its package config is the
-`@standard_layout_pub` hub of that lock. It permanently selects `lib/alternate$release.dart`; execution
-covers the nondefault `entrypoint` (the app kernel's: `flutter_assets` takes none) without shell expansion, and
-smooth_app executes the same nondefault-entrypoint shape.
-
-It passes `plugin_deps = None`, the Dart half of a project that never calls
-`plugins.project()`. The root package pairs it with
-`flutter_android_binary(plugins = None)`, which removes every
-`@flutter_plugins` label from the APK graph. This does not remove the Flutter
-embedding's Maven dependencies: `MODULE.bazel` declares
-`rules_jvm_external` 7.1, creates `maven.install(name = "flutter_maven", ...)`
-with the complete embedding coordinate list, and imports it with
-`use_repo(maven, "flutter_maven")`.
+`@standard_layout_pub` hub of that lock. It permanently selects
+`lib/alternate$release.dart`; this covers the nondefault entrypoint without
+shell expansion. The root fixture also declares one core and exercises both
+plugin and plugin-free packaging.
 
 `fixtures/fake_plugin` is an external Flutter plugin layout, and the four
 `fixtures/namespace_*` directories are plugin layouts dedicated to namespace
 syntax coverage. They are not in any `pubspec.lock`, so no `pub.lock` hub
 describes them. `fixtures/plugin_fixture.bzl` is a small repository rule that
 writes the two hub files `plugins.project` reads (`plugins_metadata.json`,
-`package_config.json`) for this fixture set, with repository-relative rootUris.
+`package_config.json`) for this fixture set.
+
 This proves two
 things nothing else here can, because this module reaches the ruleset the
 same way `hello_bazel` and `smooth-app` do and those two are external to this

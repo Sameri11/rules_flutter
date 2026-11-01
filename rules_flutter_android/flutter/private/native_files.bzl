@@ -1,89 +1,91 @@
-"""The plugin repository's native libraries as Files, one aggregate per ABI.
+"""Plugin native libraries as raw Files, one aggregate per Android ABI."""
 
-The split route packages recipe contributions and generated CMake libraries
-through CcInfo, which needs each library as its own File. The hub emits one
-`flutter_native_files` per ABI and keys them with `flutter_native_files_by_abi`.
-The legacy jar carrier remains separate.
-"""
-
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
+load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
+load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS")
+load(":abis.bzl", "bazel_platform", "check_platform_abi")
+load(":native_strip.bzl", "strip_native_file")
 load(":recipe.bzl", "FlutterNativeInfo")
 
-# Generated hub repositories load this file across a repository boundary.
 visibility("public")
 
 FlutterNativeFilesByAbiInfo = provider(
-    doc = "One plugin repository's native libraries as Files, keyed by the ABIs it declares.",
-    fields = {
-        "files": "dict[str, depset[File]]: each declared ABI to its libraries.",
-    },
+    doc = "One plugin repository's native libraries as Files, keyed by declared ABI.",
+    fields = {"files": "dict[str, depset[File]]: each declared ABI to its libraries."},
 )
 
 def _check_abi(where, abi):
     if abi not in ABIS:
         fail("{}: unknown ABI '{}'. Supported: {}.".format(where, abi, sorted(ABIS)))
 
-def _flutter_native_files_impl(ctx):
-    _check_abi(ctx.label, ctx.attr.slice)
+def _platform_impl(_settings, attr):
+    return {"//command_line_option:platforms": [attr.platform]}
 
+_platform = transition(
+    implementation = _platform_impl,
+    inputs = [],
+    outputs = ["//command_line_option:platforms"],
+)
+
+def _flutter_native_files_impl(ctx):
+    abi = check_platform_abi(ctx)
+    _check_abi(ctx.label, abi)
+    toolchain = find_cpp_toolchain(ctx)
     libs = []
-    for d in ctx.attr.deps:
-        info = d[FlutterNativeInfo]
+    seen = {}
+
+    for dep in ctx.attr.deps:
+        info = dep[FlutterNativeInfo]
         if info.platform != "android":
             fail("{}: contribution {} targets platform '{}', but this aggregate is android.".format(
                 ctx.label,
-                d.label,
+                dep.label,
                 info.platform,
             ))
-
-        # Same rule as flutter_native_libs: a contribution that names some
-        # slices must name this one, or the split would silently lack it.
-        if info.libraries and ctx.attr.slice not in info.libraries:
-            fail("{}: contribution {} has no library for slice '{}'; it has {}.".format(
+        if info.libraries and abi not in info.libraries:
+            fail("{}: contribution {} has no library for ABI '{}'; it has {}.".format(
                 ctx.label,
-                d.label,
-                ctx.attr.slice,
+                dep.label,
+                abi,
                 sorted(info.libraries),
             ))
-        libs.extend(info.libraries.get(ctx.attr.slice, depset()).to_list())
+        for src in info.libraries.get(abi, depset()).to_list():
+            if src.basename in seen:
+                fail("{}: two contributions provide {}: {} and {}".format(
+                    ctx.label,
+                    src.basename,
+                    seen[src.basename],
+                    src.path,
+                ))
+            seen[src.basename] = src.path
+            libs.append(strip_native_file(ctx, src, abi, toolchain))
 
     for target in ctx.attr.generated:
-        libs.extend(target[DefaultInfo].files.to_list())
-
-    # Two packages shipping one soname would overwrite each other in the APK,
-    # so the basename decides, as it does in the jar.
-    seen = {}
-    for f in libs:
-        if f.basename in seen:
-            fail("{}: two contributions provide {}: {} and {}".format(
-                ctx.label,
-                f.basename,
-                seen[f.basename].path,
-                f.path,
-            ))
-        seen[f.basename] = f
+        for src in target[DefaultInfo].files.to_list():
+            if src.basename in seen:
+                fail("{}: two contributions provide {}: {} and {}".format(
+                    ctx.label,
+                    src.basename,
+                    seen[src.basename],
+                    src.path,
+                ))
+            seen[src.basename] = src.path
+            libs.append(src)
 
     return [DefaultInfo(files = depset(libs))]
 
 flutter_native_files = rule(
     implementation = _flutter_native_files_impl,
-    doc = """One ABI's recipe and generated native libraries, as Files.
-
-Instantiated in the generated @flutter_plugins repository, not written by hand.""",
-    attrs = {
-        "slice": attr.string(
-            mandatory = True,
-            doc = "The ABI whose libraries are taken from each contribution.",
-        ),
-        "deps": attr.label_list(
-            providers = [FlutterNativeInfo],
-            doc = "flutter_native_contribution targets, one per recipe.",
-        ),
-        "generated": attr.label_list(
-            allow_files = True,
-            doc = "Generated native libraries for this split's ABI.",
-        ),
-    },
+    cfg = _platform,
+    doc = "One ABI's stripped recipe and generated native libraries as Files.",
+    attrs = dict(
+        ABI_PLATFORM_ATTRS,
+        abi = attr.string(mandatory = True),
+        platform = attr.string(mandatory = True),
+        deps = attr.label_list(providers = [FlutterNativeInfo]),
+        generated = attr.label_list(allow_files = True),
+    ),
+    fragments = ["cpp"],
+    toolchains = use_cc_toolchain(),
 )
 
 def _flutter_native_files_by_abi_impl(ctx):
@@ -108,8 +110,6 @@ def _flutter_native_files_by_abi_impl(ctx):
             ))
         by_abi[abi] = target
 
-    # A declared ABI with no aggregate would package nothing for its splits
-    # and pass. Refuse it rather than emit an empty entry.
     for abi in ctx.attr.abis:
         if abi not in by_abi:
             fail("{}: ABI '{}' is declared but has no native files aggregate.".format(ctx.label, abi))
@@ -120,18 +120,9 @@ def _flutter_native_files_by_abi_impl(ctx):
 
 flutter_native_files_by_abi = rule(
     implementation = _flutter_native_files_by_abi_impl,
-    doc = """Every declared ABI's native library aggregate of one plugin repository, keyed by ABI.
-
-Instantiated in the generated @flutter_plugins repository, not written by hand.
-Its ABIs are the project's, so the split route takes the ABI list from the
-project rather than from a global table.""",
+    doc = "Every declared ABI's native library aggregate of one plugin repository, keyed by ABI.",
     attrs = {
-        "abis": attr.string_list(
-            mandatory = True,
-            doc = "The ABIs the plugin repository's project declares.",
-        ),
-        "libs": attr.label_keyed_string_dict(
-            doc = "flutter_native_files target to the ABI it aggregates. One per declared ABI.",
-        ),
+        "abis": attr.string_list(mandatory = True),
+        "libs": attr.label_keyed_string_dict(),
     },
 )
