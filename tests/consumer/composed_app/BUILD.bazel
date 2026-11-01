@@ -156,6 +156,7 @@ cc_library(
     srcs = ["native/composed_jni.cc"],
     deps = [":marker_dependency_shared"],
     alwayslink = True,
+    tags = ["manual"],
 )
 
 # The binary. The macro declares apk_inputs over the core and the plugin hub, and the
