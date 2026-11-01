@@ -284,7 +284,7 @@ java_binary(
     srcs = ["fixtures/BuildConfigValues.java"],
     main_class = "com.example.consumer.BuildConfigValues",
     deps = [
-        "//composed_app:direct_embedding",
+        ":flutter_embedding_no_plugins",
         "@flutter_plugins//build_config_plugin",
     ],
 )

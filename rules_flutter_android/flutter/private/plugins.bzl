@@ -108,6 +108,7 @@ _PLUGIN_TEMPLATE = """
 
 _NATIVE_SRCS_TEMPLATE = """
 # {name}'s native half: {libs}, from the plugin's own CMakeLists.
+# CMake may reach ../ios or ../common_source, so enumerate the whole package.
 filegroup(
     name = "{name}_native_srcs",
     srcs = {native_srcs},
@@ -119,11 +120,17 @@ cmake(
     name = "{name}_native_{abi}",
     lib_source = ":{name}_native_srcs",
     build_data = ["{ndk_source_properties}"],
+    # detect_root uses the topmost file's directory, not the CMakeLists directory.
     working_directory = "{cmake_dir}",
     cache_entries = {{
+        # An NDK cache entry suppresses rules_foreign_cc's STL-free crosstool.
         "CMAKE_TOOLCHAIN_FILE": "$$(dirname $$(realpath $$EXT_BUILD_ROOT$$/$(execpath {ndk_source_properties})))/build/cmake/android.toolchain.cmake",
         "ANDROID_ABI": "{abi}",
         "ANDROID_PLATFORM": "android-{api_level}",
+        # rules_android_ndk passes a 4 KB maximum page size; this later flag wins.
+        # A 4 KB-aligned library can crash the loader on a 16 KB-page device.
+        # Verify LOAD alignment is 0x4000 with llvm-readelf -l.
+        # Strip before LLD's build ID captures unstable symbols.
         "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,max-page-size=16384 -Wl,--strip-all",
     }},
     generate_args = ["-GNinja"],

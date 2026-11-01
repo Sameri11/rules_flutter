@@ -87,6 +87,7 @@ local_path_override(
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")
+use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")
 pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
 pub.lock(name = "pub", lock = "//:pubspec.lock")
 use_repo(pub, "pub")

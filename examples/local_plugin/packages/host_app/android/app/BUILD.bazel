@@ -4,15 +4,12 @@ load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "flutter_embedding_jar",
-    srcs = ["//packages/host_app:app"],
-    output_group = "flutter_embedding",
-)
-
 java_import(
     name = "flutter_embedding",
-    jars = [":flutter_embedding_jar"],
+    jars = select({
+        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
+        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
+    }),
     exports = [
         "@flutter_maven//:androidx_annotation_annotation",
         "@flutter_maven//:androidx_annotation_annotation_jvm",

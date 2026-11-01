@@ -320,7 +320,6 @@ java_import(
     name = "direct_embedding",
     jars = [":direct_embedding_jar"],
     tags = ["manual"],
-    visibility = ["//:__pkg__"],
     exports = EMBEDDING_DEPS,
     deps = EMBEDDING_DEPS,
 )
