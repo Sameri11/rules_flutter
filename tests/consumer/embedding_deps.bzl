@@ -1,3 +1,5 @@
+"""Consumer-owned compile dependencies for the Flutter embedding."""
+
 EMBEDDING_DEPS = [
     "@flutter_maven//:androidx_lifecycle_lifecycle_common",
     "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",

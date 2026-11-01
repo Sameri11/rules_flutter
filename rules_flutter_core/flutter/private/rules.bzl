@@ -25,11 +25,9 @@ their keys and outputs do not depend on where the packages sit. The flutter
 tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 """
 
-load("@bazel_skylib//lib:shell.bzl", "shell")
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS")
-load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
+load(":pubspec.bzl", "FlutterPubspecInfo")
 
 visibility(["//flutter"])
 
