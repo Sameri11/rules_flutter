@@ -67,16 +67,16 @@ def inspect_apk(mode, abis, name):
     return {"name": name, "abis": list(abis), "sha256": hashlib.sha256(dest.read_bytes()).hexdigest()}
 
 
-def graph(mode):
+def graph(mode, suffix=""):
     command = ["bazel", "aquery", "deps(//composed_app:direct_apk) + deps(//composed_app:apk)",
                "--output=jsonproto"] + options(mode, ABIS)
-    path = RESULT / (mode + "-graph.json")
-    with path.open("w") as out, (RESULT / (mode + "-graph.log")).open("w") as err:
+    path = RESULT / (mode + suffix + "-graph.json")
+    with path.open("w") as out, (RESULT / (mode + suffix + "-graph.log")).open("w") as err:
         subprocess.run(command, cwd=CONSUMER, stdout=out, stderr=err, check=True)
     actions = json.loads(path.read_text()).get("actions", [])
     assert actions, "empty action graph"
     counts = collections.Counter(action.get("mnemonic") for action in actions)
-    for obsolete in ("AndroidNativeLibJar", "JniLibJar", "StripNativeLibs"):
+    for obsolete in ("AndroidNativeLibJar", "FlutterNativeLibs", "JniLibJar", "StripNativeLibs"):
         assert not counts[obsolete], (mode, obsolete, counts[obsolete])
     assert counts["AndroidNativeLibStrip"] >= 6, counts
     assert counts["DirectCoreEngineStrip"] == 3, counts
@@ -89,6 +89,25 @@ def planted(name, path, before, after, arguments, expected):
     try:
         path.write_text(original.replace(before, after))
         run(name, arguments, expected)
+    finally:
+        path.write_text(original)
+
+
+def planted_recipe_jar():
+    path = CONSUMER / "composed_app/BUILD.bazel"
+    original = path.read_text()
+    anchor = '        "@composed_plugins//:generated_plugin_registrant",\n'
+    assert original.count(anchor) == 1
+    try:
+        path.write_text(original.replace(anchor, anchor + '        "@composed_plugins//:native_libs_arm64-v8a",\n'))
+        try:
+            graph("release", "-planted-recipe")
+        except AssertionError as error:
+            if "FlutterNativeLibs" not in str(error):
+                raise
+            print("planted recipe jar: graph guard rejected FlutterNativeLibs", flush=True)
+        else:
+            raise RuntimeError("graph guard accepted a legacy recipe jar")
     finally:
         path.write_text(original)
 
@@ -115,6 +134,7 @@ def main():
                 "    exports = EMBEDDING_DEPS,\n", "    exports = [],\n",
                 ["build", "@composed_plugins//:generated_plugin_registrant"] + options("release", ("arm64-v8a",)),
                 "NonNull")
+        planted_recipe_jar()
         run("restored-strict-compile", ["build", "@composed_plugins//:generated_plugin_registrant",
                                         "//composed_app:direct_activity"] + options("release", ("arm64-v8a",)))
         run("restored-direct-apk", ["build", "//composed_app:direct_apk"] + options("release", ("arm64-v8a",)))
