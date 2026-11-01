@@ -184,7 +184,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel test --build_tests_only --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_test.log
+          bazel test --build_tests_only --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //... 2>&1 | tee ../../bazel_consumer_test.log
 
       # Composed app: the APK check fails the build on a planted mismatch.
       - name: Consumer composed app release APK check

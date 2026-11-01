@@ -79,9 +79,9 @@ namespace_plugin_metadata(
     call_marker = "//:fixtures/namespace_call/pubspec.yaml",
     # These syntax fixtures declare no Flutter registrations in their pubspecs.
     debug_registrant = "@pub//:android/debug/GeneratedPluginRegistrant.java",
-    release_registrant = "@pub//:android/release/GeneratedPluginRegistrant.java",
     fake_marker = "//:fixtures/fake_plugin/pubspec.yaml",
     guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
+    release_registrant = "@pub//:android/release/GeneratedPluginRegistrant.java",
 )
 
 plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
