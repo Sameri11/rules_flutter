@@ -1,0 +1,10 @@
+group 'com.example.dev_cmake_plugin'
+version '1.0'
+android {
+    namespace 'com.example.dev_cmake_plugin'
+    externalNativeBuild {
+        cmake {
+            path 'CMakeLists.txt'
+        }
+    }
+}

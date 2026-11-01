@@ -21,9 +21,10 @@ choose a consumer layout and create the files it needs.
 | Consumer recipes and native assets | A package cannot be described by the standard generator, such as a plugin that downloads native libraries or a Dart native-asset package. | [`examples/demo_app`](examples/demo_app/) |
 
 Start with the smallest matching shape. A normal CMake Android plugin belongs in
-**Root app with pub plugins**; it is generated automatically. Recipes are for a
-package the normal graph cannot describe, not a replacement for the normal
-plugin setup.
+**Root app with pub plugins**; its native libraries are built and packaged
+automatically for the requested ABIs. A recipe replaces standard generation for
+its package, while automatically generated CMake libraries from other packages
+remain packaged alongside it.
 
 ## Common prerequisites and conventions
 

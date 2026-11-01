@@ -1,9 +1,9 @@
 """The plugin repository's native libraries as Files, one aggregate per ABI.
 
-`flutter_native_libs` packs the same libraries into a jar for the jar carrier.
-The split route packages them through CcInfo, which needs each library as its
-own File, so the hub emits one `flutter_native_files` per ABI from the same
-contributions and keys them with `flutter_native_files_by_abi`.
+The split route packages recipe contributions and generated CMake libraries
+through CcInfo, which needs each library as its own File. The hub emits one
+`flutter_native_files` per ABI and keys them with `flutter_native_files_by_abi`.
+The legacy jar carrier remains separate.
 """
 
 load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
@@ -47,12 +47,15 @@ def _flutter_native_files_impl(ctx):
             ))
         libs.extend(info.libraries.get(ctx.attr.slice, depset()).to_list())
 
+    for target in ctx.attr.generated:
+        libs.extend(target[DefaultInfo].files.to_list())
+
     # Two packages shipping one soname would overwrite each other in the APK,
     # so the basename decides, as it does in the jar.
     seen = {}
     for f in libs:
         if f.basename in seen:
-            fail("{}: two recipes contribute {}: {} and {}".format(
+            fail("{}: two contributions provide {}: {} and {}".format(
                 ctx.label,
                 f.basename,
                 seen[f.basename].path,
@@ -64,10 +67,9 @@ def _flutter_native_files_impl(ctx):
 
 flutter_native_files = rule(
     implementation = _flutter_native_files_impl,
-    doc = """One ABI's recipe native libraries, as Files.
+    doc = """One ABI's recipe and generated native libraries, as Files.
 
-Instantiated in the generated @flutter_plugins repository, not written by hand.
-Its contributions are the same deps flutter_native_libs packs into the jar.""",
+Instantiated in the generated @flutter_plugins repository, not written by hand.""",
     attrs = {
         "slice": attr.string(
             mandatory = True,
@@ -76,6 +78,10 @@ Its contributions are the same deps flutter_native_libs packs into the jar.""",
         "deps": attr.label_list(
             providers = [FlutterNativeInfo],
             doc = "flutter_native_contribution targets, one per recipe.",
+        ),
+        "generated": attr.label_list(
+            allow_files = True,
+            doc = "Generated native libraries for this split's ABI.",
         ),
     },
 )

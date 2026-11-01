@@ -1,4 +1,5 @@
 #include <jni.h>
+extern "C" int marker_dependency();
 
 // The app's own JNI library, linked into the APK's library. JNI_OnLoad runs when it
 // loads; the plugin's native method is exported under its JNI name. The underscore in
@@ -7,5 +8,5 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM*, void*) { return JNI_VERSION_1_6; }
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_composed_1plugin_ComposedPlugin_nativeMarker(JNIEnv*, jclass) {
-  return 42;
+  return marker_dependency();
 }

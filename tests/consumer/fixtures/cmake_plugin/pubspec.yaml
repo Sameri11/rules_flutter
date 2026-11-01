@@ -1,0 +1,13 @@
+name: cmake_plugin
+version: 1.0.0
+environment:
+  sdk: ^3.12.2
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.example.cmake_plugin
+        pluginClass: CmakePlugin

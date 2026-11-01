@@ -142,9 +142,13 @@ plugins.project(
     metadata = "@namespace_plugin_metadata//:plugins_metadata.json",
     package_config = "@namespace_plugin_metadata//:package_config.json",
 )
+plugins.package(
+    name = "recipe_package",
+    bzl_file = "//composed_app:recipe_package.bzl",
+    project = "composed_plugins",
+)
 
-# The composed app's own hub. Its lock names only the composed plugin, so the
-# namespace fixtures of `flutter_plugins` cannot reach its APK.
+# The composed app's hub is isolated from the namespace fixtures.
 plugins.project(
     name = "composed_plugins",
     abis = [
@@ -157,7 +161,30 @@ plugins.project(
     metadata = "@composed_pub//:plugins_metadata.json",
     package_config = "@composed_pub//:package_config.json",
 )
-use_repo(plugins, "composed_plugins", "flutter_plugins")
+plugins.package(
+    name = "recipe_package",
+    bzl_file = "//composed_app:recipe_package.bzl",
+    project = "composed_override_plugins",
+)
+plugins.package(
+    name = "cmake_plugin",
+    bzl_file = "//composed_app:recipe_package.bzl",
+    macro = "cmake_override_recipe",
+    project = "composed_override_plugins",
+)
+plugins.project(
+    name = "composed_override_plugins",
+    abis = [
+        "arm64-v8a",
+        "x86_64",
+        "armeabi-v7a",
+    ],
+    embedding = "//:flutter_embedding_no_plugins",
+    maven_repo = "@plugin_maven//:pin",
+    metadata = "@composed_pub//:plugins_metadata.json",
+    package_config = "@composed_pub//:package_config.json",
+)
+use_repo(plugins, "composed_override_plugins", "composed_plugins", "flutter_plugins")
 
 # Public Flutter extension repositories used to test explicit embedding
 # debug/release labels in this fixture.
