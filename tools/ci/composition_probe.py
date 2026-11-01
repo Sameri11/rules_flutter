@@ -79,7 +79,10 @@ def graph(mode, suffix=""):
     for obsolete in ("AndroidNativeLibJar", "FlutterNativeLibs", "JniLibJar", "StripNativeLibs"):
         assert not counts[obsolete], (mode, obsolete, counts[obsolete])
     assert counts["AndroidNativeLibStrip"] >= 6, counts
-    assert counts["DirectCoreEngineStrip"] == 3, counts
+    direct_inputs = [a["arguments"][-1] for a in actions if a.get("mnemonic") == "DirectCoreEngineStrip"]
+    helper_inputs = [a["arguments"][-1] for a in actions if a.get("mnemonic") == "FlutterEngineStrip"]
+    assert direct_inputs and len(direct_inputs) == len(set(direct_inputs)), direct_inputs
+    assert collections.Counter(direct_inputs) == collections.Counter(helper_inputs), (direct_inputs, helper_inputs)
     print(json.dumps({"mode": mode, "mnemonics": counts}, sort_keys=True), flush=True)
 
 
