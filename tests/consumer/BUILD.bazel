@@ -105,7 +105,7 @@ flutter_assets(
 )
 
 pub_path_deps_check(
-    name = "path_deps_check",
+    name = "fixture_path_deps_check",
     path_deps = [],
     pubspec_lock = "pubspec.lock",
 )

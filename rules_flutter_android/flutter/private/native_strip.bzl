@@ -33,7 +33,7 @@ def _native_files_impl(ctx):
                 tools = toolchain.all_files,
                 outputs = [out],
                 mnemonic = "AndroidNativeLibStrip",
-                progress_message = "Stripping {} for %{label}".format(src.basename),
+                progress_message = "Stripping {} for %{{label}}".format(src.basename),
             )
             outputs[src.basename] = out
     if not outputs:
