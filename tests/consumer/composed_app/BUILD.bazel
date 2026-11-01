@@ -62,6 +62,7 @@ cc_binary(
     name = "libaar_native.so",
     srcs = ["native/aar_native.cc"],
     linkshared = True,
+    tags = ["manual"],
 )
 
 # AAR inputs are raw, stripped libraries built with each ABI's NDK toolchain.
@@ -138,6 +139,7 @@ cc_binary(
     name = "librecipe_marker.so",
     srcs = ["native/recipe_marker.cc"],
     linkshared = True,
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
@@ -145,6 +147,7 @@ cc_binary(
     name = "libcmake_marker.so",
     srcs = ["native/override_marker.cc"],
     linkshared = True,
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
