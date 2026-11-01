@@ -133,10 +133,16 @@ def main():
                 "    engine_libs = [] if abi == \"arm64-v8a\" else ctx.files.engine_libs\n",
                 ["build", "//composed_app:direct_apk"] + options("release", ("arm64-v8a",)),
                 "ABI 'arm64-v8a' has no engine libraries")
-        planted("strict-annotation-rejection", CONSUMER / "BUILD.bazel",
-                "    exports = EMBEDDING_DEPS,\n", "    exports = [],\n",
+        planted("missing-embedding", CONSUMER / "BUILD.bazel",
+                '    name = "flutter_embedding_no_plugins",\n'
+                '    jars = select({\n'
+                '        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],\n'
+                '        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],\n'
+                '    }),\n',
+                '    name = "flutter_embedding_no_plugins",\n'
+                '    jars = ["fixtures/fake_native_libs.jar"],\n',
                 ["build", "@composed_plugins//:generated_plugin_registrant"] + options("release", ("arm64-v8a",)),
-                "NonNull")
+                "io.flutter")
         planted_recipe_jar()
         run("restored-strict-compile", ["build", "@composed_plugins//:generated_plugin_registrant",
                                         "//composed_app:direct_activity"] + options("release", ("arm64-v8a",)))
