@@ -1,9 +1,6 @@
 """Plugin native libraries as raw Files, one aggregate per Android ABI."""
 
-load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS")
-load(":abis.bzl", "bazel_platform", "check_platform_abi")
-load(":native_strip.bzl", "strip_native_file")
+load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
 load(":recipe.bzl", "FlutterNativeInfo")
 
 visibility("public")
@@ -17,22 +14,11 @@ def _check_abi(where, abi):
     if abi not in ABIS:
         fail("{}: unknown ABI '{}'. Supported: {}.".format(where, abi, sorted(ABIS)))
 
-def _platform_impl(_settings, attr):
-    return {"//command_line_option:platforms": [attr.platform]}
-
-_platform = transition(
-    implementation = _platform_impl,
-    inputs = [],
-    outputs = ["//command_line_option:platforms"],
-)
-
 def _flutter_native_files_impl(ctx):
-    abi = check_platform_abi(ctx)
+    abi = ctx.attr.slice
     _check_abi(ctx.label, abi)
-    toolchain = find_cpp_toolchain(ctx)
-    libs = []
-    seen = {}
 
+    libs = []
     for dep in ctx.attr.deps:
         info = dep[FlutterNativeInfo]
         if info.platform != "android":
@@ -48,44 +34,32 @@ def _flutter_native_files_impl(ctx):
                 abi,
                 sorted(info.libraries),
             ))
-        for src in info.libraries.get(abi, depset()).to_list():
-            if src.basename in seen:
-                fail("{}: two contributions provide {}: {} and {}".format(
-                    ctx.label,
-                    src.basename,
-                    seen[src.basename],
-                    src.path,
-                ))
-            seen[src.basename] = src.path
-            libs.append(strip_native_file(ctx, src, abi, toolchain))
+        libs.extend(info.libraries.get(abi, depset()).to_list())
 
     for target in ctx.attr.generated:
-        for src in target[DefaultInfo].files.to_list():
-            if src.basename in seen:
-                fail("{}: two contributions provide {}: {} and {}".format(
-                    ctx.label,
-                    src.basename,
-                    seen[src.basename],
-                    src.path,
-                ))
-            seen[src.basename] = src.path
-            libs.append(src)
+        libs.extend(target[DefaultInfo].files.to_list())
+
+    seen = {}
+    for f in libs:
+        if f.basename in seen:
+            fail("{}: two contributions provide {}: {} and {}".format(
+                ctx.label,
+                f.basename,
+                seen[f.basename].path,
+                f.path,
+            ))
+        seen[f.basename] = f
 
     return [DefaultInfo(files = depset(libs))]
 
 flutter_native_files = rule(
     implementation = _flutter_native_files_impl,
-    cfg = _platform,
-    doc = "One ABI's stripped recipe and generated native libraries as Files.",
-    attrs = dict(
-        ABI_PLATFORM_ATTRS,
-        abi = attr.string(mandatory = True),
-        platform = attr.string(mandatory = True),
-        deps = attr.label_list(providers = [FlutterNativeInfo]),
-        generated = attr.label_list(allow_files = True),
-    ),
-    fragments = ["cpp"],
-    toolchains = use_cc_toolchain(),
+    doc = "One ABI's recipe and generated native libraries, as raw Files.",
+    attrs = {
+        "slice": attr.string(mandatory = True),
+        "deps": attr.label_list(providers = [FlutterNativeInfo]),
+        "generated": attr.label_list(allow_files = True),
+    },
 )
 
 def _flutter_native_files_by_abi_impl(ctx):

@@ -12,7 +12,7 @@ cannot describe. Recipes are keyed by pub package so they also support packages
 without an `android/` module.
 """
 
-load(":abis.bzl", "MIN_SDK", "bazel_platform", "check_abis")
+load(":abis.bzl", "MIN_SDK", "check_abis")
 load(":embedding.bzl", "ANNOTATION_JVM", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
@@ -249,13 +249,11 @@ _NATIVE_FILES_TARGET = "native_files_{}"
 _NATIVE_FILES_TEMPLATE = """
 flutter_native_files(
     name = "{target}",
-    abi = "{abi}",
-    platform = "{platform}",
+    slice = "{abi}",
     deps = {deps},
     generated = {generated},
 )
 """
-
 
 # The aggregate the split route reads. Its keys are the ABIs the project
 # declares, so no per-ABI label is listed by hand.
@@ -1230,7 +1228,6 @@ def _native_files_target(ctx, manifest, abi, dev):
     return _NATIVE_FILES_TEMPLATE.format(
         target = _NATIVE_FILES_TARGET.format(abi),
         abi = abi,
-        platform = bazel_platform(abi),
         deps = _recipe_contributions(ctx, manifest, dev),
         generated = _mode_list(generated, dev, ctx),
     )

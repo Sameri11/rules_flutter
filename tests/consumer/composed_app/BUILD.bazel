@@ -19,9 +19,9 @@ load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 load("@rules_java//java:defs.bzl", "java_import", "java_library")
 load("@rules_java//java:java_single_jar.bzl", "java_single_jar")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+load("//:embedding_deps.bzl", "EMBEDDING_DEPS")
 load(":direct_native.bzl", "direct_native")
 load(":native_files_test.bzl", "native_files_check")
-load("//:embedding_deps.bzl", "EMBEDDING_DEPS")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -312,10 +312,10 @@ filegroup(
 java_import(
     name = "direct_embedding",
     jars = [":direct_embedding_jar"],
-    deps = EMBEDDING_DEPS,
-    exports = EMBEDDING_DEPS,
     tags = ["manual"],
     visibility = ["//:__pkg__"],
+    exports = EMBEDDING_DEPS,
+    deps = EMBEDDING_DEPS,
 )
 
 direct_native(
@@ -339,28 +339,28 @@ cc_library(
 kt_android_library(
     name = "direct_activity",
     srcs = ["DirectActivity.kt"],
-    deps = [":direct_embedding"],
     tags = ["manual"],
+    deps = [":direct_embedding"],
 )
 
 android_binary(
     name = "direct_apk",
+    assets = [":direct_assets"],
+    assets_dir = "core_bundle_action",
     manifest = "AndroidManifest.xml",
     manifest_values = {
         "applicationId": "com.example.composed_app.direct",
         "minSdkVersion": "24",
         "targetSdkVersion": "36",
     },
-    assets = [":direct_assets"],
-    assets_dir = "core_bundle_action",
-    resource_files = [],
     nocompress_extensions = [".so"],
+    resource_files = [],
     deps = [
+        ":composed_aar",
+        ":composed_jni",
         ":direct_activity",
         ":direct_embedding",
         ":direct_native",
-        ":composed_aar",
-        ":composed_jni",
         "@composed_plugins//:generated_plugin_registrant",
     ],
 )

@@ -5,14 +5,14 @@ package(default_visibility = ["//visibility:public"])
 flutter_core(
     name = "app",
     assets = [],
+    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     # The local plugin's Dart sources. `greeter` is a path: dependency, so
     # pubspec.lock carries no hash for it and its content is otherwise an
     # undeclared input.
     path_deps = ["//packages/greeter:srcs"],
     # The committed segment lives at the module root, where MODULE.bazel includes it.
     plugin_deps = "//:plugin_deps.MODULE.bazel",
-    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
-    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     pub = "@pub",
 )
 

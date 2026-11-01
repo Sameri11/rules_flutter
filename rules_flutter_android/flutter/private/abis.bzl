@@ -49,7 +49,6 @@ def bazel_platform(abi):
 # declare a higher minimum than this.
 MIN_SDK = 21
 
-
 def check_abis(abis, where):
     """Fails with the supported set listed, rather than a KeyError.
 

@@ -40,7 +40,6 @@ a fixed value set, a typo names itself instead of surfacing later as a missing
 library.
 """
 
-
 visibility(["//flutter"])
 
 # `dart_aot_kernel`'s `target_os` names, not a second vocabulary. The list grows
@@ -183,4 +182,3 @@ bundle already carries the authoritative mapping -- but checked against
         ),
     },
 )
-

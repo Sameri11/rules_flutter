@@ -1047,8 +1047,6 @@ def _pub_hub_labels(pub, who):
         pub + "//:all",
     )
 
-
-
 def _lib_tier(ctx, pubspec):
     """Declares a package's lib tier, and the deps_lib its test kernels import.
 
@@ -1255,7 +1253,6 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
         assets = assets,
         **kwargs
     )
-
 
 def _bundle_dir(out, abi, index):
     """Where one ABI's bundle goes.
@@ -1703,4 +1700,3 @@ or upgraded. This is the guard, and it prints the file to write.""",
         ),
     },
 )
-

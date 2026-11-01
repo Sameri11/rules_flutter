@@ -24,7 +24,6 @@ load(":maven.bzl", "maven_label")
 
 visibility(["//flutter"])
 
-
 FLUTTER_EMBEDDING_ARTIFACTS = [
     "androidx.lifecycle:lifecycle-common:2.7.0",
     "androidx.lifecycle:lifecycle-common-java8:2.7.0",
@@ -64,4 +63,3 @@ def flutter_embedding_deps(maven_repo = "@flutter_maven"):
         maven_label(coordinate, repo = maven_repo)
         for coordinate in FLUTTER_EMBEDDING_ARTIFACTS
     ] + [maven_repo + dep for dep in _TRANSITIVE_DEPS]
-

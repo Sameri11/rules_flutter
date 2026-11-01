@@ -8,10 +8,10 @@ package(default_visibility = ["//visibility:public"])
 flutter_core(
     name = "app",
     srcs = glob(["lib/**/*.dart"]) + [":lib/gen_info.dart"],
+    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
     path_deps = ["//packages/mylib:srcs"],
     plugin_deps = "//:plugin_deps.MODULE.bazel",
-    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     pub = "@pub",
 )
 

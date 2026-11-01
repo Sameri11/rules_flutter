@@ -7,9 +7,9 @@ package(default_visibility = ["//visibility:public"])
 flutter_core(
     name = "app",
     assets = [],
+    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
     plugin_deps = "//:plugin_deps.MODULE.bazel",
-    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     pub = "@pub",
 )
 

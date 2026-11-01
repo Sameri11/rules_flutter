@@ -2,9 +2,8 @@
 # manifest, resources and sources.
 
 load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
-
 load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -17,43 +16,43 @@ filegroup(
 java_import(
     name = "flutter_embedding",
     jars = [":flutter_embedding_jar"],
-    deps = [
-        "@flutter_maven//:androidx_lifecycle_lifecycle_common",
-        "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
-        "@flutter_maven//:androidx_lifecycle_lifecycle_process",
-        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
-        "@flutter_maven//:androidx_fragment_fragment",
-        "@flutter_maven//:androidx_annotation_annotation",
-        "@flutter_maven//:androidx_tracing_tracing",
-        "@flutter_maven//:androidx_core_core",
-        "@flutter_maven//:androidx_window_window_java",
-        "@flutter_maven//:androidx_window_window",
-        "@flutter_maven//:androidx_exifinterface_exifinterface",
-        "@flutter_maven//:com_getkeepsafe_relinker_relinker",
-        "@flutter_maven//:androidx_annotation_annotation_jvm",
-    ],
     exports = [
+        "@flutter_maven//:androidx_annotation_annotation",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:androidx_fragment_fragment",
         "@flutter_maven//:androidx_lifecycle_lifecycle_common",
         "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
         "@flutter_maven//:androidx_lifecycle_lifecycle_process",
         "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
-        "@flutter_maven//:androidx_fragment_fragment",
-        "@flutter_maven//:androidx_annotation_annotation",
         "@flutter_maven//:androidx_tracing_tracing",
-        "@flutter_maven//:androidx_core_core",
-        "@flutter_maven//:androidx_window_window_java",
         "@flutter_maven//:androidx_window_window",
-        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:androidx_window_window_java",
         "@flutter_maven//:com_getkeepsafe_relinker_relinker",
+    ],
+    deps = [
+        "@flutter_maven//:androidx_annotation_annotation",
         "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:androidx_fragment_fragment",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_process",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
+        "@flutter_maven//:androidx_tracing_tracing",
+        "@flutter_maven//:androidx_window_window",
+        "@flutter_maven//:androidx_window_window_java",
+        "@flutter_maven//:com_getkeepsafe_relinker_relinker",
     ],
 )
 
 flutter_android_app(
     name = "pub_plugins",
     core = "//:app",
-    plugins = "@flutter_plugins",
     manifest_values = {"applicationId": "com.example.pub_plugins"},
+    plugins = "@flutter_plugins",
     deps = [":main_activity"],
 )
 

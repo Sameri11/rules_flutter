@@ -15,19 +15,6 @@ _platform = transition(
     outputs = ["//command_line_option:platforms"],
 )
 
-def strip_native_file(ctx, src, abi, toolchain):
-    out = ctx.actions.declare_file("{}/lib/{}/{}".format(ctx.label.name, abi, src.basename))
-    ctx.actions.run(
-        executable = toolchain.strip_executable,
-        arguments = ["--strip-unneeded", "-o", out.path, src.path],
-        inputs = [src],
-        tools = toolchain.all_files,
-        outputs = [out],
-        mnemonic = "AndroidNativeLibStrip",
-        progress_message = "Stripping {} for %{label}".format(src.basename),
-    )
-    return out
-
 def _native_files_impl(ctx):
     abi = check_platform_abi(ctx)
     toolchain = find_cpp_toolchain(ctx)
@@ -38,7 +25,17 @@ def _native_files_impl(ctx):
                 continue
             if src.basename in outputs:
                 fail("{}: duplicate native library {}".format(ctx.label, src.basename))
-            outputs[src.basename] = strip_native_file(ctx, src, abi, toolchain)
+            out = ctx.actions.declare_file("{}/lib/{}/{}".format(ctx.label.name, abi, src.basename))
+            ctx.actions.run(
+                executable = toolchain.strip_executable,
+                arguments = ["--strip-unneeded", "-o", out.path, src.path],
+                inputs = [src],
+                tools = toolchain.all_files,
+                outputs = [out],
+                mnemonic = "AndroidNativeLibStrip",
+                progress_message = "Stripping {} for %{label}".format(src.basename),
+            )
+            outputs[src.basename] = out
     if not outputs:
         fail("{}: sources produced no .so files".format(ctx.label))
     return [DefaultInfo(files = depset(outputs.values()))]

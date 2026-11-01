@@ -25,9 +25,9 @@ java_import(
         "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
         "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
     }),
-    deps = EMBEDDING_DEPS,
-    exports = EMBEDDING_DEPS,
     visibility = ["//visibility:public"],
+    exports = EMBEDDING_DEPS,
+    deps = EMBEDDING_DEPS,
 )
 
 exports_files(["build_config_probe.py"])
@@ -173,9 +173,9 @@ filegroup(
     srcs = [
         ":apk",
         ":apk_derived",
-        ":apk_no_plugin_natives",
-        ":apk_no_plugin_graph",
         ":apk_external_app",
+        ":apk_no_plugin_graph",
+        ":apk_no_plugin_natives",
         ":package_test",
     ],
 )
@@ -215,6 +215,7 @@ build_test(
     name = "apk_external_app_contents_test",
     targets = [":apk_external_app_contents_check"],
 )
+
 # External-plugin regression: dependency recipes are ignored, and generated
 # Maven labels use this project's mapping.
 pub_plugins_check(
@@ -310,4 +311,3 @@ build_test(
     name = "build_config_plugin_values_test",
     targets = [":build_config_plugin_values_check"],
 )
-
