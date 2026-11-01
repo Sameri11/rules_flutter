@@ -464,31 +464,11 @@ jobs:
         run: |
           ../../tools/ci/test_kernel_invariants.sh ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }}
 
-      # Hash gate builds the APKs below; tests run their target guards.
-      - name: bazel test //...
-        working-directory: ${{ matrix.example.directory }}
-        run: |
-          set -o pipefail
-          bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
-
-      # Host tests must not reach the Android SDK or NDK through any action input or environment.
-      - name: Host test closure has no Android SDK or NDK
+      # Kernel checks need worker spawns; the ABI sequence needs fresh production outputs.
+      - name: Reset measured ABI sequence
         if: matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app'
         working-directory: ${{ matrix.example.directory }}
-        run: |
-          set -euo pipefail
-          bazel aquery 'deps(kind(".*_test rule", //...) except //android/...)' \
-            --output=jsonproto --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} > "$RUNNER_TEMP/host_test_aquery.json"
-          python3 ../../tools/ci/host_test_closure.py "$RUNNER_TEMP/host_test_aquery.json"
-
-      # The update target is manual, so bazel test never builds it. Building it
-      # keeps its launcher compiling without writing goldens.
-      - name: bazel build golden update target
-        if: matrix.example.directory == 'examples/demo_app'
-        working-directory: ${{ matrix.example.directory }}
-        run: |
-          set -o pipefail
-          bazel build //:test/golden_test_update_goldens --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_golden_${{ matrix.example.name }}.log
+        run: bazel clean --expunge
 
       # Query declared targets first so stale or omitted configured labels fail.
       # Raw APK and canonical entry hashes distinguish content from ZIP-layout
@@ -501,6 +481,33 @@ jobs:
           python3 tools/ci/example_hashes.py --check --only ${{ matrix.example.name }} \
             --golden tools/ci/example_hashes_${{ matrix.os == 'ubuntu-latest' && 'linux' || 'macos' }}.txt \
             2>&1 | tee bazel_example_hash_${{ matrix.example.name }}.log
+
+      # Collect APK execution evidence before test targets populate their outputs.
+      - name: bazel test //...
+        if: ${{ !cancelled() }}
+        working-directory: ${{ matrix.example.directory }}
+        run: |
+          set -o pipefail
+          bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+
+      # Host tests must not reach the Android SDK or NDK through any action input or environment.
+      - name: Host test closure has no Android SDK or NDK
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app' }}
+        working-directory: ${{ matrix.example.directory }}
+        run: |
+          set -euo pipefail
+          bazel aquery 'deps(kind(".*_test rule", //...) except //android/...)' \
+            --output=jsonproto --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} > "$RUNNER_TEMP/host_test_aquery.json"
+          python3 ../../tools/ci/host_test_closure.py "$RUNNER_TEMP/host_test_aquery.json"
+
+      # The update target is manual, so bazel test never builds it. Building it
+      # keeps its launcher compiling without writing goldens.
+      - name: bazel build golden update target
+        if: ${{ !cancelled() && matrix.example.directory == 'examples/demo_app' }}
+        working-directory: ${{ matrix.example.directory }}
+        run: |
+          set -o pipefail
+          bazel build //:test/golden_test_update_goldens --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_golden_${{ matrix.example.name }}.log
 
       # Upload after failures so changed bundle entries and bytes remain
       # diagnosable; raw APKs enable byte-for-byte cross-OS comparison.

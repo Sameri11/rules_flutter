@@ -222,6 +222,7 @@ def collect(bazel: str, manifests: Path, build: bool, only: str | None) -> list[
         if build:
             run(
                 [bazel, "build",
+                 "--disk_cache=", "--worker_quit_after_build",
                  "--execution_log_json_file={}".format(execution_log),
                  *flags, target],
                 module,
