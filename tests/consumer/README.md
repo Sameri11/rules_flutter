@@ -104,7 +104,9 @@ plugin and plugin-free packaging.
 syntax coverage. They are not in any `pubspec.lock`, so no `pub.lock` hub
 describes them. `fixtures/plugin_fixture.bzl` is a small repository rule that
 writes the two hub files `plugins.project` reads (`plugins_metadata.json`,
-`package_config.json`) for this fixture set.
+`package_config.json`) and exposes the root pub hub's mode-specific Android
+registrants for this fixture set. These syntax fixtures declare no Flutter
+registrations in their pubspecs.
 
 This proves two
 things nothing else here can, because this module reaches the ruleset the

@@ -10,7 +10,7 @@ def _root_uri(marker):
     return "../../" + "/".join([s for s in directory.split("/") if s]) + "/"
 
 def _namespace_plugin_metadata_impl(ctx):
-    """Generate pub metadata for namespace and BuildConfig fixtures."""
+    """Generate pub metadata and expose mode-specific Android registrants."""
     plugins = []
     for name, marker in [
         ("namespace_bare", ctx.attr.bare_marker),
@@ -53,14 +53,32 @@ def _namespace_plugin_metadata_impl(ctx):
             ],
         }),
     )
+    for mode, registrant in [
+        ("debug", ctx.attr.debug_registrant),
+        ("release", ctx.attr.release_registrant),
+    ]:
+        ctx.symlink(ctx.path(registrant), "android/{}/GeneratedPluginRegistrant.java".format(mode))
     ctx.file(
         "BUILD.bazel",
-        "exports_files([\"plugins_metadata.json\", \"package_config.json\"])\n",
+        "exports_files({})\n".format(repr([
+            "plugins_metadata.json",
+            "package_config.json",
+            "android/debug/GeneratedPluginRegistrant.java",
+            "android/release/GeneratedPluginRegistrant.java",
+        ])),
     )
 
 namespace_plugin_metadata = repository_rule(
     implementation = _namespace_plugin_metadata_impl,
     attrs = {
+        "debug_registrant": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+        ),
+        "release_registrant": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+        ),
         "bare_marker": attr.label(
             allow_single_file = True,
             mandatory = True,
