@@ -23,7 +23,7 @@ jobs:
           bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
       - name: Run composition checks
         run: python3 tools/ci/composition_probe.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: composition-results

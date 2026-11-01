@@ -122,6 +122,7 @@ def main():
         print("PASS: direct output groups, eight APK ABI/mode checks, raw AAR bytes, jar-free graphs, wildcard and planted failures", flush=True)
     finally:
         subprocess.run(["bazel", "shutdown"], cwd=CONSUMER, check=False)
+        shutil.copyfile(CONSUMER / "MODULE.bazel.lock", RESULT / "MODULE.bazel.lock")
 
 
 if __name__ == "__main__":
