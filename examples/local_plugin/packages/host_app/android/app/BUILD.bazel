@@ -1,23 +1,57 @@
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+load("@rules_java//java:defs.bzl", "java_import")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_embedding_library(name = "flutter_embedding")
+java_import(
+    name = "flutter_embedding",
+    jars = select({
+        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
+        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
+    }),
+    exports = [
+        "@flutter_maven//:androidx_annotation_annotation",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:androidx_fragment_fragment",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_process",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
+        "@flutter_maven//:androidx_tracing_tracing",
+        "@flutter_maven//:androidx_window_window",
+        "@flutter_maven//:androidx_window_window_java",
+        "@flutter_maven//:com_getkeepsafe_relinker_relinker",
+    ],
+    deps = [
+        "@flutter_maven//:androidx_annotation_annotation",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:androidx_fragment_fragment",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_process",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
+        "@flutter_maven//:androidx_tracing_tracing",
+        "@flutter_maven//:androidx_window_window",
+        "@flutter_maven//:androidx_window_window_java",
+        "@flutter_maven//:com_getkeepsafe_relinker_relinker",
+    ],
+)
 
-flutter_android_binary(
+flutter_android_app(
     name = "host_app",
-    abis = ["arm64-v8a"],
-    # A named package this time, so the plain spelling works -- unlike the flat
-    # examples, which must write "//:app" because the root package has no
-    # shorthand.
-    app = "//packages/host_app",
+    core = "//packages/host_app:app",
     manifest_values = {"applicationId": "com.example.host_app"},
+    plugins = "@flutter_plugins",
     deps = [":main_activity"],
 )
 
 kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/host_app/MainActivity.kt"],
-    deps = [":flutter_embedding"],
+    deps = [":host_app_inputs"],
 )

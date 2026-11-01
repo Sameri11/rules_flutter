@@ -15,6 +15,12 @@ exports_files(
     visibility = ["//tools/ci:__pkg__"],
 )
 
+# Generated plugin BUILD files use the ABI-pinned raw strip bridge.
+exports_files(
+    ["native_strip.bzl"],
+    visibility = ["//visibility:public"],
+)
+
 # Attribute defaults of rules defined under //flutter. Those rules are
 # instantiated in consumer packages, so //flutter:__subpackages__ is enough.
 exports_files(
@@ -25,8 +31,8 @@ exports_files(
     visibility = ["//flutter:__subpackages__"],
 )
 
-# The empty registrant flutter_android_binary compiles for a plugin-free app.
-# The macro expands in the consumer's package, so the file must be public.
+# The empty registrant is compiled for a plugin-free app.
+# The generated rule is instantiated in the consumer's package.
 exports_files(
     ["registrant/GeneratedPluginRegistrant.java"],
     visibility = ["//visibility:public"],

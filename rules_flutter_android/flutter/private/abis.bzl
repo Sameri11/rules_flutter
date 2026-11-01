@@ -49,33 +49,6 @@ def bazel_platform(abi):
 # declare a higher minimum than this.
 MIN_SDK = 21
 
-# The generated plugin repository's per-slice aggregates. plugins.bzl emits these
-# target names and android.bzl derives labels for them, so the contract lives
-# here rather than as a string that happens to match in two files.
-_PLUGIN_REPO_TARGETS = {
-    # Every .so a package *recipe* contributed for one ABI.
-    "recipe_libraries": "native_libs_{}",
-    # Every .so the native *plugins* built for one ABI.
-    "plugin_native_libraries": "plugin_libs_{}",
-}
-
-def plugin_repo_target(kind, abi):
-    """Target name in @flutter_plugins holding one ABI's libraries.
-
-    Args:
-      kind: a key of _PLUGIN_REPO_TARGETS -- the contribution kind it feeds.
-      abi: the ABI whose aggregate is wanted.
-
-    Returns:
-      A bare target name, without a repository or package.
-    """
-    if kind not in _PLUGIN_REPO_TARGETS:
-        fail("plugin_repo_target: unknown kind '{}'. Known: {}.".format(
-            kind,
-            sorted(_PLUGIN_REPO_TARGETS),
-        ))
-    return _PLUGIN_REPO_TARGETS[kind].format(abi)
-
 def check_abis(abis, where):
     """Fails with the supported set listed, rather than a KeyError.
 

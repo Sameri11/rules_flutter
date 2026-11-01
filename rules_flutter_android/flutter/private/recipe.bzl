@@ -40,8 +40,6 @@ a fixed value set, a typo names itself instead of surfacing later as a missing
 library.
 """
 
-load(":archive.bzl", "ZIPPER_ATTRS", "deterministic_jar")
-
 visibility(["//flutter"])
 
 # `dart_aot_kernel`'s `target_os` names, not a second vocabulary. The list grows
@@ -181,126 +179,6 @@ bundle already carries the authoritative mapping -- but checked against
         "empty": attr.bool(
             default = False,
             doc = "Assert deliberately that this package contributes no library.",
-        ),
-    },
-)
-
-def _flutter_native_libs_impl(ctx):
-    # Android's packaging shape, and only Android's: this stages `lib/<slice>/`
-    # and zips a jar, because that is how android_binary finds native libraries
-    # on the classpath. An Apple slice needs a framework inside a bundle, which
-    # is a different action, not a different attribute value -- so `ios` is
-    # refused here rather than silently producing an Android-shaped jar that
-    # nothing on Apple would read.
-    if ctx.attr.platform != "android":
-        fail(("{}: flutter_native_libs packages Android jars, but platform is " +
-              "'{}'. The Apple bundle step does not exist yet; contributions " +
-              "for it are declared (flutter_native_contribution) but cannot be " +
-              "aggregated.").format(ctx.label, ctx.attr.platform))
-
-    jar = ctx.actions.declare_file(ctx.label.name + ".jar")
-
-    # A contribution for another platform reaching this aggregate is a recipe
-    # bug. Filtering it out silently would yield a bundle missing a library --
-    # the failure this file exists to prevent -- so it is named here.
-    for d in ctx.attr.deps:
-        got = d[FlutterNativeInfo].platform
-        if got != ctx.attr.platform:
-            fail("{}: contribution {} targets platform '{}', but this bundle is '{}'.".format(
-                ctx.label,
-                d.label,
-                got,
-                ctx.attr.platform,
-            ))
-
-    libs = depset(transitive = [
-        d[FlutterNativeInfo].libraries.get(ctx.attr.slice, depset())
-        for d in ctx.attr.deps
-    ]).to_list()
-
-    # Contributing something, but nothing for the slice being built, is not the
-    # same as deliberately contributing nothing.
-    for d in ctx.attr.deps:
-        have = d[FlutterNativeInfo].libraries
-        if have and ctx.attr.slice not in have:
-            fail("{}: contribution {} has no library for slice '{}'; it has {}.".format(
-                ctx.label,
-                d.label,
-                ctx.attr.slice,
-                sorted(have),
-            ))
-
-    # Two packages shipping the same soname would silently clobber each other
-    # inside the jar, and whichever won would be a coin flip across rebuilds.
-    # Scoped to one slice: a package legitimately ships the same soname per
-    # ABI, and comparing across slices would reject that.
-    seen = {}
-    for f in libs:
-        if f.basename in seen:
-            fail("Two recipes contribute {}: {} and {}".format(
-                f.basename,
-                seen[f.basename].path,
-                f.path,
-            ))
-        seen[f.basename] = f
-
-    entries = {
-        "lib/{}/{}".format(ctx.attr.slice, basename): f
-        for basename, f in seen.items()
-    }
-
-    # Keep an empty jar for unconditional java_import consumers.
-    if not entries:
-        entries = {"lib/{}/".format(ctx.attr.slice): None}
-
-    # Same mechanism as jni_lib_jar: android_binary extracts lib/<abi>/*.so from
-    # jars on the classpath, which is how the prebuilt engine artifact ships
-    # libflutter.so and how libapp.so is packaged. Recipe output rides the same
-    # path rather than needing one of its own.
-    #
-    # Not stripped, deliberately -- unlike android_native_lib_jar, which strips
-    # what it just compiled, these are vendor prebuilts. Stripping them would
-    # need a cc_toolchain (and so a platform transition) to reach llvm-strip, to
-    # discard symbols the vendor already chose to ship.
-    deterministic_jar(
-        ctx,
-        jar = jar,
-        entries = entries,
-        mnemonic = "FlutterNativeLibs",
-        progress_message = "Packaging recipe native libraries %{label}",
-    )
-
-    # A plain jar. The generated repo wraps it in java_import, exactly as
-    # app/android/app does for libapp.so -- constructing JavaInfo here would
-    # duplicate that for no gain.
-    return [DefaultInfo(files = depset([jar]))]
-
-flutter_native_libs = rule(
-    implementation = _flutter_native_libs_impl,
-    doc = """Collects every recipe's native libraries into one jar for android_binary.
-
-Instantiated in the generated @flutter_plugins repository, not written by hand,
-and wrapped there in a java_import the app can depend on directly.""",
-    attrs = ZIPPER_ATTRS | {
-        "deps": attr.label_list(
-            providers = [FlutterNativeInfo],
-            doc = "flutter_native_contribution targets, one per recipe.",
-        ),
-        "platform": attr.string(
-            default = "android",
-            values = PLATFORMS,
-            doc = "Platform being bundled; contributions must agree.",
-        ),
-        "slice": attr.string(
-            mandatory = True,
-            doc = """Which slice of each contribution to take, and on Android the
-lib/<abi>/ directory libraries are packaged under. See FlutterNativeInfo.
-
-Mandatory: a default here packages one architecture's libraries as another's,
-which nothing downstream can detect.
-
-Not checked against abi_from_platform: this rule does not transition --platforms,
-so its ambient configuration is the caller's, not this slice's.""",
         ),
     },
 )

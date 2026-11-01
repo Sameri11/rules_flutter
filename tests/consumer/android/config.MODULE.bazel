@@ -2,6 +2,7 @@ bazel_dep(name = "external_app", version = "0.0.1")
 bazel_dep(name = "rules_java", version = "9.3.0")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
@@ -76,8 +77,11 @@ namespace_plugin_metadata(
     bare_marker = "//:fixtures/namespace_bare/pubspec.yaml",
     build_config_marker = "//:fixtures/build_config_plugin/pubspec.yaml",
     call_marker = "//:fixtures/namespace_call/pubspec.yaml",
+    # These syntax fixtures declare no Flutter registrations in their pubspecs.
+    debug_registrant = "@pub//:android/debug/GeneratedPluginRegistrant.java",
     fake_marker = "//:fixtures/fake_plugin/pubspec.yaml",
     guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
+    release_registrant = "@pub//:android/release/GeneratedPluginRegistrant.java",
 )
 
 plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")

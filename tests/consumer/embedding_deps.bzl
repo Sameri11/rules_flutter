@@ -1,0 +1,17 @@
+"""Consumer-owned compile dependencies for the Flutter embedding."""
+
+EMBEDDING_DEPS = [
+    "@flutter_maven//:androidx_lifecycle_lifecycle_common",
+    "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
+    "@flutter_maven//:androidx_lifecycle_lifecycle_process",
+    "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
+    "@flutter_maven//:androidx_fragment_fragment",
+    "@flutter_maven//:androidx_annotation_annotation",
+    "@flutter_maven//:androidx_tracing_tracing",
+    "@flutter_maven//:androidx_core_core",
+    "@flutter_maven//:androidx_window_window_java",
+    "@flutter_maven//:androidx_window_window",
+    "@flutter_maven//:androidx_exifinterface_exifinterface",
+    "@flutter_maven//:com_getkeepsafe_relinker_relinker",
+    "@flutter_maven//:androidx_annotation_annotation_jvm",
+]

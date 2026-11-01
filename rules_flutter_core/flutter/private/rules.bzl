@@ -25,11 +25,9 @@ their keys and outputs do not depend on where the packages sit. The flutter
 tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 """
 
-load("@bazel_skylib//lib:shell.bzl", "shell")
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS", "aot_target_compatible_with", "check_abis")
-load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
+load(":abis.bzl", "ABIS")
+load(":pubspec.bzl", "FlutterPubspecInfo")
 
 visibility(["//flutter"])
 
@@ -1048,135 +1046,6 @@ def _pub_hub_labels(pub, who):
         pub + "//:all",
     )
 
-def flutter_aot_library(name, srcs, abis, pubspec, entrypoint, pub, path_deps = [], dart_plugin_registrant = None, target_os = "android", strip = True, dart_defines = {}, **kwargs):
-    """Convenience wrapper: Dart sources straight through to libapp.so.
-
-    Produces an AOT-shaped `.dill` and its `libapp.so` per ABI. The kernel is
-    `dart_aot_kernel`, which compiles `--aot --tfa` only. Both it and each
-    `dart_aot_elf` are `target_compatible_with` only the modes `AOT_MODES` lists,
-    so under `mode=debug` this target reports incompatibility rather than
-    building a kernel gen_snapshot rejects.
-
-    Also declares `<name>_jit_kernel`, the debug (JIT) kernel: a manual
-    `dart_jit_kernel` over the same sources, which the debug overlay in
-    `flutter_android_binary` ships as `kernel_blob.bin`. It is mode-independent
-    and so not restricted by `target_compatible_with`. See
-    docs_internal/build-modes-plan.md.
-
-    Every rule-specific attribute is a named parameter here, and **kwargs
-    carries only what both targets should share -- visibility, tags,
-    `target_compatible_with`. Forwarding kwargs to both instead means an
-    attribute that exists on only one of them cannot be passed at all, which
-    stops being a footnote as soon as either rule grows a per-platform or
-    per-ABI attribute. `target_compatible_with` is the one exception: each
-    `dart_aot_elf` already sets it (see below), so a caller-supplied value is
-    pulled out of kwargs once and concatenated in rather than passed twice.
-
-    `abis` is required and always a list. There is no default: one would mean a
-    consumer ships a single ABI, or three, without ever saying which.
-
-    Produces `<name>_<abi>` per entry, and no `<name>` -- an unsuffixed target
-    would have to pick an ABI silently.
-
-    Args:
-      name: prefix for the generated targets.
-      srcs: Dart sources, for change detection.
-      abis: Android ABIs to snapshot for. Required, always a list.
-      pubspec: a flutter_pubspec target; supplies the package name.
-      entrypoint: the app's entrypoint under lib/, as a label.
-      pub: the `pub.lock` hub repository, e.g. `"@pub"`: its package config and
-        hosted package files are the compile's package inputs.
-      path_deps: sources of `path:` dependencies.
-      dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
-      target_os: OS the kernel is compiled for; see dart_aot_kernel.
-      strip: drop DWARF from each ELF.
-      dart_defines: `-D` constants the kernel compiles with; see dart_aot_kernel.dart_defines.
-      **kwargs: shared rule attributes.
-    """
-    check_abis(abis, "flutter_aot_library " + name)
-    package_config, _, pub_lib, _ = _pub_hub_labels(pub, "flutter_aot_library " + name)
-
-    # Avoid passing target_compatible_with twice.
-    caller_compatible_with = kwargs.pop("target_compatible_with", [])
-
-    dart_aot_kernel(
-        name = name + "_kernel",
-        srcs = srcs,
-        pubspec = pubspec,
-        entrypoint = entrypoint,
-        package_config = package_config,
-        pub_srcs = [pub_lib],
-        path_deps = path_deps,
-        dart_plugin_registrant = dart_plugin_registrant,
-        target_os = target_os,
-        dart_defines = dart_defines,
-        target_compatible_with = caller_compatible_with + aot_target_compatible_with(),
-        **kwargs
-    )
-
-    # The debug kernel. It reads no mode, so it is the same action under either
-    # one; manual keeps it out of `//...`. Only the debug overlay reaches it.
-    dart_jit_kernel(
-        name = name + "_jit_kernel",
-        srcs = srcs,
-        pubspec = pubspec,
-        entrypoint = entrypoint,
-        package_config = package_config,
-        pub_srcs = [pub_lib],
-        path_deps = path_deps,
-        dart_plugin_registrant = dart_plugin_registrant,
-        dart_defines = dart_defines,
-        target_compatible_with = caller_compatible_with,
-        **_internal_kwargs(kwargs)
-    )
-
-    # One kernel feeds every ABI: the kernel is architecture-independent, and
-    # only the platform axis fans it out (see dart_aot_kernel's target_os).
-    for abi in abis:
-        dart_aot_elf(
-            name = "{}_{}".format(name, abi),
-            dill = ":" + name + "_kernel",
-            abi = abi,
-            snapshot_flags = ABIS[abi].snapshot_flags,
-            strip = strip,
-            # AOT targets are incompatible with debug; retain caller constraints.
-            target_compatible_with = caller_compatible_with + aot_target_compatible_with(),
-            **kwargs
-        )
-
-# Sentinel distinguishes the default from an explicit `None`.
-_DEFAULT_DART_PLUGIN_REGISTRANT = struct()
-
-# Keep macro-internal targets out of wildcard roots.
-def _internal_tags(kwargs):
-    tags = list(kwargs.get("tags", []))
-    if "manual" not in tags:
-        tags.append("manual")
-    return tags
-
-def _internal_kwargs(kwargs):
-    internal = dict(kwargs)
-    internal["tags"] = _internal_tags(kwargs)
-    return internal
-
-def _workspace_label(label):
-    """Resolve a committed destination and reject external repositories."""
-    requested = str(label)
-    label = native.package_relative_label(label)
-    workspace = native.package_relative_label("//:__pkg__")
-    if label.repo_name != workspace.repo_name:
-        fail(
-            (
-                "flutter_app: destination label {} belongs to repository {}, but " +
-                "BUILD_WORKSPACE_DIRECTORY can only update files in the invoking " +
-                "workspace."
-            ).format(
-                requested,
-                label.repo_name,
-            ),
-        )
-    return label
-
 def _lib_tier(ctx, pubspec):
     """Declares a package's lib tier, and the deps_lib its test kernels import.
 
@@ -1350,13 +1219,14 @@ _flutter_package = rule(
 def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = None, **kwargs):
     """The inputs a host test reads from a Dart package, with no app build.
 
-    Declares no app build. `flutter_app` declares one as `:app`; a package without
-    an app declares one by hand, as the conformance suite does:
+    Declares no app build. `flutter_core` declares a core artifact; a package
+    without an app declares a pubspec and package by hand, as the conformance
+    suite does:
 
         flutter_pubspec(name = "pubspec")
         flutter_package(name = "pkg", pub = "@pub", pubspec = ":pubspec")
 
-    `pub` is the `pub.lock` hub of the package's dependencies, as for flutter_app.
+    `pub` is the `pub.lock` hub of the package's dependencies.
 
     Args:
       name: the target's name.
@@ -1380,262 +1250,6 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
         pub_srcs = [pub_lib],
         path_deps = path_deps,
         assets = assets,
-        **kwargs
-    )
-
-# buildifier: disable=unnamed-macro
-# Target names are fixed: Android packaging derives them from the package.
-def flutter_app(
-        abis = None,
-        path_deps = [],
-        srcs = None,
-        assets = None,
-        entrypoint = "lib/main.dart",
-        dart_plugin_registrant = _DEFAULT_DART_PLUGIN_REGISTRANT,
-        pub = None,
-        plugin_deps = "//:plugin_deps.MODULE.bazel",
-        target_os = "android",
-        dart_defines = {},
-        native_build_env = None,
-        **kwargs):
-    """The Dart half of a Flutter app: one call, in the app's own package.
-
-    Everything a standard `flutter create` layout fixes is a default here -- the
-    entrypoint, the source and asset globs, the committed Dart registrant, and
-    pubspec.yaml. What is left is what only the app knows:
-
-        flutter_app(
-            abis = ["arm64-v8a"],
-            path_deps = ["//packages/mylib:srcs"],
-            pub = "@pub",
-        )
-
-    `pub` is the hub of the app's `pubspec.lock`, declared in MODULE.bazel:
-
-        pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
-        pub.lock(name = "pub", lock = "//:pubspec.lock")
-        use_repo(pub, "pub")
-
-    `flutter pub get` is only how the lock is updated: no action reads
-    `.dart_tool/` or `.flutter-plugins-dependencies`.
-
-    Produces, in the calling package:
-
-    | target | what |
-    | --- | --- |
-    | `:pubspec` | the package name and version, read once from pubspec.yaml |
-    | `:app` | the package inputs `flutter_test(app = ...)` reads: pubspec, `lib/` sources, pub hub, `path_deps`, and `:test_assets` |
-    | `:app_<abi>` | the AOT snapshot per ABI; release only |
-    | `:app_jit_kernel` | the debug kernel, from flutter_aot_library; manual, shipped as `kernel_blob.bin` by the debug overlay |
-    | `:assets` | the flutter_assets bundle, built for every ABI; no app Dart inputs, the same under every mode |
-    | `:test_assets` | the bundle host tests read, for flutter_tester's platform; no ABIs and no Android SDK. Override it with `flutter_package(assets = ...)` |
-    | `:path_deps_check` | fails if a `path:` dependency is undeclared |
-    | `:plugins_check` | fails if the committed Maven coordinates drifted |
-    | `:plugins_update` | writes the generated Maven segment into the workspace |
-    | `:dart_registrant_check` | fails if the committed registrant drifted |
-    | `:dart_registrant_update` | writes the generated registrant into the workspace |
-    | `:guards_test` | the guards, under `bazel test` |
-
-    Under `--@rules_flutter_core//flutter:mode=debug`, `:app_<abi>` reports
-    incompatibility. The debug overlay in `flutter_android_binary` ships
-    `:app_jit_kernel` and the host-engine snapshots next to `:assets`; see
-    docs_internal/build-modes-plan.md.
-
-    The names are fixed rather than derived from a `name` parameter: the Android
-    half computes them from the package (`flutter_android_binary(app = "//app")`),
-    so a second spelling here would only be a way to break that agreement.
-
-    `abis` has no default, here as everywhere: it is the one fact about an app
-    that these rules cannot infer, and a default would mean shipping one ABI, or
-    three, without ever saying which. It is an Android ABI list today; a second
-    platform adds its own dimension rather than overloading this one.
-
-    With the default, an app with no plugin graph (`plugin_deps = None`) has no
-    Dart registrant; an app with one uses the conventional committed
-    `lib/dart_plugin_registrant.dart`. Pass `dart_plugin_registrant = None` to
-    opt out explicitly, including in a project that otherwise has a plugin
-    graph. An explicitly supplied label remains the committed registrant guard.
-
-    Args:
-      abis: Android ABIs to build for. Required, always a list.
-      path_deps: sources of `path:` dependencies -- the one input nothing else
-        observes, which is why `:path_deps_check` exists.
-      srcs: Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
-      assets: declared assets. Defaults to `glob(["assets/**"])`.
-      entrypoint: the app's entrypoint under lib/. It drives the app's kernels
-        (`:app_<abi>`, `:app_jit_kernel`) only. `:assets` compiles nothing, so
-        it does not depend on the entrypoint.
-      dart_plugin_registrant: the committed Dart registrant, or None.
-      pub: the `pub.lock` hub repository, e.g. `"@pub"`. Required: it supplies
-        the package config and every hosted package, for the compile and the
-        bundle alike.
-      plugin_deps: the committed Maven segment MODULE.bazel includes, which
-        `:plugins_check` compares against the generated one. Repo-root by
-        convention because that is where `include()` reads it from; `None` for a
-        project with no plugin graph, which drops the two guards over it.
-      target_os: OS the kernel is compiled for; see dart_aot_kernel.
-      dart_defines: `-D` constants both kernels compile with, e.g. {"FOO": "bar"}.
-        Read only through `const String.fromEnvironment(...)`; see
-        dart_aot_kernel.dart_defines.
-      native_build_env: a `native_build_env` target whose shell exports the native
-        build hooks run under, e.g. the Android SDK's. None exports nothing.
-      **kwargs: visibility, tags -- passed to every target declared here.
-    """
-    check_abis(abis, "flutter_app")
-
-    # `name` used to be a parameter that could not vary: the Android half derives
-    # `//<pkg>:app`, `:assets` and `:pubspec` from the package, so a different
-    # prefix here produced targets the APK never asked for. Refused by name
-    # rather than colliding downstream in flutter_aot_library's own `name`.
-    if "name" in kwargs:
-        fail(
-            "flutter_app: no `name` -- it declares `:app`, `:assets`, " +
-            "`:pubspec` and the guards by convention, because " +
-            "flutter_android_binary(app = ...) derives those names from the " +
-            "package. One Flutter app per package, as one pubspec per package.",
-        )
-
-    # This is deliberately a *standard-layout* macro. flutter_tools has no
-    # `--pubspec` or `--package-config-path` option for `build bundle`: it reads
-    # pubspec.yaml and .dart_tool/package_config.json from the staged project
-    # root, where the action stages the pub hub's project config. Name the
-    # unsupported knobs rather than forwarding them through **kwargs to an
-    # unrelated target and failing opaquely.
-    for unsupported in ("pubspec", "package_config"):
-        if unsupported in kwargs:
-            fail(
-                (
-                    "flutter_app: no `{}` override -- {}. Use the lower-level " +
-                    "rules if the Dart half alone has a nonstandard layout."
-                ).format(
-                    unsupported,
-                    "`flutter build bundle` reads the standard-layout pubspec.yaml " +
-                    "and exposes no option to relocate it" if unsupported == "pubspec" else "the package " +
-                                                                                            "config is the `pub` hub's, passed as `pub = \"@hub\"`",
-                ),
-            )
-    if not pub:
-        fail(
-            "flutter_app: `pub` is required, the `pub.lock` hub of this app's pubspec.lock, " +
-            "e.g. pub = \"@pub\". See the flutter_app docstring for the MODULE.bazel lines.",
-        )
-    _, project_package_config, _, pub_all = _pub_hub_labels(pub, "flutter_app")
-
-    if dart_plugin_registrant == _DEFAULT_DART_PLUGIN_REGISTRANT:
-        dart_plugin_registrant = None if plugin_deps == None else "lib/dart_plugin_registrant.dart"
-
-    if srcs == None:
-        srcs = native.glob(["lib/**/*.dart"])
-    if assets == None:
-        assets = native.glob(["assets/**"])
-
-    flutter_pubspec(src = "pubspec.yaml", **kwargs)
-
-    flutter_aot_library(
-        name = "app",
-        srcs = srcs,
-        abis = abis,
-        pubspec = ":pubspec",
-        entrypoint = entrypoint,
-        pub = pub,
-        path_deps = path_deps,
-        dart_plugin_registrant = dart_plugin_registrant,
-        target_os = target_os,
-        dart_defines = dart_defines,
-        **kwargs
-    )
-
-    flutter_assets(
-        name = "assets",
-        abis = abis,
-        assets = assets,
-        native_build_env = native_build_env,
-        pubspec = ":pubspec",
-        package_config = project_package_config,
-        pub_srcs = [pub_all],
-        path_deps = path_deps,
-        **kwargs
-    )
-
-    flutter_test_assets(
-        name = "test_assets",
-        assets = assets,
-        pubspec = ":pubspec",
-        package_config = project_package_config,
-        pub_srcs = [pub_all],
-        path_deps = path_deps,
-        **kwargs
-    )
-
-    flutter_package(
-        name = "app",
-        pub = pub,
-        pubspec = ":pubspec",
-        srcs = srcs,
-        path_deps = path_deps,
-        assets = ":test_assets",
-        **kwargs
-    )
-
-    # The guards. Emitted rather than asked for: each one exists because its
-    # absence was a silent failure once, and a guard a consumer has to remember
-    # to instantiate is a guard that eventually is not there.
-    pub_path_deps_check(
-        name = "path_deps_check",
-        path_deps = path_deps,
-        pubspec_lock = "pubspec.lock",
-        **kwargs
-    )
-
-    guards = [":path_deps_check"]
-
-    # Both halves of the generated repo that a project commits: the Maven
-    # coordinate segment MODULE.bazel includes, and the Dart registrant that
-    # needs a `package:` URI and so cannot be consumed from the repo itself.
-    # Both compare against @flutter_plugins, so both are skipped by a project
-    # that has no such repo -- rather than making the macro uninstantiable there.
-    if plugin_deps:
-        plugin_deps_label = _workspace_label(plugin_deps)
-        pub_plugins_check(
-            name = "plugins_check",
-            committed = plugin_deps_label,
-            expected = "@flutter_plugins//:plugin_deps.MODULE.bazel",
-            updater = ":plugins_update",
-            **kwargs
-        )
-        guards.append(":plugins_check")
-
-        _write_source_file(
-            name = "plugins_update",
-            source = "@flutter_plugins//:plugin_deps.MODULE.bazel",
-            destination = plugin_deps_label,
-            **_internal_kwargs(kwargs)
-        )
-
-        if dart_plugin_registrant:
-            registrant_label = _workspace_label(dart_plugin_registrant)
-            pub_plugins_check(
-                name = "dart_registrant_check",
-                committed = registrant_label,
-                expected = "@flutter_plugins//:dart_plugin_registrant.dart",
-                updater = ":dart_registrant_update",
-                **kwargs
-            )
-            guards.append(":dart_registrant_check")
-
-            _write_source_file(
-                name = "dart_registrant_update",
-                source = "@flutter_plugins//:dart_plugin_registrant.dart",
-                destination = registrant_label,
-                **_internal_kwargs(kwargs)
-            )
-
-    # The guards fail as *actions*, which is stronger than a test: anything
-    # depending on one fails too, and the result is remote-cacheable. build_test
-    # does not change that -- it only gives `bazel test` a reason to build them.
-    build_test(
-        name = "guards_test",
-        targets = guards,
         **kwargs
     )
 
@@ -1831,8 +1445,8 @@ NOTICES.Z, fonts, shaders, declared assets) for packaging into an APK.
 Mode-independent, and free of app Dart: it takes no sources, entrypoint or kernel, and
 its action key is the same under every `//flutter:mode`. flutter_tools still compiles the
 stub's package closure for record-use, so SDK and pub/path `.dart` are inputs; app `lib/`
-is not. The debug kernel and snapshots are not part of it: the debug overlay in
-flutter_android_binary adds them.
+is not. The debug kernel and snapshots are not part of it: the core's debug
+asset bundle adds them.
 
 It fails, when the action runs, on a pubspec with `deferred-components:` or an
 asset `transformers:`: rules_flutter supports neither.
@@ -2082,92 +1696,6 @@ or upgraded. This is the guard, and it prints the file to write.""",
         ),
         "updater": attr.label(
             doc = "Optional updater command to print when this guard drifts.",
-        ),
-    },
-)
-
-_WRITE_SOURCE_FILE_SCRIPT = """#!/usr/bin/env bash
-# Bazel Bash runfiles initialization.
-set -uo pipefail; set +e; f=bazel_tools/tools/bash/runfiles/runfiles.bash
-# shellcheck disable=SC1090
-source "${{RUNFILES_DIR:-/dev/null}}/$f" 2>/dev/null || \\
-  source "$(grep -sm1 "^$f " "${{RUNFILES_MANIFEST_FILE:-/dev/null}}" | cut -f2- -d' ')" 2>/dev/null || \\
-  source "$0.runfiles/$f" 2>/dev/null || \\
-  source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
-  source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
-  {{ echo>&2 "ERROR: cannot find $f"; exit 1; }}; f=; set -e
-
-key={source}
-source_file="$(rlocation "$key" || true)"
-if [[ ! -f "$source_file" ]]; then
-  echo "ERROR: cannot locate generated source file $key in runfiles." >&2
-  exit 1
-fi
-
-workspace="${{BUILD_WORKSPACE_DIRECTORY:?this target must be run with bazel run}}"
-destination="$workspace"/{destination}
-mkdir -p "$(dirname "$destination")"
-cp "$source_file" "$destination"
-"""
-
-def _write_source_file_impl(ctx):
-    script = ctx.actions.declare_file(ctx.label.name)
-    source = ctx.file.source
-
-    # Convert short_path to the repository-qualified runfiles key.
-    source_path = source.short_path
-    if source_path.startswith("../"):
-        source_path = source_path[3:]
-    else:
-        source_path = ctx.workspace_name + "/" + source_path
-
-    # Only source files in this workspace can be safely overwritten.
-    destination = ctx.file.destination
-    if destination.short_path.startswith("../") or not destination.is_source:
-        fail(
-            (
-                "{}: destination {} is not a source file in the invoking " +
-                "workspace, and BUILD_WORKSPACE_DIRECTORY can only update files " +
-                "there. Name the committed file directly."
-            ).format(
-                ctx.label,
-                ctx.attr.destination.label,
-            ),
-        )
-
-    ctx.actions.write(
-        output = script,
-        content = _WRITE_SOURCE_FILE_SCRIPT.format(
-            source = shell.quote(source_path),
-            destination = shell.quote(destination.short_path),
-        ),
-        is_executable = True,
-    )
-
-    return [DefaultInfo(
-        executable = script,
-        runfiles = ctx.runfiles(files = [source]).merge(
-            ctx.attr._runfiles[DefaultInfo].default_runfiles,
-        ),
-    )]
-
-_write_source_file = rule(
-    implementation = _write_source_file_impl,
-    executable = True,
-    doc = "Writes a generated artifact into a source file in the Consumer Module.",
-    attrs = {
-        "source": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-            doc = "The generated artifact to write back.",
-        ),
-        "destination": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-            doc = "The committed file to overwrite in the invoking workspace.",
-        ),
-        "_runfiles": attr.label(
-            default = "@bazel_tools//tools/bash/runfiles",
         ),
     },
 )

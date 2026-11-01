@@ -1,4 +1,5 @@
 bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_java", version = "9.3.0")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 

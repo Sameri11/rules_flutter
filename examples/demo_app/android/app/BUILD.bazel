@@ -1,34 +1,55 @@
-# Bazel target for the Android module that `flutter create` generated, placed
-# beside the Gradle module it mirrors so both read the same manifest, resources
-# and sources. Nothing here is a copy.
-#
-# Note this directory is template-managed: `flutter create --platforms` and
-# `flutter migrate` rewrite files under app/android/. They do not delete unknown
-# files, so this BUILD survives, but keep that in mind when upgrading templates.
+# The Android module that `flutter create` generated, beside the Gradle module
+# it mirrors so both read the same manifest, resources and sources.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+load("@rules_java//java:defs.bzl", "java_import")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# Must be covered by both //:app and plugins.project; the bundle check enforces it.
-ABIS = [
-    "arm64-v8a",
-    "x86_64",
-    "armeabi-v7a",
-]
+java_import(
+    name = "flutter_embedding",
+    jars = select({
+        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
+        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
+    }),
+    exports = [
+        "@flutter_maven//:androidx_annotation_annotation",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:androidx_fragment_fragment",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_process",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
+        "@flutter_maven//:androidx_tracing_tracing",
+        "@flutter_maven//:androidx_window_window",
+        "@flutter_maven//:androidx_window_window_java",
+        "@flutter_maven//:com_getkeepsafe_relinker_relinker",
+    ],
+    deps = [
+        "@flutter_maven//:androidx_annotation_annotation",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:androidx_exifinterface_exifinterface",
+        "@flutter_maven//:androidx_fragment_fragment",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_process",
+        "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
+        "@flutter_maven//:androidx_tracing_tracing",
+        "@flutter_maven//:androidx_window_window",
+        "@flutter_maven//:androidx_window_window_java",
+        "@flutter_maven//:com_getkeepsafe_relinker_relinker",
+    ],
+)
 
-# Declare embedding here so Maven labels resolve in the consumer's repository.
-flutter_embedding_library(name = "flutter_embedding")
-
-# Join Flutter inputs into a fat APK and one APK per ABI.
-# Assets, pubspec, plugins and Android sources are derived from app and layout.
-flutter_android_binary(
+flutter_android_app(
     name = "demo_app",
-    abis = ABIS,
-    # Root-package labels require an explicit target name.
-    app = "//:app",
+    core = "//:app",
     manifest_values = {"applicationId": "com.example.demo_app"},
+    plugins = "@flutter_plugins",
     # Keep dependency order stable: native library order affects ZIP alignment.
     deps = [":main_activity"],
 )
@@ -40,5 +61,5 @@ flutter_android_binary(
 kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/demo_app/MainActivity.kt"],
-    deps = [":flutter_embedding"],
+    deps = [":demo_app_inputs"],
 )

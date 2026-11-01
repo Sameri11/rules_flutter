@@ -29,7 +29,7 @@ exports_files(glob(["*/app/pubspec.*"]))
     ]
 ]
 
-# What flutter_android_binary compiles when `plugins = None`.
+# What a plugin-free flutter_android_app compiles.
 diff_test(
     name = "empty_registrant_test",
     file1 = "no_plugins/expected/release/GeneratedPluginRegistrant.java",

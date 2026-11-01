@@ -10,6 +10,7 @@ The android_binary side takes the artifact through `FlutterArtifactInfo`. See
 `flutter_android_inputs` for the packaging half.
 """
 
+load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
@@ -19,6 +20,32 @@ load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutte
 visibility(["//flutter/...", "//tests/..."])
 
 _TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
+
+def _internal_tags(kwargs):
+    tags = list(kwargs.get("tags", []))
+    if "manual" not in tags:
+        tags.append("manual")
+    return tags
+
+def _internal_kwargs(kwargs):
+    internal = dict(kwargs)
+    internal["tags"] = _internal_tags(kwargs)
+    return internal
+
+def _workspace_label(label):
+    """Resolve a committed destination and reject external repositories."""
+    requested = str(label)
+    label = native.package_relative_label(label)
+    workspace = native.package_relative_label("//:__pkg__")
+    if label.repo_name != workspace.repo_name:
+        fail(
+            (
+                "flutter_core: destination label {} belongs to repository {}, but " +
+                "BUILD_WORKSPACE_DIRECTORY can only update files in the invoking " +
+                "workspace."
+            ).format(requested, label.repo_name),
+        )
+    return label
 
 FlutterArtifactInfo = provider(
     doc = "What flutter_core hands to the android_binary split that built it.",
@@ -140,9 +167,20 @@ def _flutter_core_impl(ctx):
         fail("{}: expected one assets directory, got {}".format(ctx.label, len(assets)))
     if len(libapp) > 1:
         fail("{}: expected at most one libapp.so, got {}".format(ctx.label, len(libapp)))
+    if abi != None:
+        if not engine_libs:
+            fail("{}: ABI '{}' has no engine libraries".format(ctx.label, abi))
+        if mode == "release" and len(libapp) != 1:
+            fail("{}: release ABI '{}' needs one libapp.so".format(ctx.label, abi))
 
     return [
         DefaultInfo(files = depset(libapp + engine_libs + [embedding_jar, assets[0]])),
+        OutputGroupInfo(
+            flutter_assets = depset([assets[0]]),
+            flutter_engine = depset(engine_libs),
+            flutter_libapp = depset(libapp),
+            flutter_embedding = depset([embedding_jar]),
+        ),
         FlutterArtifactInfo(
             mode = mode,
             abi = abi,
@@ -181,9 +219,9 @@ def _pub_labels(pub, who):
 def flutter_core(
         name,
         pub,
-        assets = [],
+        assets = None,
         entrypoint = "lib/main.dart",
-        srcs = [],
+        srcs = None,
         path_deps = [],
         dart_defines = {},
         native_build_env = None,
@@ -192,30 +230,31 @@ def flutter_core(
         plugins = "@flutter_plugins",
         target_os = "android",
         **kwargs):
-    """Declares an app's platform-neutral artifact as the target `<name>`.
+    """Declares an app's Flutter artifacts and host-test inputs.
 
-    Declares `:pubspec` and the targets the artifact is built from, and the
-    guards `<name>_guards_test` runs. Internal targets keep the package's
-    default visibility. `visibility` also reaches `:pubspec`, which a consumer in
-    another package reads through its flutter_android_inputs. `<name>_test_package`
-    and its `<name>_test_assets` are the package host tests read, as flutter_app's
-    `:app` is; both are `manual`.
+    Standard-layout packages derive Dart sources from `lib/` and assets from
+    `assets/`. The fixed `pubspec.yaml`, package/test targets, and guards are
+    declared with the artifacts so the package has one core.
 
     Args:
       name: the artifact's target name. `pubspec` is reserved.
       pub: the `pub.lock` hub repository, e.g. `"@pub"`.
-      assets: asset files the bundle packages, as labels.
-      entrypoint: the app's entrypoint under lib/, as a label.
-      srcs: Dart sources, for change detection.
+      assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
+      entrypoint: the app's entrypoint under lib/.
+      srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies.
-      dart_defines: `-D` constants the kernel compiles with.
-      dart_plugin_registrant: the Dart plugin registrant under lib/, as a label.
-      plugin_deps: the committed Maven plugin file, checked against the hub.
-      plugins: the plugin hub the guards check against, e.g. "@flutter_plugins"; required with plugin_deps.
-      target_os: OS the kernel is compiled for; must be "android".
-      native_build_env: the native build environment for the asset bundle's flutter build action, or None. Android builds pass rules_flutter_android's `native_build_env` rule.
-      **kwargs: visibility, which also applies to `:pubspec`, and tags of `<name>`.
+      dart_defines: `-D` constants the kernels compile with.
+      native_build_env: the native build environment for asset bundle hooks, or None.
+      dart_plugin_registrant: the Dart plugin registrant under lib/, or None.
+      plugin_deps: the committed Maven plugin file checked against the hub.
+      plugins: the plugin hub guards check against, e.g. `"@flutter_plugins"`.
+      target_os: OS the kernel is compiled for; must be `"android"`.
+      **kwargs: visibility and tags passed to declared targets.
     """
+    if srcs == None:
+        srcs = native.glob(["lib/**/*.dart"])
+    if assets == None:
+        assets = native.glob(["assets/**"], allow_empty = True)
     if name == "pubspec":
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
     if target_os != "android":
@@ -276,8 +315,8 @@ def flutter_core(
         path_deps = path_deps,
     )
 
-    # The host test reads this bundle and package, built for flutter_tester. It
-    # takes no ABI and no Android build environment, as flutter_app's do.
+    # The host test reads this bundle and package, built for flutter_tester.
+    # It takes no ABI and no Android build environment.
     flutter_test_assets(
         name = name + "_test_assets",
         assets = assets,
@@ -327,26 +366,45 @@ def flutter_core(
         name = "path_deps_check",
         path_deps = path_deps,
         pubspec_lock = "pubspec.lock",
+        **kwargs
     )
     if plugin_deps:
+        plugin_deps_label = _workspace_label(plugin_deps)
         pub_plugins_check(
             name = "plugins_check",
-            committed = plugin_deps,
+            committed = plugin_deps_label,
             expected = plugins + "//:plugin_deps.MODULE.bazel",
+            updater = ":plugins_update",
+            **kwargs
+        )
+        _write_source_file(
+            name = "plugins_update",
+            source = plugins + "//:plugin_deps.MODULE.bazel",
+            destination = plugin_deps_label,
+            **_internal_kwargs(kwargs)
         )
         guards.append(":plugins_check")
 
-    if dart_plugin_registrant and plugin_deps:
-        pub_plugins_check(
-            name = "dart_registrant_check",
-            committed = dart_plugin_registrant,
-            expected = plugins + "//:dart_plugin_registrant.dart",
-        )
-        guards.append(":dart_registrant_check")
-
+        if dart_plugin_registrant:
+            registrant_label = _workspace_label(dart_plugin_registrant)
+            pub_plugins_check(
+                name = "dart_registrant_check",
+                committed = registrant_label,
+                expected = plugins + "//:dart_plugin_registrant.dart",
+                updater = ":dart_registrant_update",
+                **kwargs
+            )
+            _write_source_file(
+                name = "dart_registrant_update",
+                source = plugins + "//:dart_plugin_registrant.dart",
+                destination = registrant_label,
+                **_internal_kwargs(kwargs)
+            )
+            guards.append(":dart_registrant_check")
     build_test(
         name = name + "_guards_test",
         targets = guards,
+        **kwargs
     )
 
     # Each split names only its own ABI's libapp and engine libraries. The
@@ -369,3 +427,84 @@ def flutter_core(
         pubspec = ":pubspec",
         **kwargs
     )
+
+_WRITE_SOURCE_FILE_SCRIPT = """#!/usr/bin/env bash
+# Bazel Bash runfiles initialization.
+set -uo pipefail; set +e; f=bazel_tools/tools/bash/runfiles/runfiles.bash
+# shellcheck disable=SC1090
+source "${{RUNFILES_DIR:-/dev/null}}/$f" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "${{RUNFILES_MANIFEST_FILE:-/dev/null}}" | cut -f2- -d' ')" 2>/dev/null || \\
+  source "$0.runfiles/$f" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
+  {{ echo>&2 "ERROR: cannot find $f"; exit 1; }}; f=; set -e
+
+key={source}
+source_file="$(rlocation "$key" || true)"
+if [[ ! -f "$source_file" ]]; then
+  echo "ERROR: cannot locate generated source file $key in runfiles." >&2
+  exit 1
+fi
+
+workspace="${{BUILD_WORKSPACE_DIRECTORY:?this target must be run with bazel run}}"
+destination="$workspace"/{destination}
+mkdir -p "$(dirname "$destination")"
+cp "$source_file" "$destination"
+"""
+
+def _write_source_file_impl(ctx):
+    script = ctx.actions.declare_file(ctx.label.name)
+    source = ctx.file.source
+
+    source_path = source.short_path
+    if source_path.startswith("../"):
+        source_path = source_path[3:]
+    else:
+        source_path = ctx.workspace_name + "/" + source_path
+
+    destination = ctx.file.destination
+    if destination.short_path.startswith("../") or not destination.is_source:
+        fail(
+            (
+                "{}: destination {} is not a source file in the invoking " +
+                "workspace, and BUILD_WORKSPACE_DIRECTORY can only update files " +
+                "there. Name the committed file directly."
+            ).format(ctx.label, ctx.attr.destination.label),
+        )
+
+    ctx.actions.write(
+        output = script,
+        content = _WRITE_SOURCE_FILE_SCRIPT.format(
+            source = shell.quote(source_path),
+            destination = shell.quote(destination.short_path),
+        ),
+        is_executable = True,
+    )
+
+    return [DefaultInfo(
+        executable = script,
+        runfiles = ctx.runfiles(files = [source]).merge(
+            ctx.attr._runfiles[DefaultInfo].default_runfiles,
+        ),
+    )]
+
+_write_source_file = rule(
+    implementation = _write_source_file_impl,
+    executable = True,
+    doc = "Writes a generated artifact into a source file in the Consumer Module.",
+    attrs = {
+        "source": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The generated artifact to write back.",
+        ),
+        "destination": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The committed file to overwrite in the invoking workspace.",
+        ),
+        "_runfiles": attr.label(
+            default = "@bazel_tools//tools/bash/runfiles",
+        ),
+    },
+)

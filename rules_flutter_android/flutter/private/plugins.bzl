@@ -12,7 +12,7 @@ cannot describe. Recipes are keyed by pub package so they also support packages
 without an `android/` module.
 """
 
-load(":abis.bzl", "MIN_SDK", "check_abis", "plugin_repo_target")
+load(":abis.bzl", "MIN_SDK", "check_abis")
 load(":embedding.bzl", "ANNOTATION_JVM", "FLUTTER_EMBEDDING_ARTIFACTS")
 load(":maven.bzl", "highest_versions", "maven_label")
 
@@ -70,8 +70,7 @@ _KOTLIN_BUILD_LOADS = """load("@rules_kotlin//kotlin:android.bzl", "kt_android_l
 # Loaded only into the BUILD of a plugin that actually has a CMake build, so a
 # project with no native plugins never pulls rules_foreign_cc into analysis.
 _NATIVE_BUILD_LOADS = """load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
-load("@rules_java//java:defs.bzl", "java_import")
-load("{android_bzl}", "android_native_lib_jar")
+load("{native_strip}", "android_native_files")
 """
 
 _BUILD_PACKAGE = """
@@ -107,33 +106,9 @@ _PLUGIN_TEMPLATE = """
 )
 """
 
-# The native half, in two pieces: the sources once, then a chain per ABI.
-#
-# Three targets per ABI rather than one because each boundary is a different
-# concern: cmake() compiles, android_native_lib_jar packages (and pins the
-# Android platform), java_import puts the jar on the classpath where
-# android_binary looks for lib/<abi>/*.so.
-#
-# Every ABI's chain is emitted unconditionally. Analysing one costs nothing and
-# its cmake() never runs unless something demands the output, so a single-ABI
-# APK pays for a single cross-compile.
-#
-# The jar route collects native libraries through //:plugin_libs_<abi>; the
-# split route selects the matching ABI's stripped files.
 _NATIVE_SRCS_TEMPLATE = """
 # {name}'s native half: {libs}, from the plugin's own CMakeLists.
-#
-# The plugin's CMakeLists is run as written, against the NDK's own
-# android.toolchain.cmake -- the toolchain file AGP passes and the one the
-# CMakeLists was tested against. Handing it over as a CMAKE_TOOLCHAIN_FILE
-# cache entry suppresses rules_foreign_cc's synthesized crosstool, which does
-# not link the NDK C++ STL.
-#
-# lib_source is the whole package root, enumerated. A plugin's CMakeLists
-# routinely reaches outside android/ -- rive_common's pulls in ../ios and,
-# through that, ../common_source -- and which directories it reaches into
-# cannot be known without evaluating it, so no narrower set is predictable
-# from here.
+# CMake may reach ../ios or ../common_source, so enumerate the whole package.
 filegroup(
     name = "{name}_native_srcs",
     srcs = {native_srcs},
@@ -145,57 +120,31 @@ cmake(
     name = "{name}_native_{abi}",
     lib_source = ":{name}_native_srcs",
     build_data = ["{ndk_source_properties}"],
-    # CMakeLists.txt lives under android/, but its sources do not. Note
-    # rules_foreign_cc's detect_root() picks the topmost *file* dirname, so this
-    # is relative to the package root only because the package root has files.
+    # detect_root uses the topmost file's directory, not the CMakeLists directory.
     working_directory = "{cmake_dir}",
     cache_entries = {{
+        # An NDK cache entry suppresses rules_foreign_cc's STL-free crosstool.
         "CMAKE_TOOLCHAIN_FILE": "$$(dirname $$(realpath $$EXT_BUILD_ROOT$$/$(execpath {ndk_source_properties})))/build/cmake/android.toolchain.cmake",
         "ANDROID_ABI": "{abi}",
         "ANDROID_PLATFORM": "android-{api_level}",
-        # NDK 28 defaults to 16 KB page alignment, but that default does not
-        # survive this path: rules_android_ndk's cc_toolchain passes an explicit
-        # -Wl,-z,max-page-size=4096, and rules_foreign_cc forwards the toolchain's
-        # link flags into CMAKE_SHARED_LINKER_FLAGS. So the NDK version alone is
-        # not enough here and the alignment has to be restated.
-        #
-        # cache_entries are appended *after* the toolchain's own values, so this
-        # is the later -z max-page-size and wins.
-        #
-        # Getting this wrong is not a clean failure: a 4 KB-aligned .so
-        # segfaults the loader on a 16 KB-page device (API 35), with no
-        # dlerror() and nothing in logcat. Verify with
-        # `llvm-readelf -l <so> | grep LOAD` -- want 0x4000, not 0x1000.
-        # Strip before LLD hashes the output for its build ID. Android packaging
-        # strips it later anyway, after that ID has captured unstable symbols.
+        # rules_android_ndk passes a 4 KB maximum page size; this later flag wins.
+        # A 4 KB-aligned library can crash the loader on a 16 KB-page device.
+        # Verify LOAD alignment is 0x4000 with llvm-readelf -l.
+        # Strip before LLD's build ID captures unstable symbols.
         "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,max-page-size=16384 -Wl,--strip-all",
     }},
     generate_args = ["-GNinja"],
-    # The plugin declares no install() rules -- there is nothing for
-    # `cmake --install` to do -- so the libraries are lifted out by hand.
+    # These projects have no install() rule, so copy their declared outputs to
+    # the directory rules_foreign_cc collects when installation is disabled.
     install = False,
     out_shared_libs = {libs},
     postfix_script = "mkdir -p $$INSTALLDIR/lib && cp {lib_copy} $$INSTALLDIR/lib/",
 )
 
-android_native_lib_jar(
-    name = "{name}_native_jar_{abi}",
-    src = [":{name}_native_{abi}"],
-    # The platform the .so is *built* for is derived from this: the jar saying
-    # one ABI while the cross-compile resolves another's toolchain is exactly
-    # what two separate values allowed.
-    abi = "{abi}",
-)
-
-filegroup(
+android_native_files(
     name = "{name}_native_files_{abi}",
-    srcs = [":{name}_native_jar_{abi}"],
-    output_group = "native_libraries",
-)
-
-java_import(
-    name = "{name}_native_import_{abi}",
-    jars = [":{name}_native_jar_{abi}"],
+    src = [":{name}_native_{abi}"],
+    abi = "{abi}",
 )
 """
 
@@ -292,55 +241,9 @@ PACKAGE_INFO = struct(
 )
 '''
 
-# Loads used only by the aggregate BUILD.
-_NATIVE_LIBS_LOADS = """load("{recipe}", "flutter_native_libs")
-load("{native_files}", "flutter_native_files", "flutter_native_files_by_abi")
-load("@rules_java//java:defs.bzl", "java_import", "java_library")
+_NATIVE_LIBS_LOADS = """load("{native_files}", "flutter_native_files", "flutter_native_files_by_abi")
 """
 
-# Recipe native libraries for one ABI. Recipes must define
-# `<name>_flutter_native` so omissions fail during analysis.
-_NATIVE_LIBS_TEMPLATE = """
-flutter_native_libs(
-    name = "{target}_jar",
-    slice = "{abi}",
-    deps = {deps},
-)
-
-java_import(
-    name = "{target}",
-    jars = [":{target}_jar"],
-)
-"""
-
-# Source-built plugin native libraries for one ABI.
-_PLUGIN_LIBS_TEMPLATE = """
-java_import(
-    name = "{target}",
-    jars = {jars},
-)
-"""
-
-# Plain Java/Kotlin plugins still need this derived JavaInfo target. An empty
-# java_library is valid; java_import(jars = []) is not.
-_PLUGIN_LIBS_EMPTY_TEMPLATE = """
-java_library(
-    name = "{target}",
-)
-"""
-
-_MODE_ALIAS_TEMPLATE = """
-alias(
-    name = "{target}",
-    actual = select({{
-        "{debug}": ":{target}_debug",
-        "{release}": ":{target}_release",
-    }}),
-)
-"""
-
-# GeneratedPluginRegistrant.java for the build's mode, written by the pub hub
-# (rules_flutter_core's registrant.bzl). flutter_android_binary compiles it against `:all`.
 _REGISTRANT_SRC_TEMPLATE = """
 filegroup(
     name = "generated_plugin_registrant_src",
@@ -351,7 +254,6 @@ filegroup(
 )
 """
 
-# Generated libraries reuse the strip outputs of the source-built plugin jar.
 _NATIVE_FILES_TARGET = "native_files_{}"
 
 _NATIVE_FILES_TEMPLATE = """
@@ -1318,33 +1220,6 @@ def _mode_list(labels, dev, ctx):
         release = ctx.attr.mode_release,
     )
 
-def _plugin_native_libs_target(ctx, manifest, abi, dev):
-    """Return this ABI's aggregate of source-built plugin libraries."""
-    jars = [
-        (p["name"], "//{n}:{n}_native_jar_{a}".format(n = p["name"], a = abi))
-        for p in manifest
-        if p["strategy"] == "source+cmake"
-    ]
-
-    # Keep this derived name aligned with flutter_android_binary.
-    target = plugin_repo_target("plugin_native_libraries", abi)
-    if not jars:
-        return _PLUGIN_LIBS_EMPTY_TEMPLATE.format(target = target)
-    if [n for n, _ in jars if not dev.get(n)]:
-        return _PLUGIN_LIBS_TEMPLATE.format(target = target, jars = _mode_list(jars, dev, ctx))
-
-    # Every native plugin is dev-only: release has no jar, and java_import
-    # rejects an empty `jars`.
-    return (
-        _PLUGIN_LIBS_TEMPLATE.format(target = target + "_debug", jars = _mode_list(jars, {}, ctx)) +
-        _PLUGIN_LIBS_EMPTY_TEMPLATE.format(target = target + "_release") +
-        _MODE_ALIAS_TEMPLATE.format(
-            target = target,
-            debug = ctx.attr.mode_debug,
-            release = ctx.attr.mode_release,
-        )
-    )
-
 def _recipe_contributions(ctx, manifest, dev):
     """A BUILD list of every recipe's flutter_native_contribution, mode-selected."""
     return _mode_list([
@@ -1682,15 +1557,15 @@ def _flutter_plugins_impl(ctx):
                 for abi in ctx.attr.abis
             ])
 
-            # No dep on the plugin's own library: see the note on the
-            # templates. The jars are collected per ABI in //:plugin_libs_<abi>.
+            # No Java dependency on the plugin's native files: the raw libraries are
+            # collected per ABI by the plugin repository's file carrier.
             native_deps = []
 
         ctx.file(
             "{}/BUILD.bazel".format(name),
             _BUILD_LOADS +
             (_KOTLIN_BUILD_LOADS if kotlin_srcs else "") +
-            (_NATIVE_BUILD_LOADS.format(android_bzl = ctx.attr.android_bzl) if native else "") +
+            (_NATIVE_BUILD_LOADS.format(native_strip = ctx.attr.native_strip_bzl) if native else "") +
             _BUILD_PACKAGE +
             native +
             _PLUGIN_TEMPLATE.format(
@@ -1875,7 +1750,6 @@ def _flutter_plugins_impl(ctx):
         "BUILD.bazel",
         _BUILD_LOADS +
         _NATIVE_LIBS_LOADS.format(
-            recipe = ctx.attr.recipe_bzl,
             native_files = str(Label("//flutter/private:native_files.bzl")),
         ) +
         _BUILD_PACKAGE +
@@ -1902,14 +1776,7 @@ def _flutter_plugins_impl(ctx):
             annotation = ANNOTATION_JVM,
         ) +
         "".join([
-            _NATIVE_LIBS_TEMPLATE.format(
-                abi = abi,
-                # The target name the APK derives for this contribution. Both
-                # halves read it from plugin_repo_target, so neither file can
-                # rename it alone.
-                target = plugin_repo_target("recipe_libraries", abi),
-                deps = _recipe_contributions(ctx, manifest, dev),
-            ) + _plugin_native_libs_target(ctx, manifest, abi, dev) + _native_files_target(ctx, manifest, abi, dev)
+            _native_files_target(ctx, manifest, abi, dev)
             for abi in ctx.attr.abis
         ]) + _native_files_by_abi_target(ctx),
     )
@@ -1927,8 +1794,8 @@ flutter_plugins = repository_rule(
             doc = "Label of the flutter_embedding java_import every plugin compiles against.",
             mandatory = True,
         ),
-        "android_bzl": attr.string(
-            doc = "Label of //flutter:defs.bzl, for android_native_lib_jar.",
+        "native_strip_bzl": attr.string(
+            doc = "Label of the internal ABI-pinned raw strip rule.",
             mandatory = True,
         ),
         "mode_debug": attr.string(
@@ -1937,10 +1804,6 @@ flutter_plugins = repository_rule(
         ),
         "mode_release": attr.string(
             doc = "Canonical label of Flutter's release mode selector.",
-            mandatory = True,
-        ),
-        "recipe_bzl": attr.string(
-            doc = "Label of //flutter:defs.bzl, for flutter_native_libs.",
             mandatory = True,
         ),
         "ndk_source_properties": attr.string(
@@ -2109,18 +1972,13 @@ extra ABIs have no plugin libraries in them.""",
         ),
         "embedding": attr.label(
             default = "@flutter_embedding_release//jar:file",
-            doc = """The `flutter_embedding_library` target every plugin compiles against.
+            doc = """The Java import plugins compile against.
 
-Supplied by the consuming project because the target must live there: its deps
-are Maven artifacts resolved from that project's own coordinate list, and a
-label naming them from inside these rules would resolve against these rules'
-dependencies instead. Instantiate it with
-`//flutter:defs.bzl%flutter_embedding_library` and pass the result
-here. The default is the bare release engine jar, which compiles but leaves
-plugins without androidx.annotation -- enough to fail loudly rather than
-silently. Module extension tags cannot read `//flutter:mode`, so this
-default cannot itself vary by mode; a debug build supplies its own
-`flutter_embedding_library()` result here regardless.""",
+The target belongs to the consuming project because its Maven dependencies
+resolve in that project's repository mapping. Pass a mode-selected `java_import`
+over the `flutter_core` embedding output group, with the project's embedding
+dependencies. The default is the release engine jar only; it does not provide
+mode selection or the AndroidX compile classpath.""",
         ),
     },
 )
@@ -2253,10 +2111,9 @@ def _flutter_plugins_ext_impl(ctx):
                     for n, v in build_config_fields.get(project.name, {}).items()
                 },
                 recipes = recipes.get(project.name, {}),
-                android_bzl = str(Label("//flutter:defs.bzl")),
+                native_strip_bzl = str(Label("//flutter/private:native_strip.bzl")),
                 mode_debug = str(Label("@rules_flutter_core//flutter:mode_debug")),
                 mode_release = str(Label("@rules_flutter_core//flutter:mode_release")),
-                recipe_bzl = str(Label("//flutter:defs.bzl")),
                 ndk_source_properties = str(Label("@androidndk_cmake//:ndk_source_properties")),
             )
 
