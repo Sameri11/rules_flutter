@@ -205,94 +205,11 @@ jobs:
           cp bazel-bin/composed_app/direct_apk.apk "$RUNNER_TEMP/direct-debug.apk"
           cp bazel-bin/composed_app/composed_aar.aar "$RUNNER_TEMP/composed-debug.aar"
 
-      # Build the consumer-owned APK and ordinary //all targets in both modes;
-      # retain the full action graphs and compare SDK-derived strip inputs.
+      # Capture both modes' action graphs, compare SDK-derived strip inputs and
+      # AAR payloads, and require each ABI's missing AAR library to fail.
       - name: Consumer composed app direct-route graph and AAR guard
-        working-directory: tests/consumer
-        run: |
-          set -euo pipefail
-          platforms=@rules_android//:arm64-v8a,@rules_android//:x86_64,@rules_android//:armeabi-v7a
-          roots='deps(//composed_app:direct_apk) + deps(//composed_app:apk) + deps(//composed_app:apk_variant)'
-          bazel aquery -c opt --@rules_flutter_core//flutter:mode=release --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} "$roots" \
-            --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
-            --android_platforms="$platforms" --output=jsonproto \
-            > "$RUNNER_TEMP/composed-release-aquery.json"
-          bazel aquery --@rules_flutter_core//flutter:mode=debug -c fastbuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} "$roots" \
-            --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
-            --android_platforms="$platforms" --output=jsonproto \
-            > "$RUNNER_TEMP/composed-debug-aquery.json"
-          python3 - "$RUNNER_TEMP/composed-release-aquery.json" \
-            "$RUNNER_TEMP/composed-debug-aquery.json" \
-            "$RUNNER_TEMP/direct-release.apk" "$RUNNER_TEMP/composed-release.aar" \
-            "$RUNNER_TEMP/direct-debug.apk" "$RUNNER_TEMP/composed-debug.aar" <<'PY'
-          import collections, json, sys, zipfile
+        run: python3 tools/ci/composed_route_guard.py "$RUNNER_TEMP"
 
-          abis = ("arm64-v8a", "x86_64", "armeabi-v7a")
-          obsolete = ("AndroidNativeLibJar", "FlutterNativeLibs", "JniLibJar", "StripNativeLibs")
-          for mode, graph_path, apk_path, aar_path in (
-              ("release", sys.argv[1], sys.argv[3], sys.argv[4]),
-              ("debug", sys.argv[2], sys.argv[5], sys.argv[6]),
-          ):
-              with open(graph_path) as source:
-                  actions = json.load(source).get("actions", [])
-              if not actions:
-                  sys.exit(f"{mode} direct/helper graph is empty")
-              counts = collections.Counter(action.get("mnemonic") for action in actions)
-              for mnemonic in obsolete:
-                  if counts[mnemonic]:
-                      sys.exit(f"{mode} graph contains obsolete {mnemonic} actions")
-              if not counts["AndroidNativeLibStrip"]:
-                  sys.exit(f"{mode} graph contains no raw native strip actions")
-              direct_inputs = [
-                  action["arguments"][-1] for action in actions
-                  if action.get("mnemonic") == "DirectCoreEngineStrip"
-              ]
-              helper_inputs = [
-                  action["arguments"][-1] for action in actions
-                  if action.get("mnemonic") == "FlutterEngineStrip"
-              ]
-              if not direct_inputs or len(direct_inputs) != len(set(direct_inputs)):
-                  sys.exit(f"{mode} direct engine strips are absent or duplicate: {direct_inputs}")
-              if collections.Counter(direct_inputs) != collections.Counter(helper_inputs):
-                  sys.exit(f"{mode} direct/helper engine inputs differ: {direct_inputs} != {helper_inputs}")
-              with zipfile.ZipFile(apk_path) as apk, zipfile.ZipFile(aar_path) as aar:
-                  names = set(apk.namelist())
-                  actual_abis = {
-                      path.split("/")[1] for path in names
-                      if path.startswith("lib/") and path.endswith(".so")
-                  }
-                  if actual_abis != set(abis):
-                      sys.exit(f"{mode} direct APK ABIs are {sorted(actual_abis)}")
-                  expected_aar = {"jni/" + abi + "/libaar_native.so" for abi in abis}
-                  actual_aar = {path for path in aar.namelist() if path.endswith(".so")}
-                  if actual_aar != expected_aar:
-                      sys.exit(f"{mode} AAR native entries are {sorted(actual_aar)}")
-                  for abi in abis:
-                      shipped = "lib/" + abi + "/libaar_native.so"
-                      source = "jni/" + abi + "/libaar_native.so"
-                      if shipped not in names or apk.read(shipped) != aar.read(source):
-                          sys.exit(f"{mode} {abi} AAR native payload differs")
-              print(f"{mode}: actions={counts} direct_engine_inputs={direct_inputs}")
-          PY
-          for target_abi in \
-            "aar_missing_native_arm64 @rules_android//:arm64-v8a" \
-            "aar_missing_native_x86_64 @rules_android//:x86_64" \
-            "aar_missing_native_armeabi_v7a @rules_android//:armeabi-v7a"; do
-            read -r target platform <<< "$target_abi"
-            log="$RUNNER_TEMP/${target}.log"
-            if bazel build -c opt --@rules_flutter_core//flutter:mode=release \
-              --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} \
-              --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
-              --android_platforms="$platform" "//composed_app:$target" >"$log" 2>&1; then
-              echo "missing native input unexpectedly built: $target" >&2
-              exit 1
-            fi
-            if ! grep -Fq "no .so files" "$log"; then
-              cat "$log" >&2
-              echo "missing native input failed for the wrong reason: $target" >&2
-              exit 1
-            fi
-          done
       - name: Upload composed direct-route graphs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -406,57 +323,7 @@ jobs:
 
       - name: APK inventory rejects an unlisted app
         if: matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app'
-        run: |
-          python3 - <<'PY'
-          import importlib.util, shlex, shutil, subprocess, sys, tempfile
-          from pathlib import Path
-
-          root = Path.cwd()
-          script = root / "tools/ci/example_hashes.py"
-          spec = importlib.util.spec_from_file_location("example_hashes", script)
-          hashes = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(hashes)
-          bazel = shutil.which("bazel")
-          if not bazel:
-              sys.exit("Bazel is unavailable for the inventory rejection check")
-          build = root / "examples/demo_app/android/app/BUILD.bazel"
-          original = build.read_bytes()
-          label = "//android/app:inventory_probe"
-          try:
-              build.write_bytes(original + b'''
-          flutter_android_app(
-              name = "inventory_probe",
-              core = "//:app",
-              plugins = "@flutter_plugins",
-              manifest_values = {"applicationId": "com.example.inventory_probe"},
-              deps = [":main_activity"],
-          )
-          ''')
-              declared = hashes.declared_apk_targets(bazel, root / "examples/demo_app")
-              if label not in declared:
-                  sys.exit("The planted app was not discovered by the actual Bazel query")
-              with tempfile.TemporaryDirectory() as temporary:
-                  directory = Path(temporary)
-                  calls = directory / "calls"
-                  wrapper = directory / "bazel"
-                  wrapper.write_text(
-                      '#!/usr/bin/env bash\nprintf "%s\\n" "$1" >> ' +
-                      shlex.quote(str(calls)) + '\nexec ' + shlex.quote(bazel) + ' "$@"\n'
-                  )
-                  wrapper.chmod(0o755)
-                  result = subprocess.run(
-                      [sys.executable, str(script), "--check", "--only", "demo_app",
-                       "--bazel", str(wrapper), "--manifests", str(directory / "captures"),
-                       "--golden", str(root / "tools/ci/example_hashes_linux.txt")],
-                      capture_output=True, text=True,
-                  )
-                  invoked = calls.read_text().splitlines() if calls.exists() else []
-                  if result.returncode == 0 or invoked != ["query"] or label not in result.stderr:
-                      sys.exit(f"Inventory rejection failed: calls={invoked}\n{result.stdout}\n{result.stderr}")
-                  print(f"Unlisted app rejected before any build: {label}")
-          finally:
-              build.write_bytes(original)
-          PY
+        run: python3 tools/ci/apk_inventory_probe.py --golden tools/ci/example_hashes_linux.txt
 
       # Runs before the example's first build: cached outputs have no worker spawns to check.
       - name: Test kernel invariants
