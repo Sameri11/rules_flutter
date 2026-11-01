@@ -427,6 +427,7 @@ jobs:
           flutter_android_app(
               name = "inventory_probe",
               core = "//:app",
+              plugins = "@flutter_plugins",
               manifest_values = {"applicationId": "com.example.inventory_probe"},
               deps = [":main_activity"],
           )
