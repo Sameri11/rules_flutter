@@ -239,7 +239,7 @@ def flutter_core(
     Args:
       name: the artifact's target name. `pubspec` is reserved.
       pub: the `pub.lock` hub repository, e.g. `"@pub"`.
-      assets: asset files the bundle packages; defaults to `glob(["assets/**"])`.
+      assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies.
@@ -254,7 +254,7 @@ def flutter_core(
     if srcs == None:
         srcs = native.glob(["lib/**/*.dart"])
     if assets == None:
-        assets = native.glob(["assets/**"])
+        assets = native.glob(["assets/**"], allow_empty = True)
     if name == "pubspec":
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
     if target_os != "android":
