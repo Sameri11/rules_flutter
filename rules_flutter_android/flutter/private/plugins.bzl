@@ -1542,6 +1542,8 @@ def _flutter_plugins_impl(ctx):
                     name = name,
                     libs = repr(libraries),
                     lib_copy = " ".join(libraries),
+                    cmake_dir = cmake_directory,
+                    ndk_source_properties = ctx.attr.ndk_source_properties,
                     abi = abi,
                     api_level = MIN_SDK,
                 )

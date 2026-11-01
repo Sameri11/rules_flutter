@@ -10,15 +10,42 @@ The android_binary side takes the artifact through `FlutterArtifactInfo`. See
 `flutter_android_inputs` for the packaging half.
 """
 
+load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "_internal_kwargs", "_workspace_label", "_write_source_file", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "pub_path_deps_check", "pub_plugins_check")
+load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "pub_path_deps_check", "pub_plugins_check")
 
 visibility(["//flutter/...", "//tests/..."])
 
 _TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
+
+def _internal_tags(kwargs):
+    tags = list(kwargs.get("tags", []))
+    if "manual" not in tags:
+        tags.append("manual")
+    return tags
+
+def _internal_kwargs(kwargs):
+    internal = dict(kwargs)
+    internal["tags"] = _internal_tags(kwargs)
+    return internal
+
+def _workspace_label(label):
+    """Resolve a committed destination and reject external repositories."""
+    requested = str(label)
+    label = native.package_relative_label(label)
+    workspace = native.package_relative_label("//:__pkg__")
+    if label.repo_name != workspace.repo_name:
+        fail(
+            (
+                "flutter_core: destination label {} belongs to repository {}, but " +
+                "BUILD_WORKSPACE_DIRECTORY can only update files in the invoking " +
+                "workspace."
+            ).format(requested, label.repo_name),
+        )
+    return label
 
 FlutterArtifactInfo = provider(
     doc = "What flutter_core hands to the android_binary split that built it.",
@@ -400,3 +427,84 @@ def flutter_core(
         pubspec = ":pubspec",
         **kwargs
     )
+
+_WRITE_SOURCE_FILE_SCRIPT = """#!/usr/bin/env bash
+# Bazel Bash runfiles initialization.
+set -uo pipefail; set +e; f=bazel_tools/tools/bash/runfiles/runfiles.bash
+# shellcheck disable=SC1090
+source "${{RUNFILES_DIR:-/dev/null}}/$f" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "${{RUNFILES_MANIFEST_FILE:-/dev/null}}" | cut -f2- -d' ')" 2>/dev/null || \\
+  source "$0.runfiles/$f" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
+  source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \\
+  {{ echo>&2 "ERROR: cannot find $f"; exit 1; }}; f=; set -e
+
+key={source}
+source_file="$(rlocation "$key" || true)"
+if [[ ! -f "$source_file" ]]; then
+  echo "ERROR: cannot locate generated source file $key in runfiles." >&2
+  exit 1
+fi
+
+workspace="${{BUILD_WORKSPACE_DIRECTORY:?this target must be run with bazel run}}"
+destination="$workspace"/{destination}
+mkdir -p "$(dirname "$destination")"
+cp "$source_file" "$destination"
+"""
+
+def _write_source_file_impl(ctx):
+    script = ctx.actions.declare_file(ctx.label.name)
+    source = ctx.file.source
+
+    source_path = source.short_path
+    if source_path.startswith("../"):
+        source_path = source_path[3:]
+    else:
+        source_path = ctx.workspace_name + "/" + source_path
+
+    destination = ctx.file.destination
+    if destination.short_path.startswith("../") or not destination.is_source:
+        fail(
+            (
+                "{}: destination {} is not a source file in the invoking " +
+                "workspace, and BUILD_WORKSPACE_DIRECTORY can only update files " +
+                "there. Name the committed file directly."
+            ).format(ctx.label, ctx.attr.destination.label),
+        )
+
+    ctx.actions.write(
+        output = script,
+        content = _WRITE_SOURCE_FILE_SCRIPT.format(
+            source = shell.quote(source_path),
+            destination = shell.quote(destination.short_path),
+        ),
+        is_executable = True,
+    )
+
+    return [DefaultInfo(
+        executable = script,
+        runfiles = ctx.runfiles(files = [source]).merge(
+            ctx.attr._runfiles[DefaultInfo].default_runfiles,
+        ),
+    )]
+
+_write_source_file = rule(
+    implementation = _write_source_file_impl,
+    executable = True,
+    doc = "Writes a generated artifact into a source file in the Consumer Module.",
+    attrs = {
+        "source": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The generated artifact to write back.",
+        ),
+        "destination": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "The committed file to overwrite in the invoking workspace.",
+        ),
+        "_runfiles": attr.label(
+            default = "@bazel_tools//tools/bash/runfiles",
+        ),
+    },
+)
