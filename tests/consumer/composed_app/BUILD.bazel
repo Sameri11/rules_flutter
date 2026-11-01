@@ -14,6 +14,7 @@ load(
     "@rules_flutter_android//flutter:defs.bzl",
     "flutter_android_app",
 )
+
 # Exercise the generated native strip path without adding a public macro.
 # buildifier: disable=bzl-visibility
 load("@rules_flutter_android//flutter/private:native_strip.bzl", "android_native_files")
