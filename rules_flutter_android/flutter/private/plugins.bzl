@@ -127,8 +127,11 @@ cmake(
         "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,max-page-size=16384 -Wl,--strip-all",
     }},
     generate_args = ["-GNinja"],
+    # These projects have no install() rule, so copy their declared outputs to
+    # the directory rules_foreign_cc collects when installation is disabled.
     install = False,
     out_shared_libs = {libs},
+    postfix_script = "mkdir -p $$INSTALLDIR/lib && cp {lib_copy} $$INSTALLDIR/lib/",
 )
 
 android_native_files(
@@ -1538,8 +1541,7 @@ def _flutter_plugins_impl(ctx):
                 _NATIVE_ABI_TEMPLATE.format(
                     name = name,
                     libs = repr(libraries),
-                    cmake_dir = cmake_directory,
-                    ndk_source_properties = ctx.attr.ndk_source_properties,
+                    lib_copy = " ".join(libraries),
                     abi = abi,
                     api_level = MIN_SDK,
                 )

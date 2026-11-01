@@ -142,19 +142,27 @@ flutter_android_app(
     deps = [":main_activity"],
 )
 
+
 kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/hello_bazel/MainActivity.kt"],
-    deps = ["@flutter_maven//:flutter_embedding_release"],
+    deps = [":hello_bazel_inputs"],
 )
 ```
+
+The helper produces the app inputs target used by the Android entrypoint and
+other Android targets in the package.
 
 Build release with `-c opt` and debug with `-c fastbuild` plus Flutter debug mode:
 
 ```sh
-bazel build //android/app:hello_bazel -c opt
-bazel build //android/app:hello_bazel -c fastbuild --@rules_flutter_core//flutter:mode=debug
+bazel build //android/app:hello_bazel -c opt \
+  --android_platforms=@rules_android//:arm64-v8a
+bazel build //android/app:hello_bazel -c fastbuild \
+  --@rules_flutter_core//flutter:mode=debug \
+  --android_platforms=@rules_android//:arm64-v8a
 ```
+
 
 Select the ABI set using `--android_platforms`; keep the APK label unchanged. Build and capture each configuration's APK before the next invocation. Install with `adb install -r bazel-bin/android/app/hello_bazel.apk`. For hot reload, run the Bazel-built debug APK with `flutter run --debug --use-application-binary=<apk-path>`; packaging changes require a rebuild.
 

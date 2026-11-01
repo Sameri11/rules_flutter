@@ -14,7 +14,7 @@ load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "pub_path_deps_check", "pub_plugins_check")
+load(":rules.bzl", "_internal_kwargs", "_workspace_label", "_write_source_file", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "pub_path_deps_check", "pub_plugins_check")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -339,26 +339,45 @@ def flutter_core(
         name = "path_deps_check",
         path_deps = path_deps,
         pubspec_lock = "pubspec.lock",
+        **kwargs
     )
     if plugin_deps:
+        plugin_deps_label = _workspace_label(plugin_deps)
         pub_plugins_check(
             name = "plugins_check",
-            committed = plugin_deps,
+            committed = plugin_deps_label,
             expected = plugins + "//:plugin_deps.MODULE.bazel",
+            updater = ":plugins_update",
+            **kwargs
+        )
+        _write_source_file(
+            name = "plugins_update",
+            source = plugins + "//:plugin_deps.MODULE.bazel",
+            destination = plugin_deps_label,
+            **_internal_kwargs(kwargs)
         )
         guards.append(":plugins_check")
 
-    if dart_plugin_registrant and plugin_deps:
-        pub_plugins_check(
-            name = "dart_registrant_check",
-            committed = dart_plugin_registrant,
-            expected = plugins + "//:dart_plugin_registrant.dart",
-        )
-        guards.append(":dart_registrant_check")
-
+        if dart_plugin_registrant:
+            registrant_label = _workspace_label(dart_plugin_registrant)
+            pub_plugins_check(
+                name = "dart_registrant_check",
+                committed = registrant_label,
+                expected = plugins + "//:dart_plugin_registrant.dart",
+                updater = ":dart_registrant_update",
+                **kwargs
+            )
+            _write_source_file(
+                name = "dart_registrant_update",
+                source = plugins + "//:dart_plugin_registrant.dart",
+                destination = registrant_label,
+                **_internal_kwargs(kwargs)
+            )
+            guards.append(":dart_registrant_check")
     build_test(
         name = name + "_guards_test",
         targets = guards,
+        **kwargs
     )
 
     # Each split names only its own ABI's libapp and engine libraries. The
