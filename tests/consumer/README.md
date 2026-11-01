@@ -91,6 +91,12 @@ second app variant reusing inputs, and an app from an external module.
 `//apk_external_app_contents_test` checks that the external app's declared asset
 lands at its runtime path.
 
+Neither this module nor `external_app` owns a `flutter` package. A `select()`
+key inside a ruleset macro that regresses from `Label("//flutter:mode_debug")`
+to a bare string resolves in the caller's repository, so it fails analysis here
+with `no such package` under every mode instead of silently picking a branch.
+Verified by planting both the kernel and embedding keys.
+
 `flutter_core` is instantiated in `//standard_layout`, a second package whose
 contents follow the layout `flutter create` leaves behind: `pubspec.yaml`,
 `pubspec.lock`, `lib/main.dart`, and one asset. Its package config is the
