@@ -404,6 +404,59 @@ jobs:
           cache-project-id: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
           cache-token: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
 
+      - name: APK inventory rejects an unlisted app
+        if: matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app'
+        run: |
+          python3 - <<'PY'
+          import importlib.util, shlex, shutil, subprocess, sys, tempfile
+          from pathlib import Path
+
+          root = Path.cwd()
+          script = root / "tools/ci/example_hashes.py"
+          spec = importlib.util.spec_from_file_location("example_hashes", script)
+          hashes = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(hashes)
+          bazel = shutil.which("bazel")
+          if not bazel:
+              sys.exit("Bazel is unavailable for the inventory rejection check")
+          build = root / "examples/demo_app/android/app/BUILD.bazel"
+          original = build.read_bytes()
+          label = "//android/app:inventory_probe"
+          try:
+              build.write_bytes(original + b'''
+          flutter_android_app(
+              name = "inventory_probe",
+              core = "//:app",
+              manifest_values = {"applicationId": "com.example.inventory_probe"},
+              deps = [":main_activity"],
+          )
+          ''')
+              declared = hashes.declared_apk_targets(bazel, root / "examples/demo_app")
+              if label not in declared:
+                  sys.exit("The planted app was not discovered by the actual Bazel query")
+              with tempfile.TemporaryDirectory() as temporary:
+                  directory = Path(temporary)
+                  calls = directory / "calls"
+                  wrapper = directory / "bazel"
+                  wrapper.write_text(
+                      '#!/usr/bin/env bash\nprintf "%s\\n" "$1" >> ' +
+                      shlex.quote(str(calls)) + '\nexec ' + shlex.quote(bazel) + ' "$@"\n'
+                  )
+                  wrapper.chmod(0o755)
+                  result = subprocess.run(
+                      [sys.executable, str(script), "--check", "--only", "demo_app",
+                       "--bazel", str(wrapper), "--manifests", str(directory / "captures"),
+                       "--golden", str(root / "tools/ci/example_hashes_linux.txt")],
+                      capture_output=True, text=True,
+                  )
+                  invoked = calls.read_text().splitlines() if calls.exists() else []
+                  if result.returncode == 0 or invoked != ["query"] or label not in result.stderr:
+                      sys.exit(f"Inventory rejection failed: calls={invoked}\n{result.stdout}\n{result.stderr}")
+                  print(f"Unlisted app rejected before any build: {label}")
+          finally:
+              build.write_bytes(original)
+          PY
+
       # Runs before the example's first build: cached outputs have no worker spawns to check.
       - name: Test kernel invariants
         working-directory: ${{ matrix.example.directory }}
