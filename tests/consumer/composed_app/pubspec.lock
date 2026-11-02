@@ -59,6 +59,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.0"
+  production_probe:
+    dependency: transitive
+    description:
+      path: "../fixtures/production_probe"
+      relative: true
+    source: path
+    version: "0.0.1"
   recipe_package:
     dependency: "direct main"
     description:
@@ -66,6 +73,13 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
+  shared_probe:
+    dependency: transitive
+    description:
+      path: "../fixtures/shared_probe"
+      relative: true
+    source: path
+    version: "0.0.1"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -81,3 +95,4 @@ packages:
     version: "2.4.4"
 sdks:
   dart: ">=3.12.2 <4.0.0"
+  flutter: ">=3.0.0"

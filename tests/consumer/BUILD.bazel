@@ -57,6 +57,23 @@ filegroup(
     visibility = ["//composed_app:__pkg__"],
 )
 
+filegroup(
+    name = "production_probe_srcs",
+    srcs = glob(["fixtures/production_probe/**"]),
+    visibility = ["//composed_app:__pkg__"],
+)
+
+filegroup(
+    name = "shared_probe_srcs",
+    srcs = glob(["fixtures/shared_probe/**"]),
+    visibility = ["//composed_app:__pkg__"],
+)
+
+filegroup(
+    name = "dev_only_probe_srcs",
+    srcs = glob(["fixtures/dev_only_probe/**"]),
+)
+
 # `//standard_layout` exercises `flutter_core` defaults for standard-layout
 # sources/assets while naming the remaining attributes explicitly.
 
@@ -89,7 +106,11 @@ flutter_core(
     srcs = ["lib/main.dart"],
     dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     entrypoint = "lib/main.dart",
-    path_deps = [],
+    path_deps = [
+        ":dev_only_probe_srcs",
+        ":production_probe_srcs",
+        ":shared_probe_srcs",
+    ],
     pub = "@pub",
 )
 
@@ -104,7 +125,11 @@ flutter_assets(
 
 pub_path_deps_check(
     name = "fixture_path_deps_check",
-    path_deps = [],
+    path_deps = [
+        ":dev_only_probe_srcs",
+        ":production_probe_srcs",
+        ":shared_probe_srcs",
+    ],
     pubspec_lock = "pubspec.lock",
 )
 
@@ -177,6 +202,16 @@ filegroup(
     ],
 )
 
+filegroup(
+    name = "graph_guard_cross_hub",
+    testonly = True,
+    srcs = [
+        ":apk",
+        "@composed_plugins//composed_plugin",
+    ],
+    tags = ["manual"],
+)
+
 flutter_android_app(
     name = "apk_no_plugin_graph",
     core = "//standard_layout:core",
@@ -194,14 +229,6 @@ flutter_android_app(
     manifest_values = {"applicationId": "com.example.external_app"},
     plugins = None,
     resource_files = [],
-    tags = ["manual"],
-)
-
-flutter_android_inputs(
-    name = "maven_alias_inputs",
-    core = ":app_core",
-    maven_repo = "@plugin_maven_alias",
-    plugins = "@flutter_plugins",
     tags = ["manual"],
 )
 
@@ -230,10 +257,10 @@ flutter_android_inputs(
 
 flutter_android_app(
     name = "maven_reused_app",
-    inputs = ":maven_alias_inputs",
+    inputs = "@external_app//app:maven_alias_inputs",
     manifest = "fixtures/AndroidManifest.xml",
     manifest_values = {"applicationId": "com.example.maven_reused"},
-    maven_repo = "@plugin_maven_alias",
+    maven_repo = "@plugin_maven",
     resource_files = [],
     tags = ["manual"],
 )

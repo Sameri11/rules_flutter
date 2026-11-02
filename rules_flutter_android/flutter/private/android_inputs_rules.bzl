@@ -26,7 +26,7 @@ load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
 visibility(["//flutter/...", "//tests/..."])
 
 # The registrant of an app without plugins: an empty GeneratedPluginRegistrant.
-_EMPTY_REGISTRANT = Label("@rules_flutter_android//flutter/private:registrant/GeneratedPluginRegistrant.java")
+_EMPTY_REGISTRANT = Label("//flutter/private:registrant/GeneratedPluginRegistrant.java")
 
 _NO_ABI_MESSAGE = "ERROR: {} has no Android ABI, so it packages no native libraries. Set --android_platforms to the Android platforms to build."
 

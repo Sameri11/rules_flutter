@@ -41,6 +41,7 @@ flutter_android_app(
     core = ":app_core",
     manifest_values = {"applicationId": "com.example.rejected"},
     plugins = None,
+    resource_files = [],
     plugin_deps = None,
     tags = ["manual"],
 )

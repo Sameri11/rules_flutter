@@ -27,7 +27,7 @@ def query(expression):
 
 def main():
     positive = query(
-        "//:apk + //:maven_alias_inputs + //:maven_custom_no_plugins_inputs + //:maven_reused_app"
+        "//:apk + //:apk_no_plugin_natives_inputs + @external_app//app:maven_alias_inputs + //:maven_custom_no_plugins_inputs + //:maven_reused_app"
     )
     if positive.returncode or not positive.stdout.strip():
         sys.exit("FAIL: public positive Maven cases did not configure:\n" + positive.stdout)

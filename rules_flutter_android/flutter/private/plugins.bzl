@@ -61,7 +61,7 @@ load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_java//java:defs.bzl", "java_import")
 """
 
-_PROJECT_BUILD_LOADS = """load("{maven_identity}", "flutter_maven_dependencies", "flutter_maven_repository")
+_PROJECT_BUILD_LOADS = """load("{maven_identity}", "flutter_maven_repository")
 """
 
 _MAVEN_TARGETS_TEMPLATE = """
@@ -70,9 +70,9 @@ flutter_maven_repository(
     maven_repo = "{maven_repo}//:pin",
 )
 
-flutter_maven_dependencies(
+android_library(
     name = "flutter_embedding_deps",
-    deps = {embedding_deps},
+    exports = {embedding_deps},
 )
 """
 
@@ -1405,6 +1405,18 @@ def _flutter_plugins_impl(ctx):
         for p in plugins
     ]
     _write_android_registrants(ctx, registrant_plugins, roots)
+
+    # Pub dependencies include entries without native Android targets, such as
+    # Dart-only and default-package declarations. Recipes in the resolution
+    # generate Android targets even when their metadata entry is non-native.
+    generated_android_targets = {
+        plugin["name"]: True
+        for plugin in plugins
+        if plugin.get("native_build", True)
+    }
+    for recipe_name in recipes:
+        if recipe_name in roots:
+            generated_android_targets[recipe_name] = True
     for plugin in plugins:
         name = plugin["name"]
         package_root = roots.get(name)
@@ -1412,9 +1424,14 @@ def _flutter_plugins_impl(ctx):
             fail(("Plugin `{}` is in {} but has no entry in {}: the two must come from " +
                   "the same pub hub.").format(name, ctx.attr.metadata, ctx.attr.package_config))
 
-        # Dart-only implementations have no Gradle module to build.
+        # Skip metadata entries that have no native Android target.
         if not plugin.get("native_build", True):
             continue
+        plugin_dependencies = [
+            dependency
+            for dependency in plugin.get("dependencies", [])
+            if dependency in generated_android_targets
+        ]
 
         # `package_root` is the package root; the Gradle module is one level down.
         # It is outside this repository, hence the staging below: Bazel cannot glob
@@ -1499,12 +1516,12 @@ def _flutter_plugins_impl(ctx):
                     "maven_repo": ctx.attr.maven_repo,
                     "plugin_deps": repr([
                         "//{n}:{n}".format(n = d)
-                        for d in plugin.get("dependencies", [])
+                        for d in plugin_dependencies
                     ]),
                     "reasons": repr(reasons),
                     "abis": repr(ctx.attr.abis),
                     "api_level": MIN_SDK,
-                    "embedding": repr("//:flutter_embedding"),
+                    "embedding": "//:flutter_embedding",
                 },
                 gate_note = (
                     "\n# Reasons that would otherwise gate it: {}.".format(", ".join(gated)) if gated else ""
@@ -1677,7 +1694,7 @@ def _flutter_plugins_impl(ctx):
                     # from the same "dependencies" field.
                     [
                         "\n        \"//{n}:{n}\",".format(n = d)
-                        for d in plugin.get("dependencies", [])
+                        for d in plugin_dependencies
                     ] + [
                         "\n        \"{}\",".format(
                             maven_label(c, repo = ctx.attr.maven_repo),
@@ -1742,7 +1759,7 @@ def _flutter_plugins_impl(ctx):
                 "reasons": repr([]),
                 "abis": repr(ctx.attr.abis),
                 "api_level": MIN_SDK,
-                "embedding": repr("//:flutter_embedding"),
+                "embedding": "//:flutter_embedding",
             })
             manifest.append({
                 "name": name,

@@ -27,11 +27,13 @@ def run(*args):
         command,
         cwd=CONSUMER,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
     )
     if result.returncode:
-        raise RuntimeError("command failed: {}\n{}".format(" ".join(command), result.stdout))
+        raise RuntimeError(
+            "command failed: {}\n{}".format(" ".join(command), result.stdout + result.stderr)
+        )
     return result.stdout
 
 

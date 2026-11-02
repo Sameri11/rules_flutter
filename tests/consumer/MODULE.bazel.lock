@@ -557,7 +557,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "zsupZP3aFp8eDGC+RvKPvSFdka4N6VMylo+LcceedxA=",
+        "bzlTransitiveDigest": "K1vqpRDYfXpPP2+gE3JW2gTa1E62VKVmQM3dGL4kIa4=",
         "usagesDigest": "AFQI5PN97mnks2yWgIX361TV8306rJ4VPuWmhG1yFNA=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android rules_android+",
@@ -579,12 +579,15 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "zsupZP3aFp8eDGC+RvKPvSFdka4N6VMylo+LcceedxA=",
-        "usagesDigest": "rQ0qVoGrilAfvxDRN6LrmedLES350Ep6gbmLpCNDGy0=",
+        "bzlTransitiveDigest": "K1vqpRDYfXpPP2+gE3JW2gTa1E62VKVmQM3dGL4kIa4=",
+        "usagesDigest": "d70uhRryOiDD7MSJaDj2QCMDJqNgGn6pmUKPgd/sr2I=",
         "recordedInputs": [
           "REPO_MAPPING:,composed_pub sameri11_rules_flutter_core++pub+composed_pub",
+          "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
           "REPO_MAPPING:,namespace_plugin_metadata +namespace_plugin_metadata+namespace_plugin_metadata",
-          "REPO_MAPPING:,plugin_maven_alias rules_jvm_external++maven+plugin_maven",
+          "REPO_MAPPING:,plugin_maven rules_jvm_external++maven+plugin_maven",
+          "REPO_MAPPING:external_app+,external_app_pub sameri11_rules_flutter_core++pub+external_app_pub",
+          "REPO_MAPPING:external_app+,plugin_maven_alias rules_jvm_external++maven+plugin_maven",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android rules_android+",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android_ndk rules_android_ndk+",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+",
@@ -642,7 +645,7 @@
               "extra_artifacts": [],
               "maven_resolver": "coursier",
               "maven_lock_file": "",
-              "maven_repo": "'@@rules_jvm_external++maven+plugin_maven'",
+              "maven_repo": "'@@rules_jvm_external++maven+flutter_maven'",
               "overrides": {},
               "consumer_rules": {},
               "build_config_fields": {},
@@ -671,7 +674,7 @@
               "extra_artifacts": [],
               "maven_resolver": "coursier",
               "maven_lock_file": "",
-              "maven_repo": "'@@rules_jvm_external++maven+plugin_maven'",
+              "maven_repo": "'@@rules_jvm_external++maven+flutter_maven'",
               "overrides": {},
               "consumer_rules": {},
               "build_config_fields": {},
@@ -690,7 +693,7 @@
     },
     "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "Ua9YzuFYtWugtjtK5z6CXrj+uY7jfLZHmFp5bj42uFc=",
+        "bzlTransitiveDigest": "fMsnDE0GtbkGNlFAaqudkI1W/6egu6RJvMGtvoa9Trk=",
         "usagesDigest": "3YgLOQ5KctGblzmwvkmzbmE3OR8fATY6yGn0owwy7n8=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_core+,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",

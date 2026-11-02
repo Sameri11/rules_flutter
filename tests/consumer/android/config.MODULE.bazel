@@ -18,10 +18,9 @@ use_repo(android_sdk, "androidsdk")
 
 register_toolchains("@androidsdk//:all")
 
-# The proxy and both imports stay in this Consumer Module so the mandatory
-# `plugins.project(maven_repo = ...)` label resolves before the generated
-# segment is included. The plugin graph intentionally uses `plugin_maven`;
-# the embedding keeps its separate `flutter_maven` repository.
+# The generated segment owns the plugin project's Maven install. Keep the SDK
+# runtime install in this Consumer Module; external_app imports the project repo
+# under a distinct alias to exercise canonical-equivalence validation.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "flutter_maven",
@@ -45,19 +44,10 @@ maven.install(
     ],
     version_conflict_policy = "pinned",
 )
-maven.install(
-    name = "plugin_maven",
-    artifacts = [
-        "androidx.annotation:annotation-experimental:1.4.1",
-        "androidx.annotation:annotation:1.8.1",
-    ],
-    repositories = [
-        "https://maven.google.com",
-        "https://repo1.maven.org/maven2",
-    ],
-    version_conflict_policy = "pinned",
-)
-use_repo(maven, "flutter_maven", plugin_maven_alias = "plugin_maven")
+
+include("//:fixtures/plugin_deps.MODULE.bazel")
+
+use_repo(maven, "flutter_maven", "plugin_maven")
 
 local_path_override(
     module_name = "external_app",
@@ -146,7 +136,7 @@ plugins.package(
 )
 plugins.project(
     abis = ["arm64-v8a"],
-    maven_repo = "@plugin_maven_alias//:pin",
+    maven_repo = "@plugin_maven//:pin",
     metadata = "@namespace_plugin_metadata//:plugins_metadata.json",
     package_config = "@namespace_plugin_metadata//:package_config.json",
 )
@@ -164,7 +154,7 @@ plugins.project(
         "x86_64",
         "armeabi-v7a",
     ],
-    maven_repo = "@plugin_maven_alias//:pin",
+    maven_repo = "@flutter_maven//:pin",
     metadata = "@composed_pub//:plugins_metadata.json",
     package_config = "@composed_pub//:package_config.json",
 )
@@ -186,7 +176,7 @@ plugins.project(
         "x86_64",
         "armeabi-v7a",
     ],
-    maven_repo = "@plugin_maven_alias//:pin",
+    maven_repo = "@flutter_maven//:pin",
     metadata = "@composed_pub//:plugins_metadata.json",
     package_config = "@composed_pub//:package_config.json",
 )

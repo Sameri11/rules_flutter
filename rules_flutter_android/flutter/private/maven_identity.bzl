@@ -1,6 +1,6 @@
 """Analysis-time identity for a project's Maven repository."""
 
-load("@rules_java//java:defs.bzl", "JavaInfo", "java_common")
+load("@rules_java//java:defs.bzl", "java_common")
 
 FlutterMavenRepositoryInfo = provider(
     doc = "The canonical Maven repository selected by a Flutter plugin project.",
@@ -16,17 +16,6 @@ def _maven_repository_impl(ctx):
 flutter_maven_repository = rule(
     implementation = _maven_repository_impl,
     attrs = {"maven_repo": attr.label(mandatory = True)},
-)
-
-def _maven_dependencies_impl(ctx):
-    return [
-        java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps]),
-        DefaultInfo(files = depset()),
-    ]
-
-flutter_maven_dependencies = rule(
-    implementation = _maven_dependencies_impl,
-    attrs = {"deps": attr.label_list(providers = [JavaInfo])},
 )
 
 def _maven_repository_check_impl(ctx):

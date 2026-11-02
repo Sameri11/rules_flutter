@@ -133,6 +133,10 @@ def _plugin_dependency_graph(entries, root_name):
 
 def _plugins_metadata(entries, root_name, deps, reached):
     platform_plugins = {}
+
+    # Keep app-facing default_package entries in metadata, but never expose them
+    # as target dependencies: only implementation packages have generated targets.
+    implementing_plugins = {}
     implements_by_plugin = {}
     for name in sorted(entries.keys()):
         if name == root_name:
@@ -142,7 +146,10 @@ def _plugins_metadata(entries, root_name, deps, reached):
         for platform, info in platforms.items():
             if platform not in platform_plugins:
                 platform_plugins[platform] = {}
+                implementing_plugins[platform] = {}
             platform_plugins[platform][name] = info
+            if info.get("pluginClass") or info.get("dartPluginClass") or info.get("ffiPlugin") == "true":
+                implementing_plugins[platform][name] = True
 
     plugins = {}
     for platform, platform_plugins_for_os in platform_plugins.items():
@@ -152,7 +159,7 @@ def _plugins_metadata(entries, root_name, deps, reached):
             plugin_list.append({
                 "name": name,
                 "native_build": bool(info.get("pluginClass")) or info.get("ffiPlugin") == "true",
-                "dependencies": [d for d in deps[name] if d in platform_plugins_for_os],
+                "dependencies": [d for d in deps[name] if d in implementing_plugins[platform]],
                 "direct": name in deps[root_name],
                 "dev_dependency": name not in reached,
                 "implements": implements_by_plugin[name] or "",
@@ -308,8 +315,8 @@ def _pub_hub_impl(rctx):
             debug_registrations.append((name, registrations))
             if name in reached:
                 release_registrations.append((name, registrations))
-    rctx.file("dart_plugin_registrant.dart", render_dart_registrant(debug_registrations))
-    rctx.file("dart_plugin_registrant_release.dart", render_dart_registrant(release_registrations))
+    rctx.file("dart_plugin_registrant.dart", render_dart_registrant(debug_registrations), executable = False)
+    rctx.file("dart_plugin_registrant_release.dart", render_dart_registrant(release_registrations), executable = False)
 
     hosted_names = sorted(rctx.attr.hosted.values())
     repo_of = {name: label.repo_name for label, name in rctx.attr.hosted.items()}

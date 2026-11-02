@@ -43,7 +43,9 @@ flutter_core(
         "//:cmake_plugin_srcs",
         "//:composed_plugin_srcs",
         "//:dev_cmake_plugin_srcs",
+        "//:production_probe_srcs",
         "//:recipe_package_srcs",
+        "//:shared_probe_srcs",
     ],
     pub = "@composed_pub",
 )

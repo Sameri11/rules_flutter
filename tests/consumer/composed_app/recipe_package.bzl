@@ -51,5 +51,5 @@ def cmake_override_recipe(name, info):
         srcs = info.android_srcs,
         manifest = info.android_manifest,
         custom_package = info.namespace,
-        deps = [info.embedding],
+        deps = [info.embedding] + info.plugin_deps,
     )
