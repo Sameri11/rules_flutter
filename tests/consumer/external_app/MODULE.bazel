@@ -24,10 +24,5 @@ plugins.package(
     name = "absent_package",
     bzl_file = "//:absent_package.bzl",
 )
-plugins.project(
-    abis = ["arm64-v8a"],
-    maven_repo = "@plugin_maven_alias//:pin",
-    metadata = "@external_app_pub//:plugins_metadata.json",
-    package_config = "@external_app_pub//:package_config.json",
-)
+# This alias imports the root project's plugin hub.
 use_repo(plugins, flutter_plugins_alias = "flutter_plugins")

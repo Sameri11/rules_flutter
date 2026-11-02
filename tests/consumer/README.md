@@ -148,7 +148,7 @@ repository:
   `@plugin_maven_alias`; its `maven_alias_inputs` target proves the helper accepts
   a distinct apparent name for the same canonical repository.
 - Four namespace parser fixtures use bare Android manifests and source packages
-  that each reference `R.string.namespace_marker`; `:namespace_plugin_test`
+  that each reference its own `R.string.namespace_<case>_marker`; `:namespace_plugin_test`
   builds all four generated targets, making javac observe the exact namespace
   emitted as `custom_package` rather than accepting a manifest fallback.
 - `fixtures/build_config_plugin` disables AGP BuildConfig generation and reads

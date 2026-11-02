@@ -580,14 +580,12 @@
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
         "bzlTransitiveDigest": "K1vqpRDYfXpPP2+gE3JW2gTa1E62VKVmQM3dGL4kIa4=",
-        "usagesDigest": "d70uhRryOiDD7MSJaDj2QCMDJqNgGn6pmUKPgd/sr2I=",
+        "usagesDigest": "naeoxEuq0KIKhL+K5i/mck3koDXytX3693b+UUhKcqI=",
         "recordedInputs": [
           "REPO_MAPPING:,composed_pub sameri11_rules_flutter_core++pub+composed_pub",
           "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
           "REPO_MAPPING:,namespace_plugin_metadata +namespace_plugin_metadata+namespace_plugin_metadata",
           "REPO_MAPPING:,plugin_maven rules_jvm_external++maven+plugin_maven",
-          "REPO_MAPPING:external_app+,external_app_pub sameri11_rules_flutter_core++pub+external_app_pub",
-          "REPO_MAPPING:external_app+,plugin_maven_alias rules_jvm_external++maven+plugin_maven",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android rules_android+",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android_ndk rules_android_ndk+",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+",
