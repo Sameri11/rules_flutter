@@ -258,13 +258,14 @@ def flutter_core(
 
     package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
 
-    registrant = None
+    aot_registrant = None
+    debug_registrant = None
     if dart_plugin_registrant:
-        registrant = select({
+        debug_registrant = _workspace_label(dart_plugin_registrant)
+        aot_registrant = select({
             Label("//flutter:mode_release"): pub + "//:dart_plugin_registrant_release.dart",
-            "//conditions:default": _workspace_label(dart_plugin_registrant),
+            "//conditions:default": debug_registrant,
         })
-
 
     flutter_pubspec(name = "pubspec", src = "pubspec.yaml", visibility = kwargs.get("visibility"))
 
@@ -276,8 +277,7 @@ def flutter_core(
         package_config = package_config,
         pub_srcs = [pub_lib],
         path_deps = path_deps,
-        dart_plugin_registrant = registrant,
-        target_os = target_os,
+        dart_plugin_registrant = aot_registrant,
         dart_defines = dart_defines,
         target_compatible_with = aot_target_compatible_with(),
     )
@@ -297,7 +297,7 @@ def flutter_core(
         package_config = package_config,
         pub_srcs = [pub_lib],
         path_deps = path_deps,
-        dart_plugin_registrant = registrant,
+        dart_plugin_registrant = debug_registrant,
         dart_defines = dart_defines,
     )
 

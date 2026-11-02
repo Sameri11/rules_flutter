@@ -1,1 +1,1 @@
--keep class com.example.fake_plugin.FakePlugin { *; }
+-keep class com.example.fake_plugin.ConsumerRuleProbe { *; }

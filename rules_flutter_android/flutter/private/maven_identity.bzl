@@ -33,6 +33,7 @@ def _maven_repository_check_impl(ctx):
     project_repo = ctx.attr.project[FlutterMavenRepositoryInfo].repo_name
     supplied_repo = ctx.attr.maven_repo.label.repo_name
     if project_repo != supplied_repo:
+        # buildifier: disable=canonical-repository
         fail("{}: maven_repo resolves to @@{} but the plugin project uses @@{}".format(
             ctx.label,
             supplied_repo,

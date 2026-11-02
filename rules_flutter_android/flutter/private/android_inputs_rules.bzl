@@ -255,6 +255,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
             name = name + "_maven_repository",
             actual = plugins + "//:maven_repository",
             tags = helper_tags,
+            visibility = visibility,
         )
         if maven_repo == None:
             embedding_deps = [plugins + "//:flutter_embedding_deps"]
@@ -273,6 +274,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
         flutter_maven_repository(
             name = name + "_maven_repository",
             maven_repo = maven_repo + "//:pin",
+            visibility = visibility,
             tags = helper_tags,
         )
         embedding_deps = flutter_embedding_deps(maven_repo)
@@ -312,6 +314,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
             srcs = [_EMPTY_REGISTRANT],
             deps = [
                 ":" + name + "_embedding",
+                maven_repo + ANNOTATION_JVM,
             ],
             tags = helper_tags,
         )

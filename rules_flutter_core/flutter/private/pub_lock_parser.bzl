@@ -363,7 +363,12 @@ def _yaml_scalar(value):
 def pubspec_flutter_plugins(pubspec_text):
     """Returns Flutter plugin metadata as `(implements, platform_map)`.
 
-    Each platform map contains the scalar values declared under that platform.
+    Args:
+      pubspec_text: Contents of a pubspec.yaml.
+
+    Returns:
+      The flutter.plugin.implements value (or empty string) and a mapping from
+      platform name to its scalar metadata fields.
     """
     stack = []
     platforms = {}
@@ -385,7 +390,7 @@ def pubspec_flutter_plugins(pubspec_text):
         path = [s[1] for s in stack]
         if path == ["flutter", "plugin"] and key == "implements" and value != "":
             implements = _yaml_scalar(value)
-        elif path == ["flutter", "plugin", "platforms"] and value == "":
+        elif path == ["flutter", "plugin", "platforms"] and (value == "" or value.startswith("#")):
             platforms[key] = {}
         elif path == ["flutter", "plugin", "platforms"] and value.startswith("{"):
             if not value.endswith("}"):
@@ -402,7 +407,6 @@ def pubspec_flutter_plugins(pubspec_text):
             stack.append((indent, key))
     return implements, platforms
 
-
 def pubspec_dart_plugins(pubspec_text, name):
     """Returns Dart plugin classes by native operating system."""
     platforms = ["android", "ios", "linux", "macos", "windows"]
@@ -415,4 +419,3 @@ def pubspec_dart_plugins(pubspec_text, name):
         for platform, info in metadata.items()
         if platform in platforms and info.get("dartPluginClass")
     }
-

@@ -87,7 +87,7 @@ flutter_test(
 flutter_core(
     name = "app_core",
     srcs = ["lib/main.dart"],
-    dart_plugin_registrant = "lib/registrant.dart",
+    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     entrypoint = "lib/main.dart",
     path_deps = [],
     pub = "@pub",
@@ -333,10 +333,20 @@ build_test(
     targets = [":build_config_plugin_jar_check"],
 )
 
+java_import(
+    name = "build_config_runtime_embedding",
+    jars = select({
+        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
+        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
+    }),
+    deps = EMBEDDING_DEPS,
+)
+
 java_binary(
     name = "build_config_plugin_values",
     srcs = ["fixtures/BuildConfigValues.java"],
     main_class = "com.example.consumer.BuildConfigValues",
+    runtime_deps = [":build_config_runtime_embedding"],
     deps = [
         "@flutter_plugins//build_config_plugin",
     ],

@@ -57,7 +57,7 @@ maven.install(
     ],
     version_conflict_policy = "pinned",
 )
-use_repo(maven, "flutter_maven", "plugin_maven", plugin_maven_alias = "plugin_maven")
+use_repo(maven, "flutter_maven", plugin_maven_alias = "plugin_maven")
 
 local_path_override(
     module_name = "external_app",
@@ -137,10 +137,6 @@ plugins.build_config_field(
     value = "4.9e-324",
 )
 plugins.package(
-    name = "fake_plugin",
-    consumer_rules = ["android/consumer-rules.pro"],
-)
-plugins.package(
     name = "build_config_plugin",
     consumer_rules = ["android/custom-consumer.pro"],
 )
@@ -150,7 +146,7 @@ plugins.package(
 )
 plugins.project(
     abis = ["arm64-v8a"],
-    maven_repo = "@plugin_maven//:pin",
+    maven_repo = "@plugin_maven_alias//:pin",
     metadata = "@namespace_plugin_metadata//:plugins_metadata.json",
     package_config = "@namespace_plugin_metadata//:package_config.json",
 )
@@ -168,7 +164,7 @@ plugins.project(
         "x86_64",
         "armeabi-v7a",
     ],
-    maven_repo = "@plugin_maven//:pin",
+    maven_repo = "@plugin_maven_alias//:pin",
     metadata = "@composed_pub//:plugins_metadata.json",
     package_config = "@composed_pub//:package_config.json",
 )
@@ -190,7 +186,7 @@ plugins.project(
         "x86_64",
         "armeabi-v7a",
     ],
-    maven_repo = "@plugin_maven//:pin",
+    maven_repo = "@plugin_maven_alias//:pin",
     metadata = "@composed_pub//:plugins_metadata.json",
     package_config = "@composed_pub//:package_config.json",
 )

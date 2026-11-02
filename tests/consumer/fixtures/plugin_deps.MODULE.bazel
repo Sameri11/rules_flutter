@@ -3,11 +3,11 @@
 # Maven artifacts from the Flutter embedding and plugin build files.
 # Run the standalone `flutter_plugin_deps_guards` updater target when this segment drifts.
 #
-# The Consumer Module must import `maven_repo` before this segment; it declares
-# the sole `flutter_maven` install, avoiding version skew from split installs.
+# The Consumer Module imports the repository identity selected by the project
+# before this segment; it declares that install once, avoiding version skew.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
-    name = "flutter_maven",
+    name = "plugin_maven",
     artifacts = [
         "androidx.annotation:annotation:1.8.1",
         "androidx.annotation:annotation-experimental:1.4.1",

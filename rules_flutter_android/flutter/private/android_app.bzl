@@ -11,8 +11,8 @@ load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load(":abis.bzl", "MIN_SDK")
 load(":android.bzl", "flutter_android_manifest", "flutter_assets_dir")
 load(":android_inputs_rules.bzl", "flutter_android_inputs")
-load(":maven_identity.bzl", "check_flutter_maven_repository")
 load(":apk_check.bzl", "flutter_apk_check")
+load(":maven_identity.bzl", "check_flutter_maven_repository")
 
 # Mirrors android.bzl's _MANIFEST_VALUES, which goes with the wrapper.
 _MANIFEST_VALUES = {
@@ -58,7 +58,10 @@ def flutter_android_app(
         Its `core` and `plugins` are the ones it was declared with, and it must be
         visible from this package.
       plugins: the plugin repository, e.g. "@flutter_plugins", or None for an app
-        without plugins. Required without `inputs`; unset with it.
+      maven_repo: optional Maven repository alias. With plugins it must resolve
+        to the same canonical repository selected by the project; without plugins
+        it defaults to `@flutter_maven` and may be overridden. With `inputs=`, an
+        explicit value must match that inputs target's Maven repository.
       manifest: the app's AndroidManifest.xml. Stamped with the core's version.
       manifest_values: values the manifest does not carry. `applicationId` is
         required. `applicationName`, `minSdkVersion` and `targetSdkVersion` default

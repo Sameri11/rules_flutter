@@ -32,6 +32,7 @@ Bazel cannot verify a content hash for them.
 
 load(":dart_registrant.bzl", "render_dart_registrant")
 load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "pubspec_version", "resolve_lock")
+load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
 
@@ -113,6 +114,56 @@ def _test_deps_libraries(rctx, name, lib, sdk):
             continue
         uris.append("package:{}/{}".format(name, f.basename))
     return uris
+
+def _plugin_dependency_graph(entries, root_name):
+    deps = {name: pubspec_dependencies(entries[name]["pubspec"]) for name in entries}
+    reached = {root_name: True}
+    frontier = [root_name]
+    for _ in range(len(entries)):
+        nxt = []
+        for name in frontier:
+            for dep in deps[name]:
+                if dep in entries and dep not in reached:
+                    reached[dep] = True
+                    nxt.append(dep)
+        frontier = nxt
+        if not frontier:
+            break
+    return deps, reached
+
+def _plugins_metadata(entries, root_name, deps, reached):
+    platform_plugins = {}
+    implements_by_plugin = {}
+    for name in sorted(entries.keys()):
+        if name == root_name:
+            continue
+        implements, platforms = pubspec_flutter_plugins(entries[name]["pubspec"])
+        implements_by_plugin[name] = implements
+        for platform, info in platforms.items():
+            if platform not in platform_plugins:
+                platform_plugins[platform] = {}
+            platform_plugins[platform][name] = info
+
+    plugins = {}
+    for platform, platform_plugins_for_os in platform_plugins.items():
+        plugin_list = []
+        for name in sorted(platform_plugins_for_os.keys()):
+            info = platform_plugins_for_os[name]
+            plugin_list.append({
+                "name": name,
+                "native_build": bool(info.get("pluginClass")) or info.get("ffiPlugin") == "true",
+                "dependencies": [d for d in deps[name] if d in platform_plugins_for_os],
+                "direct": name in deps[root_name],
+                "dev_dependency": name not in reached,
+                "implements": implements_by_plugin[name] or "",
+                "default_package": info.get("default_package"),
+                "package": info.get("package"),
+                "plugin_class": info.get("pluginClass"),
+            })
+        plugins[platform] = plugin_list
+    if "android" not in plugins:
+        plugins["android"] = []
+    return {"plugins": plugins}
 
 def _pub_hub_impl(rctx):
     lock_label = rctx.attr.lock
@@ -240,59 +291,12 @@ def _pub_hub_impl(rctx):
         "configVersion": 1,
     }, indent = "  ") + "\n")
 
-    # Native plugin metadata is derived from the pubspecs already held by the hub.
-    # Package paths remain owned by package_config.json.
-    deps = {name: pubspec_dependencies(entries[name]["pubspec"]) for name in entries}
-    reached = {root_name: True}
-    frontier = [root_name]
-    for _ in range(len(entries)):
-        nxt = []
-        for name in frontier:
-            for dep in deps[name]:
-                if dep in entries and dep not in reached:
-                    reached[dep] = True
-                    nxt.append(dep)
-        frontier = nxt
-        if not frontier:
-            break
-
-    platform_plugins = {}
-    implements_by_plugin = {}
-    for name in sorted(entries.keys()):
-        if name == root_name:
-            continue
-        implements, platforms = pubspec_flutter_plugins(entries[name]["pubspec"])
-        implements_by_plugin[name] = implements
-        for platform, info in platforms.items():
-            if not (info.get("pluginClass") or info.get("dartPluginClass") or info.get("ffiPlugin") == "true"):
-                continue
-            if platform not in platform_plugins:
-                platform_plugins[platform] = {}
-            platform_plugins[platform][name] = info
-
-    plugin_metadata = {}
-    for platform, plugins in platform_plugins.items():
-        plugin_list = []
-        for name in sorted(plugins.keys()):
-            info = plugins[name]
-            plugin_list.append({
-                "name": name,
-                "native_build": bool(info.get("pluginClass")) or info.get("ffiPlugin") == "true",
-                "dependencies": [d for d in deps[name] if d in plugins],
-                "direct": name in deps[root_name],
-                "dev_dependency": name not in reached,
-                "implements": implements_by_plugin[name] or "",
-                "default_package": info.get("default_package"),
-                "package": info.get("package"),
-                "plugin_class": info.get("pluginClass"),
-            })
-        plugin_metadata[platform] = plugin_list
-    if "android" not in plugin_metadata:
-        plugin_metadata["android"] = []
-    rctx.file("plugins_metadata.json", json.encode_indent({
-        "plugins": plugin_metadata,
-    }, indent = "  ") + "\n")
-
+    # Package locations are owned by package_config.json.
+    deps, reached = _plugin_dependency_graph(entries, root_name)
+    rctx.file("plugins_metadata.json", json.encode_indent(
+        _plugins_metadata(entries, root_name, deps, reached),
+        indent = "  ",
+    ) + "\n")
 
     debug_registrations = []
     release_registrations = []
@@ -387,7 +391,6 @@ dart_test_deps(
         libraries = ", ".join(['"{}"'.format(uri) for uri in sorted(libraries.keys())]),
         packages = ", ".join(['"{}"'.format(name) for name in sorted(direct)]),
     ))
-
 
 def _root_package_name(pubspec_text):
     for raw in pubspec_text.split("\n"):

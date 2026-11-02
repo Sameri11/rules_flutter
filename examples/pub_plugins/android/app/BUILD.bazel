@@ -6,7 +6,6 @@ load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
-
 flutter_android_app(
     name = "pub_plugins",
     core = "//:app",

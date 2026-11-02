@@ -141,6 +141,11 @@ def _pubspec_readers_impl(ctx):
         ("", {"android": {"pluginClass": "A"}, "ios": {"pluginClass": "I"}}),
         pubspec_flutter_plugins("flutter:\n  plugin:\n    platforms:\n      android: {pluginClass: A}\n      ios: {pluginClass: I}\n"),
     )
+    asserts.equals(
+        env,
+        ("", {"ios": {"pluginClass": "IOSPlugin"}}),
+        pubspec_flutter_plugins("flutter:\n  plugin:\n    platforms:\n      ios: # federated implementation\n        pluginClass: IOSPlugin\n"),
+    )
     rendered = render_dart_registrant([("example", pubspec_dart_plugins(pubspec, "example"))])
     asserts.true(env, "Platform.isAndroid" in rendered)
     asserts.true(env, "Platform.isIOS" in rendered)

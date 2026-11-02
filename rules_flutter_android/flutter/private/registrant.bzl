@@ -49,6 +49,15 @@ def android_plugin(name, implements, android, direct, dev):
     }
 
 def resolve_android_plugins(plugins, release):
+    """Resolve Android implementations and omit dev-only entries for release.
+
+    Args:
+      plugins: normalized Android plugin metadata.
+      release: whether to exclude plugins reachable only through dev dependencies.
+
+    Returns:
+      The selected implementations, sorted by plugin name.
+    """
     if release:
         plugins = [p for p in plugins if not p["dev"]]
     by_name = {p["name"]: p for p in plugins}

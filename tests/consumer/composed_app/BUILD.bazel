@@ -45,7 +45,6 @@ flutter_core(
         "//:dev_cmake_plugin_srcs",
         "//:recipe_package_srcs",
     ],
-    plugins = "@composed_plugins",
     pub = "@composed_pub",
 )
 
