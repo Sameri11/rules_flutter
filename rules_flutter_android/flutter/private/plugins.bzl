@@ -1861,6 +1861,8 @@ def _flutter_plugins_impl(ctx):
         mode: "android/{}/GeneratedPluginRegistrant.java".format(mode)
         for mode in ["debug", "release"]
     }
+
+    # Stable label order preserves Maven classpath precedence for duplicate resources.
     ctx.file(
         "BUILD.bazel",
         _BUILD_LOADS +
@@ -1869,7 +1871,7 @@ def _flutter_plugins_impl(ctx):
         ) +
         _MAVEN_TARGETS_TEMPLATE.format(
             maven_repo = ctx.attr.maven_repo,
-            embedding_deps = repr(flutter_embedding_deps(maven_repo = ctx.attr.maven_repo)),
+            embedding_deps = repr(sorted(flutter_embedding_deps(maven_repo = ctx.attr.maven_repo))),
         ) +
         _NATIVE_LIBS_LOADS.format(
             native_files = str(Label("//flutter/private:native_files.bzl")),
