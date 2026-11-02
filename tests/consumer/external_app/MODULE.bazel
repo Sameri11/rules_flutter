@@ -24,5 +24,6 @@ plugins.package(
     name = "absent_package",
     bzl_file = "//:absent_package.bzl",
 )
+
 # This alias imports the root project's plugin hub.
 use_repo(plugins, flutter_plugins_alias = "flutter_plugins")
