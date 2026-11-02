@@ -18,10 +18,9 @@ use_repo(android_sdk, "androidsdk")
 
 register_toolchains("@androidsdk//:all")
 
-# The proxy and both imports stay in this Consumer Module so the mandatory
-# `plugins.project(maven_repo = ...)` label resolves before the generated
-# segment is included. The plugin graph intentionally uses `plugin_maven`;
-# the embedding keeps its separate `flutter_maven` repository.
+# The generated segment owns the plugin project's Maven install. Keep the SDK
+# runtime install in this Consumer Module; external_app imports the project repo
+# under a distinct alias to exercise canonical-equivalence validation.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "flutter_maven",
@@ -45,18 +44,9 @@ maven.install(
     ],
     version_conflict_policy = "pinned",
 )
-maven.install(
-    name = "plugin_maven",
-    artifacts = [
-        "androidx.annotation:annotation-experimental:1.4.1",
-        "androidx.annotation:annotation:1.8.1",
-    ],
-    repositories = [
-        "https://maven.google.com",
-        "https://repo1.maven.org/maven2",
-    ],
-    version_conflict_policy = "pinned",
-)
+
+include("//:fixtures/plugin_deps.MODULE.bazel")
+
 use_repo(maven, "flutter_maven", "plugin_maven")
 
 local_path_override(
@@ -77,11 +67,8 @@ namespace_plugin_metadata(
     bare_marker = "//:fixtures/namespace_bare/pubspec.yaml",
     build_config_marker = "//:fixtures/build_config_plugin/pubspec.yaml",
     call_marker = "//:fixtures/namespace_call/pubspec.yaml",
-    # These syntax fixtures declare no Flutter registrations in their pubspecs.
-    debug_registrant = "@pub//:android/debug/GeneratedPluginRegistrant.java",
     fake_marker = "//:fixtures/fake_plugin/pubspec.yaml",
     guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
-    release_registrant = "@pub//:android/release/GeneratedPluginRegistrant.java",
 )
 
 plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
@@ -139,9 +126,16 @@ plugins.build_config_field(
     type = "double",
     value = "4.9e-324",
 )
+plugins.package(
+    name = "build_config_plugin",
+    consumer_rules = ["android/custom-consumer.pro"],
+)
+plugins.package(
+    name = "namespace_call",
+    consumer_rules = [],
+)
 plugins.project(
     abis = ["arm64-v8a"],
-    embedding = "//:flutter_embedding_no_plugins",
     maven_repo = "@plugin_maven//:pin",
     metadata = "@namespace_plugin_metadata//:plugins_metadata.json",
     package_config = "@namespace_plugin_metadata//:package_config.json",
@@ -160,8 +154,7 @@ plugins.project(
         "x86_64",
         "armeabi-v7a",
     ],
-    embedding = "//:flutter_embedding_no_plugins",
-    maven_repo = "@plugin_maven//:pin",
+    maven_repo = "@flutter_maven//:pin",
     metadata = "@composed_pub//:plugins_metadata.json",
     package_config = "@composed_pub//:package_config.json",
 )
@@ -183,14 +176,8 @@ plugins.project(
         "x86_64",
         "armeabi-v7a",
     ],
-    embedding = "//:flutter_embedding_no_plugins",
-    maven_repo = "@plugin_maven//:pin",
+    maven_repo = "@flutter_maven//:pin",
     metadata = "@composed_pub//:plugins_metadata.json",
     package_config = "@composed_pub//:package_config.json",
 )
 use_repo(plugins, "composed_override_plugins", "composed_plugins", "flutter_plugins")
-
-# Public Flutter extension repositories used to test explicit embedding
-# debug/release labels in this fixture.
-flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
-use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")

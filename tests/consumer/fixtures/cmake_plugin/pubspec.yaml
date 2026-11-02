@@ -5,6 +5,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  composed_plugin:
+    path: ../composed_plugin
+  production_probe:
+    path: ../production_probe
 flutter:
   plugin:
     platforms:

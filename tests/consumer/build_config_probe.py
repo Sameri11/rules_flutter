@@ -157,9 +157,70 @@ def run_case(name: str, declarations: list[str], expected: str) -> None:
         print("{}: rejected with {}".format(name, expected))
 
 
+
+def run_missing_consumer_rule_case() -> None:
+    with tempfile.TemporaryDirectory(prefix="rules-flutter-consumer-rules-") as tmp:
+        workspace = Path(tmp) / "consumer"
+        shutil.copytree(
+            FIXTURE,
+            workspace,
+            ignore=shutil.ignore_patterns("bazel-*", "MODULE.bazel.lock", "*.checked"),
+        )
+        module = workspace / "MODULE.bazel"
+        text = module.read_text()
+        for name in ("rules_flutter_core", "rules_flutter_android"):
+            text = text.replace(
+                'path = "../../{}"'.format(name),
+                'path = "{}"'.format(ROOT / name),
+            )
+        module.write_text(text)
+        (workspace / ".bazelrc").write_text("common --enable_bzlmod\n")
+        config_path = workspace / "android" / "config.MODULE.bazel"
+        config = config_path.read_text()
+        config = config.replace(
+            "plugins.project(\n",
+            'plugins.package(name = "namespace_bare", consumer_rules = ["android/missing.pro"])\n\n'
+            "plugins.project(\n",
+            1,
+        )
+        config_path.write_text(config)
+        output_root = Path(tmp) / "output-user-root"
+        command = [
+            "bazel",
+            "--output_user_root=" + str(output_root),
+            "query",
+            "--lockfile_mode=update",
+            "--noshow_progress",
+            "--noshow_loading_progress",
+            "@flutter_plugins//:all",
+        ]
+        result = subprocess.run(
+            command,
+            cwd=workspace,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        subprocess.run(
+            ["bazel", "--output_user_root=" + str(output_root), "shutdown"],
+            cwd=workspace,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        expected = "consumer_rules file does not exist relative to its package root: android/missing.pro"
+        if result.returncode == 0 or expected not in result.stdout:
+            raise AssertionError(
+                "explicit missing consumer rule was not rejected with its path:\n" + result.stdout
+            )
+        print("explicit missing consumer rule: rejected with the selected path")
+
+
 def main() -> int:
     for name, (declarations, expected) in CASES.items():
         run_case(name, declarations, expected)
+    run_missing_consumer_rule_case()
     return 0
 
 

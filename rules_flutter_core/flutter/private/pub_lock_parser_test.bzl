@@ -7,7 +7,8 @@ producing a repository that fetches something unverified.
 """
 
 load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
-load(":pub_lock_parser.bzl", "language_version", "pubspec_dependencies", "pubspec_flutter_plugin", "resolve_lock")
+load(":dart_registrant.bzl", "render_dart_registrant")
+load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "resolve_lock")
 
 visibility(["//flutter"])
 
@@ -80,24 +81,80 @@ def _pubspec_readers_impl(ctx):
     asserts.equals(env, "3.4", language_version("name: x\nenvironment:\n  sdk: ^3.4.0\n  flutter: \">=3.0.0\"\n"))
     asserts.equals(env, "2.7", language_version("name: x\n"))
     asserts.equals(env, ["a", "b"], pubspec_dependencies("dependencies:\n  b: ^1.0.0\n  a:\n    sdk: flutter\ndev_dependencies:\n  c: any\n"))
+    pubspec = """flutter:
+  plugin:
+    implements: fed
+    platforms:
+      android:
+        package: com.example.alt
+        pluginClass: Alt
+        dartPluginClass: AndroidPlugin
+      ios:
+        pluginClass: IOSPlugin
+        dartPluginClass: IOSPlugin
+        dartFileName: ios_plugin.dart
+      linux:
+        dartPluginClass: LinuxPlugin
+      macos:
+        dartPluginClass: MacOSPlugin
+      windows:
+        dartPluginClass: WindowsPlugin
+      web:
+        dartPluginClass: WebPlugin
+      ohos:
+        dartPluginClass: OhosPlugin
+"""
+    implements, platform_metadata = pubspec_flutter_plugins(pubspec)
     asserts.equals(
         env,
-        ("", {"package": "com.example.p", "pluginClass": "P"}),
-        pubspec_flutter_plugin("flutter:\n  plugin:\n    platforms:\n      android:\n        package: com.example.p\n        pluginClass: P\n      ios:\n        pluginClass: Q\n"),
+        ("fed", {
+            "android": {"package": "com.example.alt", "pluginClass": "Alt", "dartPluginClass": "AndroidPlugin"},
+            "ios": {"pluginClass": "IOSPlugin", "dartPluginClass": "IOSPlugin", "dartFileName": "ios_plugin.dart"},
+            "linux": {"dartPluginClass": "LinuxPlugin"},
+            "macos": {"dartPluginClass": "MacOSPlugin"},
+            "windows": {"dartPluginClass": "WindowsPlugin"},
+            "web": {"dartPluginClass": "WebPlugin"},
+            "ohos": {"dartPluginClass": "OhosPlugin"},
+        }),
+        (implements, platform_metadata),
     )
-    asserts.equals(env, ("", None), pubspec_flutter_plugin("flutter:\n  plugin:\n    platforms:\n      ios:\n        pluginClass: Q\n"))
-
-    # `implements` sits beside `platforms`; one under a platform block is not it.
+    asserts.equals(env, ("fed", {"package": "com.example.alt", "pluginClass": "Alt", "dartPluginClass": "AndroidPlugin"}), (implements, platform_metadata["android"]))
     asserts.equals(
         env,
-        ("fed", {"package": "com.example.alt", "pluginClass": "Alt"}),
-        pubspec_flutter_plugin("flutter:\n  plugin:\n    implements: fed\n    platforms:\n      android:\n        package: com.example.alt\n        pluginClass: Alt\n"),
+        {
+            "android": ("AndroidPlugin", "example.dart"),
+            "ios": ("IOSPlugin", "ios_plugin.dart"),
+            "linux": ("LinuxPlugin", "example.dart"),
+            "macos": ("MacOSPlugin", "example.dart"),
+            "windows": ("WindowsPlugin", "example.dart"),
+        },
+        pubspec_dart_plugins(pubspec, "example"),
+    )
+    asserts.equals(env, {}, pubspec_flutter_plugins("flutter:\n  plugin:\n    platforms:\n      ios:\n        pluginClass: Q\n")[1].get("android", {}))
+    asserts.equals(
+        env,
+        {"android": {"default_package": "fed_android"}, "web": {"implements": "other"}},
+        pubspec_flutter_plugins("flutter:\n  plugin:\n    platforms:\n      android:\n        default_package: fed_android\n      web:\n        implements: other\n")[1],
     )
     asserts.equals(
         env,
-        ("", {"default_package": "fed_android"}),
-        pubspec_flutter_plugin("flutter:\n  plugin:\n    platforms:\n      android:\n        default_package: fed_android\n      web:\n        implements: other\n"),
+        ("", {"android": {"pluginClass": "A"}, "ios": {"pluginClass": "I"}}),
+        pubspec_flutter_plugins("flutter:\n  plugin:\n    platforms:\n      android: {pluginClass: A}\n      ios: {pluginClass: I}\n"),
     )
+    asserts.equals(
+        env,
+        ("", {"ios": {"pluginClass": "IOSPlugin"}}),
+        pubspec_flutter_plugins("flutter:\n  plugin:\n    platforms:\n      ios: # federated implementation\n        pluginClass: IOSPlugin\n"),
+    )
+    rendered = render_dart_registrant([("example", pubspec_dart_plugins(pubspec, "example"))])
+    asserts.true(env, "Platform.isAndroid" in rendered)
+    asserts.true(env, "Platform.isIOS" in rendered)
+    asserts.true(env, "Platform.isLinux" in rendered)
+    asserts.true(env, "Platform.isMacOS" in rendered)
+    asserts.true(env, "Platform.isWindows" in rendered)
+    asserts.true(env, "package:example/ios_plugin.dart" in rendered)
+    asserts.false(env, "Platform.isWeb" in rendered)
+    asserts.false(env, "Platform.isOhos" in rendered)
     return unittest.end(env)
 
 _pubspec_readers_test = unittest.make(_pubspec_readers_impl)

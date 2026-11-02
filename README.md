@@ -41,8 +41,10 @@ A local Flutter SDK, Android SDK, and Android NDK 28+ are required and not herme
 ### Composition and ABI selection
 
 Declare one `flutter_core` from the core module per Bazel package; it owns that
-package's app outputs, package/test outputs, and conditional plugin/registrant
-guards. `flutter_android_app` is the standard helper entrypoint.
+package's app outputs and package/test outputs. Declare
+`flutter_plugin_deps_guards` once in the package that owns the plugin graph to
+check its committed Maven segment. `flutter_android_app` is the standard helper
+entrypoint.
 `flutter_android_inputs`, `flutter_apk_check`, `flutter_android_manifest`,
 `flutter_assets_dir`, and `flutter_native_contribution` support custom
 composition.
@@ -120,7 +122,6 @@ package(default_visibility = ["//visibility:public"])
 
 flutter_core(
     name = "core",
-    plugin_deps = None,
     assets = [],
     pub = "@pub",
 )
@@ -168,6 +169,6 @@ Select the ABI set using `--android_platforms`; keep the APK label unchanged. Bu
 
 ## Scope and constraints
 
-The SDK, Android NDK and Android SDK are local, non-hermetic inputs. The Consumer Module owns Maven dependency resolution. `pubspec.lock` must be committed; hosted packages are pinned by sha256, Git sources are unsupported, and path dependencies must be declared. The Android registrant is generated from the lock for each mode: debug includes dev-only plugins and release excludes them. `plugin_deps.MODULE.bazel` is the generated Maven segment; `lib/dart_plugin_registrant.dart` is the Dart registrant.
+The SDK, Android NDK and Android SDK are local, non-hermetic inputs. The Consumer Module owns Maven dependency resolution. `pubspec.lock` must be committed; hosted packages are pinned by sha256, Git sources are unsupported, and path dependencies must be declared. The Android plugin hub generates Java registrants for each mode; debug includes dev-only plugins and release excludes them. The checked-in debug Dart registrant is at `lib/dart_plugin_registrant.dart`; the hub generates release registration during the build. Core checks the committed debug registrant against pub metadata.
 
 Bazel emits debug-key-signed and unsigned APKs; sign release APKs outside Bazel. `ndk-build` and prebuilt-JNI plugins are unsupported by automatic generation. See the detailed quickstart for Package Recipes and plugin configuration.

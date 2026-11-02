@@ -7,7 +7,5 @@ flutter_core(
     name = "core",
     entrypoint = "lib/alternate$release.dart",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
-    plugin_deps = None,
-    plugins = None,
     pub = "@standard_layout_pub",
 )

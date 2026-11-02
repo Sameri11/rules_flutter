@@ -12,6 +12,7 @@ load("//flutter/private:android.bzl", _flutter_android_manifest = "flutter_andro
 load("//flutter/private:android_app.bzl", _flutter_android_app = "flutter_android_app")
 load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
 load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
+load("//flutter/private:plugin_deps_guards.bzl", _flutter_plugin_deps_guards = "flutter_plugin_deps_guards")
 load("//flutter/private:recipe.bzl", _flutter_native_contribution = "flutter_native_contribution")
 
 _ANDROID_NATIVE_BUILD_ENV = Label("//flutter:native_build_env")
@@ -27,3 +28,4 @@ flutter_apk_check = _flutter_apk_check
 flutter_android_manifest = _flutter_android_manifest
 flutter_assets_dir = _flutter_assets_dir
 flutter_android_app = _flutter_android_app
+flutter_plugin_deps_guards = _flutter_plugin_deps_guards

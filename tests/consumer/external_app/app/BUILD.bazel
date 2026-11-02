@@ -1,3 +1,4 @@
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_inputs")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 package(default_visibility = ["//visibility:public"])
@@ -6,7 +7,13 @@ flutter_core(
     name = "app",
     entrypoint = "lib/alternate$release.dart",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
-    plugin_deps = None,
-    plugins = None,
     pub = "@external_app_pub",
+)
+
+flutter_android_inputs(
+    name = "maven_alias_inputs",
+    core = ":app",
+    maven_repo = "@plugin_maven_alias",
+    plugins = "@flutter_plugins_alias",
+    tags = ["manual"],
 )

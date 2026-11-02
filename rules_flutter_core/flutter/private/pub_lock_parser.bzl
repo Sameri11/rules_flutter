@@ -360,25 +360,18 @@ def _yaml_scalar(value):
         value = value[1:-1]
     return value
 
-def pubspec_flutter_plugin(pubspec_text):
-    """`flutter: plugin:` facts of a pubspec.yaml: `(implements, android)`.
-
-    `implements` is `flutter.plugin.implements` -- the app-facing package a
-    federated implementation serves -- or "". `android` is the scalar keys of
-    `flutter.plugin.platforms.android` (`package`, `pluginClass`,
-    `dartPluginClass`, `ffiPlugin`, `default_package`, `dartFileName`), or None
-    when there is no such block: what `flutter pub get` reads for the android
-    list of `.flutter-plugins-dependencies` and for GeneratedPluginRegistrant.
-    Block style and the one-line `{k: v, ...}` flow form are supported.
+def pubspec_flutter_plugins(pubspec_text):
+    """Returns Flutter plugin metadata as `(implements, platform_map)`.
 
     Args:
-      pubspec_text: contents of a pubspec.yaml.
+      pubspec_text: Contents of a pubspec.yaml.
 
     Returns:
-      `(implements, android)`.
+      The flutter.plugin.implements value (or empty string) and a mapping from
+      platform name to its scalar metadata fields.
     """
-    stack = []  # [(indent, key)]
-    found = None
+    stack = []
+    platforms = {}
     implements = ""
     for raw in pubspec_text.split("\n"):
         line = raw.rstrip()
@@ -397,85 +390,32 @@ def pubspec_flutter_plugin(pubspec_text):
         path = [s[1] for s in stack]
         if path == ["flutter", "plugin"] and key == "implements" and value != "":
             implements = _yaml_scalar(value)
-        elif path == ["flutter", "plugin", "platforms"] and key == "android":
-            found = found or {}
-            if value.startswith("{"):
-                if not value.endswith("}"):
-                    fail("pubspec.yaml: unsupported multi-line flow map for android plugin: {}".format(value))
-                for pair in value[1:-1].split(","):
-                    k, _, v = pair.partition(":")
-                    if k.strip():
-                        found[_yaml_scalar(k)] = _yaml_scalar(v)
-        elif path == ["flutter", "plugin", "platforms", "android"] and value != "":
-            found[key] = _yaml_scalar(value)
+        elif path == ["flutter", "plugin", "platforms"] and (value == "" or value.startswith("#")):
+            platforms[key] = {}
+        elif path == ["flutter", "plugin", "platforms"] and value.startswith("{"):
+            if not value.endswith("}"):
+                fail("pubspec.yaml: unsupported multi-line flow map for {} plugin: {}".format(key, value))
+            platform_info = {}
+            for pair in value[1:-1].split(","):
+                field, _, field_value = pair.partition(":")
+                if field.strip():
+                    platform_info[_yaml_scalar(field)] = _yaml_scalar(field_value)
+            platforms[key] = platform_info
+        elif len(path) == 4 and path[:3] == ["flutter", "plugin", "platforms"] and value != "":
+            platforms[path[3]][key] = _yaml_scalar(value)
         if value == "" or value.startswith("#"):
             stack.append((indent, key))
-    return implements, found
+    return implements, platforms
 
-def pubspec_dart_plugin(pubspec_text, name):
-    """`flutter: plugin: platforms: android: dartPluginClass` of a pubspec.yaml.
-
-    Returns `(dartClass, dartFileName)`, or `(None, None)` when the plugin has no
-    Dart class. The file defaults to `<name>.dart`, as flutter_tools does.
-
-    This is indentation-driven rather than a real YAML parse, which is why it
-    checks the nesting it walks rather than scanning for a bare key: a
-    `dartPluginClass` under ios: must not be picked up for android.
-
-    Args:
-      pubspec_text: contents of the plugin's pubspec.yaml.
-      name: the plugin's package name.
-
-    Returns:
-      `(dartClass, dartFileName)`.
-    """
-    in_flutter = False
-    in_plugin = False
-    in_platforms = False
-    in_android = False
-    dart_class = None
-    dart_file = None
-
-    for raw in pubspec_text.split("\n"):
-        line = raw.split("#")[0].rstrip()
-        if not line.strip():
-            continue
-        indent = len(line) - len(line.lstrip())
-        key = line.strip().split(":")[0].strip()
-        value = line.strip()[len(key) + 1:].strip() if ":" in line else ""
-
-        if indent == 0:
-            in_flutter = key == "flutter"
-            in_plugin = False
-            in_platforms = False
-            in_android = False
-            continue
-        if not in_flutter:
-            continue
-        if indent <= 2:
-            in_plugin = key == "plugin"
-            in_platforms = False
-            in_android = False
-            continue
-        if not in_plugin:
-            continue
-        if indent <= 4:
-            in_platforms = key == "platforms"
-            in_android = False
-            continue
-        if not in_platforms:
-            continue
-        if indent <= 6:
-            in_android = key == "android"
-            continue
-        if in_android:
-            if key == "dartPluginClass":
-                dart_class = value
-            elif key == "dartFileName":
-                dart_file = value
-
-    if dart_class == None:
-        return None, None
-
-    # flutter_tools defaults the file to <pluginName>.dart when unspecified.
-    return dart_class, (dart_file if dart_file else "{}.dart".format(name))
+def pubspec_dart_plugins(pubspec_text, name):
+    """Returns Dart plugin classes by native operating system."""
+    platforms = ["android", "ios", "linux", "macos", "windows"]
+    _, metadata = pubspec_flutter_plugins(pubspec_text)
+    return {
+        platform: (
+            _yaml_scalar(info["dartPluginClass"]),
+            _yaml_scalar(info.get("dartFileName", "{}.dart".format(name))),
+        )
+        for platform, info in metadata.items()
+        if platform in platforms and info.get("dartPluginClass")
+    }

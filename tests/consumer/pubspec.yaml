@@ -6,7 +6,13 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  production_probe:
+    path: fixtures/production_probe
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  dev_only_probe:
+    path: fixtures/dev_only_probe
+  shared_probe:
+    path: fixtures/shared_probe

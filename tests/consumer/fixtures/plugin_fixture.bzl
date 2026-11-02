@@ -10,22 +10,27 @@ def _root_uri(marker):
     return "../../" + "/".join([s for s in directory.split("/") if s]) + "/"
 
 def _namespace_plugin_metadata_impl(ctx):
-    """Generate pub metadata and expose mode-specific Android registrants."""
+    """Generate platform plugin metadata for checked-in fixture packages."""
     plugins = []
-    for name, marker in [
-        ("namespace_bare", ctx.attr.bare_marker),
-        ("namespace_call", ctx.attr.call_marker),
-        ("namespace_assignment", ctx.attr.assignment_marker),
-        ("namespace_guarded", ctx.attr.guarded_marker),
-        ("fake_plugin", ctx.attr.fake_marker),
-        ("build_config_plugin", ctx.attr.build_config_marker),
+    for name, marker, package, plugin_class in [
+        ("namespace_bare", ctx.attr.bare_marker, "com.example.namespace_bare", "Plugin"),
+        ("namespace_call", ctx.attr.call_marker, "com.example.namespace_call", "Plugin"),
+        ("namespace_assignment", ctx.attr.assignment_marker, "com.example.namespace_assignment", "Plugin"),
+        ("namespace_guarded", ctx.attr.guarded_marker, "com.example.namespace_guarded", "Plugin"),
+        ("fake_plugin", ctx.attr.fake_marker, "com.example.fake_plugin", "FakePlugin"),
+        ("build_config_plugin", ctx.attr.build_config_marker, "com.example.build_config_plugin", "BuildConfigPlugin"),
     ]:
         plugins.append({
             "name": name,
             "rootUri": _root_uri(marker),
             "native_build": True,
             "dependencies": [],
+            "direct": True,
             "dev_dependency": False,
+            "implements": "",
+            "default_package": None,
+            "package": package,
+            "plugin_class": plugin_class,
         })
 
     ctx.file(
@@ -33,7 +38,17 @@ def _namespace_plugin_metadata_impl(ctx):
         json.encode({
             "info": "Generated namespace parser fixture metadata.",
             "plugins": {"android": [
-                {key: plugin[key] for key in ["name", "native_build", "dependencies", "dev_dependency"]}
+                {key: plugin[key] for key in [
+                    "name",
+                    "native_build",
+                    "dependencies",
+                    "direct",
+                    "dev_dependency",
+                    "implements",
+                    "default_package",
+                    "package",
+                    "plugin_class",
+                ]}
                 for plugin in plugins
             ]},
         }),
@@ -53,32 +68,17 @@ def _namespace_plugin_metadata_impl(ctx):
             ],
         }),
     )
-    for mode, registrant in [
-        ("debug", ctx.attr.debug_registrant),
-        ("release", ctx.attr.release_registrant),
-    ]:
-        ctx.symlink(ctx.path(registrant), "android/{}/GeneratedPluginRegistrant.java".format(mode))
     ctx.file(
         "BUILD.bazel",
         "exports_files({})\n".format(repr([
             "plugins_metadata.json",
             "package_config.json",
-            "android/debug/GeneratedPluginRegistrant.java",
-            "android/release/GeneratedPluginRegistrant.java",
         ])),
     )
 
 namespace_plugin_metadata = repository_rule(
     implementation = _namespace_plugin_metadata_impl,
     attrs = {
-        "debug_registrant": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-        ),
-        "release_registrant": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-        ),
         "bare_marker": attr.label(
             allow_single_file = True,
             mandatory = True,

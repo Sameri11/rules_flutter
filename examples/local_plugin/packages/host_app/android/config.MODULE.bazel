@@ -1,11 +1,9 @@
 bazel_dep(name = "rules_android", version = "0.7.3")
-bazel_dep(name = "rules_java", version = "9.3.0")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
-# The proxy and import stay in this Consumer Module so the mandatory
-# `plugins.project(maven_repo = ...)` label resolves before the generated
-# segment is included.
+# The Consumer Module owns the Maven repository and exposes its canonical
+# identity to the plugin project.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 use_repo(maven, "flutter_maven")
 
@@ -29,7 +27,6 @@ register_toolchains("@androidndk//:all")
 plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
-    embedding = "//packages/host_app/android/app:flutter_embedding",
     maven_repo = "@flutter_maven//:pin",
     metadata = "@pub//:plugins_metadata.json",
     package_config = "@pub//:package_config.json",

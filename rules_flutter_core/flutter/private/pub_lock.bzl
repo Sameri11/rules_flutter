@@ -13,9 +13,7 @@ The `pub` module extension reads a consumer's `pubspec.lock` and creates
         `flutter build bundle` only reads `.dart_tool/package_config.json`, so the
         bundle action copies this one there inside its stage.
       - `package_graph.json`, the other file `flutter build bundle` reads there.
-      - `plugins_metadata.json`, the Android plugin list `plugins.project` reads.
-      - `android/{debug,release}/GeneratedPluginRegistrant.java`, the Android
-        registrant flutter_tools would write for each mode (registrant.bzl).
+      - `plugins_metadata.json`, platform-specific plugin lists; Android's list is consumed by `plugins.project`.
       - `dart_plugin_registrant.dart`, the Dart registrant over the same plugins.
       - filegroups `:lib` (every hosted package's packageUri tree and pubspec) and
         `:all` (every hosted package file, for the bundle), and `:test_deps` (the debug
@@ -33,8 +31,7 @@ Bazel cannot verify a content hash for them.
 """
 
 load(":dart_registrant.bzl", "render_dart_registrant")
-load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugin", "pubspec_dependencies", "pubspec_flutter_plugin", "pubspec_version", "resolve_lock")
-load(":registrant.bzl", "android_plugin", "main_class_candidates", "render_android_registrant", "resolve_android_plugins", "supports_embedding_v2")
+load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "pubspec_version", "resolve_lock")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
@@ -117,6 +114,63 @@ def _test_deps_libraries(rctx, name, lib, sdk):
             continue
         uris.append("package:{}/{}".format(name, f.basename))
     return uris
+
+def _plugin_dependency_graph(entries, root_name):
+    deps = {name: pubspec_dependencies(entries[name]["pubspec"]) for name in entries}
+    reached = {root_name: True}
+    frontier = [root_name]
+    for _ in range(len(entries)):
+        nxt = []
+        for name in frontier:
+            for dep in deps[name]:
+                if dep in entries and dep not in reached:
+                    reached[dep] = True
+                    nxt.append(dep)
+        frontier = nxt
+        if not frontier:
+            break
+    return deps, reached
+
+def _plugins_metadata(entries, root_name, deps, reached):
+    platform_plugins = {}
+
+    # Keep app-facing default_package entries in metadata, but never expose them
+    # as target dependencies: only implementation packages have generated targets.
+    implementing_plugins = {}
+    implements_by_plugin = {}
+    for name in sorted(entries.keys()):
+        if name == root_name:
+            continue
+        implements, platforms = pubspec_flutter_plugins(entries[name]["pubspec"])
+        implements_by_plugin[name] = implements
+        for platform, info in platforms.items():
+            if platform not in platform_plugins:
+                platform_plugins[platform] = {}
+                implementing_plugins[platform] = {}
+            platform_plugins[platform][name] = info
+            if info.get("pluginClass") or info.get("dartPluginClass") or info.get("ffiPlugin") == "true":
+                implementing_plugins[platform][name] = True
+
+    plugins = {}
+    for platform, platform_plugins_for_os in platform_plugins.items():
+        plugin_list = []
+        for name in sorted(platform_plugins_for_os.keys()):
+            info = platform_plugins_for_os[name]
+            plugin_list.append({
+                "name": name,
+                "native_build": bool(info.get("pluginClass")) or info.get("ffiPlugin") == "true",
+                "dependencies": [d for d in deps[name] if d in implementing_plugins[platform]],
+                "direct": name in deps[root_name],
+                "dev_dependency": name not in reached,
+                "implements": implements_by_plugin[name] or "",
+                "default_package": info.get("default_package"),
+                "package": info.get("package"),
+                "plugin_class": info.get("pluginClass"),
+            })
+        plugins[platform] = plugin_list
+    if "android" not in plugins:
+        plugins["android"] = []
+    return {"plugins": plugins}
 
 def _pub_hub_impl(rctx):
     lock_label = rctx.attr.lock
@@ -244,58 +298,25 @@ def _pub_hub_impl(rctx):
         "configVersion": 1,
     }, indent = "  ") + "\n")
 
-    # The android plugin list `flutter pub get` writes to `.flutter-plugins-dependencies`,
-    # derived from the pubspecs the hub already holds. Package locations are not in it:
-    # they are `package_config.json`'s. Same semantics as flutter_tools'
-    # `_createPluginMapOfPlatform`: `native_build` = pluginClass or ffiPlugin;
-    # `dependencies` = the plugin's own dependencies that are android plugins;
-    # `dev_dependency` = not reachable from the root's `dependencies`.
-    deps = {name: pubspec_dependencies(entries[name]["pubspec"]) for name in entries}
-    reached = {root_name: True}
-    frontier = [root_name]
-    for _ in range(len(entries)):
-        nxt = []
-        for name in frontier:
-            for dep in deps[name]:
-                if dep in entries and dep not in reached:
-                    reached[dep] = True
-                    nxt.append(dep)
-        frontier = nxt
-        if not frontier:
-            break
-    flutter_plugins = {}
-    android = {}
+    # Package locations are owned by package_config.json.
+    deps, reached = _plugin_dependency_graph(entries, root_name)
+    rctx.file("plugins_metadata.json", json.encode_indent(
+        _plugins_metadata(entries, root_name, deps, reached),
+        indent = "  ",
+    ) + "\n")
+
+    debug_registrations = []
+    release_registrations = []
     for name in sorted(entries.keys()):
         if name == root_name:
             continue
-        implements, info = pubspec_flutter_plugin(entries[name]["pubspec"])
-        if info == None:
-            continue
-        flutter_plugins[name] = (implements, info)
-        if info.get("pluginClass") or info.get("dartPluginClass") or info.get("ffiPlugin") == "true":
-            android[name] = info
-    plugin_list = []
-    for name in sorted(android.keys()):
-        info = android[name]
-        plugin_list.append({
-            "name": name,
-            "native_build": bool(info.get("pluginClass")) or info.get("ffiPlugin") == "true",
-            "dependencies": [d for d in deps[name] if d in android],
-            "dev_dependency": name not in reached,
-        })
-    rctx.file("plugins_metadata.json", json.encode_indent({
-        "info": "generated by rules_flutter pub_lock from pubspec.yaml files",
-        "plugins": {"android": plugin_list},
-    }, indent = "  ") + "\n")
-
-    _write_android_registrants(rctx, entries, flutter_plugins, deps[root_name], reached)
-
-    dart_registrations = []
-    for plugin in plugin_list:
-        dart_class, dart_file = pubspec_dart_plugin(entries[plugin["name"]]["pubspec"], plugin["name"])
-        if dart_class:
-            dart_registrations.append((plugin["name"], dart_class, dart_file))
-    rctx.file("dart_plugin_registrant.dart", render_dart_registrant(dart_registrations))
+        registrations = pubspec_dart_plugins(entries[name]["pubspec"], name)
+        if registrations:
+            debug_registrations.append((name, registrations))
+            if name in reached:
+                release_registrations.append((name, registrations))
+    rctx.file("dart_plugin_registrant.dart", render_dart_registrant(debug_registrations), executable = False)
+    rctx.file("dart_plugin_registrant_release.dart", render_dart_registrant(release_registrations), executable = False)
 
     hosted_names = sorted(rctx.attr.hosted.values())
     repo_of = {name: label.repo_name for label, name in rctx.attr.hosted.items()}
@@ -344,8 +365,7 @@ exports_files([
     "package_graph.json",
     "plugins_metadata.json",
     "dart_plugin_registrant.dart",
-    "android/debug/GeneratedPluginRegistrant.java",
-    "android/release/GeneratedPluginRegistrant.java",
+    "dart_plugin_registrant_release.dart",
 ])
 
 filegroup(
@@ -377,50 +397,6 @@ dart_test_deps(
         all = ", ".join(all_srcs),
         libraries = ", ".join(['"{}"'.format(uri) for uri in sorted(libraries.keys())]),
         packages = ", ".join(['"{}"'.format(name) for name in sorted(direct)]),
-    ))
-
-def _write_android_registrants(rctx, entries, flutter_plugins, direct, non_dev):
-    """`android/<mode>/GeneratedPluginRegistrant.java`, as flutter_tools writes it.
-
-    Debug is what `flutter pub get` writes, release what a release `flutter build`
-    rewrites it to. Each is generated from the hub's own pubspecs, so the Android
-    build reads nothing `flutter pub get` leaves behind.
-    """
-    plugins = []
-    for name in sorted(flutter_plugins.keys()):
-        implements, info = flutter_plugins[name]
-        plugins.append(android_plugin(name, implements, info, name in direct, name not in non_dev))
-
-    # Read once, only for plugins some mode registers -- flutter_tools reads the
-    # main class only then, and fails only then when it is missing.
-    v2 = {}
-    for mode in ["debug", "release"]:
-        entries_for_mode = []
-        for plugin in resolve_android_plugins(plugins, release = mode == "release"):
-            # `hasMethodChannel`, then `_getSupportedEmbeddings` (nothing without a package).
-            if plugin["plugin_class"] == None or plugin["package"] == None:
-                continue
-            name = plugin["name"]
-            if name not in v2:
-                v2[name] = _supports_v2(rctx, entries[name]["root"], plugin)
-            if v2[name]:
-                entries_for_mode.append((name, plugin["package"] + "." + plugin["plugin_class"]))
-        rctx.file(
-            "android/{}/GeneratedPluginRegistrant.java".format(mode),
-            render_android_registrant(entries_for_mode),
-        )
-
-def _supports_v2(rctx, root, plugin):
-    candidates = main_class_candidates(plugin["package"], plugin["plugin_class"])
-    for candidate in candidates:
-        path = root.get_child(*candidate.split("/"))
-        if path.exists:
-            return supports_embedding_v2(rctx.read(path))
-    fail(("The plugin `{}` doesn't have a main class defined in {}. This is likely due to an " +
-          "incorrect `package: {}` or `pluginClass` entry in the plugin's pubspec.yaml.").format(
-        plugin["name"],
-        " or ".join([str(root) + "/" + c for c in candidates]),
-        plugin["package"],
     ))
 
 def _root_package_name(pubspec_text):

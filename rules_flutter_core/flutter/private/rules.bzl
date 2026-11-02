@@ -91,14 +91,11 @@ def _execroot_path(file):
     return file.short_path
 
 def _dart_entry_uri(ctx, file):
-    """A debug entrypoint's frontend_server URI, as a `(scheme, path)` pair.
+    """A Dart source's frontend_server URI, as a `(scheme, path)` pair.
 
-    A file under this package's lib/ is a `package:` library, which is how the
-    engine and the plugin registrant address it in release too. Any other .dart
-    file -- an integration_test/ or test/ file, or a bootstrap generated into
-    bin_dir -- is addressed by its execroot path under org-dartlang-root, which
-    resolves through whichever virtual root holds it. The URI never names bin_dir,
-    so the kernel does not depend on the configuration that built it.
+    A file under this package's lib/ is a `package:` library. Any other .dart
+    file is addressed by its execroot path under org-dartlang-root, which
+    resolves through whichever virtual root holds it.
     """
     root = "../{}/".format(ctx.label.repo_name) if ctx.label.repo_name else ""
     lib = root + (ctx.label.package + "/" if ctx.label.package else "") + "lib/"
@@ -134,13 +131,11 @@ _DEBUG_KERNEL_FLAGS = [
     "--no-link-platform",
 ]
 
-# `--source`/`-D` triple that compiles a federated plugin's generated Dart
-# registrant into the kernel and makes the engine's `dart_plugin_registrant`
-# lookup match the exact package: URI frontend_server recorded for it -- see
-# the comment on `pubspec` below for why it must be a package: URI. Shared,
-# verbatim, by dart_aot_kernel and dart_jit_kernel (formatted with shell variable
-# names, resolved at run time).
-_REGISTRANT_SOURCE_ARGS = '--source "package:{pkg}/{registrant}" --source "package:flutter/src/dart_plugin_registrant.dart" "-Dflutter.dart_plugin_registrant=package:{pkg}/{registrant}"'
+# `--source`/`-D` triple that compiles a plugin registrant into the kernel and
+# makes the engine's `dart_plugin_registrant` lookup match the exact URI
+# frontend_server records for it. Shared by dart_aot_kernel and
+# dart_jit_kernel; shell variables are resolved at run time.
+_REGISTRANT_SOURCE_ARGS = '--source "{uri}" --source "package:flutter/src/dart_plugin_registrant.dart" "-Dflutter.dart_plugin_registrant={uri}"'
 
 def _flutter_toolchain(ctx):
     return ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
@@ -217,30 +212,39 @@ def _dart_aot_kernel_impl(ctx):
     # addressed through the package config instead, exactly like the entrypoint.
     pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
 
-    # The package name is file content, so the URIs cannot be built here -- an
-    # attribute is read at analysis and a file is read at execution. The two
-    # library paths are assembled against it by the wrapper below.
+    # The app package name is file content, so the entrypoint URI is assembled
+    # at execution. Registrants use their package URI when committed under this
+    # app's lib/, or an execroot URI when generated in the external pub hub.
+    registrant_scheme, registrant_path = _dart_entry_uri(ctx, ctx.file.dart_plugin_registrant) if ctx.file.dart_plugin_registrant else ("", "")
     scalars = ctx.actions.args()
     scalars.add(pubspec.package_name)
     scalars.add(_library_path(ctx, ctx.file.entrypoint, "entrypoint"))
-    scalars.add(
-        _library_path(ctx, ctx.file.dart_plugin_registrant, "dart_plugin_registrant") if ctx.file.dart_plugin_registrant else "",
-    )
+    scalars.add(registrant_scheme)
+    scalars.add(registrant_path)
     scalars.add(dill)
 
     ctx.actions.run_shell(
         command = """set -euo pipefail
 PKG="$(cat "$1")"; shift
 ENTRYPOINT="$1"; shift
-REGISTRANT="$1"; shift
+REGISTRANT_SCHEME="$1"; shift
+REGISTRANT_PATH="$1"; shift
 DILL="$1"; shift
 
-if [ -n "$REGISTRANT" ]; then
+if [ -n "$REGISTRANT_PATH" ]; then
+    if [ "$REGISTRANT_SCHEME" = "package" ]; then
+        REGISTRANT_URI="package:$PKG/$REGISTRANT_PATH"
+    elif [ "$REGISTRANT_SCHEME" = "org-dartlang-root" ]; then
+        REGISTRANT_URI="org-dartlang-root:///$REGISTRANT_PATH"
+    else
+        echo "ERROR: unsupported registrant URI scheme: $REGISTRANT_SCHEME" >&2
+        exit 1
+    fi
     set -- "$@" {registrant_args}
 fi
 
 exec "$@" --output-dill "$DILL" "package:$PKG/$ENTRYPOINT"
-""".format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT")),
+""".format(registrant_args = _REGISTRANT_SOURCE_ARGS.format(uri = "$REGISTRANT_URI")),
         arguments = [scalars, args],
         tools = [toolchain.dartaotruntime],
         # Every readable package is declared: the hub's package config (relative
@@ -453,7 +457,7 @@ fi
 
 {run}
 """.format(
-            registrant_args = _REGISTRANT_SOURCE_ARGS.format(pkg = "$PKG", registrant = "$REGISTRANT"),
+            registrant_args = _REGISTRANT_SOURCE_ARGS.format(uri = "package:$PKG/$REGISTRANT"),
             run = run,
         ),
         arguments = [scalars, args],
@@ -1644,17 +1648,12 @@ set -eu
 expected="$1"; committed="$2"; marker="$3"; updater="$4"
 if ! diff -u "$committed" "$expected" > /dev/null 2>&1; then
     echo "ERROR: $committed is out of date." >&2
-    echo "" >&2
-    echo "The Flutter plugins in pubspec.yaml declare Maven coordinates that do" >&2
-    echo "not match the committed MODULE.bazel segment. Replace it with:" >&2
-    echo "" >&2
+    echo "Replace it with the generated file:" >&2
     sed 's/^/    /' "$expected" >&2
     if [[ -n "$updater" ]]; then
-        echo "" >&2
         echo "To regenerate it, run:" >&2
         echo "    bazel run $updater" >&2
     fi
-    echo "" >&2
     diff -u "$committed" "$expected" >&2 || true
     exit 1
 fi
@@ -1668,31 +1667,25 @@ touch "$marker"
         ],
         inputs = [ctx.file.expected, ctx.file.committed],
         outputs = [marker],
-        mnemonic = "PubPluginsCheck",
-        progress_message = "Checking plugin Maven coordinates %{label}",
+        mnemonic = "PubFileCheck",
+        progress_message = "Checking generated pub file %{label}",
     )
 
     return [DefaultInfo(files = depset([marker]))]
 
 pub_plugins_check = rule(
     implementation = _pub_plugins_check_impl,
-    doc = """Fails the build if the committed plugin_deps.MODULE.bazel has drifted.
-
-MODULE.bazel cannot load() and one module extension cannot add tags to another,
-so the Maven coordinates extracted from plugin build.gradle files cannot be fed
-into maven.install() directly. They are generated, committed and include()d
-instead, which means they can go stale -- most obviously when a plugin is added
-or upgraded. This is the guard, and it prints the file to write.""",
+    doc = "Fails when a committed file differs from the file generated by the pub hub.",
     attrs = {
         "committed": attr.label(
             allow_single_file = True,
             mandatory = True,
-            doc = "The checked-in MODULE.bazel segment.",
+            doc = "The checked-in generated file.",
         ),
         "expected": attr.label(
             allow_single_file = True,
             mandatory = True,
-            doc = "The segment generated by the plugins repository rule.",
+            doc = "The generated file from the pub hub.",
         ),
         "updater": attr.label(
             doc = "Optional updater command to print when this guard drifts.",

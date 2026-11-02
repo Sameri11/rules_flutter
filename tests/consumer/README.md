@@ -62,7 +62,7 @@ core and Android entrypoints below, plus focused behavior checks:
 | entry point | symbols |
 | --- | --- |
 | `@rules_flutter_core//flutter:defs.bzl` | `flutter_core`, `flutter_package`, `flutter_pubspec`, `flutter_test`, `pub_path_deps_check`, `pub_plugins_check` |
-| `@rules_flutter_android//flutter:defs.bzl` | `flutter_android_app`, `flutter_android_inputs`, `flutter_apk_check`, `flutter_assets`, `flutter_assets_dir`, `flutter_android_manifest`, `flutter_native_contribution` |
+| `@rules_flutter_android//flutter:defs.bzl` | `flutter_android_app`, `flutter_android_inputs`, `flutter_apk_check`, `flutter_assets`, `flutter_assets_dir`, `flutter_android_manifest`, `flutter_native_contribution`, `flutter_plugin_deps_guards` |
 | `@rules_flutter_android//flutter:extensions.bzl` | `flutter_plugins_ext` (`plugins.project()`/`plugins.package()`/`plugins.build_config_field()`) over real, checked-in external plugin graphs — `:fake_plugin_deps_check`, `:fake_plugin_test`, `:namespace_plugin_test`, `:build_config_plugin_jar_test`, `:build_config_plugin_values_test` |
 
 Remaining implementation rules and helpers are covered indirectly by the
@@ -109,10 +109,11 @@ plugin and plugin-free packaging.
 `fixtures/namespace_*` directories are plugin layouts dedicated to namespace
 syntax coverage. They are not in any `pubspec.lock`, so no `pub.lock` hub
 describes them. `fixtures/plugin_fixture.bzl` is a small repository rule that
-writes the two hub files `plugins.project` reads (`plugins_metadata.json`,
-`package_config.json`) and exposes the root pub hub's mode-specific Android
-registrants for this fixture set. These syntax fixtures declare no Flutter
-registrations in their pubspecs.
+generates the two files `plugins.project` reads (`plugins_metadata.json`,
+`package_config.json`). Android's plugin project generates the Java registrants
+from that metadata. `fake_plugin` also implements the `ping` method channel
+invoked by the `consumer_rules_r8` fixture; its launcher activity lives under
+`fixtures/consumer_rules/`.
 
 This proves two
 things nothing else here can, because this module reaches the ruleset the
@@ -139,18 +140,15 @@ repository:
   from this graph, so nothing is inherited and the case is declared on purpose.
   Better coverage, not merely restored coverage — it no longer depends on the
   ruleset having an app inside it.
-- A generated plugin's Maven coordinate resolves through the **canonical**
-  repository `plugins.project(maven_repo = ...)` named, not through whichever
-  repository happens to be named `@flutter_maven` in the ruleset's own
-  mapping. `MODULE.bazel` declares a second, distinctly-named install,
-  `plugin_maven`, containing a coordinate absent from every `flutter_maven`
-  install in the graph; `fake_plugin`'s `build.gradle` depends on it, and
-  `plugins.project(maven_repo = "@plugin_maven//:pin")` names it.
-  `:fake_plugin_test` builds the generated `@flutter_plugins//fake_plugin`
-  target, which only resolves that dependency if `maven_repo` was actually
-  threaded through to `maven_label()` rather than a hardcoded apparent name.
+- Generated plugin coordinates resolve through the canonical repository selected
+  by `plugins.project`, not the ruleset's apparent `@flutter_maven`. The Consumer
+  Module includes the generated `plugin_maven` segment; `fake_plugin` depends on
+  a coordinate present only there, and the root project selects
+  `@plugin_maven//:pin`. `external_app` imports that same repository as
+  `@plugin_maven_alias`; its `maven_alias_inputs` target proves the helper accepts
+  a distinct apparent name for the same canonical repository.
 - Four namespace parser fixtures use bare Android manifests and source packages
-  that each reference `R.string.namespace_marker`; `:namespace_plugin_test`
+  that each reference its own `R.string.namespace_<case>_marker`; `:namespace_plugin_test`
   builds all four generated targets, making javac observe the exact namespace
   emitted as `custom_package` rather than accepting a manifest fallback.
 - `fixtures/build_config_plugin` disables AGP BuildConfig generation and reads
@@ -167,11 +165,10 @@ repository:
 ## What it does not cover
 
 - **General runtime behaviour.** Most fixtures remain stubs and are analysed
-  only. The exceptions are `:apk_no_plugin_graph`, which builds a real signed
-  APK and runs its bundle check to prove the repository-free contribution shape
-  and real embedding Maven dependency graph, and `:apk_external_app`, whose
-  content test reads its external module's marker from the signed APK.
-  `//examples/demo_app` and smooth_app cover pluginful behaviour.
+  only. Focused runtime coverage is limited to the `consumer_rules_r8` method
+  channel call, `:apk_no_plugin_graph` bundle check, and
+  `:apk_external_app` content check. `//examples/demo_app` and smooth_app cover
+  broader pluginful behaviour.
 - **The generated `@flutter_plugins` repo's CMake path.** `fixtures/fake_plugin`
   (below) reaches the repository-free, non-native half of that path — a plain
   `android_library` plugin with one Maven coordinate. It declares no
