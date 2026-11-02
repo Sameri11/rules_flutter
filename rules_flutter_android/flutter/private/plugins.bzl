@@ -70,6 +70,7 @@ flutter_maven_repository(
     maven_repo = "{maven_repo}//:pin",
 )
 
+# Keep Android manifest merge order aligned with Flutter's Maven declaration.
 android_library(
     name = "flutter_embedding_deps",
     exports = {embedding_deps},
@@ -77,21 +78,19 @@ android_library(
 """
 
 _EMBEDDING_TEMPLATE = """
-# Keep plugin compilation on a Java edge; Maven Android resources stay with helpers.
+# Keep duplicate Java-resource precedence stable on plugin compile/runtime edges.
 java_import(
     name = "flutter_embedding_jar",
     jars = select({{
         "{mode_debug}": ["{embedding_debug}"],
         "{mode_release}": ["{embedding_release}"],
     }}),
-    deps = [":flutter_embedding_deps"],
-    exports = [":flutter_embedding_deps"],
     neverlink = True,
 )
 
 java_library(
     name = "flutter_embedding",
-    exports = [":flutter_embedding_jar", ":flutter_embedding_deps"],
+    exports = [":flutter_embedding_jar"] + {embedding_deps},
 )
 """
 
@@ -1862,7 +1861,11 @@ def _flutter_plugins_impl(ctx):
         for mode in ["debug", "release"]
     }
 
-    # Stable label order preserves Maven classpath precedence for duplicate resources.
+    # Preserve canonical Android manifest merge order; sort the Java edge below
+    # so duplicate Java resources keep stable classpath precedence.
+    embedding_deps = flutter_embedding_deps(maven_repo = ctx.attr.maven_repo)
+    sorted_embedding_deps = sorted(embedding_deps)
+
     ctx.file(
         "BUILD.bazel",
         _BUILD_LOADS +
@@ -1871,7 +1874,7 @@ def _flutter_plugins_impl(ctx):
         ) +
         _MAVEN_TARGETS_TEMPLATE.format(
             maven_repo = ctx.attr.maven_repo,
-            embedding_deps = repr(sorted(flutter_embedding_deps(maven_repo = ctx.attr.maven_repo))),
+            embedding_deps = repr(embedding_deps),
         ) +
         _NATIVE_LIBS_LOADS.format(
             native_files = str(Label("//flutter/private:native_files.bzl")),
@@ -1882,6 +1885,7 @@ def _flutter_plugins_impl(ctx):
             mode_release = ctx.attr.mode_release,
             embedding_debug = ctx.attr.embedding_debug,
             embedding_release = ctx.attr.embedding_release,
+            embedding_deps = repr(sorted_embedding_deps),
         ) +
         "exports_files([\"plugin_deps.MODULE.bazel\", \"plugins.json\"])\n\n" +
         "alias(\n    name = \"dart_plugin_registrant.dart\",\n    actual = \"{}\",\n)\n\n".format(
