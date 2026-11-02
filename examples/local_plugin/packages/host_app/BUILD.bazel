@@ -11,8 +11,6 @@ flutter_core(
     # pubspec.lock carries no hash for it and its content is otherwise an
     # undeclared input.
     path_deps = ["//packages/greeter:srcs"],
-    # The committed segment lives at the module root, where MODULE.bazel includes it.
-    plugin_deps = "//:plugin_deps.MODULE.bazel",
     pub = "@pub",
 )
 

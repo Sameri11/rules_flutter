@@ -11,6 +11,7 @@ load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load(":abis.bzl", "MIN_SDK")
 load(":android.bzl", "flutter_android_manifest", "flutter_assets_dir")
 load(":android_inputs_rules.bzl", "flutter_android_inputs")
+load(":maven_identity.bzl", "check_flutter_maven_repository")
 load(":apk_check.bzl", "flutter_apk_check")
 
 # Mirrors android.bzl's _MANIFEST_VALUES, which goes with the wrapper.
@@ -33,6 +34,7 @@ def flutter_android_app(
         core = None,
         inputs = None,
         plugins = _UNSET,
+        maven_repo = None,
         manifest = "src/main/AndroidManifest.xml",
         manifest_values = {},
         resource_files = None,
@@ -75,6 +77,8 @@ def flutter_android_app(
         refused here.
     """
 
+    maven_validation = []
+
     # The caller's tags reach every target the macro declares, not only `<name>`.
     internal_tags = list(kwargs.get("tags", []))
     if "manual" not in internal_tags:
@@ -84,6 +88,15 @@ def flutter_android_app(
             fail("flutter_android_app {}: `inputs` is set, so `core` belongs to that inputs target. Pass core = None.".format(name))
         if plugins != _UNSET:
             fail("flutter_android_app {}: `inputs` is set, so `plugins` belongs to that inputs target. Omit plugins.".format(name))
+        if maven_repo != None:
+            inputs_label = native.package_relative_label(inputs)
+            check_flutter_maven_repository(
+                name = name + "_maven_repo_check",
+                project = inputs_label.same_package_label(inputs_label.name + "_maven_repository"),
+                maven_repo = maven_repo + "//:pin",
+                tags = internal_tags,
+            )
+            maven_validation = [":" + name + "_maven_repo_check"]
     else:
         if core == None:
             fail("flutter_android_app {}: pass `core`, the flutter_core target, or `inputs`.".format(name))
@@ -95,6 +108,7 @@ def flutter_android_app(
             core = core,
             plugins = plugins,
             tags = internal_tags,
+            maven_repo = maven_repo,
         )
 
     for owned in ["assets", "assets_dir"]:
@@ -159,7 +173,7 @@ def flutter_android_app(
         manifest = ":" + name + "_manifest",
         manifest_values = values,
         resource_files = resource_files,
-        deps = deps + [inputs_label] + debug_manifest_deps,
+        deps = deps + [inputs_label] + debug_manifest_deps + maven_validation,
         **kwargs
     )
 

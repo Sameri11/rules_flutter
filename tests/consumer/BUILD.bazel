@@ -4,7 +4,7 @@ Core rules load from @rules_flutter_core//flutter:defs.bzl. Android macros load 
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app", "flutter_assets", "flutter_native_contribution")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app", "flutter_android_inputs", "flutter_assets", "flutter_native_contribution", "flutter_plugin_deps_guards")
 load(
     "@rules_flutter_core//flutter:defs.bzl",
     "flutter_core",
@@ -12,22 +12,20 @@ load(
     "flutter_pubspec",
     "flutter_test",
     "pub_path_deps_check",
-    "pub_plugins_check",
 )
 load("@rules_java//java:defs.bzl", "java_binary", "java_import")
+load(
+    "@rules_kotlin//kotlin:android.bzl",
+    "kt_android_library",
+)
 load(":embedding_deps.bzl", "EMBEDDING_DEPS")
 
 package(default_visibility = ["//visibility:private"])
 
-java_import(
-    name = "flutter_embedding_no_plugins",
-    jars = select({
-        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
-        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
-    }),
-    visibility = ["//visibility:public"],
-    exports = EMBEDDING_DEPS,
-    deps = EMBEDDING_DEPS,
+flutter_plugin_deps_guards(
+    name = "fake_plugin_deps",
+    committed = "fixtures/plugin_deps.MODULE.bazel",
+    plugins = "@flutter_plugins",
 )
 
 exports_files(["build_config_probe.py"])
@@ -110,10 +108,9 @@ pub_path_deps_check(
     pubspec_lock = "pubspec.lock",
 )
 
-pub_plugins_check(
-    name = "plugins_check",
-    committed = "pubspec.yaml",
-    expected = "pubspec.yaml",
+build_test(
+    name = "dart_registrant_guards_test",
+    targets = [":app_core_guards_test"],
 )
 
 # Recipe contributions stay a platform-neutral declaration. The composed
@@ -200,6 +197,68 @@ flutter_android_app(
     tags = ["manual"],
 )
 
+flutter_android_inputs(
+    name = "maven_alias_inputs",
+    core = ":app_core",
+    maven_repo = "@plugin_maven_alias",
+    plugins = "@flutter_plugins",
+    tags = ["manual"],
+)
+
+flutter_android_inputs(
+    name = "maven_reused_inputs",
+    core = ":app_core",
+    plugins = "@flutter_plugins",
+    tags = ["manual"],
+)
+
+flutter_android_inputs(
+    name = "maven_custom_no_plugins_inputs",
+    core = ":app_core",
+    maven_repo = "@plugin_maven",
+    plugins = None,
+    tags = ["manual"],
+)
+
+flutter_android_inputs(
+    name = "maven_mismatch_inputs",
+    core = ":app_core",
+    maven_repo = "@flutter_maven",
+    plugins = "@flutter_plugins",
+    tags = ["manual"],
+)
+
+flutter_android_app(
+    name = "maven_reused_app",
+    inputs = ":maven_alias_inputs",
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.maven_reused"},
+    maven_repo = "@plugin_maven_alias",
+    resource_files = [],
+    tags = ["manual"],
+)
+
+flutter_android_app(
+    name = "maven_mismatch_app",
+    core = ":app_core",
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.maven_mismatch"},
+    maven_repo = "@flutter_maven",
+    plugins = "@flutter_plugins",
+    resource_files = [],
+    tags = ["manual"],
+)
+
+flutter_android_app(
+    name = "maven_mismatched_reused_inputs_app",
+    inputs = ":maven_reused_inputs",
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.maven_reused_mismatch"},
+    maven_repo = "@flutter_maven",
+    resource_files = [],
+    tags = ["manual"],
+)
+
 genrule(
     name = "apk_external_app_contents_check",
     srcs = [":apk_external_app.apk"],
@@ -218,11 +277,6 @@ build_test(
 
 # External-plugin regression: dependency recipes are ignored, and generated
 # Maven labels use this project's mapping.
-pub_plugins_check(
-    name = "fake_plugin_deps_check",
-    committed = "fixtures/plugin_deps.MODULE.bazel",
-    expected = "@flutter_plugins//:plugin_deps.MODULE.bazel",
-)
 
 build_test(
     name = "namespace_plugin_test",
@@ -284,7 +338,6 @@ java_binary(
     srcs = ["fixtures/BuildConfigValues.java"],
     main_class = "com.example.consumer.BuildConfigValues",
     deps = [
-        ":flutter_embedding_no_plugins",
         "@flutter_plugins//build_config_plugin",
     ],
 )
@@ -310,4 +363,33 @@ printf '%s\\n' "$$actual" > "$@"
 build_test(
     name = "build_config_plugin_values_test",
     targets = [":build_config_plugin_values_check"],
+)
+
+kt_android_library(
+    name = "consumer_rules_activity",
+    srcs = ["fixtures/consumer_rules/ConsumerRulesActivity.kt"],
+    tags = ["manual"],
+    deps = ["@flutter_plugins//:flutter_embedding"],
+)
+
+flutter_android_app(
+    name = "consumer_rules_r8",
+    core = ":app_core",
+    manifest = "fixtures/consumer_rules/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.consumer_rules_r8"},
+    plugins = "@flutter_plugins",
+    proguard_specs = ["fixtures/shrinking.pro"],
+    resource_files = [],
+    tags = ["manual"],
+    deps = [":consumer_rules_activity"],
+)
+
+flutter_android_app(
+    name = "consumer_rules_unshrunk",
+    core = ":app_core",
+    manifest = "fixtures/AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.consumer_rules_unshrunk"},
+    plugins = "@flutter_plugins",
+    resource_files = [],
+    tags = ["manual"],
 )

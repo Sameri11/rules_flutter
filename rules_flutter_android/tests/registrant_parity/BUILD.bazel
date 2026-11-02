@@ -1,5 +1,5 @@
-# The Android registrant the pub hub renders, compared with flutter_tools' own,
-# per case and mode. The goldens are recaptured with capture.py (see README.md);
+# The Android plugin repository renders each Java registrant from its hub's
+# platform metadata. Compare each mode with flutter_tools' generated output.
 # CI runs `capture.py --check`, so a Flutter template change fails there rather
 # than silently here.
 
@@ -13,14 +13,15 @@ CASES = [
     "no_plugins",
 ]
 
-# The hubs read each case's lock and pubspec; path packages are read by path.
+# The pub hubs read each case's lock and path packages; the Android projects
+# consume their metadata and render their own registrants.
 exports_files(glob(["*/app/pubspec.*"]))
 
 [
     diff_test(
         name = "{}_{}_test".format(case, mode),
         file1 = "{}/expected/{}/GeneratedPluginRegistrant.java".format(case, mode),
-        file2 = "@registrant_parity_{}//:android/{}/GeneratedPluginRegistrant.java".format(case, mode),
+        file2 = "@registrant_parity_{}_android//:android/{}/GeneratedPluginRegistrant.java".format(case, mode),
     )
     for case in CASES
     for mode in [

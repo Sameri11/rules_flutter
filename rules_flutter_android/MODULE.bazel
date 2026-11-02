@@ -23,6 +23,14 @@ flutter_dev.sdk(version = "3.47.3")
 
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1", dev_dependency = True)
+
+# The registrant-only fixtures need a canonical Maven repository identity, but
+# never resolve its artifacts.
+maven_dev = use_extension("@rules_jvm_external//:extensions.bzl", "maven", dev_dependency = True)
+maven_dev.install(name = "parity_maven", artifacts = [])
+use_repo(maven_dev, "parity_maven")
+
 
 # The embedding rule wraps the selected SDK-derived jar with rules_java's
 # java_import, so rules_java must be a ruleset dependency.
@@ -75,9 +83,6 @@ android_sdk_repository_extension = use_extension(
 )
 use_repo(android_sdk_repository_extension, "androidsdk")
 
-# Registrant parity fixtures: one pub hub per //tests/registrant_parity case.
-# Path-only locks, so nothing is downloaded. Each hub writes its Android
-# registrant, which is diffed against flutter_tools' expected output.
 pub_dev = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub", dev_dependency = True)
 pub_dev.lock(
     name = "registrant_parity_no_plugins",
@@ -106,4 +111,28 @@ use_repo(
     "registrant_parity_federated_direct",
     "registrant_parity_mixed",
     "registrant_parity_no_plugins",
+)
+
+plugins_dev = use_extension("//flutter:extensions.bzl", "flutter_plugins_ext", dev_dependency = True)
+for name in [
+    "registrant_parity_no_plugins",
+    "registrant_parity_mixed",
+    "registrant_parity_federated_default",
+    "registrant_parity_federated_direct",
+    "registrant_parity_federated_dev_override",
+]:
+    plugins_dev.project(
+        name = name + "_android",
+        metadata = "@{}//:plugins_metadata.json".format(name),
+        package_config = "@{}//:package_config.json".format(name),
+        maven_repo = "@parity_maven//:pin",
+        abis = ["arm64-v8a"],
+    )
+use_repo(
+    plugins_dev,
+    "registrant_parity_federated_default_android",
+    "registrant_parity_federated_dev_override_android",
+    "registrant_parity_federated_direct_android",
+    "registrant_parity_mixed_android",
+    "registrant_parity_no_plugins_android",
 )

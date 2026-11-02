@@ -20,12 +20,13 @@ load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi
 load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo")
 load("@rules_java//java:defs.bzl", "java_import")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
+load(":maven_identity.bzl", "check_flutter_maven_repository", "flutter_maven_repository")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
 
 visibility(["//flutter/...", "//tests/..."])
 
 # The registrant of an app without plugins: an empty GeneratedPluginRegistrant.
-_EMPTY_REGISTRANT = Label("//flutter/private:registrant/GeneratedPluginRegistrant.java")
+_EMPTY_REGISTRANT = Label("@rules_flutter_android//flutter/private:registrant/GeneratedPluginRegistrant.java")
 
 _NO_ABI_MESSAGE = "ERROR: {} has no Android ABI, so it packages no native libraries. Set --android_platforms to the Android platforms to build."
 
@@ -218,7 +219,7 @@ platform. The ABI comes from that platform.""",
     toolchains = use_cc_toolchain(),
 )
 
-def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", tags = [], visibility = None):
+def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], visibility = None):
     """Declares a flutter_core artifact's Android inputs as the target `<name>`.
 
     The consumer lists `<name>` in its android_binary deps. It exports the
@@ -233,7 +234,8 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", t
       core: the flutter_core target. Its split is selected by the platform.
       plugins: the plugin repository, e.g. `"@flutter_plugins"`, or None for an
         app without plugins.
-      maven_repo: the repository holding the embedding's Maven dependencies.
+      maven_repo: optional Maven repository label. With plugins it defaults to
+        that project's repository; without plugins it defaults to `@flutter_maven`.
       tags: tags for `<name>`. Each helper gets them plus `manual`.
       visibility: for `<name>`, `<name>_native`, `<name>_bundle` and `<name>_pubspec`,
         which a consumer in another package names.
@@ -248,6 +250,34 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", t
     # applies to the whole target set.
     helper_tags = tags if "manual" in tags else tags + ["manual"]
 
+    if plugins:
+        native.alias(
+            name = name + "_maven_repository",
+            actual = plugins + "//:maven_repository",
+            tags = helper_tags,
+        )
+        if maven_repo == None:
+            embedding_deps = [plugins + "//:flutter_embedding_deps"]
+            validation = []
+        else:
+            check_flutter_maven_repository(
+                name = name + "_maven_repo_check",
+                project = plugins + "//:maven_repository",
+                maven_repo = maven_repo + "//:pin",
+                tags = helper_tags,
+            )
+            embedding_deps = flutter_embedding_deps(maven_repo)
+            validation = [":" + name + "_maven_repo_check"]
+    else:
+        maven_repo = maven_repo or "@flutter_maven"
+        flutter_maven_repository(
+            name = name + "_maven_repository",
+            maven_repo = maven_repo + "//:pin",
+            tags = helper_tags,
+        )
+        embedding_deps = flutter_embedding_deps(maven_repo)
+        validation = []
+
     _core_file(
         name = name + "_core_embedding",
         core = core,
@@ -257,7 +287,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", t
     java_import(
         name = name + "_embedding",
         jars = [":" + name + "_core_embedding"],
-        deps = flutter_embedding_deps(maven_repo),
+        deps = embedding_deps,
         tags = helper_tags,
     )
 
@@ -282,7 +312,6 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", t
             srcs = [_EMPTY_REGISTRANT],
             deps = [
                 ":" + name + "_embedding",
-                maven_repo + ANNOTATION_JVM,
             ],
             tags = helper_tags,
         )
@@ -310,7 +339,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = "@flutter_maven", t
             ":" + name + "_registrant",
             ":" + name + "_embedding",
             ":" + name + "_native",
-        ] + flutter_embedding_deps(maven_repo),
+        ] + embedding_deps + validation,
         proguard_specs = [Label("//flutter/private:engine_keep.pro")],
         tags = tags,
         visibility = visibility,

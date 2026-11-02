@@ -6,7 +6,5 @@ flutter_core(
     name = "app",
     entrypoint = "lib/alternate$release.dart",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
-    plugin_deps = None,
-    plugins = None,
     pub = "@external_app_pub",
 )

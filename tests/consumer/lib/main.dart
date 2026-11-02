@@ -1,3 +1,14 @@
-// Reached as package:consumer_test/main.dart, which is why it sits under lib/:
-// nothing outside a package's lib/ has a package: URI.
-void main() {}
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
+const _pluginChannel = MethodChannel('fake_plugin');
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final result = await _pluginChannel.invokeMethod<String>('ping');
+    debugPrint('consumer-plugin-result: $result');
+  } catch (error) {
+    debugPrint('consumer-plugin-error: $error');
+  }
+}

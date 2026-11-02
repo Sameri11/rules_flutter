@@ -2,6 +2,10 @@
 # segment beside it. The app itself lives in //packages/host_app -- this module
 # is the monorepo shape, where the module root is the *workspace* root rather
 # than the Flutter project root.
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_plugin_deps_guards")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["plugin_deps.MODULE.bazel"])
+
+flutter_plugin_deps_guards(plugins = "@flutter_plugins")

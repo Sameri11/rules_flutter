@@ -226,8 +226,6 @@ def flutter_core(
         dart_defines = {},
         native_build_env = None,
         dart_plugin_registrant = None,
-        plugin_deps = None,
-        plugins = "@flutter_plugins",
         target_os = "android",
         **kwargs):
     """Declares an app's Flutter artifacts and host-test inputs.
@@ -246,8 +244,6 @@ def flutter_core(
       dart_defines: `-D` constants the kernels compile with.
       native_build_env: the native build environment for asset bundle hooks, or None.
       dart_plugin_registrant: the Dart plugin registrant under lib/, or None.
-      plugin_deps: the committed Maven plugin file checked against the hub.
-      plugins: the plugin hub guards check against, e.g. `"@flutter_plugins"`.
       target_os: OS the kernel is compiled for; must be `"android"`.
       **kwargs: visibility and tags passed to declared targets.
     """
@@ -259,10 +255,16 @@ def flutter_core(
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
     if target_os != "android":
         fail("flutter_core {}: target_os must be \"android\", got {}.".format(name, repr(target_os)))
-    if plugin_deps and plugins == None:
-        fail("flutter_core {}: plugin_deps needs plugins = \"<hub>\", the plugin repository such as \"@flutter_plugins\"; plugins is None.".format(name))
 
     package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
+
+    registrant = None
+    if dart_plugin_registrant:
+        registrant = select({
+            Label("//flutter:mode_release"): pub + "//:dart_plugin_registrant_release.dart",
+            "//conditions:default": _workspace_label(dart_plugin_registrant),
+        })
+
 
     flutter_pubspec(name = "pubspec", src = "pubspec.yaml", visibility = kwargs.get("visibility"))
 
@@ -274,7 +276,7 @@ def flutter_core(
         package_config = package_config,
         pub_srcs = [pub_lib],
         path_deps = path_deps,
-        dart_plugin_registrant = dart_plugin_registrant,
+        dart_plugin_registrant = registrant,
         target_os = target_os,
         dart_defines = dart_defines,
         target_compatible_with = aot_target_compatible_with(),
@@ -295,7 +297,7 @@ def flutter_core(
         package_config = package_config,
         pub_srcs = [pub_lib],
         path_deps = path_deps,
-        dart_plugin_registrant = dart_plugin_registrant,
+        dart_plugin_registrant = registrant,
         dart_defines = dart_defines,
     )
 
@@ -368,39 +370,22 @@ def flutter_core(
         pubspec_lock = "pubspec.lock",
         **kwargs
     )
-    if plugin_deps:
-        plugin_deps_label = _workspace_label(plugin_deps)
+    if dart_plugin_registrant:
+        registrant_label = _workspace_label(dart_plugin_registrant)
         pub_plugins_check(
-            name = "plugins_check",
-            committed = plugin_deps_label,
-            expected = plugins + "//:plugin_deps.MODULE.bazel",
-            updater = ":plugins_update",
+            name = "dart_registrant_check",
+            committed = registrant_label,
+            expected = pub + "//:dart_plugin_registrant.dart",
+            updater = ":dart_registrant_update",
             **kwargs
         )
         _write_source_file(
-            name = "plugins_update",
-            source = plugins + "//:plugin_deps.MODULE.bazel",
-            destination = plugin_deps_label,
+            name = "dart_registrant_update",
+            source = pub + "//:dart_plugin_registrant.dart",
+            destination = registrant_label,
             **_internal_kwargs(kwargs)
         )
-        guards.append(":plugins_check")
-
-        if dart_plugin_registrant:
-            registrant_label = _workspace_label(dart_plugin_registrant)
-            pub_plugins_check(
-                name = "dart_registrant_check",
-                committed = registrant_label,
-                expected = plugins + "//:dart_plugin_registrant.dart",
-                updater = ":dart_registrant_update",
-                **kwargs
-            )
-            _write_source_file(
-                name = "dart_registrant_update",
-                source = plugins + "//:dart_plugin_registrant.dart",
-                destination = registrant_label,
-                **_internal_kwargs(kwargs)
-            )
-            guards.append(":dart_registrant_check")
+        guards.append(":dart_registrant_check")
     build_test(
         name = name + "_guards_test",
         targets = guards,

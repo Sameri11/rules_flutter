@@ -87,7 +87,6 @@ local_path_override(
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")
-use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")
 pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
 pub.lock(name = "pub", lock = "//:pubspec.lock")
 use_repo(pub, "pub")
@@ -103,7 +102,6 @@ consumer example; it is not a claim about the minimum classpath of every app.
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 bazel_dep(name = "rules_cc", version = "0.2.17")
-bazel_dep(name = "rules_java", version = "9.3.0")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "platforms", version = "1.0.0")
 
@@ -168,10 +166,10 @@ flutter_core(
     pub = "@pub",
 )
 
-Declare one `flutter_core` per Bazel package. It owns the package's app outputs,
-package/test outputs, and conditional plugin/registrant guards. A plugin-free
-app can omit plugin repository generation; when a plugin graph is configured,
-use its plugin hub on the core and keep the generated state files checked in.
+Declare one `flutter_core` per Bazel package. It owns the package's app,
+package, and test outputs. If the Consumer Module has a plugin graph, declare
+`flutter_plugin_deps_guards` once in the package containing its committed Maven
+segment. A plugin-free module does not need this guard macro.
 
 Find the Flutter-generated activity under `android/app/src/main/kotlin/`, then
 create `android/app/BUILD.bazel`:
@@ -260,7 +258,7 @@ use_repo(maven, "flutter_maven")
 include("//:plugin_deps.MODULE.bazel")
 ```
 
-In the Consumer Module's Android configuration, the project tag has this shape:
+In the Consumer Module's Android configuration, configure the plugin hub:
 
 ```python
 plugins = use_extension(
@@ -270,7 +268,6 @@ plugins = use_extension(
 plugins.project(
     name = "flutter_plugins",
     abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
-    embedding = "//android/app:flutter_embedding",
     metadata = "@pub//:plugins_metadata.json",
     package_config = "@pub//:package_config.json",
     maven_repo = "@flutter_maven//:pin",
@@ -278,56 +275,29 @@ plugins.project(
 use_repo(plugins, "flutter_plugins")
 ```
 
-The `embedding` label is a Consumer Module `java_import` that selects the
-mode-matched SDK jar and carries the existing explicit AndroidX dependency
-closure. For example, in `android/app/BUILD.bazel`:
+In the root `BUILD.bazel`, load the standalone Maven guard once for the Consumer
+Module's plugin graph:
 
 ```python
-load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_plugin_deps_guards")
 
-EMBEDDING_DEPS = [
-    "@flutter_maven//:androidx_lifecycle_lifecycle_common",
-    "@flutter_maven//:androidx_lifecycle_lifecycle_common_java8",
-    "@flutter_maven//:androidx_lifecycle_lifecycle_process",
-    "@flutter_maven//:androidx_lifecycle_lifecycle_runtime",
-    "@flutter_maven//:androidx_fragment_fragment",
-    "@flutter_maven//:androidx_annotation_annotation",
-    "@flutter_maven//:androidx_tracing_tracing",
-    "@flutter_maven//:androidx_core_core",
-    "@flutter_maven//:androidx_window_window_java",
-    "@flutter_maven//:androidx_window_window",
-    "@flutter_maven//:androidx_exifinterface_exifinterface",
-    "@flutter_maven//:com_getkeepsafe_relinker_relinker",
-    "@flutter_maven//:androidx_annotation_annotation_jvm",
-]
-
-java_import(
-    name = "flutter_embedding",
-    jars = select({
-        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
-        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
-    }),
-    exports = EMBEDDING_DEPS,
-    deps = EMBEDDING_DEPS,
-)
+flutter_plugin_deps_guards(plugins = "@flutter_plugins")
 ```
 
-This uses the SDK embedding directly rather than coupling the plugin hub's
-embedding selection to a `flutter_core` output group. The closure matches the
-checked Consumer Module example; it is not a claim about a minimum classpath.
+The hub derives the compile-only Flutter embedding from the selected Maven
+repository. Consumers do not declare an embedding `java_import` or pass an
+embedding target to the project tag. Generated plugin libraries compile
+against this mode-correct embedding without adding a second runtime embedding
+to the APK.
 
-Include the generated `plugin_deps.MODULE.bazel` segment in the Consumer Module
-after configuring the Maven repository; see the complete checked examples at
-[`examples/pub_plugins/android/config.MODULE.bazel`](examples/pub_plugins/android/config.MODULE.bazel)
-and [`tests/consumer/android/config.MODULE.bazel`](tests/consumer/android/config.MODULE.bazel).
-Pass the named hub to `flutter_core` and `flutter_android_app` rather than the
-plugin-free `None` settings.
 
-When the core declares `plugin_deps`, refresh the committed Maven segment with
-`bazel run //:plugins_update` if `//:plugins_check` reports drift. If the core
-also declares `dart_plugin_registrant`, refresh that file with
-`bazel run //:dart_registrant_update` when `//:dart_registrant_check` reports
-drift. Run these from the Consumer Module root.
+
+Include the generated Maven segment in the Consumer Module after configuring
+its repository mapping. The guard macro creates check and update targets for
+the segment, plus a test target that ensures the per-project guards agree.
+Run the update target when the check reports drift. Core independently checks
+the committed debug Dart registrant against pub metadata and prints its update
+command when that file is stale.
 
 The generator supplies package-scoped `BuildConfig` values for ordinary
 source-built Android plugins. It does not parse Gradle `buildConfigField`

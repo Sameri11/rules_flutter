@@ -1,0 +1,1 @@
+-keep class com.example.build_config_plugin.BuildConfigPlugin { *; }

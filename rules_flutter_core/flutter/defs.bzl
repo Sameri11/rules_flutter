@@ -29,7 +29,6 @@ load(
     _dart_test_deps = "dart_test_deps",
     _flutter_assets = "flutter_assets",
     _flutter_package = "flutter_package",
-    _pub_path_deps_check = "pub_path_deps_check",
     _pub_plugins_check = "pub_plugins_check",
 )
 
