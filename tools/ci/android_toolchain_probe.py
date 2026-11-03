@@ -142,7 +142,7 @@ def run_analysis(workspace, output_base):
     _run_bazel(
         workspace,
         output_base,
-        ["build", "--nobuild", "--build_tests_only"] + android_options + ["//..."],
+        ["build", "--nobuild", "--build_tests_only", "-c", "opt"] + android_options + ["//..."],
     )
     return {
         "scenario": "analysis",

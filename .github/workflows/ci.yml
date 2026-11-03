@@ -167,7 +167,7 @@ jobs:
         run: |
           set -o pipefail
           bazel build --nobuild -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:analysis_only 2>&1 | tee ../../bazel_consumer_analysis_only.log
-          bazel build --nobuild --build_tests_only --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //... 2>&1 | tee ../../bazel_consumer_api.log
+          bazel build --nobuild --build_tests_only -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //... 2>&1 | tee ../../bazel_consumer_api.log
 
       - name: Consumer Android toolchain inventory
         working-directory: tests/consumer
