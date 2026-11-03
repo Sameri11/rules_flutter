@@ -64,9 +64,13 @@ def main():
             missing = _run(workspace, output_root, "//:app_core_assets")
             if missing.returncode == 0:
                 sys.exit("FAIL: production staged hook did not require native_build_env")
-            for expected in ("native_build_env", "production_probe"):
-                if expected not in missing.stdout:
-                    sys.exit("FAIL: missing-environment diagnostic lacked {!r}:\n{}".format(expected, missing.stdout))
+            expected = ("Error in fail:", "//:app_core_assets", "native_build_env", "production_probe", "hook/build.dart")
+            diagnostic = next(
+                (line for line in missing.stdout.splitlines() if all(part in line for part in expected)),
+                None,
+            )
+            if diagnostic is None:
+                sys.exit("FAIL: missing-environment analysis diagnostic lacked the target, attribute, package, or hook cause:\n" + missing.stdout)
 
             dependency = "  production_probe:\n    path: fixtures/production_probe\n"
             moved = original_pubspec.replace(dependency, "", 1).replace(

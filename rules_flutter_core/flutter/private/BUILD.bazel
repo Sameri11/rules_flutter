@@ -7,8 +7,15 @@ allows it to be loaded from the ruleset's root MODULE.bazel only, and
 `hook_packages.bzl`, whose public visibility allows generated pub hub
 repositories to load its private metadata rule.
 
-The `.bzl` files //tools/ci:key_portability_check reads as `srcs` are exported
-for that source-level portability guard, which needs a label, not a load.
+Two mechanical exceptions need a label, and only those:
+
+  * The Python helpers are attribute defaults of rules defined here. Bazel
+    resolves an implicit dependency against the package of the `.bzl` that
+    defines the rule, so `//flutter:__subpackages__` is enough even though the
+    rules are instantiated in another module's packages.
+  * The `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
+    That guard parses their source for action-key portability contracts, which
+    requires a label, not a load.
 
 `repo.bzl` is loaded through the public module extension. The generated
 host-compatible registration points at the public static toolchain target.
