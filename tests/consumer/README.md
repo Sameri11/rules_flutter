@@ -5,7 +5,8 @@ combining API coverage with focused behavior checks.
 
 ```sh
 cd tests/consumer
-bazel build --nobuild --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //...
+bazel build --nobuild -c opt --lockfile_mode=error --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:analysis_only
+bazel build --nobuild --build_tests_only -c opt --lockfile_mode=error --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //...
 bazel test --build_tests_only -c opt --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //...
 ```
 

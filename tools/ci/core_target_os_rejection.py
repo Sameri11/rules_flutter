@@ -63,7 +63,10 @@ def main():
             rejected = run(workspace, output_user_root)
             if rejected.returncode == 0:
                 sys.exit("FAIL: host-configured macro-generated libapp unexpectedly analyzed")
-            for expected in ("Target OS", "app_core_libapp_arm64-v8a", "arm64-v8a"):
+            for expected in (
+                "Target OS selection failed for label",
+                "app_core_libapp_arm64-v8a (ABI arm64-v8a)",
+            ):
                 if expected not in rejected.stdout:
                     sys.exit("FAIL: rejection lacked {!r}:\n{}".format(expected, rejected.stdout))
 
