@@ -173,8 +173,7 @@ def _dart_aot_kernel_impl(ctx):
     args.add("--tfa")
     args.add("-Ddart.vm.product=true")
 
-    if ctx.attr.target_os:
-        args.add("--target-os", ctx.attr.target_os)
+    args.add("--target-os", ctx.attr.target_os)
     args.add_all(_dart_define_flags(ctx.attr.dart_defines))
 
     # The package config is the pub hub's: every rootUri is relative, so it is

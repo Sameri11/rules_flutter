@@ -59,34 +59,35 @@ def main():
         (workspace / ".bazelrc").write_text("common --enable_bzlmod\n")
         output_user_root = tmp / "output-user-root"
 
-        rejected = run(workspace, output_user_root)
-        if rejected.returncode == 0:
-            sys.exit("FAIL: host-configured macro-generated libapp unexpectedly analyzed")
-        for expected in ("Target OS", "app_core_libapp_arm64-v8a", "arm64-v8a"):
-            if expected not in rejected.stdout:
-                sys.exit("FAIL: rejection lacked {!r}:\n{}".format(expected, rejected.stdout))
-
-        original = core_rules_copy.read_text()
-        fallback = '"//conditions:default": None,'
-        planted = '"//conditions:default": ":" + name + "_kernel_neutral",'
-        if original.count(fallback) != 1:
-            sys.exit("FAIL: could not uniquely locate the rejecting OS selection")
         try:
-            core_rules_copy.write_text(original.replace(fallback, planted, 1))
-            accepted = run(workspace, output_user_root)
-        finally:
-            core_rules_copy.write_text(original)
-        if accepted.returncode != 0:
-            sys.exit("FAIL: planted Android fallback was not detected by the probe:\n" + accepted.stdout)
-        print("PASS: configured libapp rejects without an OS kernel and detects an Android fallback")
+            rejected = run(workspace, output_user_root)
+            if rejected.returncode == 0:
+                sys.exit("FAIL: host-configured macro-generated libapp unexpectedly analyzed")
+            for expected in ("Target OS", "app_core_libapp_arm64-v8a", "arm64-v8a"):
+                if expected not in rejected.stdout:
+                    sys.exit("FAIL: rejection lacked {!r}:\n{}".format(expected, rejected.stdout))
 
-        subprocess.run(
-            [BAZEL, "--output_user_root=" + str(output_user_root), "shutdown"],
-            cwd=workspace,
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+            original = core_rules_copy.read_text()
+            fallback = '"//conditions:default": None,'
+            planted = '"//conditions:default": ":" + name + "_kernel_neutral",'
+            if original.count(fallback) != 1:
+                sys.exit("FAIL: could not uniquely locate the rejecting OS selection")
+            try:
+                core_rules_copy.write_text(original.replace(fallback, planted, 1))
+                accepted = run(workspace, output_user_root)
+            finally:
+                core_rules_copy.write_text(original)
+            if accepted.returncode != 0:
+                sys.exit("FAIL: planted Android fallback was not detected by the probe:\n" + accepted.stdout)
+            print("PASS: configured libapp rejects without an OS kernel and detects an Android fallback")
+        finally:
+            subprocess.run(
+                [BAZEL, "--output_user_root=" + str(output_user_root), "shutdown"],
+                cwd=workspace,
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
 
 if __name__ == "__main__":

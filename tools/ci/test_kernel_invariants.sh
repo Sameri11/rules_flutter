@@ -47,7 +47,7 @@ digest_all() {
 kernel_outputs() {
   bazel cquery --output=starlark \
     --starlark:expr='str(target.label) + " " + " ".join([f.path for f in target.files.to_list()])' \
-    ${extra[@]+"${extra[@]}"} "$@" -- $(cat "$work/labels") | LC_ALL=C sort
+    ${extra[@]+"${extra[@]}"} "$@" -- "set($(tr '\n' ' ' < "$work/labels"))" | LC_ALL=C sort
 }
 
 bazel query 'kind(dart_test_kernel, //...)' ${extra[@]+"${extra[@]}"} | LC_ALL=C sort > "$work/labels"

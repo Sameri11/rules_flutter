@@ -36,8 +36,8 @@ Other versions may work but are unverified.
 
 ### Before you install
 
-An Android SDK and Android NDK 28+ are required for Android app builds and are
-not hermetic. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set
+A local Flutter SDK, Android SDK, and Android NDK 28+ are required and are not
+hermetic. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set
 `ANDROID_HOME` and `ANDROID_NDK_HOME`. Commit `pubspec.lock`; Git pub sources are
 rejected, path dependencies need `path_deps`, and Dart compilation is not
 incremental. Bazel emits a debug-key-signed APK and an unsigned APK; release

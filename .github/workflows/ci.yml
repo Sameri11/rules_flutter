@@ -110,7 +110,7 @@ jobs:
         working-directory: rules_flutter_core
         run: |
           set -o pipefail
-          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test --build_tests_only //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} 2>&1 | tee ../bazel_test_core.log
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} 2>&1 | tee ../bazel_test_core.log
 
       # An SDK change that moves a conformance case outcome fails here.
       - name: Conformance oracles recapture
@@ -166,6 +166,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
+          bazel build --nobuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:analysis_only 2>&1 | tee ../../bazel_consumer_analysis_only.log
           bazel build --nobuild --build_tests_only --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //... 2>&1 | tee ../../bazel_consumer_api.log
 
       - name: Consumer Android toolchain inventory
@@ -369,10 +370,9 @@ jobs:
         if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app' }}
         working-directory: ${{ matrix.example.directory }}
         run: |
-          set -euo pipefail
-          bazel aquery 'deps(kind(".*_test rule", //...) except //android/...)' \
-            --output=jsonproto --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} > "$RUNNER_TEMP/host_test_aquery.json"
-          python3 ../../tools/ci/host_test_closure.py "$RUNNER_TEMP/host_test_aquery.json"
+          python3 ../../tools/ci/host_test_closure.py \
+            --lockfile-mode "${{ env.BAZEL_LOCKFILE_MODE }}" \
+            "$RUNNER_TEMP/host_test_aquery.json"
 
       # The update target is manual, so bazel test never builds it. Building it
       # keeps its launcher compiling without writing goldens.

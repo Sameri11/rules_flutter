@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Check that the host test closure reaches no Android SDK or NDK.
 
-Reads `bazel aquery --output=jsonproto` output for the host test targets and
+Discovers test labels with unconfigured `bazel query`, then reads an
+`aquery --output=jsonproto` graph for exactly those targets and their closure.
 fails when an action reads a file under the Android SDK or NDK repositories,
 names an Android SDK or NDK environment variable, or when the closure has no
 FlutterTestAssets action (so the check cannot pass on an empty graph).
@@ -9,8 +10,10 @@ FlutterTestAssets action (so the check cannot pass on an empty graph).
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
+import subprocess
 import sys
 
 SDK_INPUT = re.compile(r"external/([^/]*\+)?(androidsdk|androidndk)/|/_android_sdk_marker(/|$)")
@@ -56,10 +59,51 @@ def _input_paths(data):
     return inputs
 
 
+def _bazel_output(bazel, arguments):
+    command = [bazel] + arguments
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if result.returncode:
+        sys.exit("Bazel command failed ({}):\n{}".format(" ".join(command), result.stdout))
+    return result.stdout
+
+
 def main(argv):
-    if len(argv) != 2:
-        sys.exit("usage: host_test_closure.py AQUERY_JSON")
-    with open(argv[1]) as handle:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bazel", default="bazel")
+    parser.add_argument("--lockfile-mode", default="error")
+    parser.add_argument("output_json")
+    args = parser.parse_args(argv[1:])
+
+    test_labels = _bazel_output(
+        args.bazel,
+        [
+            "query",
+            'kind(".*_test rule", //...) except //android/...',
+            "--lockfile_mode=" + args.lockfile_mode,
+            "--output=label",
+        ],
+    ).splitlines()
+    test_labels = [label.strip() for label in test_labels if label.strip()]
+    if not test_labels:
+        sys.exit("FAIL: unconfigured test-label query returned no targets")
+    expression = "deps(set({}))".format(" ".join(test_labels))
+    query_output = _bazel_output(
+        args.bazel,
+        [
+            "aquery",
+            expression,
+            "--output=jsonproto",
+            "--lockfile_mode=" + args.lockfile_mode,
+        ],
+    )
+    with open(args.output_json, "w") as handle:
+        handle.write(query_output)
+    with open(args.output_json) as handle:
         data = json.load(handle)
     inputs = _input_paths(data)
     actions = data.get("actions", [])

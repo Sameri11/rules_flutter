@@ -132,8 +132,17 @@ def _labels(output, repository):
     return sorted({line.strip() for line in output.splitlines() if line.strip().startswith(prefix)})
 
 
-def run_analysis(workspace, output_base):
-    _run_bazel(workspace, output_base, ["build", "--nobuild", "//..."])
+    android_options = ["--android_platforms=@rules_android//:arm64-v8a"]
+    _run_bazel(
+        workspace,
+        output_base,
+        ["build", "--nobuild"] + android_options + ["//:analysis_only"],
+    )
+    _run_bazel(
+        workspace,
+        output_base,
+        ["build", "--nobuild", "--build_tests_only"] + android_options + ["//..."],
+    )
     return {
         "scenario": "analysis",
         "target": "//...",
