@@ -355,8 +355,14 @@ def _pub_hub_impl(rctx):
             for uri in _test_deps_libraries(rctx, name, pubspec.dirname.get_child("lib"), sdk = True):
                 libraries[uri] = True
 
-    rctx.file("BUILD.bazel", """load("{defs_bzl}", "dart_test_deps")
+    package_dirs = {
+        name: "/".join(entries[name]["dir"])
+        for name in sorted(reached.keys())
+    }
+    package_dirs_src = ", ".join(["{}: {}".format(repr(name), repr(path)) for name, path in package_dirs.items()])
 
+    rctx.file("BUILD.bazel", """load("{defs_bzl}", "dart_test_deps")
+load("{hook_packages_bzl}", "flutter_hook_packages")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
@@ -373,9 +379,10 @@ filegroup(
     srcs = [{lib}],
 )
 
-filegroup(
+flutter_hook_packages(
     name = "all",
     srcs = [{all}],
+    package_dirs = {{{package_dirs}}},
 )
 
 # The debug kernel of the hub's direct packages, shared by every flutter_test on
@@ -391,6 +398,8 @@ dart_test_deps(
 )
 """.format(
         defs_bzl = rctx.attr.defs_bzl,
+        hook_packages_bzl = rctx.attr.defs_bzl.replace("flutter:defs.bzl", "flutter/private:hook_packages.bzl"),
+        package_dirs = package_dirs_src,
         hub = rctx.attr.name,
         lock_name = rctx.attr.lock_name,
         lib = ", ".join(lib_srcs),
