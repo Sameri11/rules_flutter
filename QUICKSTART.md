@@ -165,6 +165,7 @@ flutter_core(
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
     pub = "@pub",
 )
+```
 
 If a production package (including the app package) contains a staged
 `hook/build.dart`, `flutter_core` requires `native_build_env` during analysis.

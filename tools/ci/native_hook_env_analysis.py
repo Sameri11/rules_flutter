@@ -68,9 +68,11 @@ def main():
                 if expected not in missing.stdout:
                     sys.exit("FAIL: missing-environment diagnostic lacked {!r}:\n{}".format(expected, missing.stdout))
 
-            moved = original_pubspec.replace(
-                "dependencies:\n  flutter:\n    sdk: flutter\n  cupertino_icons: ^1.0.8\n  production_probe:\n    path: fixtures/production_probe\n",
-                "dependencies:\n  flutter:\n    sdk: flutter\n  cupertino_icons: ^1.0.8\ndev_dependencies:\n  production_probe:\n    path: fixtures/production_probe\n",
+            dependency = "  production_probe:\n    path: fixtures/production_probe\n"
+            moved = original_pubspec.replace(dependency, "", 1).replace(
+                "dev_dependencies:\n",
+                "dev_dependencies:\n" + dependency,
+                1,
             )
             if moved == original_pubspec:
                 sys.exit("FAIL: could not construct the dev-only dependency case")

@@ -26,6 +26,7 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+load(":abis.bzl", "ABIS")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 

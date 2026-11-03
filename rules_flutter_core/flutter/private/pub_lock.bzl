@@ -398,7 +398,7 @@ dart_test_deps(
 )
 """.format(
         defs_bzl = rctx.attr.defs_bzl,
-        hook_packages_bzl = rctx.attr.defs_bzl.replace("flutter:defs.bzl", "flutter/private:hook_packages.bzl"),
+        hook_packages_bzl = rctx.attr.hook_packages_bzl,
         package_dirs = package_dirs_src,
         hub = rctx.attr.name,
         lock_name = rctx.attr.lock_name,
@@ -427,6 +427,7 @@ pub_hub = repository_rule(
         ),
         "lock_name": attr.string(mandatory = True, doc = "The hub's name in pub.lock, for messages."),
         "defs_bzl": attr.string(mandatory = True, doc = "The label of defs.bzl, which the generated BUILD file loads dart_test_deps from."),
+        "hook_packages_bzl": attr.string(mandatory = True, doc = "Label loaded by generated hub BUILD files for private package metadata."),
     },
 )
 
@@ -468,6 +469,7 @@ def _pub_impl(mctx):
                 test_deps_exclude = lock.test_deps_exclude,
                 lock_name = lock.name,
                 defs_bzl = str(Label("//flutter:defs.bzl")),
+                hook_packages_bzl = str(Label("//flutter/private:hook_packages.bzl")),
             )
 
     return mctx.extension_metadata(reproducible = True)
