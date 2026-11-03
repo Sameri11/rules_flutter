@@ -64,11 +64,17 @@ def _bazel_output(bazel, arguments):
     result = subprocess.run(
         command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
     )
     if result.returncode:
-        sys.exit("Bazel command failed ({}):\n{}".format(" ".join(command), result.stdout))
+        sys.exit(
+            "Bazel command failed ({}):\n{}{}".format(
+                " ".join(command),
+                result.stdout,
+                result.stderr,
+            )
+        )
     return result.stdout
 
 
@@ -79,7 +85,7 @@ def main(argv):
     parser.add_argument("output_json")
     args = parser.parse_args(argv[1:])
 
-    test_labels = _bazel_output(
+    raw_test_labels = _bazel_output(
         args.bazel,
         [
             "query",
@@ -88,7 +94,13 @@ def main(argv):
             "--output=label",
         ],
     ).splitlines()
-    test_labels = [label.strip() for label in test_labels if label.strip()]
+    test_labels = [label.strip() for label in raw_test_labels if label.strip()]
+    invalid_labels = [label for label in test_labels if not label.startswith(("//", "@"))]
+    if invalid_labels:
+        sys.exit(
+            "FAIL: unconfigured test-label query produced non-label output:\n  " +
+            "\n  ".join(invalid_labels)
+        )
     if not test_labels:
         sys.exit("FAIL: unconfigured test-label query returned no targets")
     expression = "deps(set({}))".format(" ".join(test_labels))

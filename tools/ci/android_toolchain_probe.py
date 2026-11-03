@@ -132,6 +132,7 @@ def _labels(output, repository):
     return sorted({line.strip() for line in output.splitlines() if line.strip().startswith(prefix)})
 
 
+def run_analysis(workspace, output_base):
     android_options = ["--android_platforms=@rules_android//:arm64-v8a"]
     _run_bazel(
         workspace,
