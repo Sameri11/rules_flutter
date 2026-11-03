@@ -20,8 +20,8 @@ host-compatible registration points at the public static toolchain target.
 
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
 load(":abis.bzl", "ABIS")
-load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":hook_packages_test.bzl", "staged_hook_packages_test")
+load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":toolchain.bzl", "flutter_toolchain")
 
 package(default_visibility = ["//visibility:private"])
@@ -71,11 +71,7 @@ exports_files(
     ],
     visibility = ["//tools/ci:__pkg__"],
 )
-exports_files(
-    ["hook_packages.bzl"],
-    visibility = ["//visibility:public"],
-)
-
+exports_files(["hook_packages.bzl"], visibility = ["//visibility:public"])
 
 flutter_toolchain(
     name = "flutter_toolchain",
