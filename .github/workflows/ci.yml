@@ -166,7 +166,8 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build --nobuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_api.log
+          bazel build --nobuild -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:analysis_only 2>&1 | tee ../../bazel_consumer_analysis_only.log
+          bazel build --nobuild --build_tests_only -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //... 2>&1 | tee ../../bazel_consumer_api.log
 
       - name: Consumer Android toolchain inventory
         working-directory: tests/consumer
@@ -188,6 +189,7 @@ jobs:
           python3 ../../tools/ci/plugin_graph_guard.py --selftest
           python3 ../../tools/ci/plugin_graph_guard.py
           python3 ../../tools/ci/plugin_deps_rejection.py
+          python3 ../../tools/ci/core_target_os_rejection.py
           python3 ../../tools/ci/maven_identity_check.py
           bazel build -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:consumer_rules_r8
           python3 ../../tools/ci/consumer_rules_check.py
@@ -197,19 +199,13 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test //composed_app:apk_override_contents_check //composed_app:direct_apk 2>&1 | tee ../../bazel_composed_release.log
-          bazel build -c opt --@rules_flutter_core//flutter:mode=release --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a,@rules_android//:x86_64,@rules_android//:armeabi-v7a //composed_app:all 2>&1 | tee -a ../../bazel_composed_release.log
-          cp bazel-bin/composed_app/direct_apk.apk "$RUNNER_TEMP/direct-release.apk"
-          cp bazel-bin/composed_app/composed_aar.aar "$RUNNER_TEMP/composed-release.aar"
+          python3 ../../tools/ci/composed_build.py release "$RUNNER_TEMP" 2>&1 | tee ../../bazel_composed_release.log
 
       - name: Consumer composed app debug APK check
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build --@rules_flutter_core//flutter:mode=debug -c fastbuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //composed_app:apk_check_test //composed_app:apk_variant_check_test //composed_app:native_files_coexistence_check //composed_app:native_files_override_check //composed_app:direct_apk 2>&1 | tee ../../bazel_composed_debug.log
-          bazel build --@rules_flutter_core//flutter:mode=debug -c fastbuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a,@rules_android//:x86_64,@rules_android//:armeabi-v7a //composed_app:all 2>&1 | tee -a ../../bazel_composed_debug.log
-          cp bazel-bin/composed_app/direct_apk.apk "$RUNNER_TEMP/direct-debug.apk"
-          cp bazel-bin/composed_app/composed_aar.aar "$RUNNER_TEMP/composed-debug.aar"
+          python3 ../../tools/ci/composed_build.py debug "$RUNNER_TEMP" 2>&1 | tee ../../bazel_composed_debug.log
 
       # Capture both modes' action graphs, compare SDK-derived strip inputs and
       # AAR payloads, and require each ABI's missing AAR library to fail.
@@ -361,17 +357,16 @@ jobs:
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+          bazel test --build_tests_only //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Host tests must not reach the Android SDK or NDK through any action input or environment.
       - name: Host test closure has no Android SDK or NDK
         if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app' }}
         working-directory: ${{ matrix.example.directory }}
         run: |
-          set -euo pipefail
-          bazel aquery 'deps(kind(".*_test rule", //...) except //android/...)' \
-            --output=jsonproto --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} > "$RUNNER_TEMP/host_test_aquery.json"
-          python3 ../../tools/ci/host_test_closure.py "$RUNNER_TEMP/host_test_aquery.json"
+          python3 ../../tools/ci/host_test_closure.py \
+            --lockfile-mode "${{ env.BAZEL_LOCKFILE_MODE }}" \
+            "$RUNNER_TEMP/host_test_aquery.json"
 
       # The update target is manual, so bazel test never builds it. Building it
       # keeps its launcher compiling without writing goldens.

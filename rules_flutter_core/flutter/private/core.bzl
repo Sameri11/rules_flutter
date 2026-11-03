@@ -226,13 +226,14 @@ def flutter_core(
         dart_defines = {},
         native_build_env = None,
         dart_plugin_registrant = None,
-        target_os = "android",
         **kwargs):
     """Declares an app's Flutter artifacts and host-test inputs.
 
     Standard-layout packages derive Dart sources from `lib/` and assets from
     `assets/`. The fixed `pubspec.yaml`, package/test targets, and guards are
-    declared with the artifacts so the package has one core.
+    declared with the artifacts so the package has one core. App AOT selects
+    its kernel from the configured Target OS; host tests and asset views need
+    no app Target OS.
 
     Args:
       name: the artifact's target name. `pubspec` is reserved.
@@ -244,7 +245,6 @@ def flutter_core(
       dart_defines: `-D` constants the kernels compile with.
       native_build_env: the native build environment for asset bundle hooks, or None.
       dart_plugin_registrant: the Dart plugin registrant under lib/, or None.
-      target_os: OS the kernel is compiled for; must be `"android"`.
       **kwargs: visibility and tags passed to declared targets.
     """
     if srcs == None:
@@ -253,8 +253,6 @@ def flutter_core(
         assets = native.glob(["assets/**"], allow_empty = True)
     if name == "pubspec":
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
-    if target_os != "android":
-        fail("flutter_core {}: target_os must be \"android\", got {}.".format(name, repr(target_os)))
 
     package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
 
@@ -279,11 +277,12 @@ def flutter_core(
         path_deps = path_deps,
         dart_plugin_registrant = aot_registrant,
         dart_defines = dart_defines,
+        target_os = "android",
         target_compatible_with = aot_target_compatible_with(),
     )
 
-    # The elf takes the kernel through the host transition, so the kernel is one
-    # action whichever split builds the elf.
+    # Keep the OS-specific kernel shared across ABI splits through the existing
+    # host transition.
     _platform_neutral_files(
         name = name + "_kernel_neutral",
         src = ":" + name + "_kernel",
@@ -356,7 +355,10 @@ def flutter_core(
     for abi in ABIS:
         dart_aot_elf(
             name = "{}_libapp_{}".format(name, abi),
-            dill = ":" + name + "_kernel_neutral",
+            dill = select({
+                Label("//flutter/private:target_os_android"): ":" + name + "_kernel_neutral",
+                "//conditions:default": None,
+            }),
             abi = abi,
             snapshot_flags = ABIS[abi].snapshot_flags,
             strip = True,
