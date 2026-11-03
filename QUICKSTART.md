@@ -462,3 +462,10 @@ package cannot compile in that shared kernel but should be compiled by a
 particular test instead, the `pub.lock` tag's `test_deps_exclude` can exclude
 that package from the shared kernel; the test still compiles its own direct
 dependency.
+
+The wildcard command `bazel test //...` retains Bazel's normal target universe:
+it can also analyze non-test app artifacts, which require an Android app
+configuration. Use `bazel test --build_tests_only //...` to select the tests
+and their dependencies without unrelated non-test roots, or name a host suite
+explicitly when running only host tests. Selected platform-dependent tests are
+not filtered out and still need their platform configuration.

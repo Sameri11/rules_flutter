@@ -45,9 +45,9 @@ digest_all() {
 
 # Prints "label path" for each kernel under the config flags given as arguments.
 kernel_outputs() {
-  bazel cquery 'kind(dart_test_kernel, //...)' --output=starlark \
+  bazel cquery --output=starlark \
     --starlark:expr='str(target.label) + " " + " ".join([f.path for f in target.files.to_list()])' \
-    ${extra[@]+"${extra[@]}"} "$@" | LC_ALL=C sort
+    ${extra[@]+"${extra[@]}"} "$@" -- $(cat "$work/labels") | LC_ALL=C sort
 }
 
 bazel query 'kind(dart_test_kernel, //...)' ${extra[@]+"${extra[@]}"} | LC_ALL=C sort > "$work/labels"

@@ -110,7 +110,7 @@ jobs:
         working-directory: rules_flutter_core
         run: |
           set -o pipefail
-          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} 2>&1 | tee ../bazel_test_core.log
+          env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test --build_tests_only //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} 2>&1 | tee ../bazel_test_core.log
 
       # An SDK change that moves a conformance case outcome fails here.
       - name: Conformance oracles recapture
@@ -166,7 +166,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -o pipefail
-          bazel build --nobuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_api.log
+          bazel build --nobuild --build_tests_only --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //... 2>&1 | tee ../../bazel_consumer_api.log
 
       - name: Consumer Android toolchain inventory
         working-directory: tests/consumer
@@ -188,6 +188,7 @@ jobs:
           python3 ../../tools/ci/plugin_graph_guard.py --selftest
           python3 ../../tools/ci/plugin_graph_guard.py
           python3 ../../tools/ci/plugin_deps_rejection.py
+          python3 ../../tools/ci/core_target_os_rejection.py
           python3 ../../tools/ci/maven_identity_check.py
           bazel build -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:consumer_rules_r8
           python3 ../../tools/ci/consumer_rules_check.py
@@ -361,7 +362,7 @@ jobs:
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -o pipefail
-          bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
+          bazel test --build_tests_only //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} ${{ matrix.example.mode == 'debug' && '-c fastbuild --@rules_flutter_core//flutter:mode=debug' || '-c opt' }} 2>&1 | tee ../../bazel_example_test_${{ matrix.example.name }}.log
 
       # Host tests must not reach the Android SDK or NDK through any action input or environment.
       - name: Host test closure has no Android SDK or NDK

@@ -337,13 +337,9 @@ Point this at a filegroup in the dependency's own package, e.g.
 boundaries, so the dependency needs its own BUILD file.""",
         ),
         "target_os": attr.string(
-            default = "android",
-            values = ["android", "ios", "macos", "linux", "windows", "fuchsia", ""],
-            doc = """Target OS for `--target-os`, or "" to omit the flag.
-
-Release-only: flutter_tools passes it under `--aot` alone.
-
-""",
+            mandatory = True,
+            values = ["android", "ios", "macos", "linux", "windows", "fuchsia"],
+            doc = "Target OS for `--target-os`.",
         ),
         "dart_defines": attr.string_dict(
             doc = """Compile-time constants, passed as `-D<name>=<value>`.
@@ -967,6 +963,13 @@ def _dart_aot_elf_impl(ctx):
     # (two ABIs, or Android beside iOS) both declaring `libapp.so` at the root
     # is a duplicate-output analysis error.
     so = ctx.actions.declare_file(ctx.label.name + "/libapp.so")
+    if ctx.file.dill == None:
+        fail(
+            "Target OS selection failed for label {} (ABI {}): no AOT kernel is configured.".format(
+                ctx.label,
+                ctx.attr.abi,
+            ),
+        )
 
     args = ctx.actions.args()
 
@@ -1008,7 +1011,6 @@ dart_aot_elf = rule(
     attrs = {
         "dill": attr.label(
             allow_single_file = [".dill"],
-            mandatory = True,
         ),
         "strip": attr.bool(
             default = True,

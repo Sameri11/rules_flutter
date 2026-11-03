@@ -119,6 +119,12 @@ pub_lock_parser_test_suite(name = "pub_lock_parser_test")
 # Public because the core's select() is expanded in the consumer's package.
 # Spelled out: Bazel does not allow `for` in BUILD files.
 config_setting(
+    name = "target_os_android",
+    constraint_values = ["@platforms//os:android"],
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
     name = "split_arm64_v8a_release",
     constraint_values = [
         "@platforms//os:android",
