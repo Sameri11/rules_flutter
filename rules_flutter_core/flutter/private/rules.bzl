@@ -26,8 +26,7 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS")
-load(":hook_packages.bzl", "FlutterHookPackagesInfo", "_staged_hook_packages")
+load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 
 visibility(["//flutter"])
@@ -1408,7 +1407,7 @@ def _flutter_assets_impl(ctx):
             hook_packages = target[FlutterHookPackagesInfo]
             break
     if build_env == None and hook_packages:
-        missing_env_packages = _staged_hook_packages(
+        missing_env_packages = staged_hook_packages(
             hook_packages.package_dirs,
             [file.path for file in staged.files],
         )

@@ -9,7 +9,7 @@ FlutterHookPackagesInfo = provider(
     },
 )
 
-def _staged_hook_packages(package_dirs, staged_paths):
+def staged_hook_packages(package_dirs, staged_paths):
     staged = {path: True for path in staged_paths}
     return [
         name
