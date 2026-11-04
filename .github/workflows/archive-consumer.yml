@@ -1,0 +1,71 @@
+name: Archive consumer proof
+
+# Diagnostic lane for the standalone consumer in tests/archive_consumer. It
+# proves that both ruleset modules build from the immutable commit archive,
+# that a local-rules baseline at the same source produces the same release APK,
+# and that a wrong archive digest is rejected on the checksum. Provenance names
+# the archived revision actually exercised, so a run on a later commit is not
+# proof of that commit's rules modules.
+on:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archive-consumer-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.3
+  FLUTTER_SHA256_DARWIN_ARM64: 66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583
+  FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+  BAZELISK_VERSION: v1.29.0
+  BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+  BAZELISK_SHA256_DARWIN_ARM64: cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+
+jobs:
+  proof:
+    name: Archive-only consumer — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-15
+    steps:
+      # The proof resolves the archived revision's module trees, which a shallow
+      # checkout does not contain.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Same environment as the other lanes. The remote cache stays off: both
+      # origins must execute their own actions for the APK comparison to mean
+      # anything.
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
+
+      - name: Archive build, local baseline, digest check
+        run: |
+          set -o pipefail
+          python3 tools/ci/archive_consumer.py \
+            --evidence "$RUNNER_TEMP/archive-consumer-evidence" \
+            --work-dir "$RUNNER_TEMP/archive-consumer-bases" \
+            2>&1 | tee archive_consumer.log
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: archive-consumer-evidence-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/archive-consumer-evidence/
+            archive_consumer.log
+          if-no-files-found: warn

@@ -1,0 +1,94 @@
+module(
+    name = "archive_consumer",
+    version = "0.0.1",
+)
+
+# macOS host C/C++ (protoc) must use apple_support's toolchain: Xcode 27 clang
+# records the SDK's SDKSettings.json in every dependency file, which only
+# apple_support's builtin include directories allow. Toolchains register in
+# bazel_dep order, so declare it before anything that brings rules_cc's
+# toolchain.
+bazel_dep(name = "apple_support", version = "1.24.5")
+
+# Both ruleset modules come from one immutable commit archive. The two
+# overrides below are the module's only source of rules; a local checkout is
+# substituted with --override_module on the command line, never in this file.
+bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+
+# One archive, two module roots: each strip_prefix selects that module's
+# directory inside the extracted tree.
+archive_override(
+    module_name = "sameri11_rules_flutter_core",
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_core",
+    type = "tar.gz",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+)
+
+archive_override(
+    module_name = "sameri11_rules_flutter_android",
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_android",
+    type = "tar.gz",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+)
+
+# The root owns the Android platform, SDK and Maven wiring: a stripped module
+# archive cannot carry the repository's shared .bazelrc or root module.
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+
+flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
+flutter.sdk(version = "3.47.3")
+
+pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
+pub.lock(
+    name = "pub",
+    lock = "//:pubspec.lock",
+)
+use_repo(pub, "pub")
+
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+
+register_toolchains("@androidsdk//:all")
+
+android_ndk = use_extension("@rules_flutter_android//flutter:extensions.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+
+register_toolchains("@androidndk//:all")
+
+# The engine embedding jar's compile and runtime dependencies.
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "flutter_maven",
+    artifacts = [
+        "androidx.annotation:annotation:1.8.1",
+        "androidx.core:core:1.13.1",
+        "androidx.exifinterface:exifinterface:1.4.1",
+        "androidx.fragment:fragment:1.7.1",
+        "androidx.lifecycle:lifecycle-common:2.7.0",
+        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
+        "androidx.lifecycle:lifecycle-process:2.7.0",
+        "androidx.lifecycle:lifecycle-runtime:2.7.0",
+        "androidx.tracing:tracing:1.2.0",
+        "androidx.window:window:1.2.0",
+        "androidx.window:window-java:1.2.0",
+        "com.getkeepsafe.relinker:relinker:1.4.5",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+use_repo(maven, "flutter_maven")

@@ -1,0 +1,23 @@
+common --enable_bzlmod
+
+# This module is consumed as an external root, so it imports nothing from a
+# parent checkout: the ruleset modules arrive inside the archive.
+build --merge_android_manifest_permissions
+
+# rules_android requires JDK 17.
+build --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
+build --java_language_version=17 --java_runtime_version=remotejdk_17
+
+# The NDK is a repository input, so it is forwarded explicitly rather than
+# read from the action environment.
+common --repo_env=ANDROID_NDK_HOME
+
+# The recorded shape: one release arm64-v8a split. Target OS comes from this
+# platform, not from a BUILD argument.
+build --android_platforms=@rules_android//:arm64-v8a
+build -c opt
+build --@rules_flutter_core//flutter:mode=release
+
+# The lock mode is deliberately not pinned here: the driver passes
+# --lockfile_mode=error for the archive build and --lockfile_mode=update when
+# generating the committed lock, and a baseline build may use module overrides.

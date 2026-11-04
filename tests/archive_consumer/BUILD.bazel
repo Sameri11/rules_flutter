@@ -1,0 +1,33 @@
+# The standalone Android consumer: its only APK is the root's //:app.
+
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The Target OS is not an argument: the AOT kernel is selected from the
+# configured platform, which .bazelrc fixes to @rules_android's arm64-v8a.
+flutter_core(
+    name = "core",
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    pub = "@pub",
+)
+
+# The manifest, resources and debug manifest follow the created layout under
+# src/main and src/debug, so only the non-layout facts are stated here.
+flutter_android_app(
+    name = "app",
+    core = ":core",
+    manifest_values = {"applicationId": "com.example.archive_consumer"},
+    # No plugins: the stock empty registrant is compiled instead of naming a
+    # @flutter_plugins repository this root does not declare.
+    plugins = None,
+    deps = [":main_activity"],
+)
+
+kt_android_library(
+    name = "main_activity",
+    srcs = ["src/main/kotlin/com/example/archive_consumer/MainActivity.kt"],
+    deps = [":app_inputs"],
+)
