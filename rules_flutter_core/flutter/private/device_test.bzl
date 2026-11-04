@@ -1,13 +1,14 @@
-# Device flavor rules: the device test macro, Dart programs built from the
-# toolchain's dart, the device stream decoder, and the codec test that checks it.
-#
-# A device kernel is compiled by `dart compile kernel` from declared inputs only:
-# the toolchain's dart, its SDK packages and its VM platform dill. Nothing reads
-# HOME, the pub cache or the host environment.
+"""Device flavor rules: the device test macro, Dart programs built from the
+toolchain's dart, the device stream decoder, and the codec test that checks it.
 
-visibility(["//flutter/...", "//tests/..."])
+A device kernel is compiled by `dart compile kernel` from declared inputs only:
+the toolchain's dart, its SDK packages and its VM platform dill. Nothing reads
+HOME, the pub cache or the host environment.
+"""
 
 load(":flutter_test.bzl", _flutter_test_device = "flutter_test_device")
+
+visibility(["//flutter/...", "//tests/..."])
 
 _TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
 

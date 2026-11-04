@@ -8,11 +8,13 @@ load("//flutter/private:device_test.bzl", "device_codec_test", "device_decoder",
 
 package(default_visibility = ["//visibility:private"])
 
-device_decoder(name = "decoder", visibility = ["//visibility:public"])
+device_decoder(
+    name = "decoder",
+    visibility = ["//visibility:public"],
+)
 
 device_kernel(
     name = "codec_kernel",
-    entrypoint = "codec_test.dart",
     srcs = [
         "//flutter/private/test/driver:device_decoder.dart",
         "//flutter/private/test/driver:frame.dart",
@@ -20,6 +22,7 @@ device_kernel(
         "//flutter/private/test/driver:results.dart",
         "//flutter/private/test/driver:settings.dart",
     ],
+    entrypoint = "codec_test.dart",
 )
 
 device_codec_test(

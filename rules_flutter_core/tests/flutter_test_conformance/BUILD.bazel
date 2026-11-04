@@ -7,8 +7,8 @@
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test", "flutter_test_suite")
-load("//flutter/private:test_metadata.bzl", "parse_error_test")
 load("//flutter/private:device_test.bzl", "flutter_test_device")
+load("//flutter/private:test_metadata.bzl", "parse_error_test")
 
 exports_files(["pubspec.lock"])
 
@@ -133,15 +133,15 @@ _PARITY_EXCLUDE = {
             "$(rlocationpath :{}_launcher)".format(fixture),
             "$(rlocationpath :{}_device)".format(fixture),
             "$(rlocationpath {}.expected.json)".format(fixture),
-        ] + [arg for name in _PARITY_EXCLUDE.get(fixture, []) for arg in ["--exclude", name]],
+        ] + ["--exclude='{}'".format(name) for name in _PARITY_EXCLUDE.get(fixture, [])],
         data = [
             ":{}_launcher".format(fixture),
             ":{}_device".format(fixture),
             "{}.expected.json".format(fixture),
             "check.py",
             "device_parity.py",
-            "@flutter_sdk//:dart",
             "//tests/device_codec:decoder",
+            "@flutter_sdk//:dart",
         ],
     )
     for fixture in DEVICE_FIXTURES

@@ -4,11 +4,13 @@
 /// callback.
 library;
 
-import 'dart:async';
+import 'dart:async' hide EventSink;
 
 import 'package:async/async.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test_api/backend.dart';
+
+import 'results.dart';
 
 export 'results.dart';
 

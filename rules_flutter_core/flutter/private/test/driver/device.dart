@@ -12,7 +12,7 @@
 /// the run settings file, so every platform selects the same tests.
 library;
 
-import 'dart:async';
+import 'dart:async' hide EventSink;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';

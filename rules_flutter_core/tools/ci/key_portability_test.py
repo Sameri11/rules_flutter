@@ -1299,7 +1299,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
-    print("OK: key portability contracts A-P hold")
+    print("OK: key portability contracts A-R hold")
     return 0
 
 

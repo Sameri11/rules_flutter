@@ -8,7 +8,7 @@
 /// are written there instead.
 library;
 
-import 'dart:async';
+import 'dart:async' hide EventSink;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
