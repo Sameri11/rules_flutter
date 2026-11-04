@@ -193,7 +193,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "a/RI5+ud+1XzjACa8J4MoLJJWd52gI1AZaG/I3oHy4E=",
+        "bzlTransitiveDigest": "IQKKhDRQ2nv9172jyBf+8QrvfO6OoJlhXoR8YS+5fA8=",
         "usagesDigest": "3eQ7CSujwGo7HWistYKJNKsA65Je6fZw/a3upweGNLo=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",

@@ -15,7 +15,7 @@ load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "pub_path_deps_check", "pub_plugins_check")
+load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "library_path", "pub_path_deps_check", "pub_plugins_check")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -56,6 +56,18 @@ FlutterArtifactInfo = provider(
         "engine_libs": "list of File: this ABI's engine .so files, unstripped.",
         "embedding_jar": "File: the Java embedding jar for this mode.",
         "assets": "Directory: the flutter_assets bundle, with the debug overlay under debug.",
+    },
+)
+
+FlutterCoreInfo = provider(
+    doc = "What a flutter_debug_core needs from its app: the kernel inputs and the debug registrant.",
+    fields = {
+        "package_config": "File: the pub hub's package_config.json.",
+        "pub_srcs": "list of File: the hub's packageUri trees.",
+        "srcs": "list of File: the app's Dart sources, for change detection.",
+        "path_deps": "list of File: sources of path dependencies.",
+        "debug_registrant": "File or None: the debug plugin registrant.",
+        "registrant_path": "str: the registrant's path within its package, as a package: URI suffix.",
     },
 )
 
@@ -104,7 +116,7 @@ def _platform_neutral_files_impl(ctx):
     (src,) = ctx.attr.src
     return [DefaultInfo(files = src[DefaultInfo].files)]
 
-_platform_neutral_files = rule(
+platform_neutral_files = rule(
     implementation = _platform_neutral_files_impl,
     doc = "Passes a target's files through, built under the host platform.",
     attrs = {
@@ -145,7 +157,7 @@ def _assets_bundle_impl(ctx):
     )
     return [DefaultInfo(files = depset([out]))]
 
-_assets_bundle = rule(
+assets_bundle = rule(
     implementation = _assets_bundle_impl,
     doc = "The flutter_assets tree the APK packages, with the debug overlay under debug.",
     attrs = {
@@ -189,6 +201,14 @@ def _flutter_core_impl(ctx):
             embedding_jar = embedding_jar,
             assets = assets[0],
         ),
+        FlutterCoreInfo(
+            package_config = ctx.file.package_config,
+            pub_srcs = ctx.files.pub_srcs,
+            srcs = ctx.files.srcs,
+            path_deps = ctx.files.path_deps,
+            debug_registrant = ctx.file.debug_registrant,
+            registrant_path = library_path(ctx, ctx.file.debug_registrant, "dart_plugin_registrant") if ctx.file.debug_registrant else "",
+        ),
         ctx.attr.pubspec[FlutterPubspecInfo],
     ]
 
@@ -202,6 +222,11 @@ _flutter_core = rule(
             "embedding": attr.label(allow_single_file = True, mandatory = True),
             "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
             "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
+            "package_config": attr.label(allow_single_file = True, mandatory = True, doc = "The pub hub's package_config.json, read by a flutter_debug_core's kernel."),
+            "pub_srcs": attr.label_list(allow_files = True, allow_empty = False, mandatory = True, doc = "The pub hub's :lib, read by a flutter_debug_core's kernel."),
+            "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
+            "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
+            "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
             "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
         },
         **ABI_PLATFORM_ATTRS
@@ -283,7 +308,7 @@ def flutter_core(
 
     # Keep the OS-specific kernel shared across ABI splits through the existing
     # host transition.
-    _platform_neutral_files(
+    platform_neutral_files(
         name = name + "_kernel_neutral",
         src = ":" + name + "_kernel",
     )
@@ -300,7 +325,7 @@ def flutter_core(
         dart_defines = dart_defines,
     )
 
-    _platform_neutral_files(
+    platform_neutral_files(
         name = name + "_jit_kernel_neutral",
         src = ":" + name + "_jit_kernel",
     )
@@ -338,7 +363,7 @@ def flutter_core(
         tags = ["manual"],
     )
 
-    _assets_bundle(
+    assets_bundle(
         name = name + "_bundle_action",
         src = ":" + name + "_assets",
         kernel = select({
@@ -347,7 +372,7 @@ def flutter_core(
         }),
     )
 
-    _platform_neutral_files(
+    platform_neutral_files(
         name = name + "_bundle",
         src = ":" + name + "_bundle_action",
     )
@@ -412,6 +437,11 @@ def flutter_core(
         }),
         assets = ":" + name + "_bundle",
         pubspec = ":pubspec",
+        package_config = package_config,
+        pub_srcs = [pub_lib],
+        srcs = srcs,
+        path_deps = path_deps,
+        debug_registrant = debug_registrant,
         **kwargs
     )
 

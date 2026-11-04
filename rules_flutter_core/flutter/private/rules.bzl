@@ -62,13 +62,21 @@ def _repository_path(ctx, file, attribute):
         ))
     return short_path[len(prefix):]
 
-def _library_path(ctx, file, attribute):
+def library_path(ctx, file, attribute):
     """A source file's path within its package, as a `package:` URI suffix.
 
     `package:<name>/x.dart` resolves to `lib/x.dart`, so the URI carries the
     path under lib/ and nothing else. Taking it from a label rather than asking
     for the URI is what keeps the package name out of BUILD files -- and a
     typo fails here instead of producing a URI that resolves to nothing.
+
+    Args:
+      ctx: the rule context.
+      file: the source File.
+      attribute: the attribute name, for error messages.
+
+    Returns:
+      The path under lib/, without the package name.
     """
     path = _repository_path(ctx, file, attribute)
     prefix = (ctx.label.package + "/" if ctx.label.package else "") + "lib/"
@@ -218,7 +226,7 @@ def _dart_aot_kernel_impl(ctx):
     registrant_scheme, registrant_path = _dart_entry_uri(ctx, ctx.file.dart_plugin_registrant) if ctx.file.dart_plugin_registrant else ("", "")
     scalars = ctx.actions.args()
     scalars.add(pubspec.package_name)
-    scalars.add(_library_path(ctx, ctx.file.entrypoint, "entrypoint"))
+    scalars.add(library_path(ctx, ctx.file.entrypoint, "entrypoint"))
     scalars.add(registrant_scheme)
     scalars.add(registrant_path)
     scalars.add(dill)
@@ -358,12 +366,22 @@ keys are unchanged.""",
 # reports it as not found. The hint says where the file has to be declared.
 _TEST_IMPORT_HINT = "hint: declare test-local imports in `srcs`"
 
-def _jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, what):
-    """Declares the debug kernel action of dart_jit_kernel and dart_test_kernel.
+def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, what):
+    """Declares the debug kernel action of dart_jit_kernel, dart_test_kernel and flutter_debug_core.
 
     `pkg` is a struct of the package's inputs: package_name, package_config,
     pub_srcs, path_deps, srcs, registrant, registrant_path, and import_dill, the
     kernel to import with --import-dill, or None.
+
+    Args:
+      ctx: the rule context.
+      dill: the output kernel File.
+      pkg: the package struct described above.
+      entrypoint: the Dart entrypoint File.
+      dart_defines: a dict of compile-time defines.
+      hint: text appended to failure messages, or "".
+      mnemonic: the action mnemonic.
+      what: the description shown in progress output.
     """
     toolchain = _flutter_toolchain(ctx)
 
@@ -486,7 +504,7 @@ def _dart_jit_kernel_impl(ctx):
     pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
     registrant = ctx.file.dart_plugin_registrant
 
-    _jit_kernel_action(
+    jit_kernel_action(
         ctx,
         dill = dill,
         pkg = struct(
@@ -496,7 +514,7 @@ def _dart_jit_kernel_impl(ctx):
             path_deps = ctx.files.path_deps,
             srcs = ctx.files.srcs,
             registrant = registrant,
-            registrant_path = _library_path(ctx, registrant, "dart_plugin_registrant") if registrant else "",
+            registrant_path = library_path(ctx, registrant, "dart_plugin_registrant") if registrant else "",
             import_dill = None,
         ),
         entrypoint = ctx.file.entrypoint,
@@ -653,7 +671,7 @@ def _dart_test_kernel_impl(ctx):
             prune = prune,
         )
     else:
-        _jit_kernel_action(
+        jit_kernel_action(
             ctx,
             dill = dill,
             pkg = pkg,
@@ -1061,7 +1079,7 @@ def _lib_tier(ctx, pubspec):
     The tier is the package's lib/ libraries, compiled once against test_deps and so
     shared by the package's tests. lib_entry.py picks the libraries and writes their
     entrypoint; frontend_server writes one dill per package, joined main first as in
-    _jit_kernel_action. deps_lib is test_deps with the tier appended: the one
+    jit_kernel_action. deps_lib is test_deps with the tier appended: the one
     --import-dill a test kernel takes, since frontend_server rejects two.
 
     A package with no lib/ sources has no tier: deps_lib is test_deps.
@@ -1083,7 +1101,7 @@ def _lib_tier(ctx, pubspec):
         entries.append(f.path + "\t" + f.short_path[len(prefix):])
     ctx.actions.write(lib_list, "\n".join(entries) + "\n")
 
-    # The debug flags and line-table handling of _jit_kernel_action, with the hub's
+    # The debug flags and line-table handling of jit_kernel_action, with the hub's
     # test deps as the import.
     args = ctx.actions.args()
     args.add(toolchain.dartaotruntime)

@@ -18,6 +18,10 @@ load(
     _flutter_core = "flutter_core",
 )
 load(
+    "//flutter/private:debug_core.bzl",
+    _flutter_debug_core = "flutter_debug_core",
+)
+load(
     "//flutter/private:flutter_test.bzl",
     _flutter_test = "flutter_test",
     _flutter_test_suite = "flutter_test_suite",
@@ -54,7 +58,11 @@ pub_plugins_check = _pub_plugins_check
 # The platform-composed artifact. An Android binary consumes it through
 # rules_flutter_android's flutter_android_inputs.
 flutter_core = _flutter_core
+
 FlutterArtifactInfo = _FlutterArtifactInfo
+
+# A debug artifact of an app's core, compiled from another entrypoint.
+flutter_debug_core = _flutter_debug_core
 
 # Read by rules_flutter_android for the version an APK declares.
 FlutterPubspecInfo = _FlutterPubspecInfo

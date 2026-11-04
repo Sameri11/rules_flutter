@@ -18,6 +18,7 @@ FILES = {
     "device_test": "flutter/private/device_test.bzl",
     "test_driver": "flutter/private/test_kernel_driver.bzl",
     "core": "flutter/private/core.bzl",
+    "debug_core": "flutter/private/debug_core.bzl",
     "android_inputs": "flutter/private/android_inputs_rules.bzl",
     "apk_check": "flutter/private/apk_check.bzl",
     "dart_registrant": "flutter/private/dart_registrant.bzl",
@@ -287,20 +288,20 @@ class Checker:
             self.fail("C", "dart_aot_kernel must not read //flutter:mode: it is AOT-only")
 
         jit = _function(tree, "_dart_jit_kernel_impl")
-        action_fn = _function(tree, "_jit_kernel_action")
+        action_fn = _function(tree, "jit_kernel_action")
         if jit is None or action_fn is None:
-            self.fail("C", "{} must define _dart_jit_kernel_impl and _jit_kernel_action".format(FILES["defs"]))
+            self.fail("C", "{} must define _dart_jit_kernel_impl and jit_kernel_action".format(FILES["defs"]))
         else:
             if _contains_attr(jit, ["ctx", "attr", "_mode"]) or _contains_attr(action_fn, ["ctx", "attr", "_mode"]):
-                self.fail("C", "_jit_kernel_action must not read //flutter:mode: the debug kernel is mode-independent")
+                self.fail("C", "jit_kernel_action must not read //flutter:mode: the debug kernel is mode-independent")
             for flag in ("--filesystem-root", "--filesystem-scheme", "--packages"):
                 if not _contains_string(action_fn, flag):
-                    self.fail("C", "_jit_kernel_action must pass {}".format(flag))
+                    self.fail("C", "jit_kernel_action must pass {}".format(flag))
             if not _contains_attr(jit, ["ctx", "file", "package_config"]):
                 self.fail("C", "_dart_jit_kernel_impl must pass ctx.file.package_config")
             jit_action = _action_call(action_fn, "run_shell")
             if jit_action is None:
-                self.fail("C", "_jit_kernel_action must create its action with ctx.actions.run_shell")
+                self.fail("C", "jit_kernel_action must create its action with ctx.actions.run_shell")
             else:
                 jit_inputs = _keyword(jit_action, "inputs")
                 for path, description in (
@@ -677,7 +678,7 @@ class Checker:
         # The test kernel's argv is part of its key, so it names no host path or variable.
         defs = self.trees.get("defs")
         if defs is not None:
-            for function_name in ("_test_kernel_driver_action", "_jit_kernel_action", "_dart_test_kernel_impl"):
+            for function_name in ("_test_kernel_driver_action", "jit_kernel_action", "_dart_test_kernel_impl"):
                 function = _function(defs, function_name)
                 if function is None:
                     continue
@@ -948,6 +949,30 @@ class Checker:
             for node in ast.walk(tree)
         ):
             self.fail("Q", "raw native stripping must not use ambient action environment")
+
+    def check_r(self):
+        # flutter_debug_core declares no action of its own: its kernel is the shared
+        # jit_kernel_action and its bundle the shared assets_bundle, so contracts C and K
+        # cover what it runs. This file reads only its declared inputs and no host state.
+        tree = self.tree("debug_core", "R")
+        if tree is None:
+            return
+        for node in ast.walk(tree):
+            path = _call_path(node) if isinstance(node, ast.Call) else None
+            if path and path[:2] == ["ctx", "actions"] and path[-1] in ("run", "run_shell", "write", "expand_template", "symlink"):
+                self.fail("R", "debug_core.bzl must not declare actions of its own; use the shared kernel and bundle")
+        for name in ("jit_kernel_action", "assets_bundle"):
+            if not _has_call(tree, name):
+                self.fail("R", "debug_core.bzl must build through the shared {} action".format(name))
+        structs = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and _call_path(node) == ["struct"]]
+        required = {"package_name", "package_config", "pub_srcs", "path_deps", "srcs", "registrant", "registrant_path", "import_dill"}
+        if len(structs) != 1 or {keyword.arg for keyword in structs[0].keywords} != required:
+            self.fail("R", "the debug kernel's pkg struct must carry exactly the package's declared inputs")
+        host_variable = re.compile(r"\$\{?(?:HOME|PWD|USER|TMPDIR)\b")
+        for node in ast.walk(tree):
+            text = _string(node)
+            if text is not None and (_HOST_PATH.search(text) or host_variable.search(text) or "PUB_CACHE" in text):
+                self.fail("R", "debug_core.bzl must not name a host path, variable or the pub cache")
 
 
 _HOST_PATH = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")
