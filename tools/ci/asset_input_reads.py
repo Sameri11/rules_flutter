@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = "42c9011"
 TARGET = "//:app_assets"
-TRACE_SYSCALLS = "open,openat,openat2,creat,stat,lstat,fstat,newfstatat,statx,access,faccessat,faccessat2,readlink,readlinkat,read,readv,pread64,preadv,preadv2,mmap,mmap2,close,dup,dup2,dup3,fcntl,execve,clone,clone3,fork,vfork,chdir,fchdir,getcwd"
+TRACE_SYSCALLS = "open,openat,openat2,creat,stat,lstat,fstat,newfstatat,statx,access,faccessat,faccessat2,readlink,readlinkat,read,readv,pread64,preadv,preadv2,copy_file_range,sendfile,sendfile64,splice,ioctl,mmap,mmap2,close,dup,dup2,dup3,fcntl,execve,clone,clone3,fork,vfork,chdir,fchdir,getcwd"
 
 def capture(out, name, argv, cwd, env):
     out.mkdir(parents=True, exist_ok=True)
@@ -97,6 +97,18 @@ def parser_control(evidence,env):
     actual_rows = json.loads((control / "actual-parsed/input-classification.json").read_text())
     if [row["classification"] for row in actual_rows] != expected:
         raise RuntimeError("actual strace control classifications differ")
+    copy_trace = control / "copy.trace"
+    run(control, "actual-copy", ["strace", "-f", "-yy", "-s", "128", "-e", "trace=" + TRACE_SYSCALLS, "-o", str(copy_trace), "/bin/cp", "--reflink=never", str(control / "read file"), str(control / "copied file")], ROOT, env)
+    copy_argv = list(argv)
+    copy_inputs = inputs + [{"exec_path": "control/copied file", "real_path": str(control / "copied file"), "size": 3}]
+    (control / "copy-inputs.json").write_text(json.dumps(copy_inputs))
+    copy_argv[copy_argv.index("--inputs") + 1] = str(control / "copy-inputs.json")
+    copy_argv[copy_argv.index("--trace") + 1] = str(copy_trace)
+    copy_argv[copy_argv.index("--output-dir") + 1] = str(control / "copy-parsed")
+    run(control, "actual-copy-parse", copy_argv, ROOT, env)
+    copy_rows = json.loads((control / "copy-parsed/input-classification.json").read_text())
+    if copy_rows[0]["classification"] != "positive_bytes_read" or copy_rows[-1]["classification"] == "positive_bytes_read" or (control / "copied file").read_bytes() != b"abc":
+        raise RuntimeError("actual copy control source-byte observation failed")
 
 def disk(out,name):
     capture(out,name,["df","-h",str(ROOT)],ROOT,dict(os.environ))

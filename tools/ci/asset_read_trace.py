@@ -4,6 +4,7 @@
 import argparse
 import ast
 import collections
+import hashlib
 import json
 import os
 import re
@@ -12,6 +13,7 @@ from pathlib import Path
 
 
 READ_CALLS = {"read", "readv", "pread64", "preadv", "preadv2"}
+KERNEL_COPY_CALLS = {"copy_file_range", "sendfile", "sendfile64", "splice"}
 MMAP_CALLS = {"mmap", "mmap2"}
 METADATA_CALLS = {
     "access", "faccessat", "faccessat2", "newfstatat", "stat", "lstat",
@@ -167,15 +169,16 @@ def process_kind(command):
 def open_access(call, arguments):
     flag_index = {"open": 1, "openat": 2, "openat2": 2}.get(call)
     if flag_index is None or flag_index >= len(arguments):
-        return False, False, False
+        return False, False, False, False
     flags = arguments[flag_index]
     if call == "openat2":
         match = re.search(r"\bflags=([^,}]+)", flags)
         flags = match.group(1) if match else ""
-    read = "O_PATH" not in flags and ("O_RDWR" in flags or "O_WRONLY" not in flags)
+    path_only = "O_PATH" in flags
+    read = not path_only and "O_WRONLY" not in flags
     write = "O_RDWR" in flags or "O_WRONLY" in flags
     create = "O_CREAT" in flags
-    return read, write, create
+    return read, write, create, path_only
 
 
 def parse_trace(trace_path, records, exec_index, real_index, execroot):
@@ -185,6 +188,7 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
         raise ValueError(f"cannot read trace: {exc}") from exc
     cwd_by_pid, pending, parent, commands = {}, {}, {}, {}
     read_totals = collections.Counter()
+    kernel_copy_totals = collections.Counter()
     accesses = [collections.Counter() for _ in records]
     process_observations = [collections.defaultdict(collections.Counter) for _ in records]
     process_totals = collections.defaultdict(collections.Counter)
@@ -245,7 +249,8 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
         recognized[call] += 1
         argv = split_arguments(args)
         fd_argument_indexes = (
-            (0,) if call in READ_CALLS or call in {"fstat", "fchdir"}
+            (0,) if call in READ_CALLS or call in {"fstat", "fchdir", "copy_file_range", "splice"}
+            else (1,) if call in {"sendfile", "sendfile64"}
             else (4,) if call in MMAP_CALLS
             else ()
         )
@@ -262,7 +267,7 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
         if call in OPEN_CALLS and ret_path:
             paths = [ret_path]
         base = dirfd_base(pid, call, argv)
-        read_open, write_open, creating_open = open_access(call, argv)
+        read_open, write_open, creating_open, path_only_open = open_access(call, argv)
 
         if call in READ_CALLS:
             if ret is None:
@@ -277,6 +282,7 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
                     read_totals["bytes"] += ret
                     add_process_event(pid, "positive_read_syscalls")
                     add_process_event(pid, "positive_read_bytes", ret)
+                    add_process_event(pid, "positive_source_bytes", ret)
                     event = "positive_read_bytes"
                     amount = ret
                 else:
@@ -290,7 +296,37 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
                     for index in indexes:
                         accesses[index][event] += amount
                         accesses[index]["read_calls"] += 1
+                        if ret > 0:
+                            accesses[index]["positive_source_bytes"] += amount
+                            add_input_event(index, pid, "positive_source_bytes", amount)
                         add_input_event(index, pid, event, amount)
+            return
+        if call in KERNEL_COPY_CALLS:
+            if ret is None:
+                malformed["kernel_copy_without_return"] += 1
+                add_unresolved("kernel_copy_without_return", rawline)
+                return
+            if ret >= 0:
+                recognized["useful_kernel_copy"] += 1
+                add_process_event(pid, "kernel_copy_calls")
+                if ret > 0:
+                    kernel_copy_totals["calls"] += 1
+                    kernel_copy_totals["bytes"] += ret
+                    add_process_event(pid, "positive_kernel_copy_syscalls")
+                    add_process_event(pid, "positive_kernel_copy_bytes", ret)
+                    add_process_event(pid, "positive_source_bytes", ret)
+                if not fd_paths and argv:
+                    add_unresolved("kernel_copy_source_fd_without_path_annotation", rawline)
+                for rawpath in fd_paths:
+                    indexes, _, _ = resolve(pid, rawpath, call)
+                    for index in indexes:
+                        accesses[index]["kernel_copy_calls"] += 1
+                        if ret > 0:
+                            accesses[index]["positive_kernel_copy_bytes"] += ret
+                            accesses[index]["positive_source_bytes"] += ret
+                            add_input_event(index, pid, "positive_kernel_copy_bytes", ret)
+                            add_input_event(index, pid, "positive_source_bytes", ret)
+                        add_input_event(index, pid, "kernel_copy_calls")
             return
 
         if call in MMAP_CALLS:
@@ -320,7 +356,7 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
                     if creating_open:
                         accesses[index]["create_open_calls"] += 1
                         add_input_event(index, pid, "create_open_calls")
-        metadata_access = call not in OPEN_CALLS or read_open
+        metadata_access = call not in OPEN_CALLS or read_open or path_only_open
         if call in METADATA_CALLS and ret is not None and ret >= 0 and metadata_access:
             add_process_event(pid, "metadata_operations")
             for rawpath in paths:
@@ -483,13 +519,13 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
         malformed["unfinished_at_eof"] += len(pending)
         for pid, (call, args) in pending.items():
             add_unresolved("unfinished_at_eof", f"pid={pid} {call}({args} <unfinished ...>")
-    if recognized["useful_read"] == 0 and recognized["successful_mmap"] == 0:
-        raise ValueError("trace contains no completed read or successful mmap observations")
+    if recognized["useful_read"] == 0 and recognized["useful_kernel_copy"] == 0 and recognized["successful_mmap"] == 0:
+        raise ValueError("trace contains no completed read, kernel-copy, or successful mmap observations")
 
 
     def classify(counts):
-        if counts["positive_read_bytes"]:
-            return "positive_bytes_read"
+        if counts["positive_source_bytes"]:
+            return "positive_source_bytes"
         if counts["zero_read_attempts"]:
             return "zero_read_attempt"
         if counts["mmap_calls"]:
@@ -515,7 +551,7 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
                 if name not in STAGING_HELPERS:
                     non_staging[event] += amount
         semantic_counts = collections.Counter({
-            "positive_read_bytes": non_staging["positive_read_bytes"],
+            "positive_source_bytes": non_staging["positive_source_bytes"],
             "zero_read_attempts": non_staging["zero_read_attempts"],
             "mmap_calls": non_staging["mmap_calls"],
             "metadata_operations": non_staging["metadata_operations"],
@@ -530,8 +566,11 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
             "classification": category,
             "non_staging_classification": semantic_classification,
             "observed_positive_read_bytes": counts["positive_read_bytes"],
+            "observed_positive_kernel_copy_bytes": counts["positive_kernel_copy_bytes"],
+            "observed_positive_source_bytes": counts["positive_source_bytes"],
             "zero_read_attempts": counts["zero_read_attempts"],
             "read_calls": counts["read_calls"],
+            "kernel_copy_calls": counts["kernel_copy_calls"],
             "read_open_calls": counts["read_open_calls"],
             "write_open_calls": counts["write_open_calls"],
             "create_open_calls": counts["create_open_calls"],
@@ -539,6 +578,8 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
             "metadata_operations": counts["metadata_operations"],
             "process_observations": process_details,
             "read_bytes_by_process_category": {kind: stats["positive_read_bytes"] for kind, stats in sorted(by_category.items()) if stats["positive_read_bytes"]},
+            "kernel_copy_bytes_by_process_category": {kind: stats["positive_kernel_copy_bytes"] for kind, stats in sorted(by_category.items()) if stats["positive_kernel_copy_bytes"]},
+            "source_bytes_by_process_category": {kind: stats["positive_source_bytes"] for kind, stats in sorted(by_category.items()) if stats["positive_source_bytes"]},
             "metadata_operations_by_process_category": {kind: stats["metadata_operations"] for kind, stats in sorted(by_category.items()) if stats["metadata_operations"]},
             "mmap_by_process_category": {kind: stats["mmap_calls"] for kind, stats in sorted(by_category.items()) if stats["mmap_calls"]},
             "mapping_observation_is_not_page_read_proof": bool(counts["mmap_calls"]),
@@ -551,8 +592,8 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
     canonical_counts = collections.Counter()
     for indexes in canonical_groups.values():
         categories = {output_records[i]["classification"] for i in indexes}
-        if "positive_bytes_read" in categories:
-            canonical_counts["positive_bytes_read"] += 1
+        if "positive_source_bytes" in categories:
+            canonical_counts["positive_source_bytes"] += 1
         elif "zero_read_attempt" in categories:
             canonical_counts["zero_read_attempt"] += 1
         elif "mapped_only" in categories:
@@ -577,18 +618,24 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
     activity_by_category = {kind: dict(sorted(values.items())) for kind, values in sorted(process_totals.items())}
     staging_activity = {name: dict(sorted(values.items())) for name, values in sorted(staging_process_totals.items())}
     summary = {
+        "classification_scope": "whole_action_including_staging_helpers",
         "declared_input_paths": len(records),
         "unique_canonical_paths": len(canonical_groups),
         "path_classification_counts": dict(sorted(classes.items())),
         "non_staging_path_classification_counts": dict(sorted(non_staging_classes.items())),
         "canonical_classification_counts": dict(sorted(canonical_counts.items())),
         "groups": {name: dict(sorted(counts.items())) for name, counts in sorted(grouped.items())},
+        "non_staging_classification_is_semantic_necessity_claim": False,
         "process_activity_by_category": activity_by_category,
         "staging_process_activity": staging_activity,
         "trace": {
             "lines": len(lines), "pids": len(all_pids), "completed_read_syscalls": recognized["useful_read"],
+            "completed_source_observations": recognized["useful_read"] + recognized["useful_kernel_copy"],
             "positive_bytes_read_syscalls": read_totals["calls"],
             "positive_bytes_read_total": read_totals["bytes"],
+            "positive_kernel_copy_syscalls": kernel_copy_totals["calls"],
+            "positive_kernel_copy_total": kernel_copy_totals["bytes"],
+            "positive_source_bytes_total": read_totals["bytes"] + kernel_copy_totals["bytes"],
             "inherited_child_processes": len(parent),
             "parent_process_categorization": "children inherit known command and cwd at clone/fork; execve replaces command identity",
             "mmap_syscalls": recognized["mmap"],
@@ -605,7 +652,7 @@ def parse_trace(trace_path, records, exec_index, real_index, execroot):
         },
         "unread_candidate_count": len(unread),
         "unread_candidate_paths": unread,
-        "interpretation": "not_observed means no matching traced read, mmap, or metadata operation; it is not a safely-unused claim. mmap does not prove mapped pages were read.",
+        "interpretation": "positive_source_bytes counts bytes returned by traced reads and source-side kernel-copy syscalls. not_observed means no matching traced read, kernel copy, mmap, or metadata operation; it is not safely-unused. non_staging_classification excludes staging helper processes and is not a semantic-necessity claim: copied inputs can be essential without a direct read under their original path. mmap does not prove mapped pages were read.",
     }
     return summary, output_records
 
@@ -622,6 +669,9 @@ def main():
         summary, classified = parse_trace(args.trace, records, exec_index, real_index, args.execroot)
         out = Path(args.output_dir)
         out.mkdir(parents=True, exist_ok=True)
+        source_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        summary["parser_sha256"] = source_sha256
+        (out / "parser-source.sha256").write_text(source_sha256 + "\n", encoding="utf-8")
         (out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         (out / "input-classification.json").write_text(json.dumps(classified, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         counts = summary["path_classification_counts"]
@@ -631,8 +681,9 @@ def main():
             "# Asset input read observations", "",
             f"- Declared paths: {summary['declared_input_paths']} ({summary['unique_canonical_paths']} unique canonical paths)",
             "- Whole-action classifications: " + ", ".join(f"{key}={value}" for key, value in sorted(counts.items())),
-            "- Excluding staging-helper processes: " + ", ".join(f"{key}={value}" for key, value in sorted(semantic_counts.items())),
-            f"- Completed read syscalls: {trace['completed_read_syscalls']}; positive-byte read syscalls: {trace['positive_bytes_read_syscalls']}; bytes: {trace['positive_bytes_read_total']}",
+            "- Excluding staging-helper processes (not a semantic-necessity classification): " + ", ".join(f"{key}={value}" for key, value in sorted(semantic_counts.items())),
+            f"- Completed direct read syscalls: {trace['completed_read_syscalls']}; positive read syscalls/bytes: {trace['positive_bytes_read_syscalls']}/{trace['positive_bytes_read_total']}",
+            f"- Positive kernel-copy source syscalls/bytes: {trace['positive_kernel_copy_syscalls']}/{trace['positive_kernel_copy_total']}; combined positive source bytes: {trace['positive_source_bytes_total']}",
             f"- mmap syscalls: {trace['mmap_syscalls']} (mapping is not proof that mapped pages were read)",
             f"- Unresolved observations: {sum(trace['unresolved_counts'].values())}; malformed/incomplete counters: {sum(trace['malformed_or_incomplete'].values())}",
             "- Process activity by category: " + json.dumps(summary["process_activity_by_category"], sort_keys=True, separators=(",", ":")),
