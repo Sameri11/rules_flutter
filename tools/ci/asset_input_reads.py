@@ -84,7 +84,7 @@ def parser_control(evidence,env):
     argv=[sys.executable,str(ROOT/"tools/ci/asset_read_trace.py"),"--inputs",str(control/"inputs.json"),"--trace",str(control/"trace.log"),"--execroot",str(control),"--output-dir",str(control/"parsed")]
     run(control,"parser-control",argv,ROOT,env)
     rows=json.loads((control/"parsed/input-classification.json").read_text())
-    expected=["positive_bytes_read","zero_read_attempt","metadata_only","not_observed"]
+    expected=["positive_source_bytes","zero_read_attempt","metadata_only","not_observed"]
     if [x["classification"] for x in rows]!=expected:raise RuntimeError("parser control classifications differ")
     # Exercise the installed tracer before spending resources on either build.
     actual_trace = control / "actual.trace"
@@ -107,7 +107,7 @@ def parser_control(evidence,env):
     copy_argv[copy_argv.index("--output-dir") + 1] = str(control / "copy-parsed")
     run(control, "actual-copy-parse", copy_argv, ROOT, env)
     copy_rows = json.loads((control / "copy-parsed/input-classification.json").read_text())
-    if copy_rows[0]["classification"] != "positive_bytes_read" or copy_rows[-1]["classification"] == "positive_bytes_read" or (control / "copied file").read_bytes() != b"abc":
+    if copy_rows[0]["observed_positive_source_bytes"] != 3 or copy_rows[-1]["classification"] == "positive_source_bytes" or (control / "copied file").read_bytes() != b"abc":
         raise RuntimeError("actual copy control source-byte observation failed")
 
 def disk(out,name):
