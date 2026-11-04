@@ -1,0 +1,31 @@
+name: Flutter asset input reads
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+      - name: Trace asset input reads
+        run: python3 tools/ci/asset_input_reads.py --evidence-dir "$RUNNER_TEMP/asset-input-reads"
+      - name: Upload trace evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flutter-asset-input-reads
+          path: ${{ runner.temp }}/asset-input-reads/
+          if-no-files-found: warn
