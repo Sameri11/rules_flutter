@@ -95,6 +95,60 @@ One measured warm four-command sequence took 1.500 seconds with the former suffi
 | iOS, web, desktop | Platform-specific builds | Not implemented | Android only. |
 | Unit and widget tests | `flutter test` | Partial | `flutter_test` and `flutter_test_suite` run host tests; no devices or integration tests. |
 
+## Installing the rules
+
+Consumers declare both modules in their Consumer Module. Until the modules are
+published to a registry, the supported install path is an immutable commit
+archive of this repository: one tarball, two `archive_override` entries, and no
+local rules checkout.
+
+```python
+bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
+archive_override(
+    module_name = "sameri11_rules_flutter_core",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_core",
+    type = "tar.gz",
+)
+
+bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
+archive_override(
+    module_name = "sameri11_rules_flutter_android",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_android",
+    type = "tar.gz",
+)
+```
+
+Both overrides name the same archive, the same URL and the same digest; only
+`strip_prefix` differs, so each module is read from its own directory of the
+extracted tree. The digest pins the download: an archive whose contents do not
+match fails during repository fetch instead of building. Moving to another rules
+revision means updating `urls` and `sha256` together in both overrides; the
+`strip_prefix` root changes with the commit. Copy the values from a tested
+consumer such as
+[`tests/archive_consumer/MODULE.bazel`](tests/archive_consumer/MODULE.bazel).
+
+An archive consumer owns its whole repository configuration. The extracted
+module trees carry neither this repository's root module nor its shared
+`.bazelrc`, so the consumer declares its own `.bazelrc` settings, Flutter/pub
+extensions, Android SDK and NDK toolchain registration, Maven install and pub
+lock. Nothing is imported from a parent rules checkout.
+
+For development against a local checkout, keep the same two `bazel_dep` lines
+and use `local_path_override` instead of the archive overrides; the rest of the
+consumer configuration is unchanged. When the modules are published to a
+registry, the `bazel_dep` lines resolve normally and the overrides are removed.
+
+The checked [`tests/archive_consumer`](tests/archive_consumer/) example is a
+complete standalone consumer built from one pinned archive, with its own
+`.bazelrc`, module file and committed lock. It pins Flutter 3.47.3, Bazel 9.2.0,
+Android SDK API 36 with build-tools 36.0.0 and NDK 28 or newer, and builds
+`//:app_unsigned.apk` for release `arm64-v8a`. It is an installation example for
+the archive revision it names, not a test of the current checkout.
+
 ## Quickstart
 
 This is a complete plugin-free path for a fresh Android-only Flutter project. For the detailed plugin, monorepo and recipe walkthroughs, see [QUICKSTART.md](QUICKSTART.md).
@@ -105,10 +159,9 @@ Use the CI-tested Flutter and Bazel versions, Bzlmod, Android SDK platform 36 wi
 
 ### Create the project
 
-From a `rules_flutter` checkout:
+No rules checkout is needed; the archive supplies both modules:
 
 ```sh
-cd ..
 flutter create --org com.example --platforms android hello_bazel
 cd hello_bazel
 ```
@@ -117,14 +170,13 @@ Commit the generated `pubspec.lock`; Bazel reads it, not `.dart_tool/`.
 
 ### Bazel workspace files
 
-Use Bazel 9.2.0 and Bzlmod. Declare both modules in the Consumer Module:
+Use Bazel 9.2.0 and Bzlmod. Declare both modules with the archive overrides
+shown in [Installing the rules](#installing-the-rules); the `bazel_dep` lines
+alone do not resolve, because the modules are not published to a registry yet.
 
-```python
-bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
-bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
-```
-
-The Consumer Module configures the Flutter SDK/pub extensions, Android SDK/NDK toolchains, and its own Maven graph. See the detailed quickstart for the full module configuration.
+The Consumer Module configures the Flutter SDK/pub extensions, Android SDK/NDK
+toolchains, and its own Maven graph. See the detailed quickstart for the full
+module and `.bazelrc` configuration.
 
 Create the root BUILD file:
 
@@ -167,16 +219,24 @@ kt_android_library(
 The helper produces the app inputs target used by the Android entrypoint and
 other Android targets in the package.
 
-Build release with `-c opt` and debug with `-c fastbuild` plus Flutter debug mode:
+A new consumer has no `MODULE.bazel.lock` yet. Run the first release build with
+`--lockfile_mode=update`, which resolves the archive and writes the lock, then
+commit the generated `MODULE.bazel.lock`. Every later build uses
+`--lockfile_mode=error`, so an unresolved archive or dependency fails instead of
+silently changing the lock:
 
 ```sh
-bazel build //android/app:hello_bazel -c opt \
+# First build only: generate the lock, then commit MODULE.bazel.lock.
+bazel build //android/app:hello_bazel -c opt --lockfile_mode=update \
   --android_platforms=@rules_android//:arm64-v8a
-bazel build //android/app:hello_bazel -c fastbuild \
+
+# Subsequent release and debug builds.
+bazel build //android/app:hello_bazel -c opt --lockfile_mode=error \
+  --android_platforms=@rules_android//:arm64-v8a
+bazel build //android/app:hello_bazel -c fastbuild --lockfile_mode=error \
   --@rules_flutter_core//flutter:mode=debug \
   --android_platforms=@rules_android//:arm64-v8a
 ```
-
 
 Select the ABI set using `--android_platforms`; keep the APK label unchanged. Build and capture each configuration's APK before the next invocation. Install with `adb install -r bazel-bin/android/app/hello_bazel.apk`. For hot reload, run the Bazel-built debug APK with `flutter run --debug --use-application-binary=<apk-path>`; packaging changes require a rebuild.
 
