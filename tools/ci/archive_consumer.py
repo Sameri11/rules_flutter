@@ -8,10 +8,10 @@ APKs must be byte-identical, the archive build must pass `--lockfile_mode=error`
 without changing the committed lock, and a planted wrong archive digest must be
 rejected on the checksum from a fresh repository state and a fresh base.
 
-Each scenario's output base is shut down before the next one starts and no base
-is shared between the origins, so at most one Bazel server is alive and neither
-origin's APK can be the other's cache hit. Logs, both APKs, their entry
-inventories and provenance.json land in --evidence.
+The comparison base is reused between origins after copying the archive APK
+and shutting down its server; action-cache reuse is permitted. The checksum
+negative has a fresh base. Logs, APKs, inventories and provenance.json land in
+--evidence. At most one owned Bazel server is alive.
 
 Local run, from this worktree, with an explicit base parent:
 
@@ -71,9 +71,6 @@ RESOURCE_FLAGS = ("--jobs=4", "--local_resources=cpu=4",
 STARTUP_FLAGS = ("--host_jvm_args=-XX:ActiveProcessorCount=4",)
 # The negative must not be satisfied by anything fetched earlier.
 FRESH_FLAGS = ("--repository_cache=", "--repo_contents_cache=", "--disk_cache=")
-NETWORK_MARKERS = ("UnrecoverableHttpException", "Could not resolve host",
-                   "Temporary failure in name resolution",
-                   "Connection timed out", "Connection reset")
 
 
 class ProofError(RuntimeError):
@@ -107,10 +104,13 @@ class Session:
         self.timeout = timeout
         self.log = evidence / "commands.log"
         self.log.write_text("")
+        self.negative_base = Path(tempfile.mkdtemp(
+            prefix="base-wrong-digest-", dir=work))
 
     def base(self, scenario: str) -> Path:
-        name = "comparison" if scenario in ("archive", "local") else scenario
-        return self.work / ("base-" + name)
+        if scenario == "wrong-digest":
+            return self.negative_base
+        return self.work / "base-comparison"
 
     def run(self, scenario: str, args, log_path: Path) -> tuple[int, str]:
         argv = [self.binary, "--output_base=" + str(self.base(scenario)),
@@ -145,7 +145,7 @@ class Session:
         return output
 
     def fresh(self, scenario: str) -> None:
-        if self.base(scenario).exists():
+        if self.base(scenario).exists() and any(self.base(scenario).iterdir()):
             raise ProofError("negative output base is not fresh")
 
     def close(self, scenario: str, evidence: Path) -> None:
@@ -298,8 +298,11 @@ def bazel_version(session: Session, evidence: Path) -> dict:
     if os.environ.get("USE_BAZEL_VERSION", "").strip():
         raise ProofError("USE_BAZEL_VERSION is set, so .bazelversion selection "
                          "cannot be proven")
-    code, output = session.run("archive", ["version"],
-                               evidence / "bazel-version.log")
+    try:
+        code, output = session.run("archive", ["version"],
+                                   evidence / "bazel-version.log")
+    finally:
+        session.close("archive", evidence)
     if code != 0:
         raise ProofError("bazel version failed: {}".format(tail(output)))
     labels = [line.split(":", 1)[1].strip() for line in output.splitlines()
@@ -358,6 +361,7 @@ def build(session: Session, origin: str, flags, evidence: Path,
         if sha256(lock) != before:
             raise ProofError("the build changed the committed lock")
         repositories = {}
+        # Introspection enumerates unused extensions absent from the build lock.
         for directory in MODULES.values():
             output = session.ok(
                 origin, ["mod", "show_repo", "@" + directory,
@@ -366,7 +370,8 @@ def build(session: Session, origin: str, flags, evidence: Path,
             repositories[directory] = {
                 "archive_url": ARCHIVE_URL in output,
                 "archive_sha256": ARCHIVE_SHA256 in output}
-            if repositories[directory]["archive_url"] != (origin == "archive"):
+            if any(value != (origin == "archive")
+                   for value in repositories[directory].values()):
                 raise ProofError(
                     "{} resolves {} from the wrong origin: {}".format(
                         origin, directory, repositories[directory]))
@@ -411,8 +416,9 @@ def wrong_digest(session: Session, evidence: Path, flags) -> dict:
     restored = sha256(module)
     if restored != hashlib.sha256(original).hexdigest():
         raise ProofError("MODULE.bazel was not restored byte for byte")
-    network = [marker for marker in NETWORK_MARKERS if marker in output]
-    checksum = "Checksum was" in output and "but wanted" in output
+    expected = "Checksum was {} but wanted {}".format(
+        ARCHIVE_SHA256, WRONG_SHA256)
+    checksum = expected in output
     problems = []
     if code == 0:
         problems.append("the planted digest was accepted")
@@ -422,14 +428,12 @@ def wrong_digest(session: Session, evidence: Path, flags) -> dict:
         problems.append("the failure does not report the planted digest")
     if ARCHIVE_URL not in output:
         problems.append("the failure does not report the archive URL")
-    if network:
-        problems.append("network failure: " + ", ".join(network))
     result = {"planted_sha256": WRONG_SHA256, "exit": code,
               "checksum_mismatch": checksum,
               "archive_url_reported": ARCHIVE_URL in output,
               "failed_repositories": sorted(
                   name for name in MODULES if name in output),
-              "network_markers": network,
+              "actual_sha256": ARCHIVE_SHA256,
               "fresh_output_base": str(session.base("wrong-digest")),
               "module_restored_sha256": restored, "raw": "wrong-digest.log",
               "problems": problems}

@@ -42,9 +42,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Same environment as the other lanes. The remote cache stays off: both
-      # origins must execute their own actions for the APK comparison to mean
-      # anything.
+      # Match the other lanes' environment. The comparison base may reuse
+      # identical actions; this lane does not claim clean-build reproducibility.
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
