@@ -1,0 +1,9 @@
+# Bazel output-base symlinks, created in this module's directory.
+/bazel-*
+
+# Machine-local Flutter tool state.
+.config/
+.dart_tool/
+
+# Gradle caches, if a local Android Studio sync ever runs here.
+.gradle/

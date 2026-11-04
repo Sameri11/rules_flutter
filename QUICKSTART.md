@@ -17,6 +17,7 @@ variants. See [README](README.md) for supported behavior and limitations.
 | Root app with pub plugins | The app is at the module root and pub resolves Android plugins. | [`examples/pub_plugins`](examples/pub_plugins/) |
 | Monorepo app with local path plugin | App and plugin are packages within one Bazel module. | [`examples/local_plugin`](examples/local_plugin/) |
 | Consumer recipes / Dart native assets | Native build or dependency metadata needs consumer-authored instructions. | [`examples/demo_app`](examples/demo_app/) |
+| Standalone install from an immutable archive | The app consumes the ruleset without a local rules checkout. | [`tests/archive_consumer`](tests/archive_consumer/) |
 
 A normal CMake Android plugin uses automatic generation. A Package Recipe
 replaces generation for its package; CMake contributions from other packages
@@ -45,28 +46,32 @@ when changing dependencies, then commit the updated lock and generated plugin
 state. Hosted packages are pinned by lockfile checksums; Git pub sources are
 unsupported. Declare path dependency sources in `path_deps`.
 
-The checked ruleset repository includes a reusable
-[`.bazelrc.android`](.bazelrc.android) fragment. Import it from the consumer's
-`.bazelrc` (adjust the path to your checkout) or copy its settings; enable Bzlmod
-and the Android config in the consumer:
+An archive consumer owns its `.bazelrc`; the archive carries neither this
+repository's root module nor its shared Android fragment. Write the settings
+directly in the consumer's `.bazelrc`:
 
 ```text
 common --enable_bzlmod
-common --config=android
+
+# rules_android requires JDK 17.
+build --merge_android_manifest_permissions
+build --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
+build --java_language_version=17 --java_runtime_version=remotejdk_17
+
+# Forward the NDK path to repository rules instead of reading the action env.
+common --repo_env=ANDROID_NDK_HOME
 ```
 
-The Android fragment configures:
-
-```text
-build:android --merge_android_manifest_permissions
-build:android --tool_java_language_version=17 --tool_java_runtime_version=remotejdk_17
-build:android --java_language_version=17 --java_runtime_version=remotejdk_17
-common:android --repo_env=ANDROID_NDK_HOME
-```
+Release and ABI selection stay ordinary command-line configuration:
+`-c opt`, `--@rules_flutter_core//flutter:mode=release` and
+`--android_platforms=@rules_android//:arm64-v8a`. The checked example puts them
+in its `.bazelrc`; either placement works.
 
 The root `MODULE.bazel` declares both ruleset modules and the Flutter/pub
-extensions. A sibling checkout can be used for development overrides; adjust the
-paths for your checkout layout:
+extensions. The working install path is one immutable commit archive: both
+`archive_override` entries name the same URL and `sha256`, and differ only in
+their `strip_prefix`, which selects each module's directory inside the extracted
+tree. No local rules checkout is used.
 
 ```python
 module(name = "hello_bazel", version = "0.0.1")
@@ -75,14 +80,21 @@ module(name = "hello_bazel", version = "0.0.1")
 bazel_dep(name = "apple_support", version = "1.24.5")
 
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
-local_path_override(
+archive_override(
     module_name = "sameri11_rules_flutter_core",
-    path = "../rules_flutter/rules_flutter_core",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/<commit>"],
+    sha256 = "<tarball-sha256>",
+    strip_prefix = "Sameri11-rules_flutter-<abbreviated-commit>/rules_flutter_core",
+    type = "tar.gz",
 )
+
 bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
-local_path_override(
+archive_override(
     module_name = "sameri11_rules_flutter_android",
-    path = "../rules_flutter/rules_flutter_android",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/<commit>"],
+    sha256 = "<tarball-sha256>",
+    strip_prefix = "Sameri11-rules_flutter-<abbreviated-commit>/rules_flutter_android",
+    type = "tar.gz",
 )
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
@@ -92,6 +104,19 @@ pub.lock(name = "pub", lock = "//:pubspec.lock")
 use_repo(pub, "pub")
 include("//android:config.MODULE.bazel")
 ```
+
+The digest fails the build during repository fetch if the downloaded archive
+does not match, so a mistyped archive or a changed upstream tarball cannot
+silently enter the graph. Commit the generated `MODULE.bazel.lock` and build with
+`--lockfile_mode=error`; regenerate it with `--lockfile_mode=update` only after
+an intentional dependency change.
+
+For development against a local checkout, keep the same `bazel_dep` lines and
+replace each `archive_override` with `local_path_override(module_name = ...,
+path = "../rules_flutter/rules_flutter_core")` (and the matching Android path).
+The rest of the configuration is identical. Once the modules are published to a
+registry, the `bazel_dep` lines resolve normally and the overrides are deleted;
+do not remove the `bazel_dep` declarations.
 
 Create `android/config.MODULE.bazel` and include it from the root module as
 shown above. This Consumer Module owns Android SDK/NDK and Maven resolution. The
@@ -140,12 +165,14 @@ maven.install(
 use_repo(maven, "flutter_maven")
 ```
 
-The `rules_flutter_android` and `rules_flutter_core` `bazel_dep` declarations may
-be replaced by registry dependencies when published. In the repository, see
-[`tests/consumer/MODULE.bazel`](tests/consumer/MODULE.bazel) and
-[`tests/consumer/android/config.MODULE.bazel`](tests/consumer/android/config.MODULE.bazel)
-for the complete checked module configuration, including plugin repositories.
-Do not copy a filesystem override path without adapting it to your checkout.
+The archive install above is the checked path: keep both `bazel_dep`
+declarations and supply the download through the two `archive_override` tags.
+In-repository examples instead substitute a checkout with `local_path_override`;
+do not copy such a path without adapting it. When the modules are published to a
+registry, the overrides are removed and the same `bazel_dep` lines resolve from
+the registry. See [`tests/archive_consumer`](tests/archive_consumer/) for the
+complete standalone configuration: its `MODULE.bazel`, `.bazelrc`, `.bazelversion`
+and committed lock.
 
 ## Build a plugin-free root app
 
@@ -233,6 +260,37 @@ Install the captured APK with `adb install -r <apk-path>`. For Flutter hot
 reload, run the Bazel-built debug APK with
 `flutter run -d <device-id> --debug --use-application-binary=<apk-path>`;
 packaging changes require a Bazel rebuild.
+
+## Standalone install from an archive
+
+[`tests/archive_consumer`](tests/archive_consumer/) is a complete consumer that
+builds only from one pinned archive, with no local rules checkout and no parent
+repository configuration. Its `.bazelrc`, `MODULE.bazel`, `.bazelversion` and
+`MODULE.bazel.lock` are the whole setup.
+
+```sh
+cd tests/archive_consumer
+bazel build //:app_unsigned.apk \
+  --lockfile_mode=error \
+  --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+  --android_platforms=@rules_android//:arm64-v8a \
+  -c opt --@rules_flutter_core//flutter:mode=release
+```
+
+The release `.bazelrc` already selects `-c opt`, release Flutter mode and the
+`arm64-v8a` platform, so `bazel build //:app_unsigned.apk --lockfile_mode=error`
+is equivalent. The module is pinned to the archive it names: it shows a known
+distribution walking through archive resolution, not the rules in the current
+checkout.
+
+The two `archive_override` entries point at the same tarball URL and `sha256`;
+their `strip_prefix` values select `rules_flutter_core` and
+`rules_flutter_android` inside the extracted tree. A wrong digest, a missing
+strip prefix or an unresolved dependency fails rather than silently building
+different sources. To build against a local checkout instead, pass
+`--override_module=sameri11_rules_flutter_core=<path>/rules_flutter_core` (and
+the Android module) on the command line; the checked module file keeps the
+archive as its only source.
 
 ## Plugins and generated state
 
