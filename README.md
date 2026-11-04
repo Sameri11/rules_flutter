@@ -106,18 +106,18 @@ local rules checkout.
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
 archive_override(
     module_name = "sameri11_rules_flutter_core",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/<commit>"],
-    sha256 = "<tarball-sha256>",
-    strip_prefix = "Sameri11-rules_flutter-<abbreviated-commit>/rules_flutter_core",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_core",
     type = "tar.gz",
 )
 
 bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
 archive_override(
     module_name = "sameri11_rules_flutter_android",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/<commit>"],
-    sha256 = "<tarball-sha256>",
-    strip_prefix = "Sameri11-rules_flutter-<abbreviated-commit>/rules_flutter_android",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_android",
     type = "tar.gz",
 )
 ```
@@ -127,8 +127,9 @@ Both overrides name the same archive, the same URL and the same digest; only
 extracted tree. The digest pins the download: an archive whose contents do not
 match fails during repository fetch instead of building. Moving to another rules
 revision means updating `urls` and `sha256` together in both overrides; the
-`strip_prefix` root changes with the commit. A known-good set of exact values is
-in [`tests/archive_consumer/MODULE.bazel`](tests/archive_consumer/MODULE.bazel).
+`strip_prefix` root changes with the commit. Copy the values from a tested
+consumer such as
+[`tests/archive_consumer/MODULE.bazel`](tests/archive_consumer/MODULE.bazel).
 
 An archive consumer owns its whole repository configuration. The extracted
 module trees carry neither this repository's root module nor its shared
@@ -218,11 +219,18 @@ kt_android_library(
 The helper produces the app inputs target used by the Android entrypoint and
 other Android targets in the package.
 
-Build release with `-c opt` and debug with `-c fastbuild` plus Flutter debug
-mode. Commit the generated `MODULE.bazel.lock` and build with
-`--lockfile_mode=error`:
+A new consumer has no `MODULE.bazel.lock` yet. Run the first release build with
+`--lockfile_mode=update`, which resolves the archive and writes the lock, then
+commit the generated `MODULE.bazel.lock`. Every later build uses
+`--lockfile_mode=error`, so an unresolved archive or dependency fails instead of
+silently changing the lock:
 
 ```sh
+# First build only: generate the lock, then commit MODULE.bazel.lock.
+bazel build //android/app:hello_bazel -c opt --lockfile_mode=update \
+  --android_platforms=@rules_android//:arm64-v8a
+
+# Subsequent release and debug builds.
 bazel build //android/app:hello_bazel -c opt --lockfile_mode=error \
   --android_platforms=@rules_android//:arm64-v8a
 bazel build //android/app:hello_bazel -c fastbuild --lockfile_mode=error \

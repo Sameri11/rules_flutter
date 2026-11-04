@@ -82,18 +82,18 @@ bazel_dep(name = "apple_support", version = "1.24.5")
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
 archive_override(
     module_name = "sameri11_rules_flutter_core",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/<commit>"],
-    sha256 = "<tarball-sha256>",
-    strip_prefix = "Sameri11-rules_flutter-<abbreviated-commit>/rules_flutter_core",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_core",
     type = "tar.gz",
 )
 
 bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name = "rules_flutter_android")
 archive_override(
     module_name = "sameri11_rules_flutter_android",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/<commit>"],
-    sha256 = "<tarball-sha256>",
-    strip_prefix = "Sameri11-rules_flutter-<abbreviated-commit>/rules_flutter_android",
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
+    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_android",
     type = "tar.gz",
 )
 
@@ -107,8 +107,13 @@ include("//android:config.MODULE.bazel")
 
 The digest fails the build during repository fetch if the downloaded archive
 does not match, so a mistyped archive or a changed upstream tarball cannot
-silently enter the graph. Commit the generated `MODULE.bazel.lock` and build with
-`--lockfile_mode=error`; regenerate it with `--lockfile_mode=update` only after
+silently enter the graph.
+
+A new consumer has no `MODULE.bazel.lock`. Generate it with the first real build
+under `--lockfile_mode=update` (a `build` investigates the configured graph,
+while `mod deps` can enumerate extensions a build never loads and leave the lock
+incomplete), commit the resulting `MODULE.bazel.lock`, and use
+`--lockfile_mode=error` from then on. Regenerate with `update` again only after
 an intentional dependency change.
 
 For development against a local checkout, keep the same `bazel_dep` lines and
@@ -233,14 +238,22 @@ kt_android_library(
 The helper composes Flutter Android inputs, manifest, assets placement, and APK
 check with a stock Android binary. It does not create a second packaging API.
 
-Build release and debug with their supported compilation modes:
+Build release and debug with their supported compilation modes. The first
+release build also writes `MODULE.bazel.lock`; commit it, then keep
+`--lockfile_mode=error` for every later build:
 
 ```sh
-bazel build //android/app:hello_bazel -c opt \
+# First build only: generate the lock, then commit MODULE.bazel.lock.
+bazel build //android/app:hello_bazel -c opt --lockfile_mode=update \
   --android_platforms=@rules_android//:arm64-v8a
 cp bazel-bin/android/app/hello_bazel.apk /tmp/hello-release-arm64.apk
 
-bazel build //android/app:hello_bazel -c fastbuild \
+# Subsequent release and debug builds.
+bazel build //android/app:hello_bazel -c opt --lockfile_mode=error \
+  --android_platforms=@rules_android//:arm64-v8a
+cp bazel-bin/android/app/hello_bazel.apk /tmp/hello-release-arm64.apk
+
+bazel build //android/app:hello_bazel -c fastbuild --lockfile_mode=error \
   --@rules_flutter_core//flutter:mode=debug \
   --android_platforms=@rules_android//:arm64-v8a
 cp bazel-bin/android/app/hello_bazel.apk /tmp/hello-debug-arm64.apk
@@ -277,7 +290,10 @@ bazel build //:app_unsigned.apk \
   -c opt --@rules_flutter_core//flutter:mode=release
 ```
 
-The release `.bazelrc` already selects `-c opt`, release Flutter mode and the
+This module already carries its committed `MODULE.bazel.lock`, so it builds
+directly under `--lockfile_mode=error`; that is the difference from a fresh root
+app, whose first build has to create the lock with `--lockfile_mode=update`. The
+release `.bazelrc` already selects `-c opt`, release Flutter mode and the
 `arm64-v8a` platform, so `bazel build //:app_unsigned.apk --lockfile_mode=error`
 is equivalent. The module is pinned to the archive it names: it shows a known
 distribution walking through archive resolution, not the rules in the current
