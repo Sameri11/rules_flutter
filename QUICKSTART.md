@@ -110,7 +110,7 @@ does not match, so a mistyped archive or a changed upstream tarball cannot
 silently enter the graph.
 
 A new consumer has no `MODULE.bazel.lock`. Generate it with the first real build
-under `--lockfile_mode=update` (a `build` investigates the configured graph,
+under `--lockfile_mode=update` (a `build` resolves the configured graph,
 while `mod deps` can enumerate extensions a build never loads and leave the lock
 incomplete), commit the resulting `MODULE.bazel.lock`, and use
 `--lockfile_mode=error` from then on. Regenerate with `update` again only after
