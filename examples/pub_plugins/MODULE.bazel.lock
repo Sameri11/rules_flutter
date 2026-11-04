@@ -624,7 +624,7 @@
     },
     "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "fMsnDE0GtbkGNlFAaqudkI1W/6egu6RJvMGtvoa9Trk=",
+        "bzlTransitiveDigest": "a/RI5+ud+1XzjACa8J4MoLJJWd52gI1AZaG/I3oHy4E=",
         "usagesDigest": "7g5j5szAjo79jAswLX0VYMWhMYvsF2r2WEYs8ccrN/k=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_core+,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",

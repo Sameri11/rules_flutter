@@ -165,6 +165,14 @@ flutter_core(
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
     pub = "@pub",
 )
+```
+
+If a production package (including the app package) contains a staged
+`hook/build.dart`, `flutter_core` requires `native_build_env` during analysis.
+The Android environment shown above supplies the SDK needed by Flutter's native
+build-hook runner. Dev-only dependencies do not trigger this requirement.
+Host-test asset targets do not run native build hooks and need no app
+environment.
 
 Declare one `flutter_core` per Bazel package. It owns the package's app,
 package, and test outputs. If the Consumer Module has a plugin graph, declare

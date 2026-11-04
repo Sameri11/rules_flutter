@@ -3,8 +3,11 @@
 Nothing here is supported API: Consumer Modules load //flutter:defs.bzl and
 //flutter:extensions.bzl. The `.bzl` files beside this file declare
 `visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
-allows it to be loaded from the ruleset's root MODULE.bazel only. Two
-mechanical exceptions need a label, and only those:
+allows it to be loaded from the ruleset's root MODULE.bazel only, and
+`hook_packages.bzl`, whose public visibility allows generated pub hub
+repositories to load its private metadata rule.
+
+Two mechanical exceptions need a label, and only those:
 
   * The Python helpers are attribute defaults of rules defined here. Bazel
     resolves an implicit dependency against the package of the `.bzl` that
@@ -20,6 +23,7 @@ host-compatible registration points at the public static toolchain target.
 
 load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
 load(":abis.bzl", "ABIS")
+load(":hook_packages_test.bzl", "staged_hook_packages_test")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":toolchain.bzl", "flutter_toolchain")
 
@@ -113,6 +117,8 @@ expect_label_equal(
 
 # What the pub lock reader accepts and, as importantly, refuses.
 pub_lock_parser_test_suite(name = "pub_lock_parser_test")
+
+staged_hook_packages_test(name = "staged_hook_packages_test")
 
 # One split per ABI and mode. The core selects its per-ABI libraries on these,
 # so a 3-ABI build gets exactly one split per ABI rather than one per platform.

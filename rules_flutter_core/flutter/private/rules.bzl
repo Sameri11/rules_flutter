@@ -27,6 +27,7 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS")
+load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 
 visibility(["//flutter"])
@@ -1401,6 +1402,23 @@ def _flutter_assets_impl(ctx):
     toolchain = _flutter_toolchain(ctx)
     build_env = ctx.attr.native_build_env[FlutterNativeBuildEnvInfo] if ctx.attr.native_build_env else None
     staged = _stage_flutter_assets(ctx, toolchain, build_env.exports if build_env else "")
+    hook_packages = None
+    for target in ctx.attr.pub_srcs:
+        if FlutterHookPackagesInfo in target:
+            hook_packages = target[FlutterHookPackagesInfo]
+            break
+    if build_env == None and hook_packages:
+        missing_env_packages = staged_hook_packages(
+            hook_packages.package_dirs,
+            [file.path for file in staged.files],
+        )
+        if missing_env_packages:
+            fail(
+                "{}: native_build_env is required because staged package `{}` declares hook/build.dart".format(
+                    ctx.label,
+                    missing_env_packages[0],
+                ),
+            )
 
     # Code assets belong in APK JNI libraries, not the asset tree. Packaging
     # recipes install them under lib/<abi>/; discard flutter_tools' duplicate.
