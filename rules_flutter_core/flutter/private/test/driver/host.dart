@@ -19,6 +19,8 @@ import 'package:test_api/backend.dart';
 import 'package:test_api/hooks.dart' show TestFailure;
 
 import 'core.dart';
+import 'guard.dart';
+import 'junit.dart';
 
 /// Runs [testMain] in-process and exits: 0 when every case passed or was
 /// skipped, 1 otherwise. On SIGTERM it writes the report so far and exits 143.
@@ -80,7 +82,7 @@ void hostMain({
   final lateErrors = <CaseResult>[];
   final channel = RemoteListener.start(
     () =>
-        () => _guarded(testMain, lateErrors),
+        () => guarded(testMain, lateErrors),
   );
   final os = _operatingSystem();
 
@@ -146,7 +148,7 @@ void _writeReport(
 ) {
   if (path == null) return;
   final temp = File('$path.tmp')
-    ..writeAsStringSync(_junit(suite, cases, packageRoot));
+    ..writeAsStringSync(junitReport(suite, cases, packageRoot));
   temp.renameSync(path);
 }
 
@@ -158,28 +160,6 @@ void _exitAfterFlush(int code) {
   stdout.flush().whenComplete(() => exit(code));
 }
 
-/// Runs [body] in a zone. Errors while main is declaring go to the listener's
-/// own zone. Later errors are recorded in [errors] as load failures, because
-/// the listener sends them after `success`, which the core ignores.
-Future<void> _guarded(
-  Future<void> Function() body,
-  List<CaseResult> errors,
-) async {
-  final outer = Zone.current;
-  var declaring = true;
-  try {
-    await runZonedGuarded(body, (error, stack) {
-      if (declaring) {
-        outer.handleUncaughtError(error, stack);
-      } else {
-        errors.add(CaseResult('load', Outcome.error, '$error\n$stack'));
-      }
-    });
-  } finally {
-    declaring = false;
-  }
-}
-
 String _operatingSystem() => switch (Platform.operatingSystem) {
   'macos' => 'mac-os',
   'windows' => 'windows',
@@ -188,13 +168,6 @@ String _operatingSystem() => switch (Platform.operatingSystem) {
   'ios' => 'ios',
   _ => 'none',
 };
-
-/// The error location as the user sees it. A tester stack names the
-/// execroot-relative URI; the package part is cut so that a failure reads
-/// `test/foo_test.dart:12`, and other files read as their execroot path.
-String _display(String text, String packageRoot) => text
-    .replaceAll('org-dartlang-root:///$packageRoot/', '')
-    .replaceAll('org-dartlang-root:///', '');
 
 final class _HostSink implements EventSink {
   _HostSink(this._packageRoot);
@@ -208,7 +181,7 @@ final class _HostSink implements EventSink {
   String? running = 'load';
 
   @override
-  void message(String text) => stdout.writeln(_display(text, _packageRoot));
+  void message(String text) => stdout.writeln(displayPath(text, _packageRoot));
 
   @override
   void setRunning(String? name) => running = name;
@@ -225,77 +198,10 @@ final class _HostSink implements EventSink {
     };
     stdout.writeln('$label ${result.name}');
     if (result.message.isNotEmpty) {
-      stdout.writeln(_display(result.message, _packageRoot));
+      stdout.writeln(displayPath(result.message, _packageRoot));
     }
   }
 }
-
-String _junit(String suite, List<CaseResult> cases, String packageRoot) {
-  var failures = 0;
-  var errors = 0;
-  var skipped = 0;
-  final body = StringBuffer();
-  for (final result in cases) {
-    final name = _xml(result.name);
-    final classname = _xml(suite);
-    final message = _xml(_display(result.message, packageRoot));
-    final firstLine = _xml(
-      _display(result.message, packageRoot).split('\n').first,
-    );
-    final tags = _tagProperties(result.tags);
-    switch (result.outcome) {
-      case Outcome.pass:
-        body.write(_testcase(classname, name, tags, ''));
-      case Outcome.skip:
-        skipped++;
-        final reason = message.isEmpty ? '' : ' message="$message"';
-        body.write(_testcase(classname, name, tags, '<skipped$reason/>'));
-      case Outcome.fail:
-        failures++;
-        body.write(
-          _testcase(
-            classname,
-            name,
-            tags,
-            '<failure message="$firstLine">$message</failure>',
-          ),
-        );
-      case Outcome.error:
-        errors++;
-        body.write(
-          _testcase(
-            classname,
-            name,
-            tags,
-            '<error message="$firstLine">$message</error>',
-          ),
-        );
-    }
-  }
-  return '<?xml version="1.0" encoding="UTF-8"?>'
-      '<testsuite name="${_xml(suite)}" tests="${cases.length}" '
-      'failures="$failures" errors="$errors" skipped="$skipped">'
-      '$body</testsuite>';
-}
-
-/// Tags are JUnit properties, so a report can be filtered by tag.
-String _tagProperties(List<String> tags) {
-  if (tags.isEmpty) return '';
-  final properties = tags
-      .map((tag) => '<property name="tag" value="${_xml(tag)}"/>')
-      .join();
-  return '<properties>$properties</properties>';
-}
-
-String _testcase(String classname, String name, String tags, String inner) =>
-    '<testcase classname="$classname" name="$name">$tags$inner</testcase>';
-
-String _xml(String value) => value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
 
 /// Compares goldens against the test's runfiles. Failure images go under the
 /// test's undeclared outputs. Updates are allowed only under the update target.

@@ -1,0 +1,34 @@
+# Codec tests for the device flavor: frame encoding, the decoder's fail-closed
+# checks, and the run settings parser. The fixtures are captured streams.
+#
+# transport_sha256 records the sha256 of each capture's reassembled payload,
+# the text the device wrote before JSON decoding.
+
+load("//flutter/private:device_test.bzl", "device_codec_test", "device_decoder", "device_kernel")
+
+package(default_visibility = ["//visibility:private"])
+
+device_decoder(name = "decoder", visibility = ["//visibility:public"])
+
+device_kernel(
+    name = "codec_kernel",
+    entrypoint = "codec_test.dart",
+    srcs = [
+        "//flutter/private/test/driver:device_decoder.dart",
+        "//flutter/private/test/driver:frame.dart",
+        "//flutter/private/test/driver:junit.dart",
+        "//flutter/private/test/driver:results.dart",
+        "//flutter/private/test/driver:settings.dart",
+    ],
+)
+
+device_codec_test(
+    name = "device_codec_test",
+    decoder = ":decoder",
+    dill = ":codec_kernel",
+    fixtures = glob(["fixtures/*.txt"]),
+    transport_sha256 = {
+        "logcat_large.txt": "708198d2d83fed986567ae2192c730d0ce1056079222de6d2c87560094e93a71",
+        "oslog_large.txt": "708198d2d83fed986567ae2192c730d0ce1056079222de6d2c87560094e93a71",
+    },
+)

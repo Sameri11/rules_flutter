@@ -15,6 +15,7 @@ FILES = {
     "plugins": "flutter/private/plugins.bzl",
     "ndk": "flutter/private/ndk.bzl",
     "test": "flutter/private/flutter_test.bzl",
+    "device_test": "flutter/private/device_test.bzl",
     "test_driver": "flutter/private/test_kernel_driver.bzl",
     "core": "flutter/private/core.bzl",
     "android_inputs": "flutter/private/android_inputs_rules.bzl",
@@ -90,6 +91,7 @@ class Checker:
         self.check_o()
         self.check_p()
         self.check_q()
+        self.check_r()
         return self.failures
 
     def tree(self, name, contract):
@@ -583,7 +585,7 @@ class Checker:
 
     def check_h(self):
         regions = []
-        for name in ("defs", "android", "plugins", "core", "android_inputs", "apk_check"):
+        for name in ("defs", "android", "plugins", "core", "android_inputs", "apk_check", "device_test"):
             tree = self.trees.get(name)
             if tree is None:
                 continue
@@ -846,6 +848,34 @@ class Checker:
                     self.fail("O", "{} must not write a host path or PUB_CACHE into the hub's text".format(FILES[name]))
                     break
 
+    def check_r(self):
+        # The device kernel compiles from declared inputs only: the toolchain's dart
+        # executable, its SDK packages and its VM platform dill. It reads no host
+        # environment and no home or pub-cache path.
+        tree = self.tree("device_test", "R")
+        if tree is None:
+            return
+        function = _function(tree, "_device_kernel_impl")
+        if function is None:
+            self.fail("R", "{} must define _device_kernel_impl".format(FILES["device_test"]))
+            return
+        action = _action_call(function, "run")
+        if action is None:
+            self.fail("R", "_device_kernel_impl must create its action with ctx.actions.run")
+            return
+        if not _contains_attr(_keyword(action, "executable"), ["toolchain", "dart"]):
+            self.fail("R", "the device kernel must run the toolchain's dart executable")
+        inputs = _keyword(action, "inputs")
+        for path, description in (
+            (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
+            (["toolchain", "vm_platform_strong"], "the VM platform dill (toolchain.vm_platform_strong)"),
+        ):
+            if not _contains_attr(inputs, path):
+                self.fail("R", "device kernel inputs must declare {}".format(description))
+        dumped = ast.dump(function)
+        if re.search(r"attr='(environ|var|getenv)'|'(HOME|PUB_CACHE)'|use_default_shell_env", dumped):
+            self.fail("R", "the device kernel action reads the host environment or a home or pub-cache path")
+
     def check_p(self):
         # The Android SDK as a native build environment: exports and the action input.
         tree = self.tree("native_build_env", "P")
@@ -956,6 +986,7 @@ def _file_contract(name):
         "plugins": "F",
         "ndk": "G",
         "test": "I",
+        "device_test": "R",
         "test_driver": "I",
         "core": "K",
         "android_inputs": "L",
