@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = "42c9011"
 TARGET = "//:app_assets"
-TRACE_SYSCALLS = "open,openat,openat2,creat,stat,lstat,newfstatat,statx,access,faccessat,read,readv,pread64,preadv,preadv2,mmap,mmap2,close,dup,dup2,dup3,fcntl,execve,clone,clone3,fork,vfork,chdir,fchdir"
+TRACE_SYSCALLS = "open,openat,openat2,creat,stat,lstat,fstat,newfstatat,statx,access,faccessat,faccessat2,readlink,readlinkat,read,readv,pread64,preadv,preadv2,mmap,mmap2,close,dup,dup2,dup3,fcntl,execve,clone,clone3,fork,vfork,chdir,fchdir,getcwd"
 
 def capture(out, name, argv, cwd, env):
     out.mkdir(parents=True, exist_ok=True)
@@ -115,7 +115,7 @@ def main():
         parser_control(evidence,env0)
         for arm,tree in (("baseline",baseline),("instrumented",ROOT)):
             out=evidence/arm;out.mkdir(parents=True,exist_ok=True);disk(out,"before-phase")
-            module=tree/"rules_flutter_core";cwd=tree/"examples/pub_plugins";ob=temp/f"asset-input-{arm}-output-base";bases.append((ob,module))
+            module=tree/"rules_flutter_core";cwd=tree/"examples/pub_plugins";ob=temp/f"asset-input-{arm}-output-base";bases.append((ob,cwd))
             env=dict(os.environ,BAZEL_OUTPUT_BASE=str(ob));start=[bazel,f"--output_base={ob}","--host_jvm_args=-XX:ActiveProcessorCount=4"]
             if arm=="instrumented":instrumented_path=module/"flutter/private/rules.bzl";original_rules=instrument(instrumented_path,out)
             run(out,"bazel-version",[bazel,"--version"],cwd,env);run(out,"flutter-version",["flutter","--version"],cwd,env)
@@ -160,9 +160,9 @@ def main():
         if original_rules is not None and instrumented_path is not None:
             instrumented_path.write_bytes(original_rules)
             (evidence/"restored-rules.sha256").write_text(hashlib.sha256(instrumented_path.read_bytes()).hexdigest()+"\n")
-        for i,(ob,module) in enumerate(bases):
+        for i,(ob,cwd) in enumerate(bases):
             if ob.exists():
-                shutdown=capture(evidence,f"shutdown-final-{i}",[bazel,f"--output_base={ob}","--host_jvm_args=-XX:ActiveProcessorCount=4","shutdown"],module,dict(os.environ,BAZEL_OUTPUT_BASE=str(ob)))
+                shutdown=capture(evidence,f"shutdown-final-{i}",[bazel,f"--output_base={ob}","--host_jvm_args=-XX:ActiveProcessorCount=4","shutdown"],cwd,dict(os.environ,BAZEL_OUTPUT_BASE=str(ob)))
                 if shutdown.returncode==0:
                     shutil.rmtree(ob,ignore_errors=True)
                     (evidence/f"output-base-{i}-removed.txt").write_text(str(ob)+"\n")
