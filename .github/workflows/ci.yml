@@ -58,7 +58,6 @@ jobs:
           cat >> "$HOME/.bazelrc" <<RC
           common --repository_cache=$HOME/.cache/bazel-repo
           common --http_connector_attempts=13
-          common --repository_disable_download
           RC
 
       - name: Install bazelisk

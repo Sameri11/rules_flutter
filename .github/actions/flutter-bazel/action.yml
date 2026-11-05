@@ -113,7 +113,6 @@ runs:
         cat >> "$HOME/.bazelrc" <<RC
         common --repository_cache=$BAZEL_REPOSITORY_CACHE
         common --http_connector_attempts=13
-        common --repository_disable_download
         build --verbose_failures
         test --test_output=errors
         RC
