@@ -58,7 +58,7 @@ jobs:
           export BAZEL_REPOSITORY_CACHE="$HOME/.cache/bazel-repo"
           cat >> "$HOME/.bazelrc" <<RC
           common --repository_cache=$BAZEL_REPOSITORY_CACHE
-          common --experimental_repository_downloader_retries=13
+          common --experimental_repository_downloader_retries=8
 
           RC
 
