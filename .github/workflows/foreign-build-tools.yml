@@ -1,6 +1,6 @@
-name: Foreign build tools probe
+name: Foreign build tools locks
 
-# Diagnostic only: runs the pub_plugins native build on the Ubuntu 26.04 runner.
+# Diagnostic only: regenerates the affected module locks on the Ubuntu 26.04 runner.
 on:
   push:
     branches: [prototype/foreign-build-tools]
@@ -15,10 +15,10 @@ env:
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
 
 jobs:
-  probe:
-    name: Foreign build tools — ubuntu-26.04
+  locks:
+    name: Foreign build tools locks — ubuntu-26.04
     runs-on: ubuntu-26.04
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -29,10 +29,8 @@ jobs:
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
 
-      # Resource limits for every Bazel command in this job, including the
-      # hash gate's own invocations. Lockfile mode is error; the lock refresh
-      # passes --lockfile_mode=update explicitly, which overrides this line.
-      - name: Bazel resource and lockfile flags
+      # Resource limits for every Bazel command in this job.
+      - name: Bazel resource flags
         shell: bash
         run: |
           set -euo pipefail
@@ -41,20 +39,15 @@ jobs:
           build --local_resources=cpu=4
           build --worker_max_instances=2
           build --worker_quit_after_build
-          common --lockfile_mode=error
           RC
 
-      - name: Probe
+      - name: Regenerate locks
         shell: bash
-        env:
-          BAZEL_LOCKFILE_MODE: error
-        run: |
-          set -o pipefail
-          python3 tools/ci/foreign_build_tools_probe.py --out "$RUNNER_TEMP/foreign-build-tools-evidence"
+        run: python3 tools/ci/foreign_build_tools_locks.py --out "$RUNNER_TEMP/foreign-build-tools-locks"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: foreign-build-tools-evidence
-          path: ${{ runner.temp }}/foreign-build-tools-evidence
+          name: foreign-build-tools-locks
+          path: ${{ runner.temp }}/foreign-build-tools-locks
           if-no-files-found: error
