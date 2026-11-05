@@ -183,7 +183,7 @@ class Run:
             return record["returncode"] == 0
         if record["returncode"] == 0:
             return False
-        output = (ROOT / record["stdout"]).read_text() + (ROOT / record["stderr"]).read_text()
+        output = (self.out / record["stdout"]).read_text() + (self.out / record["stderr"]).read_text()
         return all(needle in output for needle in step.expect_failure)
 
     def phase(self, root: Root, cwd: Path, mode: str) -> tuple[list[dict], bool]:
