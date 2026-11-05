@@ -439,6 +439,10 @@ def flutter_core(
     build_test(
         name = name + "_guards_test",
         targets = guards,
+        target_compatible_with = select({
+            Label("//flutter/private:target_os_android"): [Label("@platforms//os:linux")],
+            "//conditions:default": [],
+        }),
         **kwargs
     )
 

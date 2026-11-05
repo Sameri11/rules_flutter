@@ -556,6 +556,10 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
     _tester_test(
         name = name,
         tags = tags,
+        target_compatible_with = select({
+            Label("//flutter/private:target_os_android"): [Label("@platforms//os:linux")],
+            "//conditions:default": [],
+        }),
         **dict(launcher, **kwargs)
     )
     if goldens != None:
