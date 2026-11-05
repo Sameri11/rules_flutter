@@ -130,6 +130,14 @@ jobs:
           set -euo pipefail
           python3 tools/ci/committed_lock_guard.py
 
+      - name: Measure new repository downloads
+        if: always()
+        uses: ./.github/actions/download-cache-save
+        with:
+          cache-hit: ${{ steps.download-cache.outputs.cache-hit }}
+          cache-key: ${{ steps.download-cache.outputs.cache-primary-key }}
+          save: 'false'
+
   core:
     name: Core module and consumers
     runs-on: ubuntu-latest
