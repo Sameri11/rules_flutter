@@ -104,10 +104,11 @@ plugins.package(
 )
 
 include("//:plugin_deps.MODULE.bazel")
+
 maven.install(
     name = "flutter_maven",
-    lock_file = "//:flutter_maven_install.json",
     fail_if_repin_required = True,
+    lock_file = "//:flutter_maven_install.json",
     repositories = [
         "https://maven.google.com",
         "https://repo1.maven.org/maven2",
@@ -115,9 +116,9 @@ maven.install(
 )
 maven.install(
     name = "rules_android_maven",
+    fail_if_repin_required = True,
     known_contributing_modules = ["rules_android"],
     lock_file = "//:rules_android_maven_install.json",
-    fail_if_repin_required = True,
     repositories = [
         "https://maven.google.com",
         "https://repo1.maven.org/maven2",
@@ -125,9 +126,9 @@ maven.install(
 )
 maven.install(
     name = "android_ide_common_30_1_3",
+    fail_if_repin_required = True,
     known_contributing_modules = ["rules_android"],
     lock_file = "//:android_ide_common_30_1_3_install.json",
-    fail_if_repin_required = True,
     repositories = [
         "https://maven.google.com",
         "https://repo1.maven.org/maven2",
@@ -135,7 +136,9 @@ maven.install(
 )
 use_repo(
     maven,
+    "android_ide_common_30_1_3",
+    "rules_android_maven",
+    "unpinned_android_ide_common_30_1_3",
     "unpinned_flutter_maven",
     "unpinned_rules_android_maven",
-    "unpinned_android_ide_common_30_1_3",
 )

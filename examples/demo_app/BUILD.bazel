@@ -5,6 +5,7 @@ load("@rules_flutter_android//flutter:defs.bzl", "flutter_plugin_deps_guards")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
+
 exports_files([
     "flutter_maven_install.json",
     "rules_android_maven_install.json",

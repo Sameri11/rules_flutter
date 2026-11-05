@@ -2,8 +2,8 @@
 """Fetch locked Maven artifacts with only download-cache contents restored."""
 
 import argparse
+import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import shlex
@@ -12,6 +12,8 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlparse
+
+from maven_download_inventory import sha256
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK_NAMES = (
@@ -22,7 +24,8 @@ LOCK_NAMES = (
 
 
 def run(command, cwd, log):
-    print(shlex.join(map(str, command)), flush=True)
+    shown = shlex.join(map(str, command[:10]))
+    print(shown + (f" ... ({len(command)} arguments)" if len(command) > 10 else ""), flush=True)
     started = time.monotonic()
     with log.open("w") as stream:
         stream.write(shlex.join(map(str, command)) + "\n")
@@ -37,6 +40,7 @@ def run(command, cwd, log):
 
 def targets_and_hosts(module):
     targets = set()
+    digests = set()
     hosts = {"dl.google.com", "repo.maven.apache.org", "maven-central.storage-download.googleapis.com"}
     for name in LOCK_NAMES:
         data = json.loads((module / name).read_text())
@@ -47,6 +51,7 @@ def targets_and_hosts(module):
             for classifier, digest in artifact["shasums"].items():
                 if digest is None:
                     continue
+                digests.add(digest)
                 parts = coordinate.split(":")
                 if classifier != "jar":
                     if len(parts) == 2:
@@ -58,24 +63,62 @@ def targets_and_hosts(module):
                 targets.add(f"@@rules_jvm_external++maven+{name}//file")
     if not targets or None in hosts:
         raise SystemExit("Empty artifact set or invalid repository URL")
-    return sorted(targets), sorted(hosts)
+    return sorted(targets), sorted(hosts), digests
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bazel", default="/tmp/bazelw")
     parser.add_argument("--scratch", type=Path, required=True)
+    parser.add_argument("--seed-blob", type=Path, action="append", default=[],
+                        help="Disclosed existing artifact to seed before populating the cache")
     args = parser.parse_args()
     scratch = args.scratch.resolve()
     scratch.mkdir(parents=True, exist_ok=False)
     module = ROOT / "examples/demo_app"
-    targets, hosts = targets_and_hosts(module)
+    targets, hosts, expected_digests = targets_and_hosts(module)
     config = scratch / "blocked-maven.cfg"
-    config.write_text("".join(f"block {re.escape(host)}\n" for host in hosts))
+    config.write_text("".join(f"block {host}\n" for host in hosts))
     (scratch / "targets.txt").write_text("\n".join(targets) + "\n")
     report = {"module": str(module), "targets": targets, "blocked_hosts": hosts,
               "restored_paths": ["content_addressable"], "phases": {}}
     cold_cache = scratch / "cold-cache"
+    report["initial_seed_blobs"] = []
+    for source in args.seed_blob:
+        digest = sha256(source)
+        if digest not in expected_digests:
+            raise SystemExit(f"Seed artifact does not match a lock checksum: {source}: {digest}")
+        destination = cold_cache / "content_addressable" / "sha256" / digest / "file"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        canonical_ids = set()
+        for lock_name in LOCK_NAMES:
+            data = json.loads((module / lock_name).read_text())
+            for coordinate, artifact in data["artifacts"].items():
+                for classifier, artifact_digest in artifact["shasums"].items():
+                    if artifact_digest != digest:
+                        continue
+                    parts = coordinate.split(":")
+                    packaging = parts[2] if len(parts) > 2 else "jar"
+                    key = coordinate
+                    if classifier != "jar":
+                        key += (":jar" if len(parts) == 2 else "") + ":" + classifier
+                    version = artifact["version"]
+                    suffix = "" if classifier == "jar" else "-" + classifier
+                    path = (parts[0].replace(".", "/") + "/" + parts[1] + "/" + version
+                            + "/" + parts[1] + "-" + version + suffix + "." + packaging)
+                    urls = [repo + path for repo, artifacts in data["repositories"].items()
+                            if key in artifacts]
+                    if not urls:
+                        raise SystemExit(f"No locked download URLs for seed: {coordinate}")
+                    canonical_id = " ".join(urls)
+                    canonical_ids.add(canonical_id)
+                    marker = hashlib.sha256(canonical_id.encode()).hexdigest()
+                    (destination.parent / ("id-" + marker)).touch()
+        report["initial_seed_blobs"].append(
+            {"source": str(source), "sha256": digest, "bytes": source.stat().st_size,
+             "canonical_ids": sorted(canonical_ids)})
+    (scratch / "result.json").write_text(json.dumps(report, indent=2) + "\n")
     for phase in ("cold", "warm"):
         cache = scratch / f"{phase}-cache"
         base = scratch / f"{phase}-base"
