@@ -54,7 +54,7 @@ bazel_dep(name = "rules_kotlin", version = "2.4.0")
 # CMAKE_TOOLCHAIN_FILE cache entry -- a documented rules_foreign_cc attribute
 # that suppresses its synthesized crosstool. Letting it synthesize one instead
 # does not link the NDK C++ STL and dies at link time.
-bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
+bazel_dep(name = "rules_foreign_cc", version = "0.16.0")
 
 # Explicit rather than inherited: the native cc rules were removed from Bazel,
 # so `rules_cc` has to be visible to this module for //flutter/private:android.bzl

@@ -32,6 +32,10 @@ Ubuntu Linux x64. The Android configuration below uses SDK API 36,
 build-tools 36.0.0, and NDK 28 or newer. Flutter, Android SDK, and NDK are local,
 non-hermetic inputs. Dart compilation is not incremental.
 
+On Linux, `rules_foreign_cc` 0.16.0 builds its `pkgconf` tool from source for
+CMake native plugin halves. Bazel's auto-configured C toolchain compiles it with
+`gcc` from `PATH`, or with the compiler named by `CC`.
+
 Set the SDK locations before building:
 
 ```sh
