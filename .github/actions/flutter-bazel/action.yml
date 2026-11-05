@@ -97,11 +97,10 @@ runs:
     - name: Set up Bazel download directories
       shell: bash
       run: |
-        mkdir -p "$HOME/.cache/bazel-repo/content_addressable/sha256" "$HOME/.cache/bazelisk/bin"
+        mkdir -p "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk/bin"
         echo "BAZELISK_HOME=$HOME/.cache/bazelisk" >> "$GITHUB_ENV"
         echo "BAZEL_REPOSITORY_CACHE=$HOME/.cache/bazel-repo" >> "$GITHUB_ENV"
         echo "$HOME/.cache/bazelisk/bin" >> "$GITHUB_PATH"
-        find "$HOME/.cache/bazel-repo/content_addressable/sha256" -type f -name file -print 2>/dev/null | LC_ALL=C sort > "$RUNNER_TEMP/bazel-repository-cache-before.txt"
 
     - name: Install bazelisk
       shell: bash

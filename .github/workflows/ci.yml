@@ -61,11 +61,10 @@ jobs:
 
       - name: Set up Bazel download directories
         run: |
-          mkdir -p "$HOME/.cache/bazel-repo/content_addressable/sha256" "$HOME/.cache/bazelisk/bin"
+          mkdir -p "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk/bin"
           echo "BAZELISK_HOME=$HOME/.cache/bazelisk" >> "$GITHUB_ENV"
           echo "BAZEL_REPOSITORY_CACHE=$HOME/.cache/bazel-repo" >> "$GITHUB_ENV"
           echo "$HOME/.cache/bazelisk/bin" >> "$GITHUB_PATH"
-          find "$HOME/.cache/bazel-repo/content_addressable/sha256" -type f -name file -print 2>/dev/null | LC_ALL=C sort > "$RUNNER_TEMP/bazel-repository-cache-before.txt"
           cat >> "$HOME/.bazelrc" <<RC
           common --repository_cache=$HOME/.cache/bazel-repo
           common --http_connector_attempts=13
@@ -127,13 +126,6 @@ jobs:
           set -euo pipefail
           python3 tools/ci/committed_lock_guard.py
 
-      - name: Report lint repository downloads
-        if: always()
-        uses: ./.github/actions/download-cache-save
-        with:
-          cache-hit: 'true'
-          cache-key: unused
-          save: 'false'
   core:
     name: Core module and consumers
     runs-on: ubuntu-latest
@@ -289,7 +281,7 @@ jobs:
             tests/namespace_dynamic/MODULE.bazel.lock
             tests/core_consumer/MODULE.bazel.lock
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
@@ -343,7 +335,7 @@ jobs:
           name: module-locks-android
           path: rules_flutter_android/MODULE.bazel.lock
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
@@ -486,7 +478,7 @@ jobs:
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
@@ -528,7 +520,7 @@ jobs:
       - name: Test suite helper edit re-runs importers only
         run: bash tools/ci/test_suite_helper_edit.sh
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}

@@ -1,5 +1,5 @@
 name: Save Bazel downloads
-description: Saves the designated job's download cache after a successful job.
+description: Saves the job's download cache after completion, including failed jobs.
 inputs:
   cache-hit:
     description: Whether the exact key was restored.
@@ -13,81 +13,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Report new repository downloads
-      if: always()
-      continue-on-error: true
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 - <<'PY'
-        import base64
-        import os
-        import re
-        import subprocess
-        import tarfile
-        import zipfile
-        from pathlib import Path
-
-        root = Path.home() / ".cache/bazel-repo/content_addressable/sha256"
-        before_path = Path(os.environ["RUNNER_TEMP"]) / "bazel-repository-cache-before.txt"
-        before = set(before_path.read_text().splitlines()) if before_path.exists() else set()
-        after = sorted(str(path) for path in root.glob("*/file") if path.is_file())
-        added = [Path(path) for path in after if path not in before]
-        print(f"new repository blob files: {len(added)}")
-        print(f"new repository blob bytes: {sum(path.stat().st_size for path in added)}")
-        digests = {}
-        for path in added:
-            digest = path.parent.name
-            size = path.stat().st_size
-            print(f"new repository blob: {digest} {size}")
-            digests[digest] = path
-            if size < 1048576:
-                continue
-            print(f"new repository blob file type: {digest} {subprocess.check_output(['file', '-b', str(path)], text=True).strip()}")
-            try:
-                if zipfile.is_zipfile(path):
-                    with zipfile.ZipFile(path) as archive:
-                        members = archive.namelist()[:5]
-                else:
-                    with tarfile.open(path, "r:*") as archive:
-                        members = []
-                        for member in archive:
-                            members.append(member.name)
-                            if len(members) == 5:
-                                break
-                for member in members:
-                    print(f"new repository blob member: {digest} {member}")
-            except (tarfile.TarError, zipfile.BadZipFile, OSError):
-                pass
-
-        if digests:
-            sources = subprocess.check_output(
-                ["git", "ls-files", "-z", "--", "*.bzl", "*.json", "*.lock"]
-            ).decode().split("\0")
-            for source in filter(None, sources):
-                try:
-                    text = Path(source).read_text(errors="replace")
-                except OSError:
-                    continue
-                for match in re.finditer(r"\b[0-9a-fA-F]{64}\b", text):
-                    digest = match.group().lower()
-                    if digest not in digests:
-                        continue
-                    nearby = text[max(0, match.start() - 2000):match.end() + 2000]
-                    for url in re.findall(r"https?://github\.com/[^\s\"'<>]+", nearby):
-                        print(f"GitHub-hosted added blob: {digest} {url}")
-                for match in re.finditer(r"sha256-([A-Za-z0-9+/]+={0,2})", text):
-                    try:
-                        digest = base64.b64decode(match.group(1)).hex()
-                    except (ValueError, base64.binascii.Error):
-                        continue
-                    if digest not in digests:
-                        continue
-                    nearby = text[max(0, match.start() - 2000):match.end() + 2000]
-                    for url in re.findall(r"https?://github\.com/[^\s\"'<>]+", nearby):
-                        print(f"GitHub-hosted added blob: {digest} {url}")
-        PY
-
     - name: Save Bazel downloads
       if: success() && inputs.save == 'true' && inputs.cache-hit != 'true'
       uses: actions/cache/save@1bd1e32a3bdc45362d1e726936510720a7c30a57
