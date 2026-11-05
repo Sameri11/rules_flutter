@@ -51,24 +51,10 @@ jobs:
 
       - name: Set up Bazel download directories
         run: |
-          mkdir -p "$HOME/.cache/bazel-repo/content_addressable/sha256" "$HOME/.cache/bazelisk/bin"
+          mkdir -p "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk/bin"
           echo "BAZELISK_HOME=$HOME/.cache/bazelisk" >> "$GITHUB_ENV"
           echo "BAZEL_REPOSITORY_CACHE=$HOME/.cache/bazel-repo" >> "$GITHUB_ENV"
           echo "$HOME/.cache/bazelisk/bin" >> "$GITHUB_PATH"
-          find "$HOME/.cache/bazel-repo/content_addressable/sha256" -type f -name file -print 2>/dev/null | LC_ALL=C sort > "$RUNNER_TEMP/bazel-repository-cache-before.txt"
-          for hash in \
-            1ae6fcf983cff3edab717636f91ad0efff2e5ba75607fdddddfd6ad0dbdfaf10 \
-            37cdfbc6faefea94f7b37760a305c98c08981116c2bc9e821e3b423221fad8c8 \
-            6ef26d4f978e8b4cf5ce1d47532d70cb62cd18431227a1c8007c8f7843243c06; do
-            if [[ -f "$HOME/.cache/bazel-repo/content_addressable/sha256/$hash/file" ]]; then
-              echo "repository cache blob present: $hash"
-            else
-              echo "repository cache blob absent: $hash"
-            fi
-            for marker in "$HOME/.cache/bazel-repo/content_addressable/sha256/$hash"/id-*; do
-              [[ -e "$marker" ]] && echo "repository cache canonical-id marker: ${marker##*/}"
-            done
-          done
           cat >> "$HOME/.bazelrc" <<RC
           common --repository_cache=$HOME/.cache/bazel-repo
           common --http_connector_attempts=13
