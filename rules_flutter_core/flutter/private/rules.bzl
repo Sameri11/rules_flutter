@@ -99,18 +99,28 @@ def _execroot_path(file):
         return "external/" + file.short_path[len("../"):]
     return file.short_path
 
-def _dart_entry_uri(ctx, file):
+def lib_root(label):
+    """The execroot prefix of a package's lib/ directory, as dart_entry_uri matches it.
+
+    A package's lib/ files are its `package:` libraries, so the prefix must be
+    the package that owns the files, not the target that compiles them.
+    """
+    root = "../{}/".format(label.repo_name) if label.repo_name else ""
+    return root + (label.package + "/" if label.package else "") + "lib/"
+
+def dart_entry_uri(lib, file):
     """A Dart source's frontend_server URI, as a `(scheme, path)` pair.
 
-    A file under this package's lib/ is a `package:` library. Any other .dart
+    A file under `lib` (see lib_root) is a `package:` library. Any other .dart
     file is addressed by its execroot path under org-dartlang-root, which
     resolves through whichever virtual root holds it.
     """
-    root = "../{}/".format(ctx.label.repo_name) if ctx.label.repo_name else ""
-    lib = root + (ctx.label.package + "/" if ctx.label.package else "") + "lib/"
     if file.short_path.startswith(lib):
         return ("package", file.short_path[len(lib):])
     return ("org-dartlang-root", _execroot_path(file))
+
+def _dart_entry_uri(ctx, file):
+    return dart_entry_uri(lib_root(ctx.label), file)
 
 def _dart_define_flags(defines):
     """`-D<name>=<value>` flags for frontend_server, sorted by name.
@@ -364,14 +374,16 @@ keys are unchanged.""",
 
 # A test kernel's undeclared import is absent from the sandbox, so the frontend
 # reports it as not found. The hint says where the file has to be declared.
-_TEST_IMPORT_HINT = "hint: declare test-local imports in `srcs`"
+# Shared with flutter_debug_core, which has the same sandbox.
+TEST_IMPORT_HINT = "hint: declare test-local imports in `srcs`"
 
 def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, what):
     """Declares the debug kernel action of dart_jit_kernel, dart_test_kernel and flutter_debug_core.
 
     `pkg` is a struct of the package's inputs: package_name, package_config,
-    pub_srcs, path_deps, srcs, registrant, registrant_path, and import_dill, the
-    kernel to import with --import-dill, or None.
+    pub_srcs, path_deps, srcs, registrant, registrant_path, lib (lib_root of the
+    package that owns the sources), and import_dill, the kernel to import with
+    --import-dill, or None.
 
     Args:
       ctx: the rule context.
@@ -421,7 +433,7 @@ def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, 
 
     # The package name is file content, so the entrypoint URI is assembled by
     # the wrapper below, like dart_aot_kernel's.
-    scheme, path = _dart_entry_uri(ctx, entrypoint)
+    scheme, path = dart_entry_uri(pkg.lib, entrypoint)
 
     scalars = ctx.actions.args()
     scalars.add(pkg.package_name)
@@ -515,6 +527,7 @@ def _dart_jit_kernel_impl(ctx):
             srcs = ctx.files.srcs,
             registrant = registrant,
             registrant_path = library_path(ctx, registrant, "dart_plugin_registrant") if registrant else "",
+            lib = lib_root(ctx.label),
             import_dill = None,
         ),
         entrypoint = ctx.file.entrypoint,
@@ -598,7 +611,7 @@ def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver,
     args.add("--entry-scheme", scheme)
     args.add("--entry-path", path)
     args.add("--package-name-file", pkg.package_name)
-    args.add("--error-hint", _TEST_IMPORT_HINT)
+    args.add("--error-hint", TEST_IMPORT_HINT)
     args.add("--output-dill", dill)
     if prune:
         args.add("--prune-manifest", prune.manifest)
@@ -646,6 +659,7 @@ def _dart_test_kernel_impl(ctx):
         srcs = ctx.files.srcs + ctx.files.prunable_srcs + package.srcs,
         registrant = None,
         registrant_path = "",
+        lib = lib_root(ctx.label),
         # A test with dart_defines compiles its package's libraries itself,
         # since deps_lib was compiled without the test's constants.
         import_dill = package.test_deps if ctx.attr.dart_defines else package.deps_lib,
@@ -677,7 +691,7 @@ def _dart_test_kernel_impl(ctx):
             pkg = pkg,
             entrypoint = ctx.file.entrypoint,
             dart_defines = ctx.attr.dart_defines,
-            hint = _TEST_IMPORT_HINT,
+            hint = TEST_IMPORT_HINT,
             mnemonic = "DartTestKernel",
             what = "Dart test kernel",
         )

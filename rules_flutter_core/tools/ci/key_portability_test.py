@@ -692,13 +692,13 @@ class Checker:
         tree = self.tree("core", "K")
         if tree is None:
             return
-        bundle = _function(tree, "_assets_bundle_impl")
+        bundle = _function(tree, "assets_bundle_action")
         if bundle is None:
-            self.fail("K", "{} must define _assets_bundle_impl".format(FILES["core"]))
+            self.fail("K", "{} must define assets_bundle_action".format(FILES["core"]))
         else:
             action = _action_call(bundle, "run_shell")
             if action is None:
-                self.fail("K", "_assets_bundle_impl must create its bundle with ctx.actions.run_shell")
+                self.fail("K", "assets_bundle_action must create its bundle with ctx.actions.run_shell")
             else:
                 if _name(_keyword(action, "inputs")) != "inputs":
                     self.fail("K", "the bundle action must take the inputs list it builds")
@@ -952,8 +952,9 @@ class Checker:
 
     def check_r(self):
         # flutter_debug_core declares no action of its own: its kernel is the shared
-        # jit_kernel_action and its bundle the shared assets_bundle, so contracts C and K
-        # cover what it runs. This file reads only its declared inputs and no host state.
+        # jit_kernel_action and its bundle the shared assets_bundle_action, so contracts C
+        # and K cover what it runs. It reads the app only through FlutterCoreInfo, reads
+        # no build mode, and names no host state.
         tree = self.tree("debug_core", "R")
         if tree is None:
             return
@@ -961,13 +962,67 @@ class Checker:
             path = _call_path(node) if isinstance(node, ast.Call) else None
             if path and path[:2] == ["ctx", "actions"] and path[-1] in ("run", "run_shell", "write", "expand_template", "symlink"):
                 self.fail("R", "debug_core.bzl must not declare actions of its own; use the shared kernel and bundle")
-        for name in ("jit_kernel_action", "assets_bundle"):
+            if path and (path[-1] == "same_package_label" or path == ["native", "package_relative_label"]):
+                self.fail("R", "debug_core.bzl must not derive the app's labels; the app's FlutterCoreInfo carries what it needs")
+        for name in ("jit_kernel_action", "assets_bundle_action"):
             if not _has_call(tree, name):
                 self.fail("R", "debug_core.bzl must build through the shared {} action".format(name))
+        if _contains_attr(tree, ["ctx", "attr", "_mode"]):
+            self.fail("R", "debug_core.bzl must not read //flutter:mode: the debug artifact is debug by construction")
+        for node in ast.walk(tree):
+            text = _string(node)
+            if text is not None and text.startswith("//flutter:mode"):
+                self.fail("R", "debug_core.bzl must not name //flutter:mode")
+
+        # Each pkg field comes from the app's provider or the rule's own srcs, so a
+        # dropped or substituted input changes the shape and fails here.
+        expected = {
+            "package_name": "ctx.attr.app[FlutterPubspecInfo].package_name",
+            "package_config": "core.package_config",
+            "pub_srcs": "core.pub_srcs",
+            "path_deps": "core.path_deps",
+            "srcs": "core.srcs + ctx.files.srcs",
+            "registrant": "core.debug_registrant",
+            "registrant_path": "core.registrant_path",
+            "lib": "core.lib",
+            "import_dill": "None",
+        }
         structs = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and _call_path(node) == ["struct"]]
-        required = {"package_name", "package_config", "pub_srcs", "path_deps", "srcs", "registrant", "registrant_path", "import_dill"}
-        if len(structs) != 1 or {keyword.arg for keyword in structs[0].keywords} != required:
-            self.fail("R", "the debug kernel's pkg struct must carry exactly the package's declared inputs")
+        if len(structs) != 1:
+            self.fail("R", "the debug kernel must build exactly one pkg struct")
+        else:
+            values = {keyword.arg: ast.unparse(keyword.value) for keyword in structs[0].keywords}
+            if values != expected:
+                self.fail("R", "the debug kernel's pkg struct must take each field from the app's FlutterCoreInfo or ctx.files.srcs: {}".format(values))
+        kernel = _function(tree, "_flutter_debug_kernel_impl")
+        if kernel is None or "ctx.attr.app[FlutterCoreInfo]" not in ast.unparse(kernel):
+            self.fail("R", "_flutter_debug_kernel_impl must read the app through FlutterCoreInfo")
+        bundle = _function(tree, "_flutter_debug_bundle_impl")
+        if bundle is None or "core.mode_free_assets" not in ast.unparse(bundle):
+            self.fail("R", "_flutter_debug_bundle_impl must overlay the app's mode-free assets from FlutterCoreInfo")
+
+        # The provider's values must come from the app's own files, not from a label
+        # the debug artifact derives.
+        core = self.tree("core", "R")
+        if core is None:
+            return
+        info = [node for node in ast.walk(core) if isinstance(node, ast.Call) and _call_path(node) == ["FlutterCoreInfo"]]
+        if len(info) != 1:
+            self.fail("R", "core.bzl must construct exactly one FlutterCoreInfo")
+        else:
+            fields = {keyword.arg: ast.unparse(keyword.value) for keyword in info[0].keywords}
+            filled = {
+                "package_config": "ctx.file.package_config",
+                "pub_srcs": "ctx.files.pub_srcs",
+                "srcs": "ctx.files.srcs",
+                "path_deps": "ctx.files.path_deps",
+                "debug_registrant": "ctx.file.debug_registrant",
+                "registrant_path": "library_path(ctx, ctx.file.debug_registrant, 'dart_plugin_registrant') if ctx.file.debug_registrant else ''",
+                "lib": "lib_root(ctx.label)",
+                "mode_free_assets": "mode_free_assets",
+            }
+            if fields != filled:
+                self.fail("R", "FlutterCoreInfo must be filled from the app's own files and labels: {}".format(fields))
         host_variable = re.compile(r"\$\{?(?:HOME|PWD|USER|TMPDIR)\b")
         for node in ast.walk(tree):
             text = _string(node)

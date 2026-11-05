@@ -5,19 +5,19 @@ against the app's package inputs, and pairs that kernel with the app's
 mode-free bundle and debug engine. The result is a debug FlutterArtifactInfo
 with the same shape as the app's, so packaging consumes it the same way. Both
 kernels and both bundles come from the shared actions in rules.bzl and core.bzl.
+
+The app is reached only through its FlutterCoreInfo provider, so it may live in
+another package, behind a restrictive visibility, or be an alias.
 """
 
 load(":abis.bzl", "debug_target_compatible_with")
-load(":core.bzl", "FlutterArtifactInfo", "FlutterCoreInfo", "assets_bundle", "platform_neutral_files")
+load(":core.bzl", "FlutterArtifactInfo", "FlutterCoreInfo", "assets_bundle_action", "platform_neutral_files")
 load(":pubspec.bzl", "FlutterPubspecInfo")
-load(":rules.bzl", "jit_kernel_action")
+load(":rules.bzl", "TEST_IMPORT_HINT", "jit_kernel_action")
 
 visibility(["//flutter/..."])
 
 _TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
-
-# A test-local import missing from `srcs` is absent from the sandbox; say where to declare it.
-_IMPORT_HINT = "hint: declare test-local imports in `srcs`"
 
 def _flutter_debug_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
@@ -37,11 +37,12 @@ def _flutter_debug_kernel_impl(ctx):
             srcs = core.srcs + ctx.files.srcs,
             registrant = core.debug_registrant,
             registrant_path = core.registrant_path,
+            lib = core.lib,
             import_dill = None,
         ),
         entrypoint = ctx.file.entrypoint,
         dart_defines = ctx.attr.dart_defines,
-        hint = _IMPORT_HINT,
+        hint = TEST_IMPORT_HINT,
         mnemonic = "DartJitKernel",
         what = "Dart JIT kernel",
     )
@@ -67,6 +68,31 @@ _flutter_debug_kernel = rule(
         ),
         "dart_defines": attr.string_dict(
             doc = "Compile-time constants of this kernel only. See dart_jit_kernel.dart_defines.",
+        ),
+    },
+    toolchains = [_TOOLCHAIN],
+)
+
+def _flutter_debug_bundle_impl(ctx):
+    core = ctx.attr.app[FlutterCoreInfo]
+    (kernel,) = ctx.files.kernel
+    return [DefaultInfo(files = depset([assets_bundle_action(ctx, core.mode_free_assets, [kernel])]))]
+
+# Wrapped in platform_neutral_files, so the app is read in the platform-neutral
+# configuration, as its own bundle is, and the bundle is built once.
+_flutter_debug_bundle_action = rule(
+    implementation = _flutter_debug_bundle_impl,
+    doc = "Overlays a debug kernel on an app's mode-free flutter_assets tree.",
+    attrs = {
+        "app": attr.label(
+            mandatory = True,
+            providers = [FlutterCoreInfo],
+            doc = "The app's flutter_core target.",
+        ),
+        "kernel": attr.label_list(
+            mandatory = True,
+            allow_files = True,
+            doc = "The debug kernel of this artifact's entrypoint.",
         ),
     },
     toolchains = [_TOOLCHAIN],
@@ -122,28 +148,29 @@ def flutter_debug_core(name, app, entrypoint, dart_defines = {}, srcs = [], **kw
 
     Args:
       name: the artifact's target name.
-      app: the app's `flutter_core` target, in this package or another.
-      entrypoint: the Dart file compiled as `main`. Files under lib/ compile as
-        `package:`; any other .dart file compiles by its execroot path, as
-        dart_jit_kernel compiles them.
+      app: the app's `flutter_core` target. It may be in another package, under a
+        restrictive visibility, or an alias; only its own visibility applies.
+      entrypoint: the Dart file compiled as `main`. A file under the app's lib/
+        compiles as `package:<app>/...`, the same library the app itself loads;
+        any other .dart file compiles by its execroot path, as dart_jit_kernel
+        compiles them.
       dart_defines: `-D` constants of this artifact's kernel. The app's are not inherited.
       srcs: Dart files outside lib/ that the entrypoint imports by relative path,
         such as a helper under integration_test/. Undeclared, they are missing
         from the kernel's sandbox and the compile fails.
-      **kwargs: `tags`, default `["manual"]`, and `visibility` for the artifact.
+      **kwargs: `tags`, default `["manual"]`; `target_compatible_with`, combined
+        with the debug-only constraint; `testonly`, applied to every helper target;
+        and `visibility` for the artifact.
     """
-    if "target_compatible_with" in kwargs:
-        fail("flutter_debug_core {}: target_compatible_with is fixed to debug mode.".format(name))
+    testonly = kwargs.pop("testonly", False)
     tags = kwargs.pop("tags", ["manual"])
-    compatible = debug_target_compatible_with()
+
+    # The debug-only constraint is always kept; a caller's constraints add to it.
+    compatible = debug_target_compatible_with() + kwargs.pop("target_compatible_with", [])
 
     # Helpers are manual and debug-only as well, so no wildcard build reaches them
     # in a configuration that the artifact itself is incompatible with.
-    internal = {"tags": ["manual"], "target_compatible_with": compatible}
-
-    # flutter_core declares its mode-free bundle under this name.
-    app_label = native.package_relative_label(app)
-    assets = app_label.same_package_label(app_label.name + "_assets")
+    internal = {"tags": ["manual"], "target_compatible_with": compatible, "testonly": testonly}
 
     _flutter_debug_kernel(
         name = name + "_kernel",
@@ -162,9 +189,9 @@ def flutter_debug_core(name, app, entrypoint, dart_defines = {}, srcs = [], **kw
         **internal
     )
 
-    assets_bundle(
+    _flutter_debug_bundle_action(
         name = name + "_bundle_action",
-        src = assets,
+        app = app,
         kernel = [":" + name + "_kernel_neutral"],
         **internal
     )
@@ -181,5 +208,6 @@ def flutter_debug_core(name, app, entrypoint, dart_defines = {}, srcs = [], **kw
         bundle = ":" + name + "_bundle",
         tags = tags,
         target_compatible_with = compatible,
+        testonly = testonly,
         **kwargs
     )
