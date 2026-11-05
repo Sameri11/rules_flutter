@@ -77,6 +77,8 @@ separate typed provider. See the checked stock-binary example in
 target `//composed_app:direct_apk`. Consumers own Android packaging and native
 library handling, including strip behavior required by their packaging graph.
 
+`flutter_debug_core` declares a debug artifact of an app's `flutter_core` built from another entrypoint, such as a test file under `integration_test/`, with its own `dart_defines`. Dart files outside `lib/` that the entrypoint imports go in `srcs`; an undeclared import fails the compile. The app's package inputs, mode-free bundle and debug engine are reused, so beyond the app's own outputs it adds only its kernel and a bundle copy. It is debug only: a release configuration reports it incompatible, and it is `manual` unless `tags` overrides that, so `bazel build //...` skips it under debug. Build it with `-c fastbuild --@rules_flutter_core//flutter:mode=debug` and an Android `--platforms`.
+
 One measured warm four-command sequence took 1.500 seconds with the former suffixed labels and 16.165 seconds with one label under successive ABI configurations. These timings are scoped to one machine/workflow, not a general speed promise. Expensive Flutter/native actions remained reusable, while Android packaging reran. Disk/remote-cache switching speed was not measured; shared materialized paths do not inherently collide in action caches.
 
 ## Compatibility with flutter_tools
@@ -88,7 +90,7 @@ One measured warm four-command sequence took 1.500 seconds with the former suffi
 | Android profile builds | `flutter build apk --profile` | Not implemented | Debug and release only. |
 | Split APKs by architecture | `--split-per-abi` | Implemented | Select ABI set through `--android_platforms`; one APK label per app/mode variant. |
 | Android App Bundles (AAB) | `flutter build appbundle` | Not implemented | APKs only. |
-| Dart defines | `--dart-define`, `--dart-define-from-file` | Partial | `flutter_core(dart_defines = {...})` and `flutter_test(dart_defines = {...})`; no `--dart-define-from-file`. |
+| Dart defines | `--dart-define`, `--dart-define-from-file` | Partial | `flutter_core(dart_defines = {...})`, `flutter_debug_core(dart_defines = {...})` and `flutter_test(dart_defines = {...})`; no `--dart-define-from-file`. |
 | Android plugins and native packages | Standard Flutter/Gradle workflow | Partial | Common Java/Kotlin and CMake plugins work; custom build logic and native assets need recipes. |
 | Release signing | Gradle signing configuration | Not implemented | Sign the unsigned output outside the build. |
 | Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |

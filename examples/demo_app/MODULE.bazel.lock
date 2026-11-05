@@ -409,7 +409,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "ZpvN1+u7INwikwiLIX5KI10E4Z52uCEr7sZm5/ELjyI=",
+        "bzlTransitiveDigest": "O7RwXyd61OhUiE9lWJ5zciT1L2AEi177w1EHoms2+b4=",
         "usagesDigest": "HFu4wseopxonsvDUd/4S1JEEWdwTssTyzt3rsp61Cg8=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android rules_android+",
@@ -431,7 +431,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "ZpvN1+u7INwikwiLIX5KI10E4Z52uCEr7sZm5/ELjyI=",
+        "bzlTransitiveDigest": "O7RwXyd61OhUiE9lWJ5zciT1L2AEi177w1EHoms2+b4=",
         "usagesDigest": "NAsegc0NGgbnISf1WUvMP9+cZAMUJEHXC+unOFzUAKo=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
@@ -480,7 +480,7 @@
     },
     "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "a/RI5+ud+1XzjACa8J4MoLJJWd52gI1AZaG/I3oHy4E=",
+        "bzlTransitiveDigest": "IQKKhDRQ2nv9172jyBf+8QrvfO6OoJlhXoR8YS+5fA8=",
         "usagesDigest": "PVRq/fIGaef1uAaEjTR0LCJbig9Z96itWnzuvhhPV74=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_core+,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",

@@ -15,7 +15,7 @@ load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "pub_path_deps_check", "pub_plugins_check")
+load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check", "pub_plugins_check")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -56,6 +56,20 @@ FlutterArtifactInfo = provider(
         "engine_libs": "list of File: this ABI's engine .so files, unstripped.",
         "embedding_jar": "File: the Java embedding jar for this mode.",
         "assets": "Directory: the flutter_assets bundle, with the debug overlay under debug.",
+    },
+)
+
+FlutterCoreInfo = provider(
+    doc = "What a flutter_debug_core needs from its app: the kernel inputs and the debug registrant.",
+    fields = {
+        "package_config": "File: the pub hub's package_config.json.",
+        "pub_srcs": "list of File: the hub's packageUri trees.",
+        "srcs": "list of File: the app's Dart sources, for change detection.",
+        "path_deps": "list of File: sources of path dependencies.",
+        "debug_registrant": "File or None: the debug plugin registrant.",
+        "registrant_path": "str: the registrant's path within its package, as a package: URI suffix.",
+        "lib": "str: the app's lib/ prefix in the execroot; an entrypoint under it compiles as package:, under its own name.",
+        "mode_free_assets": "File: the app's flutter_assets tree before any debug overlay, platform neutral.",
     },
 )
 
@@ -104,7 +118,7 @@ def _platform_neutral_files_impl(ctx):
     (src,) = ctx.attr.src
     return [DefaultInfo(files = src[DefaultInfo].files)]
 
-_platform_neutral_files = rule(
+platform_neutral_files = rule(
     implementation = _platform_neutral_files_impl,
     doc = "Passes a target's files through, built under the host platform.",
     attrs = {
@@ -115,19 +129,30 @@ _platform_neutral_files = rule(
     },
 )
 
-def _assets_bundle_impl(ctx):
+def assets_bundle_action(ctx, src, kernel_files):
+    """Declares the flutter_assets tree of `src`, with the debug overlay of the kernel when given.
+
+    Shared by assets_bundle and flutter_debug_core, so the app's bundle and a
+    test bundle run the same copy and overlay.
+
+    Args:
+      ctx: the rule context; its toolchain supplies the engine snapshots.
+      src: File: the mode-free flutter_assets tree to copy.
+      kernel_files: list of File: the JIT kernel under debug, or None under release.
+
+    Returns:
+      The declared flutter_assets directory File.
+    """
     toolchain = ctx.toolchains[_TOOLCHAIN].flutter
-    mode = ctx.attr._mode[BuildSettingInfo].value
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
 
-    (src,) = ctx.files.src
     inputs = [src]
     command = 'mkdir -p "{out}" && cp -RL "{src}"/. "{out}"/'.format(out = out.path, src = src.path)
 
-    if mode == "debug":
+    if kernel_files != None:
         # The debug overlay: the JIT kernel and the host engine's snapshots,
         # under the names the engine looks for. Release ships no overlay.
-        (kernel,) = ctx.files.kernel
+        (kernel,) = kernel_files
         inputs += [kernel, toolchain.vm_isolate_snapshot, toolchain.isolate_snapshot]
         command += ' && cp "{k}" "{out}/kernel_blob.bin" && cp "{vm}" "{out}/vm_snapshot_data" && cp "{iso}" "{out}/isolate_snapshot_data"'.format(
             k = kernel.path,
@@ -143,9 +168,15 @@ def _assets_bundle_impl(ctx):
         mnemonic = "FlutterAssetBundle",
         progress_message = "Bundling Flutter assets %{label}",
     )
-    return [DefaultInfo(files = depset([out]))]
+    return out
 
-_assets_bundle = rule(
+def _assets_bundle_impl(ctx):
+    mode = ctx.attr._mode[BuildSettingInfo].value
+    (src,) = ctx.files.src
+    kernel = ctx.files.kernel if mode == "debug" else None
+    return [DefaultInfo(files = depset([assets_bundle_action(ctx, src, kernel)]))]
+
+assets_bundle = rule(
     implementation = _assets_bundle_impl,
     doc = "The flutter_assets tree the APK packages, with the debug overlay under debug.",
     attrs = {
@@ -163,6 +194,7 @@ def _flutter_core_impl(ctx):
     engine_libs = ctx.files.engine_libs
     embedding_jar = ctx.file.embedding
     assets = ctx.attr.assets[DefaultInfo].files.to_list()
+    (mode_free_assets,) = ctx.files.mode_free_assets
     if len(assets) != 1:
         fail("{}: expected one assets directory, got {}".format(ctx.label, len(assets)))
     if len(libapp) > 1:
@@ -189,6 +221,16 @@ def _flutter_core_impl(ctx):
             embedding_jar = embedding_jar,
             assets = assets[0],
         ),
+        FlutterCoreInfo(
+            package_config = ctx.file.package_config,
+            pub_srcs = ctx.files.pub_srcs,
+            srcs = ctx.files.srcs,
+            path_deps = ctx.files.path_deps,
+            debug_registrant = ctx.file.debug_registrant,
+            registrant_path = library_path(ctx, ctx.file.debug_registrant, "dart_plugin_registrant") if ctx.file.debug_registrant else "",
+            lib = lib_root(ctx.label),
+            mode_free_assets = mode_free_assets,
+        ),
         ctx.attr.pubspec[FlutterPubspecInfo],
     ]
 
@@ -201,7 +243,13 @@ _flutter_core = rule(
             "engine_libs": attr.label_list(allow_files = True, doc = "This split's engine .so files; empty on a host build."),
             "embedding": attr.label(allow_single_file = True, mandatory = True),
             "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
+            "mode_free_assets": attr.label(allow_files = True, mandatory = True, cfg = _platform_neutral_transition, doc = "The flutter_assets tree before any debug overlay, built under the host platform. A flutter_debug_core overlays its own kernel on it, so the app's assets label is never named outside this package."),
             "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
+            "package_config": attr.label(allow_single_file = True, mandatory = True, doc = "The pub hub's package_config.json, read by a flutter_debug_core's kernel."),
+            "pub_srcs": attr.label_list(allow_files = True, allow_empty = False, mandatory = True, doc = "The pub hub's :lib, read by a flutter_debug_core's kernel."),
+            "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
+            "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
+            "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
             "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
         },
         **ABI_PLATFORM_ATTRS
@@ -283,7 +331,7 @@ def flutter_core(
 
     # Keep the OS-specific kernel shared across ABI splits through the existing
     # host transition.
-    _platform_neutral_files(
+    platform_neutral_files(
         name = name + "_kernel_neutral",
         src = ":" + name + "_kernel",
     )
@@ -300,7 +348,7 @@ def flutter_core(
         dart_defines = dart_defines,
     )
 
-    _platform_neutral_files(
+    platform_neutral_files(
         name = name + "_jit_kernel_neutral",
         src = ":" + name + "_jit_kernel",
     )
@@ -338,7 +386,7 @@ def flutter_core(
         tags = ["manual"],
     )
 
-    _assets_bundle(
+    assets_bundle(
         name = name + "_bundle_action",
         src = ":" + name + "_assets",
         kernel = select({
@@ -347,7 +395,7 @@ def flutter_core(
         }),
     )
 
-    _platform_neutral_files(
+    platform_neutral_files(
         name = name + "_bundle",
         src = ":" + name + "_bundle_action",
     )
@@ -411,7 +459,13 @@ def flutter_core(
             Label("//flutter:mode_debug"): embedding_jar_label("debug"),
         }),
         assets = ":" + name + "_bundle",
+        mode_free_assets = ":" + name + "_assets",
         pubspec = ":pubspec",
+        package_config = package_config,
+        pub_srcs = [pub_lib],
+        srcs = srcs,
+        path_deps = path_deps,
+        debug_registrant = debug_registrant,
         **kwargs
     )
 

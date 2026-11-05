@@ -65,6 +65,7 @@ genrule(
 exports_files(
     [
         "core.bzl",
+        "debug_core.bzl",
         "dart_registrant.bzl",
         "device_test.bzl",
         "flutter_test.bzl",

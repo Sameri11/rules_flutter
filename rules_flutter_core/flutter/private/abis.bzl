@@ -225,6 +225,20 @@ def aot_target_compatible_with():
         conditions[Label("//flutter:mode_" + mode)] = []
     return select(conditions)
 
+def debug_target_compatible_with():
+    """target_compatible_with for a rule that exists only in debug mode.
+
+    A debug-only artifact reads the debug engine and the JIT kernel, so a
+    release configuration must skip it rather than mix the two.
+
+    Returns:
+      A select() value for a `target_compatible_with` attribute.
+    """
+    return select({
+        Label("//flutter:mode_debug"): [],
+        "//conditions:default": [Label("@platforms//:incompatible")],
+    })
+
 def check_abis(abis, where):
     """Fails with the supported set listed, rather than a KeyError.
 

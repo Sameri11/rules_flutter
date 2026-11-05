@@ -16,6 +16,7 @@ genrule(
         "//flutter/private:device_test.bzl",
         "//flutter/private:test_kernel_driver.bzl",
         "//flutter/private:core.bzl",
+        "//flutter/private:debug_core.bzl",
         "//flutter/private:dart_registrant.bzl",
         "//flutter/private:pub_lock.bzl",
     ],
