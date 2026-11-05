@@ -475,6 +475,9 @@ jobs:
           python3 tools/ci/cache_stats.py \
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
+      - name: Fail after Bazel fetch
+        if: matrix.os == 'macos-15' && matrix.example.name == 'demo_app_debug'
+        run: exit 1
       - name: Save Bazel downloads
         if: always()
         uses: ./.github/actions/download-cache-save
