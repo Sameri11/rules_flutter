@@ -1,0 +1,120 @@
+name: Wildcard platform diagnostic
+
+on:
+  push:
+    branches: [prototype/wildcard-compatibility]
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+
+  BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+  baseline:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: no_plugins
+            directory: examples/no_plugins
+          - name: pub_plugins
+            directory: examples/pub_plugins
+          - name: local_plugin
+            directory: examples/local_plugin
+          - name: demo_app
+            directory: examples/demo_app
+          - name: consumer
+            directory: tests/consumer
+          - name: core_consumer
+            directory: tests/core_consumer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+      - name: Baseline build (release default and debug)
+        working-directory: ${{ matrix.directory }}
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/wildcard-logs"
+          git worktree add "$RUNNER_TEMP/baseline" origin/main
+          baseline="$RUNNER_TEMP/baseline/${{ matrix.directory }}"
+          (cd "$baseline" && bazel build --keep_going //...) 2>&1 | tee "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-baseline-release.log"
+          echo "EXIT_CODE=${PIPESTATUS[0]}" | tee -a "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-baseline-release.log"
+          (cd "$baseline" && bazel build --keep_going -c fastbuild --@rules_flutter_core//flutter:mode=debug //...) 2>&1 | tee "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-baseline-debug.log"
+          echo "EXIT_CODE=${PIPESTATUS[0]}" | tee -a "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-baseline-debug.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: wildcard-baseline-${{ matrix.name }}
+          path: ${{ runner.temp }}/wildcard-logs
+          if-no-files-found: warn
+
+  matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: no_plugins
+            directory: examples/no_plugins
+            core: //:core_libapp_arm64-v8a
+          - name: pub_plugins
+            directory: examples/pub_plugins
+            core: //:core_libapp_arm64-v8a
+          - name: demo_app
+            directory: examples/demo_app
+            core: //:core_libapp_arm64-v8a
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+      - name: Baseline versus A1 matrix
+        working-directory: ${{ matrix.directory }}
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/wildcard-logs"
+          git worktree add "$RUNNER_TEMP/baseline" origin/main
+          baseline="$RUNNER_TEMP/baseline/${{ matrix.directory }}"
+          run_cell() {
+            revision="$1"
+            name="$2"
+            shift 2
+            if [[ "$revision" == baseline ]]; then
+              (cd "$baseline" && "$@") 2>&1 | tee "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-${revision}-${name}.log"
+            else
+              "$@" 2>&1 | tee "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-${revision}-${name}.log"
+            fi
+            rc=${PIPESTATUS[0]}
+            echo "EXIT_CODE=$rc" | tee -a "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-${revision}-${name}.log"
+          }
+          for revision in baseline a1; do
+            run_cell "$revision" row3 bazel build --keep_going //...
+            run_cell "$revision" row4 bazel test --keep_going //...
+            run_cell "$revision" row5 bazel test --build_tests_only --keep_going //...
+            run_cell "$revision" row6 bazel build --keep_going --android_platforms=@rules_android//:arm64-v8a //...
+            run_cell "$revision" row7 bazel build --keep_going --platforms=@rules_android//:arm64-v8a //...
+            run_cell "$revision" row8 bazel build --nobuild --platforms=@platforms//host:host "${{ matrix.core }}"
+            run_cell "$revision" row9 bazel build --nobuild --platforms=@rules_android//:arm64-v8a "${{ matrix.core }}"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: wildcard-matrix-${{ matrix.name }}
+          path: ${{ runner.temp }}/wildcard-logs
+          if-no-files-found: warn

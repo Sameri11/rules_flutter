@@ -410,7 +410,7 @@ def flutter_core(
             abi = abi,
             snapshot_flags = ABIS[abi].snapshot_flags,
             strip = True,
-            target_compatible_with = aot_target_compatible_with(),
+            target_compatible_with = [Label("@platforms//os:android")] + aot_target_compatible_with(),
         )
 
     guards = [":path_deps_check"]
