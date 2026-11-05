@@ -11,6 +11,7 @@ env:
   FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
 
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+jobs:
   baseline:
     runs-on: ubuntu-latest
     strategy:
