@@ -1086,6 +1086,7 @@ def _file_contract(name):
         "device_test": "R",
         "test_driver": "I",
         "core": "K",
+        "debug_core": "S",
         "android_inputs": "L",
         "apk_check": "M",
         "dart_registrant": "N",
