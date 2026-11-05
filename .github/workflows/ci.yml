@@ -11,6 +11,11 @@ on:
         required: false
         default: false
         type: boolean
+      writer-coverage:
+        description: Measure download-cache writer coverage
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 
@@ -34,6 +39,7 @@ env:
 
 jobs:
   lint:
+    if: ${{ !inputs['writer-coverage'] }}
     name: Starlark format and lint
     runs-on: ubuntu-latest
     steps:
@@ -128,6 +134,7 @@ jobs:
           cache-key: ${{ steps.download-cache.outputs.cache-primary-key }}
 
   core:
+    if: ${{ !inputs['writer-coverage'] }}
     name: Core module and consumers
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -291,6 +298,7 @@ jobs:
 
 
   android:
+    if: ${{ !inputs['writer-coverage'] }}
     name: Android module and registrant parity
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -342,6 +350,7 @@ jobs:
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
 
   example:
+    if: ${{ !inputs['writer-coverage'] }}
     name: Example — ${{ matrix.os }} — ${{ matrix.example.description }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -486,6 +495,7 @@ jobs:
 
   # Focused conformance lane also checks helper-edit invalidation with caches disabled.
   conformance:
+    if: ${{ !inputs['writer-coverage'] }}
     name: Test driver conformance — ubuntu-latest
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -525,6 +535,7 @@ jobs:
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
 
   gate:
+    if: ${{ always() && !inputs['writer-coverage'] }}
     name: Hash table fully claimed
     # Ensure every recorded example is assigned to a matrix job.
     runs-on: ubuntu-latest
@@ -552,3 +563,114 @@ jobs:
         run: |
           echo "example matrix concluded ${{ needs.example.result }}"
           exit 1
+  writer-coverage-linux:
+    name: Writer coverage — Linux
+    if: ${{ inputs['writer-coverage'] }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare cache paths
+        run: mkdir -p "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore core
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-Linux-core-9f009e74736ebe7296370993b41ea871a7ae6b0c238c51c7d9a014aae997ff54-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture core && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore demo_app
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-Linux-demo_app-9e36e0bfb6d3f3bedd0c4a64f4dacc22bfbd4be64c4c42683090486db476eb53-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture demo_app && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore no_plugins
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-Linux-no_plugins-9347e08b3bf040684e64412fc2440d98fcf255cbf6515d702968bf2d9656f073-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture no_plugins && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore local_plugin
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-Linux-local_plugin-2c433a77d7af28233955596d3dd1735d774c6f744ebeb0247d7372fae18e027d-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture local_plugin && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore pub_plugins
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-Linux-pub_plugins-fce838c782c60fd3f129a55a5dfa770b7abc9741319b95c82608064907fa8f34-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture pub_plugins
+      - name: Analyze Linux coverage
+        run: python3 tools/ci/cache_writer_coverage.py analyze core
+
+  writer-coverage-macos:
+    name: Writer coverage — macOS
+    if: ${{ inputs['writer-coverage'] }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare cache paths
+        run: mkdir -p "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore demo_app_debug
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-macOS-demo_app_debug-9e36e0bfb6d3f3bedd0c4a64f4dacc22bfbd4be64c4c42683090486db476eb53-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture demo_app_debug && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore demo_app
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-macOS-demo_app-9e36e0bfb6d3f3bedd0c4a64f4dacc22bfbd4be64c4c42683090486db476eb53-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture demo_app && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore no_plugins
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-macOS-no_plugins-9347e08b3bf040684e64412fc2440d98fcf255cbf6515d702968bf2d9656f073-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture no_plugins && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore local_plugin
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-macOS-local_plugin-2c433a77d7af28233955596d3dd1735d774c6f744ebeb0247d7372fae18e027d-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture local_plugin && rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
+      - name: Restore pub_plugins
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-macOS-pub_plugins-fce838c782c60fd3f129a55a5dfa770b7abc9741319b95c82608064907fa8f34-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
+          fail-on-cache-miss: true
+      - run: python3 tools/ci/cache_writer_coverage.py capture pub_plugins
+      - name: Analyze macOS coverage
+        run: python3 tools/ci/cache_writer_coverage.py analyze demo_app_debug
