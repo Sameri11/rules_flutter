@@ -93,6 +93,7 @@ class Checker:
         self.check_p()
         self.check_q()
         self.check_r()
+        self.check_s()
         return self.failures
 
     def tree(self, name, contract):
@@ -950,29 +951,29 @@ class Checker:
         ):
             self.fail("Q", "raw native stripping must not use ambient action environment")
 
-    def check_r(self):
+    def check_s(self):
         # flutter_debug_core declares no action of its own: its kernel is the shared
         # jit_kernel_action and its bundle the shared assets_bundle_action, so contracts C
         # and K cover what it runs. It reads the app only through FlutterCoreInfo, reads
         # no build mode, and names no host state.
-        tree = self.tree("debug_core", "R")
+        tree = self.tree("debug_core", "S")
         if tree is None:
             return
         for node in ast.walk(tree):
             path = _call_path(node) if isinstance(node, ast.Call) else None
             if path and path[:2] == ["ctx", "actions"] and path[-1] in ("run", "run_shell", "write", "expand_template", "symlink"):
-                self.fail("R", "debug_core.bzl must not declare actions of its own; use the shared kernel and bundle")
+                self.fail("S", "debug_core.bzl must not declare actions of its own; use the shared kernel and bundle")
             if path and (path[-1] == "same_package_label" or path == ["native", "package_relative_label"]):
-                self.fail("R", "debug_core.bzl must not derive the app's labels; the app's FlutterCoreInfo carries what it needs")
+                self.fail("S", "debug_core.bzl must not derive the app's labels; the app's FlutterCoreInfo carries what it needs")
         for name in ("jit_kernel_action", "assets_bundle_action"):
             if not _has_call(tree, name):
-                self.fail("R", "debug_core.bzl must build through the shared {} action".format(name))
+                self.fail("S", "debug_core.bzl must build through the shared {} action".format(name))
         if _contains_attr(tree, ["ctx", "attr", "_mode"]):
-            self.fail("R", "debug_core.bzl must not read //flutter:mode: the debug artifact is debug by construction")
+            self.fail("S", "debug_core.bzl must not read //flutter:mode: the debug artifact is debug by construction")
         for node in ast.walk(tree):
             text = _string(node)
             if text is not None and text.startswith("//flutter:mode"):
-                self.fail("R", "debug_core.bzl must not name //flutter:mode")
+                self.fail("S", "debug_core.bzl must not name //flutter:mode")
 
         # Each pkg field comes from the app's provider or the rule's own srcs, so a
         # dropped or substituted input changes the shape and fails here.
@@ -989,26 +990,26 @@ class Checker:
         }
         structs = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and _call_path(node) == ["struct"]]
         if len(structs) != 1:
-            self.fail("R", "the debug kernel must build exactly one pkg struct")
+            self.fail("S", "the debug kernel must build exactly one pkg struct")
         else:
             values = {keyword.arg: ast.unparse(keyword.value) for keyword in structs[0].keywords}
             if values != expected:
-                self.fail("R", "the debug kernel's pkg struct must take each field from the app's FlutterCoreInfo or ctx.files.srcs: {}".format(values))
+                self.fail("S", "the debug kernel's pkg struct must take each field from the app's FlutterCoreInfo or ctx.files.srcs: {}".format(values))
         kernel = _function(tree, "_flutter_debug_kernel_impl")
         if kernel is None or "ctx.attr.app[FlutterCoreInfo]" not in ast.unparse(kernel):
-            self.fail("R", "_flutter_debug_kernel_impl must read the app through FlutterCoreInfo")
+            self.fail("S", "_flutter_debug_kernel_impl must read the app through FlutterCoreInfo")
         bundle = _function(tree, "_flutter_debug_bundle_impl")
         if bundle is None or "core.mode_free_assets" not in ast.unparse(bundle):
-            self.fail("R", "_flutter_debug_bundle_impl must overlay the app's mode-free assets from FlutterCoreInfo")
+            self.fail("S", "_flutter_debug_bundle_impl must overlay the app's mode-free assets from FlutterCoreInfo")
 
         # The provider's values must come from the app's own files, not from a label
         # the debug artifact derives.
-        core = self.tree("core", "R")
+        core = self.tree("core", "S")
         if core is None:
             return
         info = [node for node in ast.walk(core) if isinstance(node, ast.Call) and _call_path(node) == ["FlutterCoreInfo"]]
         if len(info) != 1:
-            self.fail("R", "core.bzl must construct exactly one FlutterCoreInfo")
+            self.fail("S", "core.bzl must construct exactly one FlutterCoreInfo")
         else:
             fields = {keyword.arg: ast.unparse(keyword.value) for keyword in info[0].keywords}
             filled = {
@@ -1022,12 +1023,12 @@ class Checker:
                 "mode_free_assets": "mode_free_assets",
             }
             if fields != filled:
-                self.fail("R", "FlutterCoreInfo must be filled from the app's own files and labels: {}".format(fields))
+                self.fail("S", "FlutterCoreInfo must be filled from the app's own files and labels: {}".format(fields))
         host_variable = re.compile(r"\$\{?(?:HOME|PWD|USER|TMPDIR)\b")
         for node in ast.walk(tree):
             text = _string(node)
             if text is not None and (_HOST_PATH.search(text) or host_variable.search(text) or "PUB_CACHE" in text):
-                self.fail("R", "debug_core.bzl must not name a host path, variable or the pub cache")
+                self.fail("S", "debug_core.bzl must not name a host path, variable or the pub cache")
 
 
 _HOST_PATH = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")
@@ -1395,7 +1396,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
-    print("OK: key portability contracts A-R hold")
+    print("OK: key portability contracts A-S hold")
     return 0
 
 
