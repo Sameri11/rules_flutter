@@ -44,6 +44,12 @@ env:
         shell: bash
         run: |
           set +e
+          bazel() {
+            command bazel \
+              --repo_env=ANDROID_HOME="$ANDROID_HOME" \
+              --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+              --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" "$@"
+          }
           mkdir -p "$RUNNER_TEMP/wildcard-logs"
           git worktree add "$RUNNER_TEMP/baseline" origin/main
           baseline="$RUNNER_TEMP/baseline/${{ matrix.directory }}"
@@ -88,6 +94,12 @@ env:
         shell: bash
         run: |
           set +e
+          bazel() {
+            command bazel \
+              --repo_env=ANDROID_HOME="$ANDROID_HOME" \
+              --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+              --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" "$@"
+          }
           mkdir -p "$RUNNER_TEMP/wildcard-logs"
           git worktree add "$RUNNER_TEMP/baseline" origin/main
           baseline="$RUNNER_TEMP/baseline/${{ matrix.directory }}"
