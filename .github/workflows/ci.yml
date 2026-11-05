@@ -535,13 +535,12 @@ jobs:
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
 
   gate:
-    if: ${{ always() && !inputs['writer-coverage'] }}
     name: Hash table fully claimed
     # Ensure every recorded example is assigned to a matrix job.
     runs-on: ubuntu-latest
     needs: example
     # Run coverage after matrix failures, then propagate their result below.
-    if: always()
+    if: ${{ always() && !inputs['writer-coverage'] }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
