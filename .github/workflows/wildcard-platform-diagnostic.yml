@@ -145,22 +145,22 @@ jobs:
             directory: examples/no_plugins
             apk: //android/app:no_plugins
             candidate: a1
-            candidate_sha: 4b17d64
+            candidate_sha: d03f86e
           - name: demo_app
             directory: examples/demo_app
             apk: //android/app:demo_app
             candidate: a1
-            candidate_sha: 4b17d64
+            candidate_sha: d03f86e
           - name: no_plugins
             directory: examples/no_plugins
             apk: //android/app:no_plugins
             candidate: a2
-            candidate_sha: 0c2ddd6
+            candidate_sha: 14509d7
           - name: demo_app
             directory: examples/demo_app
             apk: //android/app:demo_app
             candidate: a2
-            candidate_sha: 0c2ddd6
+            candidate_sha: 14509d7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
