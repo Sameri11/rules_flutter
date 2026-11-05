@@ -203,8 +203,15 @@ void main(List<String> args) {
       parseRunSettings('{"version":1,"runId":"abc1"}').runId == 'abc1',
       'runId',
     );
+    expect(
+      parseRunSettings('{"version":1,"runId":"abcdefghijklmnopqrstuvwx"}')
+              .runId ==
+          'abcdefghijklmnopqrstuvwx',
+      'runId at the length limit',
+    );
     for (final text in [
-      '{"version":1,"runId":"ABC"}',
+      '{"version":1,"runId":"a-b"}',
+      '{"version":1,"runId":"abcdefghijklmnopqrstuvwxy"}',
       '{"version":1,"runId":""}',
       '{"version":1,"runId":5}',
     ]) {
@@ -216,6 +223,19 @@ void main(List<String> args) {
       }
       expect(rejected, 'accepted $text');
     }
+  });
+
+  check('settings error names the run from the settings text', () {
+    expect(
+      runIdFromSettings('{"version":2,"runId":"abc1"}') == 'abc1',
+      'unsupported version keeps the run id',
+    );
+    expect(runIdFromSettings('{"version":1}') == null, 'no runId');
+    expect(runIdFromSettings('{"runId":"a-b"}') == null, 'bad runId');
+    expect(runIdFromSettings('{"runId":5}') == null, 'non-string runId');
+    expect(runIdFromSettings('not json') == null, 'invalid JSON');
+    expect(runIdFromSettings('[1]') == null, 'not an object');
+    expect(runIdFromSettings(null) == null, 'no text');
   });
 
   rejects(

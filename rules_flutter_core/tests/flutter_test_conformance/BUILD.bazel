@@ -147,7 +147,7 @@ _PARITY_EXCLUDE = {
     for fixture in DEVICE_FIXTURES
 ]
 
-# A settings file the device cannot read. The device must report one load error,
+# A settings file of an unsupported version. The device must report one load error,
 # exit 1, and its stream must decode with that status. Runs for the first fixture.
 sh_test(
     name = DEVICE_FIXTURES[0] + "_device_settings_error",

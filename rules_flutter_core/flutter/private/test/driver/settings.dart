@@ -8,6 +8,8 @@ library;
 
 import 'dart:convert';
 
+import 'frame.dart';
+
 /// The settings file, relative to `Directory.systemTemp`.
 const String runSettingsPath = 'rules_flutter_test/run_settings.json';
 
@@ -25,8 +27,6 @@ const Set<String> _keys = {
   'shardCount',
   'runId',
 };
-
-final RegExp _runIdPattern = RegExp(r'^[a-z0-9]{1,32}$');
 
 /// What the settings file selects. A null [nameFilter] and [shardCount] select
 /// everything; a null [runId] lets the device choose a random one.
@@ -52,8 +52,7 @@ final class RunSettings {
 /// Parses the settings file's UTF-8 [text]. Throws [FormatException] for
 /// anything that cannot be applied exactly: invalid JSON, an unknown key, an
 /// unsupported version, a regular expression that does not compile, a shard
-/// outside `0..count-1`, or a run id that is not 1 to 32 lowercase letters or
-/// digits.
+/// outside `0..count-1`, or a run id that `isRunId` rejects.
 ///
 /// The format is a JSON object: `version` (1), optional `nameFilter` (an empty
 /// string selects everything), `shardIndex` with `shardCount` (given together),
@@ -89,9 +88,9 @@ RunSettings parseRunSettings(String text) {
   String? runId;
   if (json.containsKey('runId')) {
     final value = json['runId'];
-    if (value is! String || !_runIdPattern.hasMatch(value)) {
-      throw const FormatException(
-        'runId must be 1 to 32 lowercase letters or digits',
+    if (value is! String || !isRunId(value)) {
+      throw FormatException(
+        'runId must be 1 to $runIdMaxLength letters or digits',
       );
     }
     runId = value;
@@ -121,4 +120,20 @@ RunSettings parseRunSettings(String text) {
     shardCount: count,
     runId: runId,
   );
+}
+
+/// The run id that [text] names, when it names a valid one, else null. Reads
+/// only `runId`, so the device can report a settings error under the id the
+/// runner selects, even when the rest of the file is unusable.
+String? runIdFromSettings(String? text) {
+  if (text == null) return null;
+  Object? json;
+  try {
+    json = jsonDecode(text);
+  } on FormatException {
+    return null;
+  }
+  if (json is! Map<String, Object?>) return null;
+  final value = json['runId'];
+  return value is String && isRunId(value) ? value : null;
 }

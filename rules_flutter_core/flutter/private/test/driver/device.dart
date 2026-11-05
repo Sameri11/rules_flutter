@@ -30,21 +30,24 @@ import 'settings.dart';
 /// the pubspec directory (stack paths under it print relative to it) and
 /// [metadataJson] the library's parsed test metadata.
 ///
-/// Prints the footer and exits with the status on the desktop tester. On mobile
-/// the runner stops the app once it has read the footer.
+/// Prints the footer, then exits with the status on every platform. The runner
+/// stops the app once it has read the footer.
 void deviceMain({
   required String testFile,
   required String packageRoot,
   required String metadataJson,
   required Future<void> Function() testMain,
 }) {
+  String? text;
   final RunSettings settings;
   try {
-    settings = _prepare();
+    text = _prepare();
+    settings = text == null ? const RunSettings() : parseRunSettings(text);
   } on Object catch (error) {
-    // Never run the unfiltered suite after a settings error. No settings were
-    // read, so the run id is random.
-    final emitter = _Emitter(_newRunId());
+    // Never run the unfiltered suite after a settings error. A valid run id in
+    // the settings text names the run, so a runner that decodes with its run id
+    // sees this error; otherwise the id is random.
+    final emitter = _Emitter(runIdFromSettings(text) ?? _newRunId());
     final sink = _DeviceSink(emitter, packageRoot);
     sink.caseDone(CaseResult('load', Outcome.error, '$error'));
     _finish(emitter, sink);
@@ -89,9 +92,10 @@ void deviceMain({
   );
 }
 
-/// Empties the outputs directory, then reads and deletes the settings file. A
-/// missing file selects everything. Throws for anything else that is wrong.
-RunSettings _prepare() {
+/// Empties the outputs directory, then reads and deletes the settings file.
+/// Returns the file's text, or null when there is no file. Throws for any
+/// filesystem problem.
+String? _prepare() {
   final root = Directory.systemTemp.path;
   final outputs = Directory('$root/$outputsPath');
   if (outputs.existsSync()) {
@@ -100,11 +104,11 @@ RunSettings _prepare() {
   outputs.createSync(recursive: true);
   final file = File('$root/$runSettingsPath');
   if (!file.existsSync()) {
-    return const RunSettings();
+    return null;
   }
   final text = file.readAsStringSync();
   file.deleteSync();
-  return parseRunSettings(text);
+  return text;
 }
 
 void _finish(_Emitter emitter, _DeviceSink sink) {

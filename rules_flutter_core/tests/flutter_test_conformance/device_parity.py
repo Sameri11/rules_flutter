@@ -57,9 +57,8 @@ def run_host(args, name, run_env, tmp):
 def run_device(args, name, tmp, fixture, run_env, settings, run_id):
     """Runs the device launcher with [settings] and decodes its stream.
 
-    [run_id] is passed to the decoder when the settings name one; a settings
-    error leaves the device with a random run id, so the decoder selects the
-    only run in the stream instead.
+    [run_id] is passed to the decoder when there is one. The device reports a
+    settings error under the run id that the settings text names.
     """
     run_dir = os.path.join(tmp, "device_{}".format(name))
     tmpdir = os.path.join(run_dir, "tmp")
@@ -95,8 +94,10 @@ def report(label, problems, detail):
 
 
 def check_settings_error(args, fixture):
+    run_id = "settingserror0"
     device_rc, decoded, device_xml = run_device(
-        args, "settings_error", args.tmp, fixture, {}, {"version": 2}, None)
+        args, "settings_error", args.tmp, fixture, {},
+        {"version": 2, "runId": run_id}, run_id)
     problems = []
     if device_rc != 1:
         problems.append("device exit {} (expected 1)".format(device_rc))

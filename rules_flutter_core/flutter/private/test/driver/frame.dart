@@ -22,7 +22,9 @@ const String framePrefix = 'RFT';
 
 const int frameMaxChars = 480;
 
-final RegExp _runId = RegExp(r'^[A-Za-z0-9]{1,24}$');
+/// The longest run id a frame may carry.
+const int runIdMaxLength = 24;
+final RegExp _runId = RegExp('^[A-Za-z0-9]{1,$runIdMaxLength}\$');
 final RegExp _hex4 = RegExp(r'^[0-9a-fA-F]{4}$');
 
 /// Whether [value] is a run identifier that a frame may carry.
