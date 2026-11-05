@@ -35,11 +35,12 @@ inputs:
       disables the cache, which is what fork pull requests get.
     required: false
     default: ''
-  download-cache-id:
-    description: Stable identity of this Bazel job shape.
-    required: true
+  download-cache-save:
+    description: Whether this job is the designated writer for its runner OS.
+    required: false
+    default: 'false'
   download-cache-lock-hash:
-    description: Hash of the module lockfiles and Bazel version files used by this job.
+    description: Hash of all module lockfiles, Bazel versions, and Maven install manifests.
     required: true
 
 outputs:
@@ -62,9 +63,9 @@ runs:
         path: |
           ~/.cache/bazel-repo/content_addressable
           ~/.cache/bazelisk
-        key: bazel-download-v1-${{ runner.os }}-${{ inputs.download-cache-id }}-${{ inputs.download-cache-lock-hash }}-${{ inputs.bazelisk-version }}-${{ inputs.bazelisk-sha256 }}
+        key: bazel-download-v2-${{ runner.os }}-${{ inputs.download-cache-lock-hash }}-${{ inputs.bazelisk-version }}-${{ inputs.bazelisk-sha256 }}
         restore-keys: |
-          bazel-download-v1-${{ runner.os }}-${{ inputs.download-cache-id }}-
+          bazel-download-v2-${{ runner.os }}-
 
     - name: Set up Bazel download directories
       shell: bash
@@ -111,7 +112,7 @@ runs:
 
         cat >> "$HOME/.bazelrc" <<RC
         common --repository_cache=$BAZEL_REPOSITORY_CACHE
-        common --experimental_repository_downloader_retries=8
+        common --http_connector_attempts=13
         build --verbose_failures
         test --test_output=errors
         RC
@@ -154,35 +155,6 @@ runs:
         flutter --version
         flutter precache --android
 
-    - name: Install bazelisk
-      shell: bash
-      run: |
-        set -euo pipefail
-        case "$RUNNER_OS/$RUNNER_ARCH" in
-          macOS/ARM64) asset="bazelisk-darwin-arm64" ;;
-          Linux/X64) asset="bazelisk-linux-amd64" ;;
-          *)
-            echo "unsupported Bazelisk runner: $RUNNER_OS/$RUNNER_ARCH" >&2
-            exit 1
-            ;;
-        esac
-        curl -fsSL -o "$RUNNER_TEMP/bazel" \
-          "https://github.com/bazelbuild/bazelisk/releases/download/${{ inputs.bazelisk-version }}/$asset"
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          echo "${{ inputs.bazelisk-sha256 }}  $RUNNER_TEMP/bazel" | shasum -a 256 -c -
-        else
-          echo "${{ inputs.bazelisk-sha256 }}  $RUNNER_TEMP/bazel" | sha256sum -c -
-        fi
-        chmod +x "$RUNNER_TEMP/bazel"
-        echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-
-    - name: Bazel CI flags
-      shell: bash
-      run: |
-        cat >> "$HOME/.bazelrc" <<'RC'
-        build --verbose_failures
-        test --test_output=errors
-        RC
 
     - name: Remote cache
       if: >-

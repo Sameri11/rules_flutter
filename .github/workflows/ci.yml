@@ -46,8 +46,8 @@ jobs:
           path: |
             ~/.cache/bazel-repo/content_addressable
             ~/.cache/bazelisk
-          key: bazel-download-v1-${{ runner.os }}-lint-${{ hashFiles('rules_flutter_core/MODULE.bazel.lock', 'rules_flutter_core/.bazelversion', 'rules_flutter_android/MODULE.bazel.lock', 'rules_flutter_android/.bazelversion', 'examples/*/MODULE.bazel.lock', 'examples/*/.bazelversion', 'tests/*/MODULE.bazel.lock', 'tests/*/.bazelversion') }}-${{ env.BAZELISK_VERSION }}-${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
-          restore-keys: bazel-download-v1-${{ runner.os }}-lint-
+          key: bazel-download-v2-${{ runner.os }}-${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}-${{ env.BAZELISK_VERSION }}-${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          restore-keys: bazel-download-v2-${{ runner.os }}-
 
       - name: Set up Bazel download directories
         run: |
@@ -55,14 +55,10 @@ jobs:
           echo "BAZELISK_HOME=$HOME/.cache/bazelisk" >> "$GITHUB_ENV"
           echo "BAZEL_REPOSITORY_CACHE=$HOME/.cache/bazel-repo" >> "$GITHUB_ENV"
           echo "$HOME/.cache/bazelisk/bin" >> "$GITHUB_PATH"
-          export BAZEL_REPOSITORY_CACHE="$HOME/.cache/bazel-repo"
-          cat >> "$HOME/.bazelrc" <<RC
-          common --repository_cache=$BAZEL_REPOSITORY_CACHE
-          common --experimental_repository_downloader_retries=8
-
+          cat >> "$HOME/.bazelrc" <<'RC'
+          common --repository_cache=$HOME/.cache/bazel-repo
+          common --http_connector_attempts=13
           RC
-
-
 
       - name: Install bazelisk
         run: |
@@ -80,7 +76,6 @@ jobs:
             install -m 0755 "$RUNNER_TEMP/bazel" "$binary"
             rm "$RUNNER_TEMP/bazel"
           fi
-
       - name: buildifier (core)
         working-directory: rules_flutter_core
         run: env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //:buildifier_test --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }}
@@ -120,12 +115,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/ci/committed_lock_guard.py
-      - name: Save Bazel downloads
-        if: always()
-        uses: ./.github/actions/download-cache-save
-        with:
-          cache-hit: ${{ steps.download-cache.outputs.cache-hit }}
-          cache-key: ${{ steps.download-cache.outputs.cache-primary-key }}
 
   core:
     name: Core module and consumers
@@ -142,8 +131,8 @@ jobs:
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
-          download-cache-id: core
-          download-cache-lock-hash: ${{ hashFiles('rules_flutter_core/MODULE.bazel.lock', 'rules_flutter_core/.bazelversion', 'tests/consumer/MODULE.bazel.lock', 'tests/consumer/.bazelversion', 'tests/namespace_dynamic/MODULE.bazel.lock', 'tests/namespace_dynamic/.bazelversion', 'tests/core_consumer/MODULE.bazel.lock', 'tests/core_consumer/.bazelversion') }}
+          download-cache-save: 'true'
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -287,6 +276,7 @@ jobs:
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
+          save: 'true'
 
 
 
@@ -304,8 +294,8 @@ jobs:
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
-          download-cache-id: android
-          download-cache-lock-hash: ${{ hashFiles('rules_flutter_android/MODULE.bazel.lock', 'rules_flutter_android/.bazelversion') }}
+          download-cache-save: 'false'
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -340,6 +330,7 @@ jobs:
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
+          save: 'false'
 
   example:
     name: Example — ${{ matrix.os }} — ${{ matrix.example.description }}
@@ -381,8 +372,8 @@ jobs:
           flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
-          download-cache-id: ${{ matrix.example.name }}
-          download-cache-lock-hash: ${{ hashFiles(format('{0}/MODULE.bazel.lock', matrix.example.directory), format('{0}/.bazelversion', matrix.example.directory)) }}
+          download-cache-save: ${{ matrix.os == 'macos-15' && matrix.example.name == 'demo_app_debug' }}
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
 
           # Both demo_app modes share the module's remote cache.
           cache-mode: ${{ matrix.example.directory == 'examples/demo_app' && env.BAZEL_CACHE_MODE || '' }}
@@ -482,6 +473,7 @@ jobs:
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
+          save: ${{ matrix.os == 'macos-15' && matrix.example.name == 'demo_app_debug' }}
 
 
   # Focused conformance lane also checks helper-edit invalidation with caches disabled.
@@ -500,8 +492,8 @@ jobs:
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
-          download-cache-id: conformance
-          download-cache-lock-hash: ${{ hashFiles('rules_flutter_core/MODULE.bazel.lock', 'rules_flutter_core/.bazelversion') }}
+          download-cache-save: 'false'
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -523,6 +515,7 @@ jobs:
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
+          save: 'false'
 
   gate:
     name: Hash table fully claimed
