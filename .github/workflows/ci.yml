@@ -38,15 +38,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Restore Bazel downloads
+        id: download-cache
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v1-${{ runner.os }}-lint-${{ hashFiles('rules_flutter_core/MODULE.bazel.lock', 'rules_flutter_core/.bazelversion', 'rules_flutter_android/MODULE.bazel.lock', 'rules_flutter_android/.bazelversion', 'examples/*/MODULE.bazel.lock', 'examples/*/.bazelversion', 'tests/*/MODULE.bazel.lock', 'tests/*/.bazelversion') }}-${{ env.BAZELISK_VERSION }}-${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          restore-keys: bazel-download-v1-${{ runner.os }}-lint-
+
+      - name: Set up Bazel download directories
+        run: |
+          mkdir -p "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk/bin"
+          echo "BAZELISK_HOME=$HOME/.cache/bazelisk" >> "$GITHUB_ENV"
+          echo "BAZEL_REPOSITORY_CACHE=$HOME/.cache/bazel-repo" >> "$GITHUB_ENV"
+          echo "$HOME/.cache/bazelisk/bin" >> "$GITHUB_PATH"
+          export BAZEL_REPOSITORY_CACHE="$HOME/.cache/bazel-repo"
+          cat >> "$HOME/.bazelrc" <<RC
+          common --repository_cache=$BAZEL_REPOSITORY_CACHE
+          common --experimental_repository_downloader_retries=13
+
+          RC
+
+
 
       - name: Install bazelisk
         run: |
           set -euo pipefail
-          curl -fsSL -o "$RUNNER_TEMP/bazel" \
-            "https://github.com/bazelbuild/bazelisk/releases/download/$BAZELISK_VERSION/bazelisk-linux-amd64"
-          echo "$BAZELISK_SHA256_LINUX_AMD64  $RUNNER_TEMP/bazel" | sha256sum -c -
-          chmod +x "$RUNNER_TEMP/bazel"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          binary="$HOME/.cache/bazelisk/bin/bazel"
+          valid=false
+          if [[ -f "$binary" ]]; then
+            valid=$(echo "$BAZELISK_SHA256_LINUX_AMD64  $binary" | sha256sum -c - >/dev/null 2>&1 && echo true || echo false)
+          fi
+          if [[ "$valid" != true ]]; then
+            rm -f "$binary"
+            curl -fsSL -o "$RUNNER_TEMP/bazel" \
+              "https://github.com/bazelbuild/bazelisk/releases/download/$BAZELISK_VERSION/bazelisk-linux-amd64"
+            echo "$BAZELISK_SHA256_LINUX_AMD64  $RUNNER_TEMP/bazel" | sha256sum -c -
+            install -m 0755 "$RUNNER_TEMP/bazel" "$binary"
+            rm "$RUNNER_TEMP/bazel"
+          fi
 
       - name: buildifier (core)
         working-directory: rules_flutter_core
@@ -87,6 +120,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/ci/committed_lock_guard.py
+      - name: Save Bazel downloads
+        if: always()
+        uses: ./.github/actions/download-cache-save
+        with:
+          cache-hit: ${{ steps.download-cache.outputs.cache-hit }}
+          cache-key: ${{ steps.download-cache.outputs.cache-primary-key }}
 
   core:
     name: Core module and consumers
@@ -96,11 +135,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/flutter-bazel
+        id: setup
+
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          download-cache-id: core
+          download-cache-lock-hash: ${{ hashFiles('rules_flutter_core/MODULE.bazel.lock', 'rules_flutter_core/.bazelversion', 'tests/consumer/MODULE.bazel.lock', 'tests/consumer/.bazelversion', 'tests/namespace_dynamic/MODULE.bazel.lock', 'tests/namespace_dynamic/.bazelversion', 'tests/core_consumer/MODULE.bazel.lock', 'tests/core_consumer/.bazelversion') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -238,6 +281,13 @@ jobs:
             tests/consumer/MODULE.bazel.lock
             tests/namespace_dynamic/MODULE.bazel.lock
             tests/core_consumer/MODULE.bazel.lock
+      - name: Save Bazel downloads
+        if: always()
+        uses: ./.github/actions/download-cache-save
+        with:
+          cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
+          cache-key: ${{ steps.setup.outputs.download-cache-key }}
+
 
 
   android:
@@ -248,15 +298,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/flutter-bazel
+        id: setup
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          download-cache-id: android
+          download-cache-lock-hash: ${{ hashFiles('rules_flutter_android/MODULE.bazel.lock', 'rules_flutter_android/.bazelversion') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
           cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
+
+
 
       - name: bazel test //...
         working-directory: rules_flutter_android
@@ -279,6 +334,12 @@ jobs:
         with:
           name: module-locks-android
           path: rules_flutter_android/MODULE.bazel.lock
+      - name: Save Bazel downloads
+        if: always()
+        uses: ./.github/actions/download-cache-save
+        with:
+          cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
+          cache-key: ${{ steps.setup.outputs.download-cache-key }}
 
   example:
     name: Example — ${{ matrix.os }} — ${{ matrix.example.description }}
@@ -313,11 +374,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/flutter-bazel
+        id: setup
+
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
+          download-cache-id: ${{ matrix.example.name }}
+          download-cache-lock-hash: ${{ hashFiles(format('{0}/MODULE.bazel.lock', matrix.example.directory), format('{0}/.bazelversion', matrix.example.directory)) }}
+
           # Both demo_app modes share the module's remote cache.
           cache-mode: ${{ matrix.example.directory == 'examples/demo_app' && env.BAZEL_CACHE_MODE || '' }}
           cache-host: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
@@ -410,6 +476,13 @@ jobs:
           python3 tools/ci/cache_stats.py \
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
+      - name: Save Bazel downloads
+        if: always()
+        uses: ./.github/actions/download-cache-save
+        with:
+          cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
+          cache-key: ${{ steps.setup.outputs.download-cache-key }}
+
 
   # Focused conformance lane also checks helper-edit invalidation with caches disabled.
   conformance:
@@ -420,15 +493,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/flutter-bazel
+        id: setup
+
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          download-cache-id: conformance
+          download-cache-lock-hash: ${{ hashFiles('rules_flutter_core/MODULE.bazel.lock', 'rules_flutter_core/.bazelversion') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
           cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
+
 
       - name: bazel test //tests/flutter_test_conformance/... and the test-kernel driver
         working-directory: rules_flutter_core
@@ -439,6 +517,12 @@ jobs:
       # A helper edit re-runs only the tests that read it, on the worker path.
       - name: Test suite helper edit re-runs importers only
         run: bash tools/ci/test_suite_helper_edit.sh
+      - name: Save Bazel downloads
+        if: always()
+        uses: ./.github/actions/download-cache-save
+        with:
+          cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
+          cache-key: ${{ steps.setup.outputs.download-cache-key }}
 
   gate:
     name: Hash table fully claimed

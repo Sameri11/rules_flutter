@@ -1,0 +1,21 @@
+name: Save Bazel downloads
+description: Saves the job's download cache after completion, including failed jobs.
+inputs:
+  cache-hit:
+    description: Whether the exact key was restored.
+    required: true
+  cache-key:
+    description: Exact key computed by the restore step.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Save Bazel downloads
+      if: always() && inputs.cache-hit != 'true'
+      uses: actions/cache/save@1bd1e32a3bdc45362d1e726936510720a7c30a57
+      continue-on-error: true
+      with:
+        path: |
+          ~/.cache/bazel-repo/content_addressable
+          ~/.cache/bazelisk
+        key: ${{ inputs.cache-key }}
