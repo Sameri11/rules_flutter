@@ -1,0 +1,56 @@
+name: Maven download cache inputs
+
+on:
+  push:
+    branches: [prototype/consumer-maven-locks]
+
+permissions:
+  contents: read
+
+jobs:
+  cache-inputs:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lock:
+          - flutter_maven_install.json
+          - rules_android_maven_install.json
+          - android_ide_common_30_1_3_install.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Record original cache inputs
+        id: before
+        env:
+          MODULE_HASH: ${{ hashFiles('examples/demo_app/MODULE.bazel.lock', 'examples/demo_app/.bazelversion') }}
+          DOWNLOAD_HASH: ${{ hashFiles('examples/demo_app/MODULE.bazel.lock', 'examples/demo_app/.bazelversion', 'examples/demo_app/flutter_maven_install.json', 'examples/demo_app/rules_android_maven_install.json', 'examples/demo_app/android_ide_common_30_1_3_install.json') }}
+        run: |
+          set -euo pipefail
+          test -n "$MODULE_HASH"
+          test -n "$DOWNLOAD_HASH"
+          printf 'module_hash=%s\ndownload_hash=%s\n' "$MODULE_HASH" "$DOWNLOAD_HASH" >> "$GITHUB_OUTPUT"
+          printf 'Original module hash: %s\nOriginal download hash: %s\n' "$MODULE_HASH" "$DOWNLOAD_HASH"
+
+      - name: Change one Maven lock without changing the module lock
+        env:
+          LOCK: examples/demo_app/${{ matrix.lock }}
+        run: |
+          set -euo pipefail
+          test -s "$LOCK"
+          printf '\n' >> "$LOCK"
+
+      - name: Require a new download cache identity
+        env:
+          BEFORE_MODULE_HASH: ${{ steps.before.outputs.module_hash }}
+          BEFORE_DOWNLOAD_HASH: ${{ steps.before.outputs.download_hash }}
+          MODULE_HASH: ${{ hashFiles('examples/demo_app/MODULE.bazel.lock', 'examples/demo_app/.bazelversion') }}
+          DOWNLOAD_HASH: ${{ hashFiles('examples/demo_app/MODULE.bazel.lock', 'examples/demo_app/.bazelversion', 'examples/demo_app/flutter_maven_install.json', 'examples/demo_app/rules_android_maven_install.json', 'examples/demo_app/android_ide_common_30_1_3_install.json') }}
+          LOCK: ${{ matrix.lock }}
+        run: |
+          set -euo pipefail
+          test -n "$MODULE_HASH"
+          test -n "$DOWNLOAD_HASH"
+          test "$MODULE_HASH" = "$BEFORE_MODULE_HASH"
+          test "$DOWNLOAD_HASH" != "$BEFORE_DOWNLOAD_HASH"
+          printf 'Lock: %s\nUnchanged module hash: %s\nNew download hash: %s\n' "$LOCK" "$MODULE_HASH" "$DOWNLOAD_HASH"
