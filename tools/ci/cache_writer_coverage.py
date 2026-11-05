@@ -73,7 +73,7 @@ def analyze(candidate):
     for sha, item in sorted(large, key=lambda pair: (-pair[1]["size"], pair[0])):
         print("ARTIFACT", sha, item["size"], item.get("type", "unknown"), json.dumps(item.get("members", []), ensure_ascii=False))
     print(f"Absent small files (<1 MB): {len(absent) - len(large)} files, {sum(union[sha]['size'] for sha in absent if union[sha]['size'] < 1_000_000)} bytes")
-    best = sorted(manifest, key=lambda name: (len(set(union) - set(manifest[name])), sum(union[sha]['size'] for sha in set(union) - set(manifest[name]))))
+    best = sorted(manifest, key=lambda name: (sum(union[sha]['size'] for sha in set(union) - set(manifest[name])), len(set(union) - set(manifest[name]))))
     print("CANDIDATE_RANKING", json.dumps([{ "entry": name, "absent_count": len(set(union) - set(manifest[name])), "absent_bytes": sum(union[sha]['size'] for sha in set(union) - set(manifest[name])) } for name in best]))
 
 

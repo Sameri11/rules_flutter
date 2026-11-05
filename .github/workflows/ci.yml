@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      writer-coverage-next:
+        description: Measure the next candidate with the lowest miss size
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 
@@ -564,7 +569,7 @@ jobs:
           exit 1
   writer-coverage-linux:
     name: Writer coverage — Linux
-    if: ${{ inputs['writer-coverage'] }}
+    if: ${{ inputs['writer-coverage'] && !inputs['writer-coverage-next'] }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -620,7 +625,7 @@ jobs:
 
   writer-coverage-macos:
     name: Writer coverage — macOS
-    if: ${{ inputs['writer-coverage'] }}
+    if: ${{ inputs['writer-coverage'] && inputs['writer-coverage-next'] }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -673,3 +678,5 @@ jobs:
       - run: python3 tools/ci/cache_writer_coverage.py capture pub_plugins
       - name: Analyze macOS coverage
         run: python3 tools/ci/cache_writer_coverage.py analyze demo_app_debug
+      - name: Analyze next-best macOS writer
+        run: python3 tools/ci/cache_writer_coverage.py analyze demo_app
