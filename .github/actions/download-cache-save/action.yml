@@ -33,8 +33,7 @@ runs:
           else
             size="$(stat -c %s "$file")"
           fi
-          count=$((count + 1))
-          bytes=$((bytes + size))
+          echo "new repository blob: ${file%/file} size=$size"
           if (( size >= 1048576 )); then
             echo "new repository blob >= 1 MiB: $size $file"
           fi
