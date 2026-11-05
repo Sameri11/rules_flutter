@@ -38,16 +38,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Restore Bazel downloads
-        id: download-cache
+      - name: Restore Linux core Bazel downloads
+        id: download-cache-core
         uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
         continue-on-error: true
         with:
           path: |
             ~/.cache/bazel-repo/content_addressable
             ~/.cache/bazelisk
-          key: bazel-download-v2-${{ runner.os }}-${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}-${{ env.BAZELISK_VERSION }}-${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
-          restore-keys: bazel-download-v2-${{ runner.os }}-
+          key: bazel-download-v3-Linux-core-${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/*_install.json') }}-${{ env.BAZELISK_VERSION }}-${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          restore-keys: bazel-download-v3-Linux-core-
+      - name: Restore Linux demo_app_debug Bazel downloads
+        id: download-cache-demo
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cache/bazel-repo/content_addressable
+            ~/.cache/bazelisk
+          key: bazel-download-v3-Linux-demo_app_debug-${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/*_install.json') }}-${{ env.BAZELISK_VERSION }}-${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          restore-keys: bazel-download-v3-Linux-demo_app_debug-
 
       - name: Set up Bazel download directories
         run: |
@@ -131,8 +141,8 @@ jobs:
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
-          download-cache-save: 'true'
-          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
+          download-cache-save: 'core'
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/*_install.json') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -271,7 +281,7 @@ jobs:
             tests/namespace_dynamic/MODULE.bazel.lock
             tests/core_consumer/MODULE.bazel.lock
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
@@ -295,7 +305,7 @@ jobs:
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
           download-cache-save: 'false'
-          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/*_install.json') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -325,7 +335,7 @@ jobs:
           name: module-locks-android
           path: rules_flutter_android/MODULE.bazel.lock
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
@@ -372,8 +382,8 @@ jobs:
           flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
-          download-cache-save: ${{ matrix.os == 'macos-15' && matrix.example.name == 'demo_app_debug' }}
-          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
+          download-cache-save: ${{ matrix.example.name == 'demo_app_debug' && 'demo_app_debug' || 'false' }}
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/*_install.json') }}
 
           # Both demo_app modes share the module's remote cache.
           cache-mode: ${{ matrix.example.directory == 'examples/demo_app' && env.BAZEL_CACHE_MODE || '' }}
@@ -468,12 +478,12 @@ jobs:
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}
           cache-key: ${{ steps.setup.outputs.download-cache-key }}
-          save: ${{ matrix.os == 'macos-15' && matrix.example.name == 'demo_app_debug' }}
+          save: ${{ matrix.example.name == 'demo_app_debug' }}
 
 
   # Focused conformance lane also checks helper-edit invalidation with caches disabled.
@@ -493,7 +503,7 @@ jobs:
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
           download-cache-save: 'false'
-          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/maven_install*.json') }}
+          download-cache-lock-hash: ${{ hashFiles('**/MODULE.bazel.lock', '**/.bazelversion', '**/*_install.json') }}
           cache-mode: ${{ env.BAZEL_CACHE_MODE }}
           cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
           cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
@@ -510,7 +520,7 @@ jobs:
       - name: Test suite helper edit re-runs importers only
         run: bash tools/ci/test_suite_helper_edit.sh
       - name: Save Bazel downloads
-        if: always()
+        if: success()
         uses: ./.github/actions/download-cache-save
         with:
           cache-hit: ${{ steps.setup.outputs.download-cache-hit }}

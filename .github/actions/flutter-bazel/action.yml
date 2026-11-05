@@ -36,7 +36,7 @@ inputs:
     required: false
     default: ''
   download-cache-save:
-    description: Whether this job is the designated writer for its runner OS.
+    description: Cache writer identity: false, core, or demo_app_debug.
     required: false
     default: 'false'
   download-cache-lock-hash:
@@ -45,27 +45,54 @@ inputs:
 
 outputs:
   download-cache-hit:
-    description: Whether the exact download-cache entry was restored.
-    value: ${{ steps.download-cache.outputs.cache-hit }}
+    description: Whether this job's writer cache entry was restored exactly.
+    value: ${{ (runner.os == 'Linux' && inputs.download-cache-save == 'demo_app_debug' && steps.download-cache-demo.outputs.cache-hit == 'true') || (runner.os == 'Linux' && inputs.download-cache-save == 'core' && steps.download-cache-core.outputs.cache-hit == 'true') || (runner.os == 'macOS' && steps.download-cache-macos.outputs.cache-hit == 'true') }}
   download-cache-key:
-    description: Exact download-cache key to save after the job.
-    value: ${{ steps.download-cache.outputs.cache-primary-key }}
+    description: Exact download-cache key for this job's designated writer entry.
+    value: ${{ runner.os == 'Linux' && inputs.download-cache-save == 'demo_app_debug' && steps.download-cache-demo.outputs.cache-primary-key || runner.os == 'Linux' && steps.download-cache-core.outputs.cache-primary-key || steps.download-cache-macos.outputs.cache-primary-key }}
 
 
 runs:
   using: composite
   steps:
-    - name: Restore Bazel downloads
-      id: download-cache
+    - name: Restore Linux core Bazel downloads
+      id: download-cache-core
+      if: runner.os == 'Linux'
       uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
       continue-on-error: true
       with:
         path: |
           ~/.cache/bazel-repo/content_addressable
           ~/.cache/bazelisk
-        key: bazel-download-v2-${{ runner.os }}-${{ inputs.download-cache-lock-hash }}-${{ inputs.bazelisk-version }}-${{ inputs.bazelisk-sha256 }}
+        key: bazel-download-v3-Linux-core-${{ inputs.download-cache-lock-hash }}-${{ inputs.bazelisk-version }}-${{ inputs.bazelisk-sha256 }}
         restore-keys: |
-          bazel-download-v2-${{ runner.os }}-
+          bazel-download-v3-Linux-core-
+
+    - name: Restore Linux demo_app_debug Bazel downloads
+      id: download-cache-demo
+      if: runner.os == 'Linux'
+      uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+      continue-on-error: true
+      with:
+        path: |
+          ~/.cache/bazel-repo/content_addressable
+          ~/.cache/bazelisk
+        key: bazel-download-v3-Linux-demo_app_debug-${{ inputs.download-cache-lock-hash }}-${{ inputs.bazelisk-version }}-${{ inputs.bazelisk-sha256 }}
+        restore-keys: |
+          bazel-download-v3-Linux-demo_app_debug-
+
+    - name: Restore macOS Bazel downloads
+      id: download-cache-macos
+      if: runner.os == 'macOS'
+      uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+      continue-on-error: true
+      with:
+        path: |
+          ~/.cache/bazel-repo/content_addressable
+          ~/.cache/bazelisk
+        key: bazel-download-v3-macOS-${{ inputs.download-cache-lock-hash }}-${{ inputs.bazelisk-version }}-${{ inputs.bazelisk-sha256 }}
+        restore-keys: |
+          bazel-download-v3-macOS-
 
     - name: Set up Bazel download directories
       shell: bash
