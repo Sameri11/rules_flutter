@@ -146,3 +146,28 @@ _PARITY_EXCLUDE = {
     )
     for fixture in DEVICE_FIXTURES
 ]
+
+# A settings file the device cannot read. The device must report one load error,
+# exit 1, and its stream must decode with that status. Runs for the first fixture.
+sh_test(
+    name = DEVICE_FIXTURES[0] + "_device_settings_error",
+    srcs = ["device_parity.sh"],
+    args = [
+        "$(rlocationpath device_parity.py)",
+        "$(rlocationpath @flutter_sdk//:dart)",
+        "$(rlocationpath //tests/device_codec:decoder)",
+        "$(rlocationpath :{}_launcher)".format(DEVICE_FIXTURES[0]),
+        "$(rlocationpath :{}_device)".format(DEVICE_FIXTURES[0]),
+        "$(rlocationpath {}.expected.json)".format(DEVICE_FIXTURES[0]),
+        "--settings-error",
+    ],
+    data = [
+        ":{}_launcher".format(DEVICE_FIXTURES[0]),
+        ":{}_device".format(DEVICE_FIXTURES[0]),
+        "{}.expected.json".format(DEVICE_FIXTURES[0]),
+        "check.py",
+        "device_parity.py",
+        "//tests/device_codec:decoder",
+        "@flutter_sdk//:dart",
+    ],
+)

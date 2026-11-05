@@ -38,18 +38,20 @@ void deviceMain({
   required String metadataJson,
   required Future<void> Function() testMain,
 }) {
-  final emitter = _Emitter(_newRunId());
-  final sink = _DeviceSink(emitter, packageRoot);
-
   final RunSettings settings;
   try {
     settings = _prepare();
   } on Object catch (error) {
-    // Never run the unfiltered suite after a settings error.
+    // Never run the unfiltered suite after a settings error. No settings were
+    // read, so the run id is random.
+    final emitter = _Emitter(_newRunId());
+    final sink = _DeviceSink(emitter, packageRoot);
     sink.caseDone(CaseResult('load', Outcome.error, '$error'));
     _finish(emitter, sink);
     return;
   }
+  final emitter = _Emitter(settings.runId ?? _newRunId());
+  final sink = _DeviceSink(emitter, packageRoot);
 
   final late = <CaseResult>[];
   final channel = RemoteListener.start(
@@ -87,16 +89,22 @@ void deviceMain({
   );
 }
 
-/// Creates the outputs directory, then reads the settings file. A missing file
-/// selects everything. Throws for anything else that is wrong.
+/// Empties the outputs directory, then reads and deletes the settings file. A
+/// missing file selects everything. Throws for anything else that is wrong.
 RunSettings _prepare() {
   final root = Directory.systemTemp.path;
-  Directory('$root/$outputsPath').createSync(recursive: true);
+  final outputs = Directory('$root/$outputsPath');
+  if (outputs.existsSync()) {
+    outputs.deleteSync(recursive: true);
+  }
+  outputs.createSync(recursive: true);
   final file = File('$root/$runSettingsPath');
   if (!file.existsSync()) {
     return const RunSettings();
   }
-  return parseRunSettings(file.readAsStringSync());
+  final text = file.readAsStringSync();
+  file.deleteSync();
+  return parseRunSettings(text);
 }
 
 void _finish(_Emitter emitter, _DeviceSink sink) {
@@ -110,9 +118,8 @@ void _finish(_Emitter emitter, _DeviceSink sink) {
     'status': status,
   });
   emitter.end(status);
-  if (!Platform.isAndroid && !Platform.isIOS) {
-    stdout.flush().whenComplete(() => exit(status));
-  }
+  // The runner stops the app once it has read the footer, on every platform.
+  stdout.flush().whenComplete(() => exit(status));
 }
 
 String _newRunId() {
@@ -169,6 +176,7 @@ final class _DeviceSink implements EventSink {
       'name': result.name,
       'outcome': result.outcome.name,
       'message': displayPath(result.message, _packageRoot),
+      'tags': result.tags,
     });
   }
 }

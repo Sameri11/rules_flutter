@@ -55,6 +55,31 @@ int indexWhere(List<String> lines, bool Function(String) test) {
   return index;
 }
 
+/// [lines] with line [index] replaced by [change] of it, joined with newlines.
+String withLine(List<String> lines, int index, String Function(String) change) {
+  final edited = [...lines];
+  edited[index] = change(lines[index]);
+  return edited.join('\n');
+}
+
+String _caseJson(List<String> tags) => jsonEncode({
+  'run': _run,
+  'seq': 0,
+  'type': 'case',
+  'name': 'n',
+  'outcome': 'pass',
+  'message': '',
+  'tags': tags,
+});
+
+String _completeJson(int seq) => jsonEncode({
+  'run': _run,
+  'seq': seq,
+  'type': 'complete',
+  'caseCount': 1,
+  'status': 0,
+});
+
 void main(List<String> args) {
   final dir = args.single;
   final logcat = File('$dir/logcat_events.txt').readAsStringSync();
@@ -104,11 +129,94 @@ void main(List<String> args) {
     );
   });
 
+  // The footer stays, so the stream looks complete and only the frame is cut.
+  final lastEvent = lines.lastIndexWhere(
+    (l) => l.contains('RFT|') && !l.contains('RFT_END|'),
+  );
+  expect(lastEvent >= 0, 'fixture has no event frame');
   rejects(
-    'truncated last frame is rejected',
-    logcat.substring(0, logcat.length - 30),
+    'truncated last event frame is rejected',
+    withLine(lines, lastEvent, (l) => l.substring(0, l.length - 3)),
     run: _run,
   );
+  rejects(
+    'truncated non-final chunk is rejected',
+    withLine(lines, multiChunk, (l) => l.substring(0, l.length - 3)),
+    run: _run,
+  );
+
+  check('non-final chunks have the shared budget length', () {
+    final frames = encodeEvent(_run, 0, escapePayload('x' * 3000));
+    final count = frames.length;
+    expect(count > 2, 'event did not split: $count frames');
+    for (var i = 0; i < count - 1; i++) {
+      final chunk = frames[i].substring(frameHeader(_run, 0, i, count).length);
+      expect(
+        chunk.length == chunkBudget(_run, 0, count),
+        'chunk $i has ${chunk.length} characters',
+      );
+    }
+  });
+
+  check('case tags are decoded', () {
+    final stream = buildStream(_run, [
+      _caseJson(['conformance-tag']),
+      _completeJson(1),
+    ], 0);
+    expect(
+      decodeStream(stream, run: _run).cases.single.tags.single ==
+          'conformance-tag',
+      'tags were not decoded',
+    );
+  });
+  rejects(
+    'case event without tags is rejected',
+    buildStream(_run, [
+      '{"run":"$_run","seq":0,"type":"case","name":"n","outcome":"pass","message":""}',
+      _completeJson(1),
+    ], 0),
+    run: _run,
+  );
+  rejects(
+    'case tags that are not strings are rejected',
+    buildStream(_run, [
+      '{"run":"$_run","seq":0,"type":"case","name":"n","outcome":"pass","message":"","tags":[1]}',
+      _completeJson(1),
+    ], 0),
+    run: _run,
+  );
+
+  check('frames of another run are not validated', () {
+    final mixed = [
+      ...lines.take(3),
+      'I/flutter (1): RFT|zzzz9|0|bad|a b c',
+      ...lines.skip(3),
+    ].join('\n');
+    expect(
+      decodeStream(mixed, run: _run).cases.length == 1,
+      'other run changed result',
+    );
+  });
+
+  check('run settings accept a run id and reject a bad one', () {
+    expect(
+      parseRunSettings('{"version":1,"runId":"abc1"}').runId == 'abc1',
+      'runId',
+    );
+    for (final text in [
+      '{"version":1,"runId":"ABC"}',
+      '{"version":1,"runId":""}',
+      '{"version":1,"runId":5}',
+    ]) {
+      var rejected = false;
+      try {
+        parseRunSettings(text);
+      } on FormatException {
+        rejected = true;
+      }
+      expect(rejected, 'accepted $text');
+    }
+  });
 
   rejects(
     'missing footer is rejected',

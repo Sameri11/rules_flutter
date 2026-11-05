@@ -9,6 +9,12 @@
 /// Payload characters at or below 0x20, at or above 0x7f, `%` and `\` are
 /// written as `%uXXXX` (four hex digits of the UTF-16 code unit). Logcat and
 /// os_log keep that text intact; a raw space or backslash is not reliable there.
+///
+/// Every chunk but the last of an event has exactly [chunkBudget] payload
+/// characters for its run, sequence and count; the last is at most that long.
+/// The decoder rejects a short non-final chunk, which catches a cut even where
+/// the cut text would still parse. A strict prefix of a JSON object never
+/// parses, so JSON parsing covers the final chunk.
 library;
 
 /// The frame prefix. It is public, so the protocol names no test-only label.
@@ -28,6 +34,11 @@ String footerLine(String run, int status) => '${framePrefix}_END|$run|$status';
 /// The header of frame [index] of [count] for event [seq], up to its chunk.
 String frameHeader(String run, int seq, int index, int count) =>
     '$framePrefix|$run|$seq|$index/$count|';
+
+/// The payload length of every chunk but the last of event [seq], split into
+/// [count] chunks of [run]. The encoder splits by it and the decoder checks it.
+int chunkBudget(String run, int seq, int count) =>
+    frameMaxChars - frameHeader(run, seq, count - 1, count).length;
 
 /// Whether [unit] may appear in a frame line outside an escape: printable ASCII
 /// other than space and backslash. `%` is allowed here only as the start of an
@@ -75,10 +86,8 @@ String unescapePayload(String text) {
 /// [frameMaxChars] characters.
 List<String> encodeEvent(String run, int seq, String escaped) {
   var count = 1;
-  var budget = 0;
   while (true) {
-    // The widest header is the largest index, so this budget fits every line.
-    budget = frameMaxChars - frameHeader(run, seq, count - 1, count).length;
+    final budget = chunkBudget(run, seq, count);
     if (budget <= 0) {
       throw StateError('frame header exceeds $frameMaxChars characters');
     }
@@ -86,6 +95,7 @@ List<String> encodeEvent(String run, int seq, String escaped) {
     if (needed == count) break;
     count = needed;
   }
+  final budget = chunkBudget(run, seq, count);
   final lines = <String>[];
   for (var i = 0; i < count; i++) {
     final start = i * budget;

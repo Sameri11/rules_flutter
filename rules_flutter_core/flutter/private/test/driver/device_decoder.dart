@@ -71,6 +71,10 @@ Transport decodeTransport(String text, {String? run}) {
     final match = _markerPattern.firstMatch(line);
     if (match == null) continue;
     final framed = line.substring(match.start);
+    final body = framed.substring(match.end - match.start);
+    final fields = body.split('|');
+    // Frames of other runs, and noise, are not this run's to validate.
+    if (fields.first != selected) continue;
     if (framed.length > frameMaxChars) {
       throw DecodeError('frame longer than $frameMaxChars characters');
     }
@@ -79,9 +83,6 @@ Transport decodeTransport(String text, {String? run}) {
         throw DecodeError('frame contains a character outside the frame set');
       }
     }
-    final body = framed.substring(match.end - match.start);
-    final fields = body.split('|');
-    if (fields.first != selected) continue;
 
     if (match.group(1) != null) {
       if (fields.length != 2 || !_isStatus(fields[1])) {
@@ -113,6 +114,13 @@ Transport decodeTransport(String text, {String? run}) {
       throw DecodeError('empty chunk: $framed');
     }
     final seq = int.parse(seqText);
+    // Every chunk but the last is the encoder's full budget; a short one was cut.
+    if (i < n - 1 && chunk.length != chunkBudget(selected, seq, n)) {
+      throw DecodeError(
+        'chunk $i of event $seq is ${chunk.length} characters, '
+        'not ${chunkBudget(selected, seq, n)}',
+      );
+    }
     final event = groups.putIfAbsent(seq, () => _Event(n));
     if (event.count != n) {
       throw DecodeError('event $seq disagrees on its chunk count');
@@ -233,10 +241,11 @@ Map<String, Object?> _parseEvent(String payload, String run, int seq) {
       keys = {'name'};
       if (json['name'] != null && json['name'] is! String) throw _shape(seq);
     case 'case':
-      keys = {'name', 'outcome', 'message'};
+      keys = {'name', 'outcome', 'message', 'tags'};
       if (json['name'] is! String ||
           json['message'] is! String ||
-          !_outcomes.contains(json['outcome'])) {
+          !_outcomes.contains(json['outcome']) ||
+          !_isTagList(json['tags'])) {
         throw _shape(seq);
       }
     case 'complete':
@@ -259,10 +268,14 @@ DecodeError _shape(int seq) => DecodeError('event $seq has the wrong shape');
 
 const Set<String> _outcomes = {'pass', 'fail', 'skip', 'error'};
 
+bool _isTagList(Object? value) =>
+    value is List && value.every((tag) => tag is String);
+
 CaseResult _caseResult(Map<String, Object?> event) => CaseResult(
   event['name']! as String,
   Outcome.values.byName(event['outcome']! as String),
   event['message']! as String,
+  List<String>.from(event['tags']! as List),
 );
 
 bool _isStatus(String text) => text == '0' || text == '1';

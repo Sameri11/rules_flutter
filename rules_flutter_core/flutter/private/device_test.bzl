@@ -1,9 +1,11 @@
-"""Device flavor rules: the device test macro, Dart programs built from the
-toolchain's dart, the device stream decoder, and the codec test that checks it.
+"""Device flavor rules: the device test macro, Dart programs built by the
+toolchain's frontend_server, the device stream decoder, and the codec test that checks it.
 
-A device kernel is compiled by `dart compile kernel` from declared inputs only:
-the toolchain's dart, its SDK packages and its VM platform dill. Nothing reads
-HOME, the pub cache or the host environment.
+A device kernel is compiled by the toolchain's frontend_server from declared
+inputs only: the frontend runtime and snapshot, the VM platform dill, the SDK
+packages and the SDK revision. Paths are repository-relative under
+org-dartlang-root, so the bytes depend on neither the checkout nor the sandbox,
+and nothing reads HOME, the pub cache or the host environment.
 """
 
 load(":flutter_test.bzl", _flutter_test_device = "flutter_test_device")
@@ -27,15 +29,37 @@ def _runfile(ctx, file):
 def _device_kernel_impl(ctx):
     toolchain = ctx.toolchains[_TOOLCHAIN].flutter
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
-    ctx.actions.run(
-        executable = toolchain.dart,
-        arguments = ["compile", "kernel", ctx.file.entrypoint.path, "-o", dill.path],
-        tools = [toolchain.dart],
+
+    # The frontend_server compile of test_kernel_driver.bzl. Paths are relative
+    # to the execroot under org-dartlang-root, so no sandbox or checkout path
+    # reaches the dill, and every tool and SDK file is a declared input.
+    command = " ".join([
+        "h=$(cut -c1-10 " + toolchain.dart_sdk_revision.path + ");",
+        toolchain.dartaotruntime.path,
+        toolchain.frontend_server.path,
+        "--target=vm",
+        "--no-print-incremental-dependencies",
+        "--platform=" + toolchain.vm_platform_strong.basename,
+        "--sdk-root=" + toolchain.vm_platform_strong.dirname + "/",
+        "-Dsdk_hash=$h",
+        "--filesystem-root=.",
+        "--filesystem-scheme=org-dartlang-root",
+        "--output-dill=" + dill.path,
+        "org-dartlang-root:///" + ctx.file.entrypoint.path,
+    ])
+    ctx.actions.run_shell(
+        outputs = [dill],
         inputs = depset(
-            direct = ctx.files.srcs + [ctx.file.entrypoint, toolchain.vm_platform_strong],
+            direct = ctx.files.srcs + [
+                ctx.file.entrypoint,
+                toolchain.dart_sdk_revision,
+                toolchain.frontend_server,
+                toolchain.vm_platform_strong,
+            ],
             transitive = [toolchain.sdk_packages],
         ),
-        outputs = [dill],
+        tools = [toolchain.dartaotruntime],
+        command = "set -eu\n" + command + "\n",
         mnemonic = "DartDeviceKernel",
         progress_message = "Compiling device kernel %{label}",
     )
@@ -43,7 +67,7 @@ def _device_kernel_impl(ctx):
 
 device_kernel = rule(
     implementation = _device_kernel_impl,
-    doc = "A Dart program built from the declared toolchain: `dart compile kernel` of entrypoint.",
+    doc = "A Dart program compiled by the toolchain's frontend_server, as test kernels are: entrypoint and its srcs, repository-relative.",
     attrs = {
         "entrypoint": attr.label(
             allow_single_file = [".dart"],
