@@ -2,7 +2,7 @@
 """Measure overlap between exact Bazel repository-cache entries."""
 
 import argparse
-import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -50,7 +50,7 @@ def classify(path, file_type, members):
         return "Flutter engine artifacts"
     if "openjdk" in text or "jdk" in text or "java-runtime" in text:
         return "JDKs"
-    if "kotlin-compiler" in text or "kotlin compiler" in text:
+    if "kotlin-compiler" in text or "kotlin compiler" in text or "kotlinc/" in text:
         return "Kotlin compiler"
     if "cmake" in text:
         return "CMake"
@@ -93,6 +93,13 @@ def finalize(args):
     print(f"deduplicated bytes: {args.entry_sum - union_size}")
     print(f"unique file count: {len(data)}")
 
+    def sha256(path):
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
     groups = {
         "Flutter engine artifacts": [],
         "JDKs": [],
@@ -109,6 +116,7 @@ def finalize(args):
         file_type = subprocess.check_output(["file", "-b", str(path)], text=True).strip()
         members = archive_members(path)
         group = classify(Path(rel), file_type, members)
+        record["sha256"] = sha256(path)
         groups[group].append((rel, record, file_type, members))
 
     summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
@@ -118,22 +126,22 @@ def finalize(args):
         output.write(f"- Sum of existing entry sizes: `{args.entry_sum}` bytes\n")
         output.write(f"- De-duplicated bytes: `{args.entry_sum - union_size}`\n")
         output.write(f"- `du`: `{du}`\n\n")
-        output.write("| Group | SHA-256 path | Bytes | Entries | File type | First archive members |\n")
+        output.write("| Group | SHA-256 | Bytes | Entries | File type | First archive members |\n")
         output.write("|---|---|---:|---|---|---|\n")
         for group, files in groups.items():
             if not files:
                 output.write(f"| {group} | — | — | — | — | — |\n")
-            for rel, record, file_type, members in files:
+            for _, record, file_type, members in files:
                 output.write(
-                    f"| {group} | `{Path(rel).name}` | {record['bytes']} | "
+                    f"| {group} | `{record['sha256']}` | {record['bytes']} | "
                     f"{', '.join(record['entries'])} | {file_type} | "
                     f"{'; '.join(members) if members else '—'} |\n"
                 )
     for group, files in groups.items():
         print(f"{group}: {len(files)} large files")
-        for rel, record, file_type, members in files:
+        for _, record, file_type, members in files:
             print(
-                f"  {Path(rel).name}\t{record['bytes']}\t{','.join(record['entries'])}\t"
+                f"  {record['sha256']}\t{record['bytes']}\t{','.join(record['entries'])}\t"
                 f"{file_type}\t{'; '.join(members[:2])}"
             )
 
