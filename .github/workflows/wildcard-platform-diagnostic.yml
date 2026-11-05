@@ -187,7 +187,9 @@ jobs:
               fi
               rc=$?
               echo "$revision $mode EXIT_CODE=$rc"
+              echo "EXIT_CODE=$rc" >>"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.err"
               jq -r '.actions[].actionKey' "$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.json" | sort >"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.keys"
+              echo "ACTION_KEY_COUNT=$(wc -l <"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.keys")" >>"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.err"
             done
           done
           for mode in release debug; do
