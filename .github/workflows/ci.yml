@@ -11,11 +11,6 @@ on:
         required: false
         default: false
         type: boolean
-      cache-overlap-measurement:
-        description: Measure content overlap in existing Bazel repository-cache entries
-        required: false
-        default: false
-        type: boolean
 permissions:
   contents: read
 
@@ -40,7 +35,6 @@ env:
 jobs:
   lint:
     name: Starlark format and lint
-    if: inputs.cache-overlap-measurement != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -135,7 +129,6 @@ jobs:
 
   core:
     name: Core module and consumers
-    if: inputs.cache-overlap-measurement != true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -299,7 +292,6 @@ jobs:
 
   android:
     name: Android module and registrant parity
-    if: inputs.cache-overlap-measurement != true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -351,7 +343,6 @@ jobs:
 
   example:
     name: Example — ${{ matrix.os }} — ${{ matrix.example.description }}
-    if: inputs.cache-overlap-measurement != true
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -496,7 +487,6 @@ jobs:
   # Focused conformance lane also checks helper-edit invalidation with caches disabled.
   conformance:
     name: Test driver conformance — ubuntu-latest
-    if: inputs.cache-overlap-measurement != true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -540,7 +530,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: example
     # Run coverage after matrix failures, then propagate their result below.
-    if: always() && inputs.cache-overlap-measurement != true
+    if: always()
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -562,137 +552,3 @@ jobs:
         run: |
           echo "example matrix concluded ${{ needs.example.result }}"
           exit 1
-
-  cache_overlap_linux:
-    name: Cache overlap measurement — ubuntu-latest
-    if: inputs.cache-overlap-measurement == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Prepare union directory
-        run: mkdir -p "$RUNNER_TEMP/cache-union"
-      - name: Clear entry paths — core
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore Linux core entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-Linux-core-9f009e74736ebe7296370993b41ea871a7ae6b0c238c51c7d9a014aae997ff54-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
-      - name: Record Linux core entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry core
-      - name: Clear entry paths — demo_app
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore Linux demo_app entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-Linux-demo_app-9e36e0bfb6d3f3bedd0c4a64f4dacc22bfbd4be64c4c42683090486db476eb53-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
-      - name: Record Linux demo_app entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry demo_app
-      - name: Clear entry paths — no_plugins
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore Linux no_plugins entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-Linux-no_plugins-9347e08b3bf040684e64412fc2440d98fcf255cbf6515d702968bf2d9656f073-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
-      - name: Record Linux no_plugins entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry no_plugins
-      - name: Clear entry paths — local_plugin
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore Linux local_plugin entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-Linux-local_plugin-2c433a77d7af28233955596d3dd1735d774c6f744ebeb0247d7372fae18e027d-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
-      - name: Record Linux local_plugin entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry local_plugin
-      - name: Clear entry paths — pub_plugins
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore Linux pub_plugins entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-Linux-pub_plugins-fce838c782c60fd3f129a55a5dfa770b7abc9741319b95c82608064907fa8f34-v1.29.0-5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
-      - name: Record Linux pub_plugins entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry pub_plugins
-      - name: Summarize Linux overlap
-        run: python3 tools/ci/download_cache_overlap.py finalize --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry-sum 8196751454 --os-name Linux
-
-  cache_overlap_macos:
-    name: Cache overlap measurement — macos-15
-    if: inputs.cache-overlap-measurement == true
-    runs-on: macos-15
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Prepare union directory
-        run: mkdir -p "$RUNNER_TEMP/cache-union"
-      - name: Clear entry paths — demo_app
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore macOS demo_app entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-macOS-demo_app-9e36e0bfb6d3f3bedd0c4a64f4dacc22bfbd4be64c4c42683090486db476eb53-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-      - name: Record macOS demo_app entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry demo_app
-      - name: Clear entry paths — demo_app_debug
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore macOS demo_app_debug entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-macOS-demo_app_debug-9e36e0bfb6d3f3bedd0c4a64f4dacc22bfbd4be64c4c42683090486db476eb53-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-      - name: Record macOS demo_app_debug entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry demo_app_debug
-      - name: Clear entry paths — pub_plugins
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore macOS pub_plugins entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-macOS-pub_plugins-fce838c782c60fd3f129a55a5dfa770b7abc9741319b95c82608064907fa8f34-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-      - name: Record macOS pub_plugins entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry pub_plugins
-      - name: Clear entry paths — no_plugins
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore macOS no_plugins entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-macOS-no_plugins-9347e08b3bf040684e64412fc2440d98fcf255cbf6515d702968bf2d9656f073-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-      - name: Record macOS no_plugins entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry no_plugins
-      - name: Clear entry paths — local_plugin
-        run: rm -rf "$HOME/.cache/bazel-repo/content_addressable" "$HOME/.cache/bazelisk"
-      - name: Restore macOS local_plugin entry
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
-        with:
-          path: |
-            ~/.cache/bazel-repo/content_addressable
-            ~/.cache/bazelisk
-          key: bazel-download-v1-macOS-local_plugin-2c433a77d7af28233955596d3dd1735d774c6f744ebeb0247d7372fae18e027d-v1.29.0-cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409
-      - name: Record macOS local_plugin entry
-        run: python3 tools/ci/download_cache_overlap.py record --cache-root "$HOME/.cache/bazel-repo/content_addressable" --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry local_plugin
-      - name: Summarize macOS overlap
-        run: python3 tools/ci/download_cache_overlap.py finalize --union-root "$RUNNER_TEMP/cache-union" --manifest "$RUNNER_TEMP/cache-union.json" --entry-sum 7803231841 --os-name macOS
