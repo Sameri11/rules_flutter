@@ -46,7 +46,9 @@ jobs:
         run: |
           set +e
           bazel() {
-            command bazel \
+            local subcommand="$1"
+            shift
+            command bazel "$subcommand" \
               --repo_env=ANDROID_HOME="$ANDROID_HOME" \
               --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
               --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" "$@"
@@ -96,7 +98,9 @@ jobs:
         run: |
           set +e
           bazel() {
-            command bazel \
+            local subcommand="$1"
+            shift
+            command bazel "$subcommand" \
               --repo_env=ANDROID_HOME="$ANDROID_HOME" \
               --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
               --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" "$@"
@@ -159,7 +163,9 @@ jobs:
         run: |
           set +e
           bazel() {
-            command bazel \
+            local subcommand="$1"
+            shift
+            command bazel "$subcommand" \
               --repo_env=ANDROID_HOME="$ANDROID_HOME" \
               --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
               --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" "$@"
