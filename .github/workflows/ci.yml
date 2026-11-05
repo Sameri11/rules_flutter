@@ -66,7 +66,9 @@ jobs:
               echo "repository cache blob absent: $hash"
             fi
             for marker in "$HOME/.cache/bazel-repo/content_addressable/sha256/$hash"/id-*; do
-              [[ -e "$marker" ]] && echo "repository cache canonical-id marker: ${marker##*/}"
+              if [[ -e "$marker" ]]; then
+                echo "repository cache canonical-id marker: ${marker##*/}"
+              fi
             done
           done
           cat >> "$HOME/.bazelrc" <<RC
