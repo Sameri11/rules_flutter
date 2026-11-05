@@ -92,7 +92,7 @@ jobs:
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: v1.29.0
           bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
-      - name: Baseline versus A1 matrix
+      - name: Baseline versus A2 matrix
         working-directory: ${{ matrix.directory }}
         shell: bash
         run: |
@@ -120,7 +120,7 @@ jobs:
             rc=${PIPESTATUS[0]}
             echo "EXIT_CODE=$rc" | tee -a "$RUNNER_TEMP/wildcard-logs/${{ matrix.name }}-${revision}-${name}.log"
           }
-          for revision in baseline a1; do
+          for revision in baseline a2; do
             run_cell "$revision" row3 bazel build --keep_going //...
             run_cell "$revision" row4 bazel test --keep_going //...
             run_cell "$revision" row5 bazel test --build_tests_only --keep_going //...
@@ -173,7 +173,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/wildcard-aquery"
           git worktree add "$RUNNER_TEMP/baseline" origin/main
           baseline="$RUNNER_TEMP/baseline/${{ matrix.directory }}"
-          for revision in baseline a1; do
+          for revision in baseline a2; do
             for mode in release debug; do
               if [[ "$mode" == release ]]; then
                 mode_flags=(-c opt --@rules_flutter_core//flutter:mode=release)
@@ -193,7 +193,7 @@ jobs:
             done
           done
           for mode in release debug; do
-            diff -u "$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.keys" "$RUNNER_TEMP/wildcard-aquery/a1-${mode}.keys"
+            diff -u "$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.keys" "$RUNNER_TEMP/wildcard-aquery/a2-${mode}.keys"
             echo "AQUERY_EQUALITY_$mode=$?"
           done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
