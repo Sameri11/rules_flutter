@@ -55,6 +55,14 @@ jobs:
           echo "BAZELISK_HOME=$HOME/.cache/bazelisk" >> "$GITHUB_ENV"
           echo "BAZEL_REPOSITORY_CACHE=$HOME/.cache/bazel-repo" >> "$GITHUB_ENV"
           echo "$HOME/.cache/bazelisk/bin" >> "$GITHUB_PATH"
+          cat > "$RUNNER_TEMP/bazel-downloader-block.conf" <<'BLOCK'
+          block github.com
+          block api.github.com
+          block objects.githubusercontent.com
+          block release-assets.githubusercontent.com
+          block github-releases.githubusercontent.com
+          BLOCK
+          echo "common --downloader_config=$RUNNER_TEMP/bazel-downloader-block.conf" >> "$HOME/.bazelrc"
           cat >> "$HOME/.bazelrc" <<RC
           common --repository_cache=$HOME/.cache/bazel-repo
           common --http_connector_attempts=13
