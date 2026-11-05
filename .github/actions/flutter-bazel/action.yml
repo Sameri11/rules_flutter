@@ -36,7 +36,7 @@ inputs:
     required: false
     default: ''
   download-cache-save:
-    description: Cache writer identity: false, core, or demo_app_debug.
+    description: 'Cache writer identity: false, core, or demo_app_debug.'
     required: false
     default: 'false'
   download-cache-lock-hash:
