@@ -144,9 +144,23 @@ jobs:
           - name: no_plugins
             directory: examples/no_plugins
             apk: //android/app:no_plugins
+            candidate: a1
+            candidate_sha: 4b17d64
           - name: demo_app
             directory: examples/demo_app
             apk: //android/app:demo_app
+            candidate: a1
+            candidate_sha: 4b17d64
+          - name: no_plugins
+            directory: examples/no_plugins
+            apk: //android/app:no_plugins
+            candidate: a2
+            candidate_sha: 0c2ddd6
+          - name: demo_app
+            directory: examples/demo_app
+            apk: //android/app:demo_app
+            candidate: a2
+            candidate_sha: 0c2ddd6
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -171,34 +185,47 @@ jobs:
               --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" "$@"
           }
           mkdir -p "$RUNNER_TEMP/wildcard-aquery"
-          git worktree add "$RUNNER_TEMP/baseline" origin/main
-          baseline="$RUNNER_TEMP/baseline/${{ matrix.directory }}"
-          for revision in baseline a2; do
-            for mode in release debug; do
-              if [[ "$mode" == release ]]; then
-                mode_flags=(-c opt --@rules_flutter_core//flutter:mode=release)
-              else
-                mode_flags=(-c fastbuild --@rules_flutter_core//flutter:mode=debug)
-              fi
-              if [[ "$revision" == baseline ]]; then
-                (cd "$baseline" && bazel aquery "${mode_flags[@]}" --output=jsonproto "deps(${{ matrix.apk }})") >"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.json" 2>"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.err"
-              else
-                bazel aquery "${mode_flags[@]}" --output=jsonproto "deps(${{ matrix.apk }})" >"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.json" 2>"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.err"
-              fi
-              rc=$?
-              echo "$revision $mode EXIT_CODE=$rc"
-              echo "EXIT_CODE=$rc" >>"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.err"
-              jq -r '.actions[].actionKey' "$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.json" | sort >"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.keys"
-              echo "ACTION_KEY_COUNT=$(wc -l <"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.keys")" >>"$RUNNER_TEMP/wildcard-aquery/${revision}-${mode}.err"
-            done
+          comparison="$RUNNER_TEMP/comparison"
+          git worktree add "$comparison" origin/main
+          comparison_module="$comparison/${{ matrix.directory }}"
+          for mode in release debug; do
+            if [[ "$mode" == release ]]; then
+              mode_flags=(-c opt --@rules_flutter_core//flutter:mode=release)
+            else
+              mode_flags=(-c fastbuild --@rules_flutter_core//flutter:mode=debug)
+            fi
+            (cd "$comparison_module" && bazel aquery "${mode_flags[@]}" --output=jsonproto "deps(${{ matrix.apk }})") >"$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.json" 2>"$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.err"
+            rc=$?
+            echo "baseline $mode EXIT_CODE=$rc"
+            echo "EXIT_CODE=$rc" >>"$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.err"
+            jq -r '.actions[].actionKey' "$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.json" | sort >"$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.keys"
+            echo "ACTION_KEY_COUNT=$(wc -l <"$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.keys")" >>"$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.err"
+          done
+          (cd "$comparison_module" && bazel shutdown)
+          git worktree remove --force "$comparison"
+          git worktree add "$comparison" "${{ matrix.candidate_sha }}"
+          comparison_module="$comparison/${{ matrix.directory }}"
+          for mode in release debug; do
+            if [[ "$mode" == release ]]; then
+              mode_flags=(-c opt --@rules_flutter_core//flutter:mode=release)
+            else
+              mode_flags=(-c fastbuild --@rules_flutter_core//flutter:mode=debug)
+            fi
+            (cd "$comparison_module" && bazel aquery "${mode_flags[@]}" --output=jsonproto "deps(${{ matrix.apk }})") >"$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.json" 2>"$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.err"
+            rc=$?
+            echo "${{ matrix.candidate }} $mode EXIT_CODE=$rc"
+            echo "EXIT_CODE=$rc" >>"$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.err"
+            jq -r '.actions[].actionKey' "$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.json" | sort >"$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.keys"
+            echo "ACTION_KEY_COUNT=$(wc -l <"$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.keys")" >>"$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.err"
           done
           for mode in release debug; do
-            diff -u "$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.keys" "$RUNNER_TEMP/wildcard-aquery/a2-${mode}.keys"
-            echo "AQUERY_EQUALITY_$mode=$?"
+            diff -u "$RUNNER_TEMP/wildcard-aquery/baseline-${mode}.keys" "$RUNNER_TEMP/wildcard-aquery/${{ matrix.candidate }}-${mode}.keys"
+            echo "AQUERY_EQUALITY_${mode}=$?"
           done
+          (cd "$comparison_module" && bazel shutdown)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: wildcard-aquery-${{ matrix.name }}
+          name: wildcard-aquery-${{ matrix.name }}-${{ matrix.candidate }}
           path: ${{ runner.temp }}/wildcard-aquery
           if-no-files-found: warn
