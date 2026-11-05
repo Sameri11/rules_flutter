@@ -28,8 +28,27 @@ visibility(["//flutter"])
 
 _DRIVER_SRCS = [
     Label("//flutter/private/test/driver:core.dart"),
+    Label("//flutter/private/test/driver:guard.dart"),
     Label("//flutter/private/test/driver:host.dart"),
+    Label("//flutter/private/test/driver:junit.dart"),
+    Label("//flutter/private/test/driver:results.dart"),
 ]
+
+# The device flavor's driver: the shared files, plus the frame codec, the
+# settings parser and the device entry point.
+_DEVICE_DRIVER_SRCS = [
+    Label("//flutter/private/test/driver:core.dart"),
+    Label("//flutter/private/test/driver:device.dart"),
+    Label("//flutter/private/test/driver:frame.dart"),
+    Label("//flutter/private/test/driver:guard.dart"),
+    Label("//flutter/private/test/driver:junit.dart"),
+    Label("//flutter/private/test/driver:results.dart"),
+    Label("//flutter/private/test/driver:settings.dart"),
+]
+
+# The integration-test binding reports to the native side unless told not to.
+# Device results travel as frames, so the device kernel turns that report off.
+_NATIVE_REPORT_DEFINE = "INTEGRATION_TEST_SHOULD_REPORT_RESULTS_TO_NATIVE"
 
 _CONFIG_NAME = "flutter_test_config.dart"
 
@@ -181,13 +200,14 @@ def _flutter_test_bootstrap_impl(ctx):
         config_import = ""
         test_main = "await Future(test.main);"
 
+    driver = ctx.file._device_driver if ctx.attr.device else ctx.file._driver
     out = ctx.actions.declare_file(ctx.label.name + ".dart")
     ctx.actions.expand_template(
-        template = ctx.file._template,
+        template = ctx.file._device_template if ctx.attr.device else ctx.file._template,
         output = out,
         substitutions = {
             "{{CONFIG_IMPORT}}": config_import,
-            "{{DRIVER_URI}}": uri(ctx.file._driver),
+            "{{DRIVER_URI}}": uri(driver),
             "{{PACKAGE_ROOT}}": _parent(_execroot_path(pubspec)),
             "{{TEST_FILE}}": _runfile(ctx, test),
             "{{GOLDENS_DECLARED}}": "true" if ctx.attr.goldens_declared else "false",
@@ -229,6 +249,9 @@ _flutter_test_bootstrap = rule(
             mandatory = True,
             doc = "The test's library-level metadata, as a Dart library.",
         ),
+        "device": attr.bool(
+            doc = "Whether this is the device flavor: deviceMain, with the integration-test binding.",
+        ),
         "_template": attr.label(
             allow_single_file = True,
             default = "//flutter/private/test/driver:bootstrap.dart.tmpl",
@@ -236,6 +259,14 @@ _flutter_test_bootstrap = rule(
         "_driver": attr.label(
             allow_single_file = True,
             default = "//flutter/private/test/driver:host.dart",
+        ),
+        "_device_template": attr.label(
+            allow_single_file = True,
+            default = "//flutter/private/test/driver:device_bootstrap.dart.tmpl",
+        ),
+        "_device_driver": attr.label(
+            allow_single_file = True,
+            default = "//flutter/private/test/driver:device.dart",
         ),
     },
 )
@@ -473,6 +504,14 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
     env = kwargs.pop("env", {})
     env_inherit = kwargs.pop("env_inherit", [])
     tags = kwargs.pop("tags", [])
+    device = kwargs.pop("device", False)
+    if device:
+        if goldens != None:
+            fail("{}: the device flavor takes no goldens".format(name))
+        if dart_defines.get(_NATIVE_REPORT_DEFINE, "false") != "false":
+            fail("{}: {} is set by the device flavor and must not be overridden".format(name, _NATIVE_REPORT_DEFINE))
+        dart_defines = dict(dart_defines)
+        dart_defines[_NATIVE_REPORT_DEFINE] = "false"
     bootstrap = name + "_bootstrap"
     parse_metadata(
         name = name + "_metadata",
@@ -487,13 +526,14 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
         srcs = _dedupe(all_srcs + prunable_srcs),
         test_label = "//{}:{}".format(native.package_name(), name),
         goldens_declared = goldens != None,
+        device = device,
         metadata = ":" + name + "_metadata",
         tags = ["manual"],
     )
     dart_test_kernel(
         name = name + "_kernel",
         app = app,
-        srcs = all_srcs + _DRIVER_SRCS + [":" + name + "_metadata"],
+        srcs = all_srcs + (_DEVICE_DRIVER_SRCS if device else _DRIVER_SRCS) + [":" + name + "_metadata"],
         prunable_srcs = prunable_srcs,
         entrypoint = ":" + bootstrap,
         dart_defines = dart_defines,
@@ -598,6 +638,43 @@ def flutter_test(
         dart_defines = dart_defines,
         materialize = materialize,
         materialize_mode = materialize_mode,
+        env = env,
+        env_inherit = env_inherit,
+        **kwargs
+    )
+
+def flutter_test_device(
+        name,
+        app,
+        src,
+        srcs = [],
+        prunable_srcs = [],
+        data = [],
+        dart_defines = {},
+        env = {},
+        env_inherit = [],
+        **kwargs):
+    """Runs one Dart test file on flutter_tester through the device flavor.
+
+    The test runs under the integration-test binding, and its results leave the
+    run as framed print lines, which device_decoder.dart turns into JUnit. The
+    launcher test itself passes when the suite exits 0; the parity gate compares
+    the decoded results. Private: exposed to //tests by device_test.bzl.
+
+    Args mirror flutter_test, without goldens or materialize.
+    """
+    _flutter_test(
+        name = name,
+        app = app,
+        src = src,
+        srcs = srcs,
+        prunable_srcs = prunable_srcs,
+        goldens = None,
+        device = True,
+        data = data,
+        dart_defines = dart_defines,
+        materialize = [],
+        materialize_mode = "copy",
         env = env,
         env_inherit = env_inherit,
         **kwargs

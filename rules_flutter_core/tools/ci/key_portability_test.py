@@ -15,6 +15,7 @@ FILES = {
     "plugins": "flutter/private/plugins.bzl",
     "ndk": "flutter/private/ndk.bzl",
     "test": "flutter/private/flutter_test.bzl",
+    "device_test": "flutter/private/device_test.bzl",
     "test_driver": "flutter/private/test_kernel_driver.bzl",
     "core": "flutter/private/core.bzl",
     "android_inputs": "flutter/private/android_inputs_rules.bzl",
@@ -90,6 +91,7 @@ class Checker:
         self.check_o()
         self.check_p()
         self.check_q()
+        self.check_r()
         return self.failures
 
     def tree(self, name, contract):
@@ -583,7 +585,7 @@ class Checker:
 
     def check_h(self):
         regions = []
-        for name in ("defs", "android", "plugins", "core", "android_inputs", "apk_check"):
+        for name in ("defs", "android", "plugins", "core", "android_inputs", "apk_check", "device_test"):
             tree = self.trees.get(name)
             if tree is None:
                 continue
@@ -846,6 +848,50 @@ class Checker:
                     self.fail("O", "{} must not write a host path or PUB_CACHE into the hub's text".format(FILES[name]))
                     break
 
+    def check_r(self):
+        # The device kernel compiles with the frontend_server compile that test
+        # kernels use, from declared inputs only: the frontend runtime and
+        # snapshot, the VM platform dill, the SDK packages and the SDK revision.
+        # Sources are addressed as repository-relative org-dartlang-root URIs.
+        # A `dart compile` action embeds the sandbox path in the dill and reads
+        # SDK snapshots it never declares. It reads no host environment and no
+        # home or pub-cache path either.
+        tree = self.tree("device_test", "R")
+        if tree is None:
+            return
+        function = _function(tree, "_device_kernel_impl")
+        if function is None:
+            self.fail("R", "{} must define _device_kernel_impl".format(FILES["device_test"]))
+            return
+        if _action_call(function, "run") is not None:
+            self.fail("R", "the device kernel must be built by ctx.actions.run_shell, not ctx.actions.run")
+        action = _action_call(function, "run_shell")
+        if action is None:
+            self.fail("R", "_device_kernel_impl must create its action with ctx.actions.run_shell")
+            return
+        declared = [_keyword(action, "inputs"), _keyword(action, "tools")]
+        for path, description in (
+            (["toolchain", "dartaotruntime"], "the frontend runtime (toolchain.dartaotruntime)"),
+            (["toolchain", "frontend_server"], "the frontend snapshot (toolchain.frontend_server)"),
+            (["toolchain", "vm_platform_strong"], "the VM platform dill (toolchain.vm_platform_strong)"),
+            (["toolchain", "dart_sdk_revision"], "the SDK revision (toolchain.dart_sdk_revision)"),
+            (["toolchain", "sdk_packages"], "the SDK's packages (toolchain.sdk_packages)"),
+        ):
+            if not any(_contains_attr(node, path) for node in declared):
+                self.fail("R", "device kernel inputs or tools must declare {}".format(description))
+        strings = {
+            node.value
+            for node in ast.walk(function)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        if "compile" in strings or any("file://" in text for text in strings):
+            self.fail("R", "the device kernel must not run dart compile: it embeds the sandbox path and reads undeclared SDK snapshots")
+        if not any("org-dartlang-root" in text for text in strings):
+            self.fail("R", "the device kernel must address its sources as org-dartlang-root URIs")
+        dumped = ast.dump(function)
+        if re.search(r"attr='(environ|var|getenv)'|'(HOME|PUB_CACHE)'|use_default_shell_env", dumped):
+            self.fail("R", "the device kernel action reads the host environment or a home or pub-cache path")
+
     def check_p(self):
         # The Android SDK as a native build environment: exports and the action input.
         tree = self.tree("native_build_env", "P")
@@ -956,6 +1002,7 @@ def _file_contract(name):
         "plugins": "F",
         "ndk": "G",
         "test": "I",
+        "device_test": "R",
         "test_driver": "I",
         "core": "K",
         "android_inputs": "L",
@@ -1268,7 +1315,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
-    print("OK: key portability contracts A-P hold")
+    print("OK: key portability contracts A-R hold")
     return 0
 
 

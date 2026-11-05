@@ -7,6 +7,7 @@
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test", "flutter_test_suite")
+load("//flutter/private:device_test.bzl", "flutter_test_device")
 load("//flutter/private:test_metadata.bzl", "parse_error_test")
 
 exports_files(["pubspec.lock"])
@@ -95,4 +96,78 @@ flutter_test_suite(
     name = "scope_tests",
     srcs = glob(["test/scope/**/*_test.dart"]),
     app = ":pkg",
+)
+
+# Device-flavor parity. C1 to C13 run through the device driver on flutter_tester
+# and must give the host's JUnit cases and outcomes for every run (21 in all).
+DEVICE_FIXTURES = FIXTURES[:13]
+
+# Known divergence: the device flavor reports this case as a pass where the host
+# reports an error. It is removed from both sides of the comparison.
+_PARITY_EXCLUDE = {
+    "c11_widgets": ["pending timer at test end"],
+}
+
+[
+    flutter_test_device(
+        name = fixture + "_device",
+        src = "test/" + fixture + "_test.dart",
+        srcs = [
+            "test/flutter_test_config.dart",
+            "test/" + fixture + "_test.dart",
+        ],
+        app = ":pkg",
+        tags = ["manual"],
+    )
+    for fixture in DEVICE_FIXTURES
+]
+
+[
+    sh_test(
+        name = fixture + "_device_parity",
+        srcs = ["device_parity.sh"],
+        args = [
+            "$(rlocationpath device_parity.py)",
+            "$(rlocationpath @flutter_sdk//:dart)",
+            "$(rlocationpath //tests/device_codec:decoder)",
+            "$(rlocationpath :{}_launcher)".format(fixture),
+            "$(rlocationpath :{}_device)".format(fixture),
+            "$(rlocationpath {}.expected.json)".format(fixture),
+        ] + ["--exclude='{}'".format(name) for name in _PARITY_EXCLUDE.get(fixture, [])],
+        data = [
+            ":{}_launcher".format(fixture),
+            ":{}_device".format(fixture),
+            "{}.expected.json".format(fixture),
+            "check.py",
+            "device_parity.py",
+            "//tests/device_codec:decoder",
+            "@flutter_sdk//:dart",
+        ],
+    )
+    for fixture in DEVICE_FIXTURES
+]
+
+# A settings file of an unsupported version. The device must report one load error,
+# exit 1, and its stream must decode with that status. Runs for the first fixture.
+sh_test(
+    name = DEVICE_FIXTURES[0] + "_device_settings_error",
+    srcs = ["device_parity.sh"],
+    args = [
+        "$(rlocationpath device_parity.py)",
+        "$(rlocationpath @flutter_sdk//:dart)",
+        "$(rlocationpath //tests/device_codec:decoder)",
+        "$(rlocationpath :{}_launcher)".format(DEVICE_FIXTURES[0]),
+        "$(rlocationpath :{}_device)".format(DEVICE_FIXTURES[0]),
+        "$(rlocationpath {}.expected.json)".format(DEVICE_FIXTURES[0]),
+        "--settings-error",
+    ],
+    data = [
+        ":{}_launcher".format(DEVICE_FIXTURES[0]),
+        ":{}_device".format(DEVICE_FIXTURES[0]),
+        "{}.expected.json".format(DEVICE_FIXTURES[0]),
+        "check.py",
+        "device_parity.py",
+        "//tests/device_codec:decoder",
+        "@flutter_sdk//:dart",
+    ],
 )

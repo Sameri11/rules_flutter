@@ -1,6 +1,6 @@
-# Dart driver sources for host tests. They are kernel inputs of every host
-# test, so they are exported as sources; the rules that use them are in
-# //flutter/private.
+# Dart driver sources for host and device tests. They are kernel inputs of
+# every such test, so they are exported as sources; the rules that use them
+# are in //flutter/private.
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,6 +8,14 @@ exports_files(
     [
         "bootstrap.dart.tmpl",
         "core.dart",
+        "device.dart",
+        "device_bootstrap.dart.tmpl",
+        "device_decoder.dart",
+        "frame.dart",
+        "guard.dart",
         "host.dart",
+        "junit.dart",
+        "results.dart",
+        "settings.dart",
     ],
 )

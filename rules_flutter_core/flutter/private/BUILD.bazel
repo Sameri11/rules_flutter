@@ -66,6 +66,7 @@ exports_files(
     [
         "core.bzl",
         "dart_registrant.bzl",
+        "device_test.bzl",
         "flutter_test.bzl",
         "pub_lock.bzl",
         "repo.bzl",
