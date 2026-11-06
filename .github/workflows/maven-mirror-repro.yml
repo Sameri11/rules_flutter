@@ -56,9 +56,9 @@ jobs:
             cat > "$wrapper" <<EOF
           #!/usr/bin/env bash
           set -euo pipefail
-          command="$1"
+          command="\$1"
           shift
-          exec bazel --output_base="$base" "$command" --remote_cache= "$@"
+          exec bazel --output_base="$base" "$command" --remote_cache= "\$@"
           EOF
             chmod +x "$wrapper"
             manifests="$evidence/phase$phase/manifests"
