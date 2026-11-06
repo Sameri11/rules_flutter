@@ -1,0 +1,11 @@
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+
+flutter_android_app(
+    name = "identity_macro_argument_probe",
+    core = "//:core",
+    plugins = None,
+    manifest_values = {"applicationId": "com.example.no_plugins"},
+    deps = ["//android/app:main_activity"],
+    resource_files = [],
+    test_entrypoints = ["//:integration_test/debug_core_test.dart"],
+)

@@ -16,6 +16,7 @@ flutter_android_app(
     manifest_values = _VALUES,
     deps = ["//android/app:main_activity"],
     resource_files = [],
+    debug_manifest = None,
 )
 
 flutter_debug_core(
@@ -32,5 +33,5 @@ android_binary(
     manifest = ":shared_app_manifest",
     manifest_values = _VALUES,
     resource_files = [],
-    deps = ["//android/app:main_activity", ":shared_app_inputs", ":shared_app_debug_manifest"],
+    deps = ["//android/app:main_activity", ":shared_app_inputs"],
 )

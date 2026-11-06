@@ -43,8 +43,8 @@ jobs:
             --execution_log_compact_file="$out/e7-step3.binpb" 2>&1 | tee "$out/e7-step3.log"
           cp "$RUNNER_TEMP/main.dart.original" lib/main.dart
           trap - EXIT
-          wc -l android/app/BUILD.bazel android/app_probes/BUILD.bazel android/shared_values/BUILD.bazel > "$out/e3-build-lines.txt"
-          for probe in //android/app_probes:identity_macro_argument_probe //android/app_probes:derived_cross_package //android/app_probes:derived_through_alias //android/shared_values:shared_test_apk; do
+          wc -l android/app/BUILD.bazel android/app_probes/BUILD.bazel android/shared_values/BUILD.bazel android/argument_probe/BUILD.bazel > "$out/e3-build-lines.txt"
+          for probe in //android/argument_probe:identity_macro_argument_probe //android/app_probes:derived_cross_package //android/app_probes:derived_through_alias //android/shared_values:shared_test_apk; do
             safe_name="${probe//\//_}"
             safe_name="${safe_name//:/_}"
             if bazel build "${common[@]}" "$probe" > "$out/e3${safe_name}.log" 2>&1; then
