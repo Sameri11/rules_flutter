@@ -2,7 +2,7 @@ bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
-# Configure rules_android's separate Maven installs in this root.
+# Try the Central mirror before Central for rules_android's own installs.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "rules_android_maven",

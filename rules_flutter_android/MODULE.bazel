@@ -35,7 +35,7 @@ maven_dev.install(
 )
 use_repo(maven_dev, "parity_maven")
 
-# Configure rules_android's separate Maven installs in this root.
+# Try the Central mirror before Central for rules_android's own installs.
 maven_dev.install(
     name = "rules_android_maven",
     known_contributing_modules = ["rules_android"],

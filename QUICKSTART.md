@@ -200,12 +200,15 @@ maven.install(
 use_repo(maven, "flutter_maven")
 ```
 
-The repository order tries Google's Maven service first, its periodically
-synced Maven Central mirror next, and repo1 Central last. The Google-hosted
-Central mirror is a periodic copy, may lag Central, and is not a Google Maven
-product mirror; keep `maven.google.com` first for those artifacts. Maven Central
-has returned HTTP 429 responses. Coursier may keep using the repository that
-supplied a POM when fetching its JAR, so this order does not guarantee JAR
+Google Maven remains first for Android artifacts. Google's Central mirror is a
+periodically synchronized copy of Maven Central and may lag new releases. Its
+[service page](https://storage-download.googleapis.com/maven-central/index.html)
+states that it is not an officially supported Google product. The mirror
+precedes repo1 Central because Central has returned HTTP 429 responses.
+
+The two `rules_android` install tags contribute no artifacts; they configure the
+repositories for its upstream installs. Coursier may keep using the repository
+that supplied a POM when fetching its JAR, so this order does not guarantee JAR
 fallback if the selected repository serves the POM but fails to serve the JAR.
 
 The archive install above is the checked path: keep both `bazel_dep`

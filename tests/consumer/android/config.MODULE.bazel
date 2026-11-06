@@ -18,7 +18,7 @@ use_repo(android_sdk, "androidsdk")
 
 register_toolchains("@androidsdk//:all")
 
-# Configure rules_android's separate Maven installs in this root.
+# Try the Central mirror before Central for rules_android's own installs.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "rules_android_maven",
