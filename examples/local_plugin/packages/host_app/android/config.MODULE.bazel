@@ -2,8 +2,7 @@ bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
-# The Consumer Module owns the Maven repository and exposes its canonical
-# identity to the plugin project.
+# Configure rules_android's separate Maven installs in this root.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "rules_android_maven",
@@ -13,6 +12,7 @@ maven.install(
         "https://maven-central.storage-download.googleapis.com/maven2",
         "https://repo1.maven.org/maven2",
     ],
+    use_starlark_android_rules = True,
 )
 maven.install(
     name = "android_ide_common_30_1_3",
@@ -22,7 +22,11 @@ maven.install(
         "https://maven-central.storage-download.googleapis.com/maven2",
         "https://repo1.maven.org/maven2",
     ],
+    use_starlark_android_rules = True,
 )
+
+# The Consumer Module owns the Maven repository and exposes its canonical
+# identity to the plugin project.
 use_repo(maven, "flutter_maven")
 
 android_sdk = use_extension(
