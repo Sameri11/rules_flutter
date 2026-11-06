@@ -158,6 +158,7 @@ def declared_apk_targets(bazel: str, module: Path) -> set[str]:
          'attr("generator_function", "^flutter_android_app$", kind("android_binary rule", //...)) except attr("tags", "flutter-test-apk", kind("android_binary rule", //...))'],
         module,
     )
+    return set(result.splitlines())
 
 
 def expected_abis(selection: str) -> set[str]:
