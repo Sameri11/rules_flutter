@@ -1,0 +1,16 @@
+module(name = "maven_mirror_fallback", version = "1.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "maven",
+    artifacts = ["junit:junit:4.13.2"],
+    repositories = [
+        "http://127.0.0.1:18765/maven2",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+    ],
+)
+use_repo(maven, "maven")
+
+pinned = use_extension("//:downloader.bzl", "fixture")
+use_repo(pinned, "pinned_file")
