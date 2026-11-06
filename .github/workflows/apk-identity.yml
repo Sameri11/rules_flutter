@@ -36,6 +36,10 @@ jobs:
           for name in no_plugins identity_test_direct identity_test_aggregate; do
             cp "bazel-bin/android/app/$name.apk" "$RUNNER_TEMP/identity-evidence/"
             bazel aquery "deps(//android/app:$name)" --output=textproto \
+              -c fastbuild --@rules_flutter_core//flutter:mode=debug \
+              --repo_env=ANDROID_HOME="$ANDROID_HOME" \
+              --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+              --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" \
               > "$RUNNER_TEMP/identity-evidence/$name.aquery"
             "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2" dump badging "$RUNNER_TEMP/identity-evidence/$name.apk" \
               > "$RUNNER_TEMP/identity-evidence/$name.badging"
