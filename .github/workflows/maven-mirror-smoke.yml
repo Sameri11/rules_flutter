@@ -1,0 +1,86 @@
+name: Maven mirror fetch
+
+on:
+  push:
+    branches: [prototype/maven-mirror-fallback]
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 98f43ca51468e45f34ee616d1d37986556f15e3e
+      - name: Install verified Bazelisk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download v1.29.0 --repo bazelbuild/bazelisk --pattern bazelisk-linux-amd64 --dir "$RUNNER_TEMP"
+          echo '5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992  '"$RUNNER_TEMP/bazelisk-linux-amd64" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bazelisk-linux-amd64"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Fetch both upstream Maven graphs
+        working-directory: rules_flutter_android
+        run: |
+          set -euo pipefail
+          env -u USE_BAZEL_VERSION bazelisk-linux-amd64 --output_base="$RUNNER_TEMP/maven-mirror-base" version
+          env -u USE_BAZEL_VERSION bazelisk-linux-amd64 --output_base="$RUNNER_TEMP/maven-mirror-base" fetch \
+            --lockfile_mode=error \
+            --repository_cache="$RUNNER_TEMP/maven-mirror-downloads" \
+            --repo_contents_cache="$RUNNER_TEMP/maven-mirror-contents" \
+            @@rules_jvm_external++maven+rules_android_maven//... \
+            @@rules_jvm_external++maven+android_ide_common_30_1_3//... \
+            2>&1 | tee "$RUNNER_TEMP/maven-mirror-fetch.log"
+      - name: Verify ordered sources and native artifact
+        run: |
+          python3 - <<'PY'
+          from collections import Counter
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'maven-mirror-base/external'
+          expected = ['https://maven.google.com', 'https://maven-central.storage-download.googleapis.com/maven2', 'https://repo1.maven.org/maven2']
+          results = {'candidate': '98f43ca51468e45f34ee616d1d37986556f15e3e', 'graphs': {}}
+          for name in ('rules_android_maven', 'android_ide_common_30_1_3'):
+              repo = root / ('rules_jvm_external++maven+' + name)
+              repositories = (repo / 'outdated.repositories').read_text().splitlines()
+              if repositories != expected:
+                  raise SystemExit(f'{name}: unexpected repository order: {repositories}')
+              tree = json.loads((repo / 'coursier-deps.json').read_text())
+              dependencies = tree['dependencies']
+              origins = Counter(dep.get('url', '').split('/')[2] for dep in dependencies if dep.get('url', '').startswith('https://'))
+              results['graphs'][name] = {'repositories': repositories, 'origin_counts': dict(origins), 'resolved_nodes': len(dependencies)}
+              if name == 'rules_android_maven':
+                  native = [dep for dep in dependencies if dep.get('url', '').endswith('/nativeruntime-dist-compat/1.0.16/nativeruntime-dist-compat-1.0.16.jar')]
+                  if len(native) != 1:
+                      raise SystemExit(f'Expected one native-runtime artifact, got {len(native)}')
+                  dep = native[0]
+                  if not dep['url'].startswith(expected[1] + '/'):
+                      raise SystemExit(f'Native-runtime origin was not the mirror: {dep["url"]}')
+                  artifact = repo / dep['file']
+                  digest = hashlib.file_digest(artifact.open('rb'), 'sha256').hexdigest()
+                  if digest != '2f4e879b00eed634d0e43353ecff80db4d5ce24b3b213d1e6053cb21b0ced10f' or artifact.stat().st_size != 157996126:
+                      raise SystemExit('Native-runtime artifact differs from the known baseline')
+                  results['native_runtime'] = {'url': dep['url'], 'sha256': digest, 'bytes': artifact.stat().st_size}
+          print(json.dumps(results, indent=2))
+          (Path(os.environ['RUNNER_TEMP']) / 'maven-mirror-result.json').write_text(json.dumps(results, indent=2) + '\n')
+          PY
+      - name: Stop owned Bazel base
+        if: always()
+        working-directory: rules_flutter_android
+        run: env -u USE_BAZEL_VERSION bazelisk-linux-amd64 --output_base="$RUNNER_TEMP/maven-mirror-base" shutdown
+      - name: Upload fetch evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: maven-mirror-fetch-evidence
+          path: |
+            ${{ runner.temp }}/maven-mirror-fetch.log
+            ${{ runner.temp }}/maven-mirror-result.json
+          if-no-files-found: warn
