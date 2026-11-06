@@ -25,6 +25,8 @@ jobs:
       BAZEL_LOCKFILE_MODE: error
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 98f43ca51468e45f34ee616d1d37986556f15e3e
 
       - uses: ./.github/actions/flutter-bazel
         with:
@@ -45,7 +47,8 @@ jobs:
           evidence="$RUNNER_TEMP/maven-mirror-proof/$EXAMPLE"
           mkdir -p "$evidence"
           candidate="$(git rev-parse HEAD)"
-          printf 'candidate=%s\nworkflow=%s\nexample=%s\n' "$candidate" "$candidate" "$EXAMPLE" > "$evidence/provenance.txt"
+          test "$candidate" = 98f43ca51468e45f34ee616d1d37986556f15e3e
+          printf 'candidate=%s\nworkflow=%s\nexample=%s\n' "$candidate" "$GITHUB_SHA" "$EXAMPLE" > "$evidence/provenance.txt"
           printf 'Flutter=%s (%s)\nBazelisk=%s (%s)\nNDK=28.2.13676358\n' \
             "$FLUTTER_VERSION" "$FLUTTER_SHA256_LINUX_X64" \
             "$BAZELISK_VERSION" "$BAZELISK_SHA256_LINUX_AMD64" >> "$evidence/provenance.txt"
@@ -58,7 +61,14 @@ jobs:
           set -euo pipefail
           command="\$1"
           shift
-          exec bazel --output_base="$base" "\$command" --remote_cache= "\$@"
+          case "\$command" in
+            build|test|run|cquery|aquery)
+              exec bazel --output_base="$base" "\$command" --remote_cache= --disk_cache= --worker_quit_after_build "\$@"
+              ;;
+            *)
+              exec bazel --output_base="$base" "\$command" "\$@"
+              ;;
+          esac
           EOF
             chmod +x "$wrapper"
             manifests="$evidence/phase$phase/manifests"
@@ -72,10 +82,12 @@ jobs:
             result=$?
             set -e
             if [[ $result -ne 0 ]]; then
+              cat "$evidence/phase$phase/hash.log"
               exit "$result"
             fi
             cp "$evidence/phase$phase/hash.log" "$evidence/phase$phase/rows.txt"
             rm -f "$manifests"/*.apk
+            bazel --output_base="$base" shutdown
             printf 'phase=%s hash_gate=PASS\n' "$phase" >> "$evidence/provenance.txt"
           done
           diff -u \
@@ -85,9 +97,20 @@ jobs:
           printf 'phase_comparison=identical\n' >> "$evidence/provenance.txt"
           sha256sum "$evidence"/phase*/rows.txt "$evidence"/phase*/manifests/*.execution.json \
             > "$evidence/artifact-sha256.txt"
+      - name: Package compact proof receipts
+        if: always()
+        env:
+          EXAMPLE: ${{ matrix.example }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/maven-mirror-proof/$EXAMPLE"
+          for manifests in "$evidence"/phase*/manifests; do
+            if [[ -d "$manifests" ]]; then
+              find "$manifests" -name '*.apk' -delete
+            fi
+          done
           tar -czf "$RUNNER_TEMP/maven-mirror-proof-$EXAMPLE.tar.gz" \
-            -C "$evidence" provenance.txt phase1 phase2 phase-comparison.diff artifact-sha256.txt
-          rm -rf "$evidence"/outputbase-1 "$evidence"/outputbase-2
+            -C "$evidence" --exclude='outputbase-*' .
 
       - name: Upload compact proof receipts
         if: always()
