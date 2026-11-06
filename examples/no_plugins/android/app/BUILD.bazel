@@ -3,6 +3,10 @@
 load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_assets_dir")
+load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
+
 package(default_visibility = ["//visibility:public"])
 
 flutter_android_app(
@@ -19,4 +23,48 @@ kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/no_plugins/MainActivity.kt"],
     deps = [":no_plugins_inputs"],
+)
+
+
+flutter_debug_core(
+    name = "identity_core",
+    app = "//:core",
+    entrypoint = "//:integration_test/debug_core_test.dart",
+    srcs = ["//:integration_test/debug_core_helper.dart"],
+    dart_defines = {"IDENTITY_TEST_MARK": "test-value"},
+)
+
+android_library(
+    name = "identity_aggregate",
+    exports = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)
+
+android_binary(
+    name = "identity_test_direct",
+    assets = [":identity_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle"),
+    manifest = ":no_plugins_manifest",
+    manifest_values = {
+        "applicationId": "com.example.no_plugins",
+        "applicationName": "io.flutter.app.FlutterApplication",
+        "minSdkVersion": "21",
+        "targetSdkVersion": "36",
+    },
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)
+
+android_binary(
+    name = "identity_test_aggregate",
+    assets = [":identity_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle"),
+    manifest = ":no_plugins_manifest",
+    manifest_values = {
+        "applicationId": "com.example.no_plugins",
+        "applicationName": "io.flutter.app.FlutterApplication",
+        "minSdkVersion": "21",
+        "targetSdkVersion": "36",
+    },
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":identity_aggregate"],
 )
