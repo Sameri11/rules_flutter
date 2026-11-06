@@ -25,6 +25,8 @@ _MANIFEST_VALUES = {
 _MODE_DEBUG = Label("@rules_flutter_core//flutter:mode_debug")
 _MODE_RELEASE = Label("@rules_flutter_core//flutter:mode_release")
 
+_INCOMPATIBLE = Label("@platforms//:incompatible")
+
 # Sentinels no caller can pass by accident. A string compare would also match a
 # consumer who writes the default path explicitly and expects it to be required.
 _UNSET = struct(sentinel = "plugins")
@@ -310,5 +312,5 @@ def _test_tags(tags):
 def _debug_compatibility(extra):
     return select({
         _MODE_DEBUG: extra,
-        "//conditions:default": extra + ["@platforms//:incompatible"],
+        "//conditions:default": extra + [_INCOMPATIBLE],
     })
