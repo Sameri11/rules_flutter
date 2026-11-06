@@ -42,7 +42,7 @@ android_library(
 android_binary(
     name = "identity_test_direct",
     assets = [":identity_core_bundle"],
-    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle"),
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle_action"),
     manifest = ":no_plugins_manifest",
     manifest_values = {
         "applicationId": "com.example.no_plugins",
@@ -57,7 +57,7 @@ android_binary(
 android_binary(
     name = "identity_test_aggregate",
     assets = [":identity_core_bundle"],
-    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle"),
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle_action"),
     manifest = ":no_plugins_manifest",
     manifest_values = {
         "applicationId": "com.example.no_plugins",
