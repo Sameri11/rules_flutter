@@ -48,4 +48,3 @@ kt_android_library(
     deps = [":no_plugins_inputs"],
 )
 
-
