@@ -85,11 +85,14 @@ jobs:
           printf 'phase_comparison=identical\n' >> "$evidence/provenance.txt"
           sha256sum "$evidence"/phase*/rows.txt "$evidence"/phase*/manifests/*.execution.json \
             > "$evidence/artifact-sha256.txt"
+          tar -czf "$RUNNER_TEMP/maven-mirror-proof-$EXAMPLE.tar.gz" \
+            -C "$evidence" provenance.txt phase1 phase2 phase-comparison.diff artifact-sha256.txt
+          rm -rf "$evidence"/outputbase-1 "$evidence"/outputbase-2
 
       - name: Upload compact proof receipts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: maven-mirror-proof-${{ matrix.example }}
-          path: ${{ runner.temp }}/maven-mirror-proof/${{ matrix.example }}
-          if-no-files-found: warn
+          path: ${{ runner.temp }}/maven-mirror-proof-${{ matrix.example }}.tar.gz
+          if-no-files-found: error
