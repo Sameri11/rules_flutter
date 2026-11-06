@@ -22,5 +22,6 @@ flutter_android_app(
     plugins = None,
     manifest_values = {"applicationId": "com.example.no_plugins"},
     deps = ["//android/app:main_activity"],
+    resource_files = [],
     test_entrypoints = ["//:integration_test/debug_core_test.dart"],
 )

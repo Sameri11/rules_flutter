@@ -15,6 +15,7 @@ flutter_android_app(
     plugins = None,
     manifest_values = _VALUES,
     deps = ["//android/app:main_activity"],
+    resource_files = [],
 )
 
 flutter_debug_core(
