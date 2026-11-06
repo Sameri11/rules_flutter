@@ -18,10 +18,32 @@ use_repo(android_sdk, "androidsdk")
 
 register_toolchains("@androidsdk//:all")
 
+# Try the Central mirror before Central for rules_android's own installs.
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "rules_android_maven",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+maven.install(
+    name = "android_ide_common_30_1_3",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+
 # The generated segment owns the plugin project's Maven install. Keep the SDK
 # runtime install in this Consumer Module; external_app imports the project repo
 # under a distinct alias to exercise canonical-equivalence validation.
-maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "flutter_maven",
     artifacts = [
@@ -40,6 +62,7 @@ maven.install(
     ],
     repositories = [
         "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
         "https://repo1.maven.org/maven2",
     ],
     version_conflict_policy = "pinned",

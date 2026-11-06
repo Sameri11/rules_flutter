@@ -168,11 +168,48 @@ maven.install(
         "androidx.exifinterface:exifinterface:1.4.1",
         "com.getkeepsafe.relinker:relinker:1.4.5",
     ],
-    repositories = ["https://maven.google.com", "https://repo1.maven.org/maven2"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
     version_conflict_policy = "pinned",
+)
+
+# The root configures rules_android's separate Maven installs as well.
+maven.install(
+    name = "rules_android_maven",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+maven.install(
+    name = "android_ide_common_30_1_3",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
 )
 use_repo(maven, "flutter_maven")
 ```
+
+Google Maven remains first for Android artifacts. Google's Central mirror is a
+periodically synchronized copy of Maven Central and may lag new releases. Its
+[service page](https://storage-download.googleapis.com/maven-central/index.html)
+states that it is not an officially supported Google product. The mirror
+precedes repo1 Central because Central has returned HTTP 429 responses.
+
+The two `rules_android` install tags contribute no artifacts; they configure the
+repositories for its upstream installs. Coursier may keep using the repository
+that supplied a POM when fetching its JAR, so this order does not guarantee JAR
+fallback if the selected repository serves the POM but fails to serve the JAR.
 
 The archive install above is the checked path: keep both `bazel_dep`
 declarations and supply the download through the two `archive_override` tags.

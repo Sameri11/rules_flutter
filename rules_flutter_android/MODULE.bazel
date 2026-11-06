@@ -35,6 +35,28 @@ maven_dev.install(
 )
 use_repo(maven_dev, "parity_maven")
 
+# Try the Central mirror before Central for rules_android's own installs.
+maven_dev.install(
+    name = "rules_android_maven",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+maven_dev.install(
+    name = "android_ide_common_30_1_3",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+
 # The embedding rule wraps the selected SDK-derived jar with rules_java's
 # java_import, so rules_java must be a ruleset dependency.
 bazel_dep(name = "rules_java", version = "9.3.0")
