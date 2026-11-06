@@ -33,5 +33,5 @@ android_binary(
     manifest = ":shared_app_manifest",
     manifest_values = _VALUES,
     resource_files = [],
-    deps = ["//android/app:main_activity", ":shared_app_inputs"],
+    deps = ["//android/app:main_activity"],
 )
