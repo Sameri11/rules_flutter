@@ -71,8 +71,8 @@ android_binary(
 flutter_debug_core(
     name = "identity_core_two",
     app = "//:core",
-    entrypoint = "//integration_test:debug_core_two.dart",
-    srcs = ["//integration_test:debug_core_helper.dart"],
+    entrypoint = "integration_test/debug_core_two.dart",
+    srcs = ["integration_test/debug_core_helper.dart"],
     dart_defines = {"IDENTITY_TEST_MARK": "test-two"},
 )
 

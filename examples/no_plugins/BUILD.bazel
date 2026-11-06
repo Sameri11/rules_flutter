@@ -29,3 +29,4 @@ flutter_test_suite(
     name = "tests",
     app = ":core_test_package",
 )
+exports_files(["integration_test/debug_core_two.dart"])
