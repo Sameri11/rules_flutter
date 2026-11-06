@@ -224,10 +224,10 @@ def _declare_test_apps(name, test_apps, app_core, inputs, app_manifest, pubspec,
     keys = sorted(test_apps.keys())
     for key in keys:
         if not key or key in reserved or key.endswith("_core") or key.endswith("_manifest") or key.endswith("_check_test") or key.endswith("_assets"):
-            fail("flutter_android_app {}: test_apps key {!r} is reserved or collides with a generated target suffix.".format(name, key))
+            fail("flutter_android_app {}: test_apps key {} is reserved or collides with a generated target suffix.".format(name, key))
         for suffix in ["_core", "_manifest", "_check_test", "_assets"]:
             if key + suffix in test_apps:
-                fail("flutter_android_app {}: test_apps keys {!r} and {!r} generate colliding targets.".format(name, key, key + suffix))
+                fail("flutter_android_app {}: test_apps keys {} and {} generate colliding targets.".format(name, key, key + suffix))
 
     for key in keys:
         entry = dict(test_apps[key])
