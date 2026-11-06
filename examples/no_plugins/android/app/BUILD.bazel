@@ -68,3 +68,89 @@ android_binary(
     resource_files = glob(["src/main/res/**"], allow_empty = False),
     deps = [":identity_aggregate"],
 )
+flutter_debug_core(
+    name = "identity_core_two",
+    app = "//:core",
+    entrypoint = "//:integration_test/debug_core_two.dart",
+    srcs = ["//:integration_test/debug_core_helper.dart"],
+    dart_defines = {"IDENTITY_TEST_MARK": "test-two"},
+)
+
+android_binary(
+    name = "identity_test_no_values",
+    assets = [":identity_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle_action"),
+    manifest = ":no_plugins_manifest",
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)
+
+android_binary(
+    name = "identity_test_application_id_only",
+    assets = [":identity_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle_action"),
+    manifest = ":no_plugins_manifest",
+    manifest_values = {"applicationId": "com.example.no_plugins"},
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)
+
+android_binary(
+    name = "identity_test_suffix_relative",
+    assets = [":identity_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle_action"),
+    manifest = ":no_plugins_manifest",
+    manifest_values = {
+        "applicationId": "com.example.no_plugins.test",
+        "applicationName": "io.flutter.app.FlutterApplication",
+        "minSdkVersion": "21",
+        "targetSdkVersion": "36",
+    },
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)
+
+android_binary(
+    name = "identity_test_suffix_absolute",
+    assets = [":identity_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle_action"),
+    manifest = "src/main/AndroidManifestAbsolute.xml",
+    manifest_values = {
+        "applicationId": "com.example.no_plugins.test",
+        "applicationName": "io.flutter.app.FlutterApplication",
+        "minSdkVersion": "21",
+        "targetSdkVersion": "36",
+    },
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)
+
+android_binary(
+    name = "identity_test_flutter_activity",
+    assets = [":identity_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_bundle_action"),
+    manifest = "src/main/AndroidManifestFlutterActivity.xml",
+    manifest_values = {
+        "applicationId": "com.example.no_plugins",
+        "applicationName": "io.flutter.app.FlutterApplication",
+        "minSdkVersion": "21",
+        "targetSdkVersion": "36",
+    },
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)
+
+android_binary(
+    name = "identity_test_two",
+    assets = [":identity_core_two_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":identity_core_two_bundle_action"),
+    manifest = ":no_plugins_manifest",
+    manifest_values = {
+        "applicationId": "com.example.no_plugins",
+        "applicationName": "io.flutter.app.FlutterApplication",
+        "minSdkVersion": "21",
+        "targetSdkVersion": "36",
+    },
+    resource_files = glob(["src/main/res/**"], allow_empty = False),
+    deps = [":main_activity", ":no_plugins_inputs", ":no_plugins_debug_manifest"],
+)

@@ -1,0 +1,26 @@
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+load(":identity_macro_probe.bzl", "manifest_from_app")
+
+alias(
+    name = "no_plugins_alias",
+    actual = "//android/app:no_plugins",
+)
+
+manifest_from_app(
+    name = "derived_cross_package",
+    app = "//android/app:no_plugins",
+)
+
+manifest_from_app(
+    name = "derived_through_alias",
+    app = ":no_plugins_alias",
+)
+
+flutter_android_app(
+    name = "identity_macro_argument_probe",
+    core = "//:core",
+    plugins = None,
+    manifest_values = {"applicationId": "com.example.no_plugins"},
+    deps = ["//android/app:main_activity"],
+    test_entrypoints = ["//:integration_test/debug_core_test.dart"],
+)

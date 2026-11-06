@@ -1,0 +1,35 @@
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app", "flutter_assets_dir")
+load("@rules_android//rules:rules.bzl", "android_binary")
+
+_VALUES = {
+    "applicationId": "com.example.no_plugins",
+    "applicationName": "io.flutter.app.FlutterApplication",
+    "minSdkVersion": "21",
+    "targetSdkVersion": "36",
+}
+
+flutter_android_app(
+    name = "shared_app",
+    core = "//:core",
+    plugins = None,
+    manifest_values = _VALUES,
+    deps = ["//android/app:main_activity"],
+)
+
+flutter_debug_core(
+    name = "shared_test_core",
+    app = "//:core",
+    entrypoint = "//:integration_test/debug_core_test.dart",
+    dart_defines = {"IDENTITY_TEST_MARK": "shared-values"},
+)
+
+android_binary(
+    name = "shared_test_apk",
+    assets = [":shared_test_core_bundle"],
+    assets_dir = flutter_assets_dir(assets = ":shared_test_core_bundle_action"),
+    manifest = ":shared_app_manifest",
+    manifest_values = _VALUES,
+    resource_files = [],
+    deps = ["//android/app:main_activity", ":shared_app_inputs", ":shared_app_debug_manifest"],
+)
