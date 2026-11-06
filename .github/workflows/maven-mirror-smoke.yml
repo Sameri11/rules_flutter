@@ -84,3 +84,34 @@ jobs:
             ${{ runner.temp }}/maven-mirror-fetch.log
             ${{ runner.temp }}/maven-mirror-result.json
           if-no-files-found: warn
+
+  consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 98f43ca51468e45f34ee616d1d37986556f15e3e
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+          bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+      - name: Consumer public API analysis and generated guards
+        working-directory: tests/consumer
+        run: |
+          set -euo pipefail
+          bazel build --nobuild -c opt --lockfile_mode=error \
+            --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+            --android_platforms=@rules_android//:arm64-v8a \
+            //:analysis_only 2>&1 | tee "$RUNNER_TEMP/maven-mirror-consumer-analysis.log"
+          bazel test --lockfile_mode=error \
+            //:fake_plugin_deps_check //:fake_plugin_deps_guards_test \
+            2>&1 | tee "$RUNNER_TEMP/maven-mirror-consumer-guards.log"
+      - name: Upload consumer evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: maven-mirror-consumer-evidence
+          path: ${{ runner.temp }}/maven-mirror-consumer-*.log
+          if-no-files-found: warn
