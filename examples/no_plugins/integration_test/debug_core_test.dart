@@ -3,6 +3,6 @@
 import 'debug_core_helper.dart';
 
 void main() {
-  const mark = String.fromEnvironment('DEBUG_CORE_MARK', defaultValue: 'unset');
-  print('debug core mark=$mark helper=${helperLabel()}');
+  const mark = String.fromEnvironment('IDENTITY_TEST_MARK', defaultValue: 'unset');
+  print('identity test mark=$mark helper=${helperLabel()}');
 }
