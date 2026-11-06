@@ -553,5 +553,4 @@ The wildcard command `bazel test //...` retains Bazel's normal target universe:
 it can also analyze non-test app artifacts, which require an Android app
 configuration. Use `bazel test --build_tests_only //...` to select the tests
 and their dependencies without unrelated non-test roots, or name a host suite
-explicitly when running only host tests. Selected platform-dependent tests are
-not filtered out and still need their platform configuration.
+explicitly when running only host tests. Consumer-declared platform-specific targets must declare their own `target_compatible_with`.

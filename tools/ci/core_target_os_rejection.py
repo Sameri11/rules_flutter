@@ -64,8 +64,8 @@ def main():
             if rejected.returncode == 0:
                 sys.exit("FAIL: host-configured macro-generated libapp unexpectedly analyzed")
             for expected in (
-                "Target OS selection failed for label",
-                "app_core_libapp_arm64-v8a (ABI arm64-v8a)",
+                "Target //:app_core_libapp_arm64-v8a is incompatible and cannot be built, but was explicitly requested",
+                "didn't satisfy constraint @@platforms//os:android",
             ):
                 if expected not in rejected.stdout:
                     sys.exit("FAIL: rejection lacked {!r}:\n{}".format(expected, rejected.stdout))
@@ -73,16 +73,23 @@ def main():
             original = core_rules_copy.read_text()
             fallback = '"//conditions:default": None,'
             planted = '"//conditions:default": ":" + name + "_kernel_neutral",'
-            if original.count(fallback) != 1:
-                sys.exit("FAIL: could not uniquely locate the rejecting OS selection")
+            compatibility = 'target_compatible_with = [Label("@platforms//os:android"), ABIS[abi].cpu_constraint] + aot_target_compatible_with(),'
+            if original.count(fallback) != 1 or original.count(compatibility) != 1:
+                sys.exit("FAIL: could not uniquely locate rejection and compatibility declarations")
             try:
-                core_rules_copy.write_text(original.replace(fallback, planted, 1))
+                core_rules_copy.write_text(
+                    original.replace(fallback, planted, 1).replace(
+                        compatibility,
+                        "target_compatible_with = [],",
+                        1,
+                    )
+                )
                 accepted = run(workspace, output_user_root)
             finally:
                 core_rules_copy.write_text(original)
             if accepted.returncode != 0:
                 sys.exit("FAIL: planted Android fallback was not detected by the probe:\n" + accepted.stdout)
-            print("PASS: configured libapp rejects without an OS kernel and detects an Android fallback")
+
         finally:
             subprocess.run(
                 [BAZEL, "--output_user_root=" + str(output_user_root), "shutdown"],

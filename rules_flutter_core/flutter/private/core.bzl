@@ -410,7 +410,8 @@ def flutter_core(
             abi = abi,
             snapshot_flags = ABIS[abi].snapshot_flags,
             strip = True,
-            target_compatible_with = aot_target_compatible_with(),
+            # Only the matching Android ABI has a libapp implementation.
+            target_compatible_with = [Label("@platforms//os:android"), ABIS[abi].cpu_constraint] + aot_target_compatible_with(),
         )
 
     guards = [":path_deps_check"]
