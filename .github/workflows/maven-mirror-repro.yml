@@ -1,0 +1,94 @@
+name: Maven mirror clean hash proof
+
+on:
+  push:
+    branches: [prototype/maven-mirror-repro]
+
+permissions:
+  contents: read
+
+jobs:
+  example:
+    name: ${{ matrix.example }} — two clean builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [demo_app, demo_app_debug, no_plugins, pub_plugins, local_plugin]
+    env:
+      FLUTTER_VERSION: 3.47.3
+      FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+      BAZELISK_VERSION: v1.29.0
+      BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+      BAZEL_CACHE_MODE: ''
+      BAZEL_LOCKFILE_MODE: error
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          cache-mode: ''
+          cache-host: ''
+          cache-project-id: ''
+          cache-token: ''
+
+      - name: Run both isolated hash phases
+        env:
+          EXAMPLE: ${{ matrix.example }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/maven-mirror-proof/$EXAMPLE"
+          mkdir -p "$evidence"
+          candidate="$(git rev-parse HEAD)"
+          printf 'candidate=%s\nworkflow=%s\nexample=%s\n' "$candidate" "$candidate" "$EXAMPLE" > "$evidence/provenance.txt"
+          printf 'Flutter=%s (%s)\nBazelisk=%s (%s)\nNDK=28.2.13676358\n' \
+            "$FLUTTER_VERSION" "$FLUTTER_SHA256_LINUX_X64" \
+            "$BAZELISK_VERSION" "$BAZELISK_SHA256_LINUX_AMD64" >> "$evidence/provenance.txt"
+          for phase in 1 2; do
+            base="$RUNNER_TEMP/maven-mirror-proof/$EXAMPLE/outputbase-$phase"
+            mkdir -p "$base"
+            wrapper="$RUNNER_TEMP/maven-mirror-proof/$EXAMPLE/bazel-$phase"
+            cat > "$wrapper" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          command="$1"
+          shift
+          exec bazel --output_base="$base" "$command" --remote_cache= "$@"
+          EOF
+            chmod +x "$wrapper"
+            manifests="$evidence/phase$phase/manifests"
+            mkdir -p "$manifests"
+            printf '\nphase=%s output_base=%s disk_cache=disabled remote_cache=disabled wrapper=%s\n' \
+              "$phase" "$base" "$wrapper" >> "$evidence/provenance.txt"
+            set +e
+            python3 tools/ci/example_hashes.py --check --only "$EXAMPLE" \
+              --golden tools/ci/example_hashes_linux.txt --bazel "$wrapper" \
+              --manifests "$manifests" > "$evidence/phase$phase/hash.log" 2>&1
+            result=$?
+            set -e
+              exit "$result"
+            fi
+            cp "$evidence/phase$phase/hash.log" "$evidence/phase$phase/rows.txt"
+            rm -f "$manifests"/*.apk
+            printf 'phase=%s hash_gate=PASS\n' "$phase" >> "$evidence/provenance.txt"
+          done
+          diff -u \
+            <(grep -E '^(demo_app|demo_app_debug|no_plugins|pub_plugins|local_plugin) ' "$evidence/phase1/rows.txt") \
+            <(grep -E '^(demo_app|demo_app_debug|no_plugins|pub_plugins|local_plugin) ' "$evidence/phase2/rows.txt") \
+            > "$evidence/phase-comparison.diff"
+          printf 'phase_comparison=identical\n' >> "$evidence/provenance.txt"
+          sha256sum "$evidence"/phase*/rows.txt "$evidence"/phase*/manifests/*.execution.json \
+            > "$evidence/artifact-sha256.txt"
+
+      - name: Upload compact proof receipts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: maven-mirror-proof-${{ matrix.example }}
+          path: ${{ runner.temp }}/maven-mirror-proof/${{ matrix.example }}
+          if-no-files-found: warn
