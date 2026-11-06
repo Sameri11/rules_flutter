@@ -20,6 +20,7 @@ def run(workspace, output_user_root):
             "build",
             "--nobuild",
             "--lockfile_mode=update",
+            "--platforms=@platforms//host:host",
             "//:app_core_libapp_arm64-v8a",
         ],
         cwd=workspace,
@@ -88,7 +89,7 @@ def main():
                 core_rules_copy.write_text(original)
             if accepted.returncode != 0:
                 sys.exit("FAIL: planted Android fallback was not detected by the probe:\n" + accepted.stdout)
-            print("PASS: incompatible host libapp is rejected and the probe detects an Android fallback")
+
         finally:
             subprocess.run(
                 [BAZEL, "--output_user_root=" + str(output_user_root), "shutdown"],

@@ -145,22 +145,22 @@ jobs:
             directory: examples/no_plugins
             apk: //android/app:no_plugins
             candidate: a1
-            candidate_sha: d03f86e
+            candidate_sha: 3ff5797
           - name: demo_app
             directory: examples/demo_app
             apk: //android/app:demo_app
             candidate: a1
-            candidate_sha: d03f86e
+            candidate_sha: 3ff5797
           - name: no_plugins
             directory: examples/no_plugins
             apk: //android/app:no_plugins
             candidate: a2
-            candidate_sha: 14509d7
+            candidate_sha: 3ff5797
           - name: demo_app
             directory: examples/demo_app
             apk: //android/app:demo_app
             candidate: a2
-            candidate_sha: 14509d7
+            candidate_sha: 3ff5797
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -229,3 +229,84 @@ jobs:
           name: wildcard-aquery-${{ matrix.name }}-${{ matrix.candidate }}
           path: ${{ runner.temp }}/wildcard-aquery
           if-no-files-found: warn
+  host-wildcard:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: no_plugins
+            directory: examples/no_plugins
+          - name: pub_plugins
+            directory: examples/pub_plugins
+          - name: local_plugin
+            directory: examples/local_plugin
+          - name: demo_app
+            directory: examples/demo_app
+          - name: core_consumer
+            directory: tests/core_consumer
+          - name: consumer
+            directory: tests/consumer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+      - name: Compare flagless release wildcards
+        working-directory: ${{ matrix.directory }}
+        shell: bash
+        run: |
+          set +e
+          bazel() {
+            local subcommand="$1"
+            shift
+            command bazel "$subcommand" \
+              --repo_env=ANDROID_HOME="$ANDROID_HOME" \
+              --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+              --repo_env=FLUTTER_ROOT="$FLUTTER_ROOT" "$@"
+          }
+          mkdir -p "$RUNNER_TEMP/wildcard-host"
+          git worktree add "$RUNNER_TEMP/baseline" origin/main
+          baseline="$RUNNER_TEMP/baseline/${{ matrix.directory }}"
+          run_cell() {
+            revision="$1"
+            command_name="$2"
+            shift 2
+            if [[ "$revision" == baseline ]]; then
+              (cd "$baseline" && bazel "$@") 2>&1 | tee "$RUNNER_TEMP/wildcard-host/${{ matrix.name }}-${revision}-${command_name}.log"
+            else
+              bazel "$@" 2>&1 | tee "$RUNNER_TEMP/wildcard-host/${{ matrix.name }}-${revision}-${command_name}.log"
+            fi
+            rc=${PIPESTATUS[0]}
+            echo "EXIT_CODE=$rc" | tee -a "$RUNNER_TEMP/wildcard-host/${{ matrix.name }}-${revision}-${command_name}.log"
+          }
+          for revision in baseline candidate; do
+            run_cell "$revision" build build --keep_going //...
+            run_cell "$revision" test test --keep_going //...
+          done
+          (cd "$baseline" && bazel shutdown)
+          bazel shutdown
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: wildcard-host-${{ matrix.name }}
+          path: ${{ runner.temp }}/wildcard-host
+          if-no-files-found: warn
+
+  hash-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.47.3
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+      - name: Check recorded APK hashes
+        run: python3 tools/ci/example_hashes.py --check

@@ -324,6 +324,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
         core = core,
         native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None,
         tags = helper_tags,
+        # Split-native inputs exist only in Android split configurations.
         target_compatible_with = [Label("@platforms//os:android")],
         visibility = visibility,
     )

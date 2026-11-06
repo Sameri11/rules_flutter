@@ -410,6 +410,7 @@ def flutter_core(
             abi = abi,
             snapshot_flags = ABIS[abi].snapshot_flags,
             strip = True,
+            # Only the matching Android ABI has a libapp implementation.
             target_compatible_with = [Label("@platforms//os:android"), ABIS[abi].cpu_constraint] + aot_target_compatible_with(),
         )
 
@@ -439,10 +440,6 @@ def flutter_core(
     build_test(
         name = name + "_guards_test",
         targets = guards,
-        target_compatible_with = select({
-            Label("//flutter/private:target_os_android"): [Label("@platforms//os:linux")],
-            "//conditions:default": [],
-        }),
         **kwargs
     )
 
