@@ -71,6 +71,7 @@ jobs:
               --manifests "$manifests" > "$evidence/phase$phase/hash.log" 2>&1
             result=$?
             set -e
+            if [[ $result -ne 0 ]]; then
               exit "$result"
             fi
             cp "$evidence/phase$phase/hash.log" "$evidence/phase$phase/rows.txt"
