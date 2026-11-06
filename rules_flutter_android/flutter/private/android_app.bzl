@@ -8,8 +8,9 @@ library and the asset copy are built once.
 """
 
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
 load(":abis.bzl", "MIN_SDK")
-load(":android.bzl", "flutter_android_manifest", "flutter_assets_dir")
+load(":android.bzl", "flutter_android_assets", "flutter_android_manifest", "flutter_assets_dir")
 load(":android_inputs_rules.bzl", "flutter_android_inputs")
 load(":apk_check.bzl", "flutter_apk_check")
 load(":maven_identity.bzl", "check_flutter_maven_repository")
@@ -29,6 +30,7 @@ _MODE_RELEASE = Label("@rules_flutter_core//flutter:mode_release")
 _UNSET = struct(sentinel = "plugins")
 _DEFAULT_DEBUG_MANIFEST = struct(sentinel = "debug_manifest")
 
+_TEST_APK_TAG = "flutter-test-apk"
 def flutter_android_app(
         name,
         core = None,
@@ -41,13 +43,15 @@ def flutter_android_app(
         debug_manifest = _DEFAULT_DEBUG_MANIFEST,
         apk_check = True,
         deps = [],
+        test_apps = {},
         **kwargs):
     """A stock android_binary `name` with Flutter's defaults for a standard layout.
 
     Declares `<name>_inputs` from `core` and `plugins` unless `inputs` names an
-    existing flutter_android_inputs target. The macro's own targets carry the
-    caller's tags plus `manual`. `<name>` and `<name>_check_test` carry the caller's
-    tags and visibility.
+    existing flutter_android_inputs target. `test_apps` declares debug APKs with
+    the app's identity and Android inputs; test-only Dart artifacts can replace
+    their kernel without creating another inputs target. Generated helper targets
+    carry the caller's tags plus `manual`.
 
     Args:
       name: the APK's target name.
@@ -58,6 +62,7 @@ def flutter_android_app(
         Its `core` and `plugins` are the ones it was declared with, and it must be
         visible from this package.
       plugins: the plugin repository, e.g. "@flutter_plugins", or None for an app
+        without plugins.
       maven_repo: optional Maven repository alias. With plugins it must resolve
         to the same canonical repository selected by the project; without plugins
         it defaults to `@flutter_maven` and may be overridden. With `inputs=`, an
@@ -75,6 +80,11 @@ def flutter_android_app(
       apk_check: whether to declare `<name>_check_test`, the APK's native-library
         check.
       deps: the app's own targets. The inputs target is appended.
+      test_apps: a dictionary from APK suffix to either macro-core settings
+        (`entrypoint`, `srcs`, `dart_defines`, optional `app`) or a prebuilt
+        `flutter_debug_core` label under `core`. Each entry also accepts Android
+        binary attributes; `deps` append to the app's dependencies. Generated APKs
+        and check targets are debug-only, `testonly` by default, and `manual`.
       **kwargs: forwarded to android_binary, and tags and visibility also to
         `<name>_check_test`. `assets` and `assets_dir` are set by the macro and
         refused here.
@@ -188,3 +198,117 @@ def flutter_android_app(
             tags = kwargs.get("tags", []),
             visibility = kwargs.get("visibility"),
         )
+    test_inputs_label = native.package_relative_label(inputs)
+    test_native_label = test_inputs_label.same_package_label(test_inputs_label.name + "_native")
+    _declare_test_apps(
+        name = name,
+        test_apps = test_apps,
+        app_core = core,
+        inputs = inputs,
+        app_manifest = manifest,
+        pubspec = pubspec,
+        manifest_values = values,
+        resource_files = resource_files,
+        app_deps = deps,
+        app_extra_deps = maven_validation,
+        debug_manifest_deps = debug_manifest_deps,
+        app_kwargs = kwargs,
+        tags = kwargs.get("tags", []),
+        native_label = test_native_label,
+    )
+
+def _declare_test_apps(name, test_apps, app_core, inputs, app_manifest, pubspec, manifest_values, resource_files, app_deps, app_extra_deps, debug_manifest_deps, app_kwargs, tags, native_label):
+    reserved = ["inputs", "manifest", "debug_manifest", "check_test"]
+    keys = sorted(test_apps.keys())
+    for key in keys:
+        if not key or key in reserved or key.endswith("_core") or key.endswith("_manifest") or key.endswith("_check_test") or key.endswith("_assets"):
+            fail("flutter_android_app {}: test_apps key {!r} is reserved or collides with a generated target suffix.".format(name, key))
+        for suffix in ["_core", "_manifest", "_check_test", "_assets"]:
+            if key + suffix in test_apps:
+                fail("flutter_android_app {}: test_apps keys {!r} and {!r} generate colliding targets.".format(name, key, key + suffix))
+
+    for key in keys:
+        entry = dict(test_apps[key])
+        target = name + "_" + key
+        macro_fields = ["entrypoint", "srcs", "dart_defines", "app"]
+        mixed_core = False
+        for field in macro_fields:
+            if field in entry:
+                mixed_core = True
+        if "core" in entry and mixed_core:
+            fail("flutter_android_app {}: test_apps[{}] cannot combine `core` with entrypoint, srcs, dart_defines, or app.".format(name, key))
+        if "core" not in entry:
+            if app_core == None and "app" not in entry:
+                fail("flutter_android_app {}: test_apps[{}] needs `app` when the app call uses prebuilt `inputs`.".format(name, key))
+            test_core = target + "_core"
+            flutter_debug_core(
+                name = test_core,
+                app = entry.pop("app", app_core),
+                entrypoint = entry.pop("entrypoint", "lib/main.dart"),
+                srcs = entry.pop("srcs", []),
+                dart_defines = entry.pop("dart_defines", {}),
+                tags = _test_tags(entry.get("tags", tags)),
+                testonly = entry.get("testonly", True),
+                visibility = entry.get("visibility", app_kwargs.get("visibility")),
+                target_compatible_with = entry.get("target_compatible_with", []),
+            )
+        else:
+            test_core = entry.pop("core")
+            for field in macro_fields:
+                entry.pop(field, None)
+
+        entry_manifest = entry.pop("manifest", app_manifest)
+        entry_values = entry.pop("manifest_values", {})
+        for version_key in ["versionCode", "versionName"]:
+            if version_key in entry_values:
+                fail("flutter_android_app {}: test_apps[{}].manifest_values['{}'] and the pubspec both set the version.".format(name, key, version_key))
+        values = dict(manifest_values)
+        values.update(entry_values)
+        stamped = target + "_manifest"
+        test_tags = _test_tags(entry.get("tags", tags))
+        flutter_android_manifest(name = stamped, manifest = entry_manifest, pubspec = pubspec, tags = test_tags)
+        flutter_android_assets(name = target + "_assets", core = test_core, tags = test_tags, testonly = entry.get("testonly", True), visibility = entry.get("visibility", app_kwargs.get("visibility")))
+
+        testonly = entry.pop("testonly", True)
+        visibility = entry.pop("visibility", app_kwargs.get("visibility"))
+        compatible = _debug_compatibility(entry.pop("target_compatible_with", app_kwargs.get("target_compatible_with", [])))
+        entry_tags = _test_tags(entry.pop("tags", tags))
+        entry_resources = entry.pop("resource_files", resource_files)
+        entry_deps = entry.pop("deps", [])
+        binary_kwargs = dict(app_kwargs)
+        binary_kwargs.update(entry)
+        binary_kwargs.pop("assets", None)
+        binary_kwargs.pop("assets_dir", None)
+        binary_kwargs.pop("manifest", None)
+        binary_kwargs.pop("manifest_values", None)
+        binary_kwargs.pop("resource_files", None)
+        binary_kwargs.pop("deps", None)
+        binary_kwargs["tags"] = entry_tags
+        binary_kwargs["testonly"] = testonly
+        binary_kwargs["visibility"] = visibility if visibility != None else ["//visibility:public"]
+        binary_kwargs["target_compatible_with"] = compatible
+        binary_kwargs.setdefault("nocompress_extensions", [".so"])
+        android_binary(
+            name = target,
+            assets = [":" + target + "_assets"],
+            assets_dir = flutter_assets_dir(":" + target + "_assets"),
+            manifest = ":" + stamped,
+            manifest_values = values,
+            resource_files = entry_resources,
+            deps = app_deps + entry_deps + [native.package_relative_label(inputs)] + debug_manifest_deps + app_extra_deps,
+            **binary_kwargs
+        )
+        flutter_apk_check(name = target + "_check_test", binary = ":" + target, native = [native_label], tags = entry_tags, visibility = visibility, testonly = testonly)
+
+def _test_tags(tags):
+    out = list(tags)
+    for tag in ["manual", _TEST_APK_TAG]:
+        if tag not in out:
+            out.append(tag)
+    return out
+
+def _debug_compatibility(extra):
+    return select({
+        _MODE_DEBUG: extra,
+        "//conditions:default": extra + ["@platforms//:incompatible"],
+    })

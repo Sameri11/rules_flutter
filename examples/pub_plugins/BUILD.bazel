@@ -1,7 +1,7 @@
 # Dart targets for the flat pub-plugin example.
 
 load("@rules_flutter_android//flutter:defs.bzl", "flutter_plugin_deps_guards")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_debug_core", "flutter_test_suite")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -15,15 +15,6 @@ flutter_core(
     pub = "@pub",
 )
 
-# A debug artifact compiled from integration_test/, with its own define. Debug
-# only: `bazel build //...` skips it under release and does not build it under debug.
-flutter_debug_core(
-    name = "debug_core",
-    srcs = ["integration_test/debug_core_helper.dart"],
-    app = ":app",
-    dart_defines = {"DEBUG_CORE_MARK": "test-value"},
-    entrypoint = "integration_test/debug_core_test.dart",
-)
 
 flutter_test_suite(
     name = "tests",

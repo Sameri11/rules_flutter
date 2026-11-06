@@ -12,6 +12,13 @@ flutter_android_app(
     manifest_values = {"applicationId": "com.example.pub_plugins"},
     plugins = "@flutter_plugins",
     deps = [":main_activity"],
+    test_apps = {
+        "smoke": {
+            "entrypoint": "//integration_test:debug_core_test.dart",
+            "srcs": ["//integration_test:debug_core_helper.dart"],
+            "dart_defines": {"DEBUG_CORE_MARK": "plugin-test-value"},
+        },
+    },
 )
 
 kt_android_library(
