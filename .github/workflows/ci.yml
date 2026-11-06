@@ -364,6 +364,7 @@ jobs:
             tests=(//android/app:no_plugins_smoke //android/app:no_plugins_prebuilt //android/app:no_plugins_suffix //android/app:no_plugins_flutter_activity)
             checks=(//android/app:no_plugins_smoke_check_test //android/app:no_plugins_prebuilt_check_test //android/app:no_plugins_suffix_check_test //android/app:no_plugins_flutter_activity_check_test)
             bazel build "${common[@]}" //android/app:no_plugins "${tests[@]}" "${checks[@]}"
+            bazel test "${common[@]}" "${checks[@]}"
             python3 ../../tools/ci/test_apk_kernel_check.py --bazel-arg=-c --bazel-arg=fastbuild --bazel-arg=--@rules_flutter_core//flutter:mode=debug --app-core //:core --app-apk //android/app:no_plugins \\
               --test //android/app:no_plugins_smoke=//android/app:no_plugins_smoke_core \\
               --test //android/app:no_plugins_prebuilt=//integration_test:prebuilt_core \\
@@ -371,6 +372,7 @@ jobs:
               --test //android/app:no_plugins_flutter_activity=//android/app:no_plugins_flutter_activity_core
           else
             bazel build "${common[@]}" //android/app:pub_plugins //android/app:pub_plugins_smoke //android/app:pub_plugins_smoke_check_test
+            bazel test "${common[@]}" //android/app:pub_plugins_smoke_check_test
             python3 ../../tools/ci/test_apk_kernel_check.py --bazel-arg=-c --bazel-arg=fastbuild --bazel-arg=--@rules_flutter_core//flutter:mode=debug --app-core //:app --app-apk //android/app:pub_plugins \\
               --test //android/app:pub_plugins_smoke=//android/app:pub_plugins_smoke_core
           fi
