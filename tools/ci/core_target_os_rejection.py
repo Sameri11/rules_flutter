@@ -90,6 +90,7 @@ def main():
             if accepted.returncode != 0:
                 sys.exit("FAIL: planted Android fallback was not detected by the probe:\n" + accepted.stdout)
 
+            print("PASS: host libapp rejects as incompatible; planted fallback builds")
         finally:
             subprocess.run(
                 [BAZEL, "--output_user_root=" + str(output_user_root), "shutdown"],
