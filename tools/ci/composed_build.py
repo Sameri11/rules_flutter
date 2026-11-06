@@ -47,16 +47,7 @@ def main():
     flags = MODE_FLAGS[args.mode]
     build(*flags, "--android_platforms=@rules_android//:arm64-v8a", "--", *CHECKS[args.mode])
 
-    if args.mode == "release":
-        # Configure the three OS-specific roots directly; keep the rest host-configured.
-        roots = tuple("//composed_app:core_libapp_" + abi for abi in ABIS)
-        build(*flags, "--android_platforms=" + PLATFORMS,
-              "--platforms=@rules_android//:arm64-v8a", "--", *roots)
-        # This partition retains every non-libapp root and must run last for host artifacts.
-        excluded = tuple("-" + root for root in roots)
-        build(*flags, "--android_platforms=" + PLATFORMS, "--", "//composed_app:all", *excluded)
-    else:
-        build(*flags, "--android_platforms=" + PLATFORMS, "--", "//composed_app:all")
+    build(*flags, "--android_platforms=" + PLATFORMS, "--", "//composed_app:all")
 
     shutil.copy2(WORKSPACE / "bazel-bin/composed_app/direct_apk.apk",
                  evidence / ("direct-" + args.mode + ".apk"))

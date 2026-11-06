@@ -2,6 +2,7 @@
 """Probe configured libapp rejection and guard against an Android fallback."""
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -63,26 +64,48 @@ def main():
             rejected = run(workspace, output_user_root)
             if rejected.returncode == 0:
                 sys.exit("FAIL: host-configured macro-generated libapp unexpectedly analyzed")
-            for expected in (
-                "Target OS selection failed for label",
-                "app_core_libapp_arm64-v8a (ABI arm64-v8a)",
-            ):
-                if expected not in rejected.stdout:
-                    sys.exit("FAIL: rejection lacked {!r}:\n{}".format(expected, rejected.stdout))
-
+            explicit_error = (
+                "Target //:app_core_libapp_arm64-v8a is incompatible and cannot be built, "
+                "but was explicitly requested"
+            )
+            if explicit_error not in rejected.stdout:
+                sys.exit("FAIL: rejection lacked {!r}:\n{}".format(explicit_error, rejected.stdout))
+            target_line = "//:app_core_libapp_arm64-v8a"
+            dependency_chain = rejected.stdout.partition("Dependency chain:")[2]
+            has_target_os_rejection = (
+                target_line in dependency_chain
+                and re.search(
+                    r"didn't satisfy constraints?\s+(?:\[[^\]]*@@platforms//os:android\]|@@platforms//os:android)",
+                    dependency_chain,
+                )
+            )
+            if not has_target_os_rejection:
+                sys.exit(
+                    "FAIL: dependency chain for {} lacked an Android OS constraint:\n{}".format(
+                        target_line, rejected.stdout
+                    )
+                )
             original = core_rules_copy.read_text()
             fallback = '"//conditions:default": None,'
             planted = '"//conditions:default": ":" + name + "_kernel_neutral",'
-            if original.count(fallback) != 1:
-                sys.exit("FAIL: could not uniquely locate the rejecting OS selection")
+            compatibility = 'target_compatible_with = [Label("@platforms//os:android"), ABIS[abi].cpu_constraint] + aot_target_compatible_with(),'
+            if original.count(fallback) != 1 or original.count(compatibility) != 1:
+                sys.exit("FAIL: could not uniquely locate rejection and compatibility declarations")
             try:
-                core_rules_copy.write_text(original.replace(fallback, planted, 1))
+                core_rules_copy.write_text(
+                    original.replace(fallback, planted, 1).replace(
+                        compatibility,
+                        "target_compatible_with = [],",
+                        1,
+                    )
+                )
                 accepted = run(workspace, output_user_root)
             finally:
                 core_rules_copy.write_text(original)
             if accepted.returncode != 0:
                 sys.exit("FAIL: planted Android fallback was not detected by the probe:\n" + accepted.stdout)
-            print("PASS: configured libapp rejects without an OS kernel and detects an Android fallback")
+
+            print("PASS: host libapp rejects as incompatible; planted fallback builds")
         finally:
             subprocess.run(
                 [BAZEL, "--output_user_root=" + str(output_user_root), "shutdown"],
