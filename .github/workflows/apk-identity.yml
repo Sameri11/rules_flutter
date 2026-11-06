@@ -53,15 +53,17 @@ jobs:
               echo "BUILD_FAILED $probe" >> "$out/e3-results.txt"
             fi
           done
-          # E1/E2/E4/E5 variants are built and exported from the same CI runner.
+          # E1/E2/E3/E4/E5 variants are built and exported from the same CI runner.
           for name in no_plugins_identity_macro_generated identity_test_direct identity_test_aggregate identity_test_no_values identity_test_application_id_only identity_test_suffix_relative identity_test_suffix_absolute identity_test_flutter_activity; do
             if bazel build "${common[@]}" "//android/app:$name" > "$out/$name.build.log" 2>&1; then
+              echo "BUILD_SUCCEEDED $name" >> "$out/variant-results.txt"
               cp "bazel-bin/android/app/$name.apk" "$out/$name.apk"
               "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2" dump badging "$out/$name.apk" > "$out/$name.badging"
               "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2" dump xmltree "$out/$name.apk" --file AndroidManifest.xml > "$out/$name.xmltree"
               "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" dex packages "$out/$name.apk" > "$out/$name.dex-packages"
             else
               echo "BUILD_FAILED $name" >> "$out/variant-failures.txt"
+              echo "BUILD_FAILED $name" >> "$out/variant-results.txt"
             fi
           done
           for step in 1 2 3; do
@@ -84,10 +86,43 @@ jobs:
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2" dump xmltree "$out/pub_plugins_identity_test.apk" --file AndroidManifest.xml > "$out/pub_plugins_identity_test.xmltree"
           sha256sum "$out"/* > "$out/SHA256SUMS"
 
+      - name: Print E3 and variant results
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/identity-evidence"
+          cd "$out"
+          cat e3-results.txt variant-results.txt e3-build-lines.txt || true
+          for f in e3*.log; do echo "== $f"; grep -E "ERROR|Error|unique basename|Build completed|no such" "$f" | head -n 8; done
+          for name in no_plugins_identity_macro_generated identity_test_direct; do
+            echo "== $name"; sha256sum "$name.apk" "$name.badging" "$name.xmltree" "$name.dex-packages" || true
+          done
+          for ext in badging xmltree dex-packages; do
+            if cmp -s "no_plugins_identity_macro_generated.$ext" "identity_test_direct.$ext"; then echo "SAME $ext"; else echo "DIFF $ext"; diff "identity_test_direct.$ext" "no_plugins_identity_macro_generated.$ext" | head -n 20; fi
+          done
+          unzip -l no_plugins_identity_macro_generated.apk | grep -E "kernel_blob|isolate_snapshot_data|vm_snapshot_data" || true
+          grep -E "BUILD_FAILED" no_plugins_identity_macro_generated.build.log identity_test_direct.build.log || true
+          grep -E "ERROR" no_plugins_identity_macro_generated.build.log | head -n 10 || true
+
       - name: Upload measurement artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: apk-identity-measurements
           path: ${{ runner.temp }}/identity-evidence/
+          if-no-files-found: warn
+      - name: Upload small evidence index
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apk-identity-evidence-small
+          path: |
+            ${{ runner.temp }}/identity-evidence/*.badging
+            ${{ runner.temp }}/identity-evidence/*.xmltree
+            ${{ runner.temp }}/identity-evidence/*.dex-packages
+            ${{ runner.temp }}/identity-evidence/*.build.log
+            ${{ runner.temp }}/identity-evidence/e3*.log
+            ${{ runner.temp }}/identity-evidence/e3-results.txt
+            ${{ runner.temp }}/identity-evidence/e3-build-lines.txt
+            ${{ runner.temp }}/identity-evidence/variant-failures.txt
+            ${{ runner.temp }}/identity-evidence/SHA256SUMS
           if-no-files-found: warn
