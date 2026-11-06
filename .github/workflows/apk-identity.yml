@@ -54,7 +54,7 @@ jobs:
             fi
           done
           # E1/E2/E4/E5 variants are built and exported from the same CI runner.
-          for name in identity_test_direct identity_test_aggregate identity_test_no_values identity_test_application_id_only identity_test_suffix_relative identity_test_suffix_absolute identity_test_flutter_activity; do
+          for name in no_plugins_identity_macro_generated identity_test_direct identity_test_aggregate identity_test_no_values identity_test_application_id_only identity_test_suffix_relative identity_test_suffix_absolute identity_test_flutter_activity; do
             if bazel build "${common[@]}" "//android/app:$name" > "$out/$name.build.log" 2>&1; then
               cp "bazel-bin/android/app/$name.apk" "$out/$name.apk"
               "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2" dump badging "$out/$name.apk" > "$out/$name.badging"

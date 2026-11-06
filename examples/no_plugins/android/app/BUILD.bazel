@@ -16,13 +16,20 @@ flutter_android_app(
     # Do not construct labels in the absent @flutter_plugins repository. The
     # macro still compiles the empty GeneratedPluginRegistrant stock Flutter does.
     plugins = None,
+    test_apps = {
+        "identity_macro_generated": {
+            "entrypoint": "//:integration_test/debug_core_test.dart",
+            "srcs": ["//:integration_test/debug_core_helper.dart"],
+            "dart_defines": {"IDENTITY_TEST_MARK": "test-value"},
+        },
+    },
     deps = [":main_activity"],
 )
 
 kt_android_library(
     name = "main_activity",
     srcs = ["src/main/kotlin/com/example/no_plugins/MainActivity.kt"],
-    deps = [":no_plugins_inputs"],
+    deps = [":no_plugins_inputs_embedding"],
 )
 
 

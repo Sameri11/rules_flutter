@@ -12,6 +12,7 @@ load(":abis.bzl", "MIN_SDK")
 load(":android.bzl", "flutter_android_manifest", "flutter_assets_dir")
 load(":android_inputs_rules.bzl", "flutter_android_inputs")
 load(":apk_check.bzl", "flutter_apk_check")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
 load(":maven_identity.bzl", "check_flutter_maven_repository")
 
 # Mirrors android.bzl's _MANIFEST_VALUES, which goes with the wrapper.
@@ -39,8 +40,8 @@ def flutter_android_app(
         manifest_values = {},
         resource_files = None,
         debug_manifest = _DEFAULT_DEBUG_MANIFEST,
+        test_apps = {},
         apk_check = True,
-        deps = [],
         **kwargs):
     """A stock android_binary `name` with Flutter's defaults for a standard layout.
 
@@ -74,12 +75,19 @@ def flutter_android_app(
         exist. None opts out.
       apk_check: whether to declare `<name>_check_test`, the APK's native-library
         check.
+      test_apps: a dict of test APK suffixes to `entrypoint`, optional `srcs`
+        and `dart_defines`. Requires `core` and `plugins` in this call. Each
+        test uses the app's manifest values, resources, deps and plugin config.
       deps: the app's own targets. The inputs target is appended.
       **kwargs: forwarded to android_binary, and tags and visibility also to
         `<name>_check_test`. `assets` and `assets_dir` are set by the macro and
         refused here.
     """
 
+    if test_apps and (inputs != None or core == None or plugins == _UNSET):
+        fail("flutter_android_app {}: `test_apps` requires `core` and `plugins` in this call, not `inputs`.".format(name))
+
+    deps = kwargs.pop("deps", [])
     maven_validation = []
 
     # The caller's tags reach every target the macro declares, not only `<name>`.
@@ -179,6 +187,40 @@ def flutter_android_app(
         deps = deps + [inputs_label] + debug_manifest_deps + maven_validation,
         **kwargs
     )
+    for suffix, test_app in test_apps.items():
+        test_name = name + "_" + suffix
+        test_core = test_name + "_core"
+        test_inputs = test_name + "_inputs"
+        flutter_debug_core(
+            name = test_core,
+            app = core,
+            entrypoint = test_app["entrypoint"],
+            srcs = test_app.get("srcs", []),
+            dart_defines = test_app.get("dart_defines", {}),
+            tags = internal_tags,
+        )
+        flutter_android_inputs(
+            name = test_inputs,
+            core = ":" + test_core,
+            plugins = plugins,
+            maven_repo = maven_repo,
+            tags = internal_tags,
+        )
+        test_inputs_label = native.package_relative_label(":" + test_inputs)
+        test_bundle = test_inputs_label.same_package_label(test_inputs_label.name + "_bundle")
+        test_kwargs = dict(kwargs)
+        test_kwargs["tags"] = internal_tags
+        test_kwargs.setdefault("nocompress_extensions", [".so"])
+        android_binary(
+            name = test_name,
+            assets = [test_bundle],
+            assets_dir = flutter_assets_dir(assets = test_bundle),
+            manifest = ":" + name + "_manifest",
+            manifest_values = values,
+            resource_files = resource_files,
+            deps = deps + [test_inputs_label] + debug_manifest_deps + maven_validation,
+            **test_kwargs
+        )
 
     if apk_check:
         flutter_apk_check(
