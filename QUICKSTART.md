@@ -175,13 +175,34 @@ maven.install(
     ],
     version_conflict_policy = "pinned",
 )
+
+maven.install(
+    name = "rules_android_maven",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+)
+maven.install(
+    name = "android_ide_common_30_1_3",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+)
 use_repo(maven, "flutter_maven")
 ```
 
-Google's Maven Central mirror is ordered before Central because Central has
-returned HTTP 429 responses. This mirror does not serve every Google Maven
-product, and Coursier may keep using the repository that supplied a POM when
-fetching its JAR; the extra source is not a guarantee of per-artifact fallback.
+The list tries Google's Maven service first, its periodically synced Maven
+Central mirror next, and repo1 Central last. The mirror is included ahead of
+repo1 because Central has returned HTTP 429 responses; it does not serve every
+Google Maven product. Coursier may keep using the repository that supplied a
+POM when fetching its JAR, so the extra source does not guarantee per-artifact
+fallback.
 
 The archive install above is the checked path: keep both `bazel_dep`
 declarations and supply the download through the two `archive_override` tags.
