@@ -5,6 +5,24 @@ bazel_dep(name = "rules_jvm_external", version = "7.1")
 # The Consumer Module owns the Maven repository and exposes its canonical
 # identity to the plugin project.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "rules_android_maven",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+)
+maven.install(
+    name = "android_ide_common_30_1_3",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+)
 use_repo(maven, "flutter_maven")
 
 # The compile SDK, pinned. Left unpinned, rules_android selects the *highest

@@ -168,11 +168,20 @@ maven.install(
         "androidx.exifinterface:exifinterface:1.4.1",
         "com.getkeepsafe.relinker:relinker:1.4.5",
     ],
-    repositories = ["https://maven.google.com", "https://repo1.maven.org/maven2"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
     version_conflict_policy = "pinned",
 )
 use_repo(maven, "flutter_maven")
 ```
+
+Google's Maven Central mirror is ordered before Central because Central has
+returned HTTP 429 responses. This mirror does not serve every Google Maven
+product, and Coursier may keep using the repository that supplied a POM when
+fetching its JAR; the extra source is not a guarantee of per-artifact fallback.
 
 The archive install above is the checked path: keep both `bazel_dep`
 declarations and supply the download through the two `archive_override` tags.

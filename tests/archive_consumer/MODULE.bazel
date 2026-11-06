@@ -70,6 +70,24 @@ register_toolchains("@androidndk//:all")
 # The engine embedding jar's compile and runtime dependencies.
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
+    name = "rules_android_maven",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+)
+maven.install(
+    name = "android_ide_common_30_1_3",
+    known_contributing_modules = ["rules_android"],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+)
+maven.install(
     name = "flutter_maven",
     artifacts = [
         "androidx.annotation:annotation:1.8.1",
@@ -87,6 +105,7 @@ maven.install(
     ],
     repositories = [
         "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
         "https://repo1.maven.org/maven2",
     ],
     version_conflict_policy = "pinned",
