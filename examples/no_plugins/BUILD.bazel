@@ -15,41 +15,38 @@ flutter_core(
 
 flutter_integration_test(
     name = "integration_pass",
-    app = ":core",
     src = "//integration_test:integration_pass_test.dart",
-    data = ["//integration_test:runner_data.txt"],
-    env = {"RUNNER_FIXTURE": "available"},
+    app = ":core",
 )
-
 
 flutter_integration_test(
     name = "integration_fail",
-    app = ":core",
     src = "//integration_test:integration_fail_test.dart",
+    app = ":core",
 )
 
 flutter_integration_test(
     name = "integration_lifecycle",
-    app = ":core",
     src = "//integration_test:integration_lifecycle_test.dart",
+    app = ":core",
 )
 
 flutter_integration_test(
     name = "integration_timeout",
-    app = ":core",
     src = "//integration_test:integration_timeout_test.dart",
+    app = ":core",
 )
 
 flutter_integration_test(
     name = "integration_crash",
-    app = ":core",
     src = "//integration_test:integration_crash_test.dart",
+    app = ":core",
 )
 
 flutter_integration_test(
     name = "integration_deadline",
-    app = ":core",
     src = "//integration_test:integration_deadline_test.dart",
+    app = ":core",
 )
 
 # The host test reads core_test_package, declared by flutter_core for the

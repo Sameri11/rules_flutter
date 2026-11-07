@@ -14,6 +14,14 @@ flutter_android_inputs(
 flutter_android_app(
     name = "no_plugins",
     inputs = ":no_plugins_inputs",
+    integration_tests = {
+        "//:integration_pass": {},
+        "//:integration_fail": {},
+        "//:integration_lifecycle": {},
+        "//:integration_timeout": {},
+        "//:integration_crash": {},
+        "//:integration_deadline": {"timeout": "short"},
+    },
     manifest_values = {"applicationId": "com.example.no_plugins"},
     test_apps = {
         "smoke": {
@@ -38,14 +46,6 @@ flutter_android_app(
             "dart_defines": {"DEBUG_CORE_MARK": "activity-value"},
             "manifest": "//integration_test:flutter_activity_manifest.xml",
         },
-    },
-    integration_tests = {
-        "//:integration_pass": {},
-        "//:integration_fail": {},
-        "//:integration_lifecycle": {},
-        "//:integration_timeout": {},
-        "//:integration_crash": {},
-        "//:integration_deadline": {"timeout": "short"},
     },
     deps = [":main_activity"],
 )

@@ -13,7 +13,6 @@ def _shell_quote(value):
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 def _runner_impl(ctx):
-    info = ctx.attr.integration_test[FlutterIntegrationTestInfo]
     apk_files = [
         file
         for file in ctx.attr.apk[DefaultInfo].files.to_list()
@@ -38,9 +37,9 @@ def _runner_impl(ctx):
         ),
     ]
     ctx.actions.write(launcher, "\n".join(lines) + "\n", is_executable = True)
-    files = [launcher, ctx.file._kernel, toolchain.dart, ctx.executable._adb, apk_files[0]] + info.data
+    files = [launcher, ctx.file._kernel, toolchain.dart, ctx.executable._adb, apk_files[0]]
     runfiles = ctx.runfiles(files = files, transitive_files = toolchain.sdk_packages)
-    return [DefaultInfo(executable = launcher, runfiles = runfiles), RunEnvironmentInfo(environment = info.env)]
+    return [DefaultInfo(executable = launcher, runfiles = runfiles), RunEnvironmentInfo(inherited_environment = ["ANDROID_SERIAL", "ANDROID_ADB_SERVER_PORT"])]
 
 flutter_android_integration_test = rule(
     implementation = _runner_impl,

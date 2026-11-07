@@ -680,11 +680,22 @@ flutter_android_app(
 )
 ```
 
-The app macro generates `:app_login` (test APK) and `:app_login_test` (runner).
-Run `bazel test --@rules_flutter_core//flutter:mode=debug
-//android:app_login_test`; consider putting the mode flag in `.bazelrc`.
-Start the emulator/device yourself and keep its adb server running. Set
-`ANDROID_SERIAL` if multiple devices are connected. Runs clear app data and
-uninstall the test app afterward. Test outputs, including screenshots, are in
-`test.outputs`; `--test_filter` selects cases. Sharding and Android-plugin apps
-are not supported yet.
+The app macro generates `//android/app:app_login` (test APK) and
+`//android/app:app_login_test` (runner). Run
+`bazel test --@rules_flutter_core//flutter:mode=debug //android/app:app_login_test`;
+consider putting the mode flag in `.bazelrc`.
+
+The host provides the emulator/device and adb server. The server's adb version
+must match the adb from the declared Android SDK; start the emulator or start
+the server with that SDK's adb. An exported `ANDROID_SERIAL` is inherited by the
+test; alternatively pass `--test_env=ANDROID_SERIAL=<serial>`.
+
+The test APK has the same `applicationId` as the development app, replaces it
+while running, and is uninstalled afterward. In the Dart test, create
+`${Directory.systemTemp.path}/rules_flutter_test/outputs/` and write files there
+(for example with `Directory.create(recursive: true)` and `File.writeAsString`).
+The runner copies those files into Bazel's `test.outputs` directory. It always
+adds `manual`, `external`, and `exclusive` tags. The rule has no `data` or `env`
+attributes; use `dart_defines` for device-visible configuration.
+`--test_filter` selects cases.
+Sharding and Android-plugin apps are not supported yet.

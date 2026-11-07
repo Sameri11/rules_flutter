@@ -265,16 +265,28 @@ flutter_integration_test(
 
 flutter_android_app(
     name = "app",
-    integration_tests = {":login": {}},
+    integration_tests = {"//:login": {}},
 )
 ```
 
-This generates `:app_login` (the test APK) and `:app_login_test` (the runner).
-Run with `bazel test --@rules_flutter_core//flutter:mode=debug
-//android:app_login_test`; adding that mode flag to `.bazelrc` is convenient.
-Start the emulator/device yourself and keep its adb server running. Set
-`ANDROID_SERIAL` when several devices are connected. Each run starts with fresh
-app data and uninstalls the test app afterward. Screenshots and other declared
-outputs are available under `test.outputs`; use `--test_filter` to select a
-case. Sharding is not supported yet, and apps with Android plugins are not
-supported yet.
+This generates `//android/app:app_login` (the test APK) and
+`//android/app:app_login_test` (the runner). Run with
+`bazel test --@rules_flutter_core//flutter:mode=debug //android/app:app_login_test`;
+adding that mode flag to `.bazelrc` is convenient.
+
+The host provides the emulator/device and runs its adb server. The server's adb
+version must match the adb from the declared Android SDK; start the emulator or
+start the server with that SDK's adb. Select a device with an exported
+`ANDROID_SERIAL`, or pass `--test_env=ANDROID_SERIAL=<serial>`; the exported
+variable is inherited by the test.
+
+The test APK has the same `applicationId` as the development app, replaces it
+while the test runs, and is uninstalled afterward. In the Dart test, create
+`${Directory.systemTemp.path}/rules_flutter_test/outputs/` and write files there
+(for example with `Directory.create(recursive: true)` and `File.writeAsString`).
+The runner copies those files into Bazel's `test.outputs` directory. It always
+adds `manual`, `external`, and `exclusive` tags. The rule has no `data` or `env`
+attributes; configure device-visible values with `dart_defines`. Use
+`--test_filter` to select cases.
+Sharding is not supported yet, and apps with Android plugins are not supported
+yet.

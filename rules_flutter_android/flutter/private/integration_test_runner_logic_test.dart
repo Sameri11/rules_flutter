@@ -23,7 +23,9 @@ void _throws(void Function() action, String expected) {
   try {
     action();
   } on FormatException catch (error) {
-    assert(error.message.toString().contains(expected));
+    if (!error.message.toString().contains(expected)) {
+      throw StateError('Expected "$expected" in "${error.message}".');
+    }
     return;
   }
   throw StateError('Expected FormatException containing $expected');
