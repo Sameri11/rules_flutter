@@ -11,6 +11,8 @@ import 'dart:io';
 
 import 'frame.dart';
 import 'junit.dart';
+export 'junit.dart';
+export 'results.dart';
 import 'results.dart';
 
 /// Malformed or inconsistent stream.

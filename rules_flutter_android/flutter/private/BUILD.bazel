@@ -12,6 +12,7 @@ exports_files(
         "apk_check.bzl",
         "ndk.bzl",
         "plugins.bzl",
+        "integration_test_runner.dart",
     ],
     visibility = ["//tools/ci:__pkg__"],
 )

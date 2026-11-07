@@ -14,7 +14,7 @@ load(":android.bzl", "flutter_android_assets", "flutter_android_manifest", "flut
 load(":android_inputs_rules.bzl", "flutter_android_inputs")
 load(":apk_check.bzl", "flutter_apk_check")
 load(":maven_identity.bzl", "check_flutter_maven_repository")
-
+load(":integration_test_runner.bzl", "flutter_android_integration_test")
 # Mirrors android.bzl's _MANIFEST_VALUES, which goes with the wrapper.
 _MANIFEST_VALUES = {
     "applicationName": "io.flutter.app.FlutterApplication",
@@ -47,6 +47,8 @@ def flutter_android_app(
         apk_check = True,
         deps = [],
         test_apps = {},
+        integration_tests = [],
+        integration_test_defaults = {},
         **kwargs):
     """A stock android_binary `name` with Flutter's defaults for a standard layout.
 
@@ -88,6 +90,11 @@ def flutter_android_app(
         `flutter_debug_core` label under `core`. Each entry also accepts Android
         binary attributes; `deps` append to the app's dependencies. Generated APKs
         and check targets are debug-only, `testonly` by default, and `manual`.
+      integration_tests: integration-test labels (or a label-to-attribute dict).
+        Each declares `<name>_<test>` as a debug APK and `<name>_<test>_test`
+        as its adb runner. `shard_count` is refused.
+      integration_test_defaults: loading-time attributes shared by the generated
+        integration runner tests, overridden by each entry's attributes.
       **kwargs: forwarded to android_binary, and tags and visibility also to
         `<name>_check_test`. `assets` and `assets_dir` are set by the macro and
         refused here.
@@ -219,6 +226,26 @@ def flutter_android_app(
         native_label = native_label,
     )
 
+    _declare_integration_tests(
+        name = name,
+        integration_tests = integration_tests,
+        defaults = integration_test_defaults,
+        app_kwargs = kwargs,
+        manifest_values = values,
+        test_apps = test_apps,
+        app_core = core,
+        inputs = inputs,
+        inputs_label = inputs_label,
+        app_manifest = manifest,
+        pubspec = pubspec,
+        resource_files = resource_files,
+        app_deps = deps,
+        app_extra_deps = maven_validation,
+        debug_manifest_deps = debug_manifest_deps,
+        tags = kwargs.get("tags", []),
+        native_label = native_label,
+    )
+
 def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_manifest, pubspec, manifest_values, resource_files, app_deps, app_extra_deps, debug_manifest_deps, app_kwargs, tags, native_label):
     reserved = ["debug", "inputs", "manifest", "debug_manifest", "maven_repo_check", "check_test"]
     keys = sorted(test_apps.keys())
@@ -299,6 +326,73 @@ def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_mani
             **binary_kwargs
         )
         flutter_apk_check(name = target + "_check_test", binary = ":" + target, native = [native_label], tags = entry_tags, visibility = visibility, testonly = testonly)
+
+def _declare_integration_tests(name, integration_tests, defaults, app_kwargs, manifest_values, test_apps, app_core, inputs, inputs_label, app_manifest, pubspec, resource_files, app_deps, app_extra_deps, debug_manifest_deps, tags, native_label):
+    if "shard_count" in defaults:
+        fail("flutter_android_app {}: shard_count is not supported for integration_tests.".format(name))
+    if type(integration_tests) == "list":
+        entries = {label: {} for label in integration_tests}
+    elif type(integration_tests) == "dict":
+        entries = integration_tests
+    else:
+        fail("flutter_android_app {}: integration_tests must be a list or dict.".format(name))
+
+    names = {}
+    apk_entries = {}
+    for label_text, overrides in entries.items():
+        label = native.package_relative_label(label_text)
+        if label.name in names and names[label.name] != label:
+            fail("flutter_android_app {}: integration tests {} and {} have the same target name {}; generated APK and runner names would collide.".format(name, names[label.name], label, label.name))
+        names[label.name] = label
+        if label.name in test_apps:
+            fail("flutter_android_app {}: integration test {} collides with test_apps key {}.".format(name, label, label.name))
+        if type(overrides) != "dict":
+            fail("flutter_android_app {}: integration_tests[{}] must have a dict of attributes.".format(name, label))
+        if "shard_count" in overrides:
+            fail("flutter_android_app {}: shard_count is not supported for integration test {}.".format(name, label))
+        apk_entries[label.name] = {"core": str(label)}
+
+    if apk_entries:
+        _declare_test_apps(
+            name = name,
+            test_apps = apk_entries,
+            app_core = app_core,
+            inputs = inputs,
+            inputs_label = inputs_label,
+            app_manifest = app_manifest,
+            pubspec = pubspec,
+            manifest_values = manifest_values,
+            resource_files = resource_files,
+            app_deps = app_deps,
+            app_extra_deps = app_extra_deps,
+            debug_manifest_deps = debug_manifest_deps,
+            app_kwargs = app_kwargs,
+            tags = tags,
+            native_label = native_label,
+        )
+
+    for label_text, overrides in entries.items():
+        label = native.package_relative_label(label_text)
+        options = dict(defaults)
+        options.update(overrides)
+        if "shard_count" in options:
+            fail("flutter_android_app {}: shard_count is not supported for integration test {}.".format(name, label))
+        test_tags = list(options.pop("tags", ["manual", "external", "exclusive"]))
+        for tag in ["manual", "external", "exclusive"]:
+            if tag not in test_tags:
+                test_tags.append(tag)
+        test_options = options.pop("target_compatible_with", app_kwargs.get("target_compatible_with", []))
+        flutter_android_integration_test(
+            name = name + "_" + label.name + "_test",
+            apk = ":" + name + "_" + label.name,
+            integration_test = str(label),
+            package = manifest_values["applicationId"],
+            activity = manifest_values["applicationId"] + ".MainActivity",
+            tags = test_tags,
+            target_compatible_with = _debug_compatibility(test_options),
+            **options
+        )
+
 
 def _test_tags(tags):
     out = list(tags)

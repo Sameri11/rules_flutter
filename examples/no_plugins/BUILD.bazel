@@ -1,6 +1,6 @@
 # Dart targets for a plugin-free app.
 
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_test_suite")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_integration_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,6 +11,21 @@ flutter_core(
     assets = [],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
     pub = "@pub",
+)
+
+flutter_integration_test(
+    name = "integration_pass",
+    app = ":core",
+    src = "//integration_test:integration_pass_test.dart",
+    data = ["//integration_test:runner_data.txt"],
+    env = {"RUNNER_FIXTURE": "available"},
+)
+
+
+flutter_integration_test(
+    name = "integration_fail",
+    app = ":core",
+    src = "//integration_test:integration_fail_test.dart",
 )
 
 # The host test reads core_test_package, declared by flutter_core for the

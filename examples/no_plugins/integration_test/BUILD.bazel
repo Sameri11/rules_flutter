@@ -5,6 +5,9 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "flutter_activity_manifest.xml",
     "identity_manifest.xml",
+    "integration_fail_test.dart",
+    "integration_pass_test.dart",
+    "runner_data.txt",
 ])
 
 flutter_debug_core(
@@ -14,3 +17,4 @@ flutter_debug_core(
     dart_defines = {"DEBUG_CORE_MARK": "prebuilt-value"},
     entrypoint = "debug_core_test.dart",
 )
+

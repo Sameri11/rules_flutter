@@ -39,6 +39,10 @@ flutter_android_app(
             "manifest": "//integration_test:flutter_activity_manifest.xml",
         },
     },
+    integration_tests = [
+        "//:integration_pass",
+        "//:integration_fail",
+    ],
     deps = [":main_activity"],
 )
 
