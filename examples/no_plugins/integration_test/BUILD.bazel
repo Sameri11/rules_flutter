@@ -1,0 +1,16 @@
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "flutter_activity_manifest.xml",
+    "identity_manifest.xml",
+])
+
+flutter_debug_core(
+    name = "prebuilt_core",
+    srcs = ["debug_core_helper.dart"],
+    app = "//:core",
+    dart_defines = {"DEBUG_CORE_MARK": "prebuilt-value"},
+    entrypoint = "debug_core_test.dart",
+)

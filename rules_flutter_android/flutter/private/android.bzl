@@ -1,8 +1,31 @@
 """Android manifest and asset-path helpers used by composed app targets."""
 
-load("@rules_flutter_core//flutter:defs.bzl", "FlutterPubspecInfo")
+load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
 
 visibility(["//flutter"])
+
+def _inputs_bundle_impl(ctx):
+    src = ctx.attr.core[FlutterArtifactInfo].assets
+    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+    ctx.actions.run_shell(
+        outputs = [out],
+        inputs = [src],
+        command = 'mkdir -p "{out}" && cp -RL "{src}"/. "{out}"/'.format(out = out.path, src = src.path),
+        mnemonic = "FlutterAssetCopy",
+        progress_message = "Copying the Flutter assets of %{label}",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+_inputs_bundle = rule(
+    implementation = _inputs_bundle_impl,
+    doc = "The core's flutter_assets tree, copied under this target's name.",
+    attrs = {
+        "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
+    },
+)
+
+# Keep the private binding so this remains a rule kind, not a macro or alias.
+flutter_android_assets = _inputs_bundle
 
 def _flutter_android_manifest_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + "/AndroidManifest.xml")

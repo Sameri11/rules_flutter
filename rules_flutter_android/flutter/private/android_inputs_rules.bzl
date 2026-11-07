@@ -19,6 +19,7 @@ load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
 load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo")
 load("@rules_java//java:defs.bzl", "java_import")
+load(":android.bzl", "flutter_android_assets")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":maven_identity.bzl", "check_flutter_maven_repository", "flutter_maven_repository")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
@@ -52,28 +53,6 @@ _core_file = rule(
     attrs = {
         "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
         "field": attr.string(mandatory = True, values = ["embedding_jar"]),
-    },
-)
-
-def _inputs_bundle_impl(ctx):
-    src = ctx.attr.core[FlutterArtifactInfo].assets
-    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
-    ctx.actions.run_shell(
-        outputs = [out],
-        inputs = [src],
-        command = 'mkdir -p "{out}" && cp -RL "{src}"/. "{out}"/'.format(out = out.path, src = src.path),
-        mnemonic = "FlutterAssetCopy",
-        progress_message = "Copying the Flutter assets of %{label}",
-    )
-    return [DefaultInfo(files = depset([out]))]
-
-# The copy puts the tree at <name>/flutter_assets, so flutter_assets_dir of this target
-# gives its prefix, whatever the core is named.
-_inputs_bundle = rule(
-    implementation = _inputs_bundle_impl,
-    doc = "The core's flutter_assets tree, copied under this target's name.",
-    attrs = {
-        "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
     },
 )
 
@@ -329,7 +308,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
         visibility = visibility,
     )
 
-    _inputs_bundle(
+    flutter_android_assets(
         name = name + "_bundle",
         core = core,
         tags = helper_tags,

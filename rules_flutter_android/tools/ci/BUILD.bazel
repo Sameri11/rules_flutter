@@ -11,6 +11,7 @@ genrule(
         "@rules_flutter_core//tools/ci:key_portability_test.py",
         "//flutter:native_build_env.bzl",
         "//flutter/private:android.bzl",
+        "//flutter/private:android_app.bzl",
         "//flutter/private:android_inputs_rules.bzl",
         "//flutter/private:native_strip.bzl",
         "//flutter/private:apk_check.bzl",
