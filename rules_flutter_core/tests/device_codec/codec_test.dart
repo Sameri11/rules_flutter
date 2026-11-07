@@ -243,6 +243,11 @@ void main(List<String> args) {
     lines.where((l) => !l.contains('RFT_END|')).join('\n'),
     run: _run,
   );
+  rejects(
+    'foreign run frames cannot satisfy the selected run',
+    buildStream('foreignrun', payloads, status),
+    run: _run,
+  );
 
   rejects(
     'dropped multi-part chunk is rejected',
