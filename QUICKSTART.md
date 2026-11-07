@@ -300,7 +300,6 @@ bazel build //android/app:hello_bazel -c fastbuild --lockfile_mode=error \
 cp bazel-bin/android/app/hello_bazel.apk /tmp/hello-debug-arm64.apk
 ```
 
-
 The supported ABIs are `arm64-v8a`, `x86_64`, and `armeabi-v7a`; 32-bit `x86`,
 `riscv64`, and other values are unsupported. Explicitly pass
 `--android_platforms` for the desired ABI platform targets unless your Bazel
@@ -314,7 +313,6 @@ Install the captured APK with `adb install -r <apk-path>`. For Flutter hot
 reload, run the Bazel-built debug APK with
 `flutter run -d <device-id> --debug --use-application-binary=<apk-path>`;
 packaging changes require a Bazel rebuild.
-
 
 ## Package a debug test APK as the app
 
@@ -345,12 +343,12 @@ flutter_android_app(
 ```
 
 This declares `:hello_bazel_smoke`, its debug core `:hello_bazel_smoke_core`,
-and `:hello_bazel_smoke_check_test`. A macro-core entry defaults to the app's
-core; set `app` explicitly when the app uses prebuilt `inputs`. A prebuilt entry
-names a `flutter_debug_core` target directly and can be declared in another
-Bazel package. The app's `dart_defines` are not inherited: share a dictionary
-and merge test-specific values as above. Entry dictionaries can likewise merge
-shared Android settings such as `proguard_specs`.
+and `:hello_bazel_smoke_check_test`. A macro-core entry needs `entrypoint` and
+defaults `app` to the app's core; set `app` explicitly when the app uses prebuilt
+`inputs`. A prebuilt entry names a `flutter_debug_core` target directly and can
+be declared in another Bazel package. The app's `dart_defines` are not inherited:
+share a dictionary and merge test-specific values as above. Entry dictionaries
+can likewise merge shared Android settings such as `proguard_specs`.
 
 For a core in another package, declare it beside the entrypoint and its
 relative-import helpers:
@@ -382,6 +380,7 @@ the dev APK again when finished.
 Test APKs are debug-only and tagged `manual`, so normal `bazel build //...`
 does not build them. Request their labels explicitly with the debug mode setting
 and the desired Android platform.
+
 ## Standalone install from an archive
 
 [`tests/archive_consumer`](tests/archive_consumer/) is a complete consumer that
