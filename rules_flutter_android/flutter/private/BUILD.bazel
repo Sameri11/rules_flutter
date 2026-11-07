@@ -14,6 +14,7 @@ exports_files(
         "ndk.bzl",
         "plugins.bzl",
         "integration_test_runner.dart",
+        "integration_test_runner.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
 )
@@ -83,7 +84,6 @@ java_test(
     main_class = "ApkCheckTest",
     use_testrunner = False,
 )
-
 
 flutter_android_integration_test_kernel(
     name = "integration_test_runner_kernel",

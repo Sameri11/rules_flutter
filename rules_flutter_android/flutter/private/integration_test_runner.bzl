@@ -4,16 +4,13 @@ load("@rules_flutter_core//flutter:defs.bzl", "FlutterIntegrationTestInfo")
 
 _TOOLCHAIN = "@rules_flutter_core//flutter:toolchain_type"
 
-
 def _runfile(ctx, file):
     if file.short_path.startswith("../"):
         return file.short_path[len("../"):]
     return ctx.workspace_name + "/" + file.short_path
 
-
 def _shell_quote(value):
     return "'" + value.replace("'", "'\"'\"'") + "'"
-
 
 def _runner_impl(ctx):
     info = ctx.attr.integration_test[FlutterIntegrationTestInfo]
@@ -44,7 +41,6 @@ def _runner_impl(ctx):
     files = [launcher, ctx.file._kernel, toolchain.dart, ctx.executable._adb, apk_files[0]] + info.data
     runfiles = ctx.runfiles(files = files, transitive_files = toolchain.sdk_packages)
     return [DefaultInfo(executable = launcher, runfiles = runfiles), RunEnvironmentInfo(environment = info.env)]
-
 
 flutter_android_integration_test = rule(
     implementation = _runner_impl,
@@ -140,5 +136,3 @@ flutter_android_integration_test_logic_test = rule(
     },
     toolchains = [_TOOLCHAIN],
 )
-
-

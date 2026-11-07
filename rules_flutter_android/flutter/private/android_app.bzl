@@ -13,8 +13,9 @@ load(":abis.bzl", "MIN_SDK")
 load(":android.bzl", "flutter_android_assets", "flutter_android_manifest", "flutter_assets_dir")
 load(":android_inputs_rules.bzl", "flutter_android_inputs")
 load(":apk_check.bzl", "flutter_apk_check")
-load(":maven_identity.bzl", "check_flutter_maven_repository")
 load(":integration_test_runner.bzl", "flutter_android_integration_test")
+load(":maven_identity.bzl", "check_flutter_maven_repository")
+
 # Mirrors android.bzl's _MANIFEST_VALUES, which goes with the wrapper.
 _MANIFEST_VALUES = {
     "applicationName": "io.flutter.app.FlutterApplication",
@@ -392,7 +393,6 @@ def _declare_integration_tests(name, integration_tests, defaults, app_kwargs, ma
             target_compatible_with = _debug_compatibility(test_options),
             **options
         )
-
 
 def _test_tags(tags):
     out = list(tags)

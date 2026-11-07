@@ -1,6 +1,5 @@
 """Platform-neutral integration-test kernels and metadata."""
 
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":core.bzl", "FlutterArtifactInfo")
 load(":debug_core.bzl", "flutter_debug_core")
 load(":flutter_test.bzl", "DEVICE_DRIVER_SRCS", "NATIVE_REPORT_DEFINE", "flutter_test_bootstrap")
@@ -8,13 +7,14 @@ load(":test_metadata.bzl", "parse_metadata")
 
 visibility(["//flutter/..."])
 
-FlutterIntegrationTestInfo = provider(fields = {
-    "core": "The debug core target used by the Android test APK.",
-    "data": "Runtime runfiles for the host runner.",
-    "env": "Environment passed to the host runner.",
-})
-
-
+FlutterIntegrationTestInfo = provider(
+    "Metadata connecting a platform-neutral integration test to its Android runner.",
+    fields = {
+        "core": "The debug core target used by the Android test APK.",
+        "data": "Runtime runfiles for the host runner.",
+        "env": "Environment passed to the host runner.",
+    },
+)
 
 def _integration_test_info_impl(ctx):
     core = ctx.attr.core[FlutterArtifactInfo]
@@ -31,7 +31,6 @@ def _integration_test_info_impl(ctx):
         FlutterIntegrationTestInfo(core = ctx.attr.core.label, data = ctx.files.data, env = ctx.attr.env),
     ]
 
-
 _integration_test_info = rule(
     implementation = _integration_test_info_impl,
     attrs = {
@@ -41,11 +40,18 @@ _integration_test_info = rule(
     },
 )
 
-
-
-
 def flutter_integration_test(name, app, src, srcs = [], dart_defines = {}, data = [], env = {}):
-    """Declares one platform-neutral integration-test file."""
+    """Declares one platform-neutral integration-test file.
+
+    Args:
+        name: Name for the generated targets.
+        app: Flutter application target used to compile the test.
+        src: Integration-test Dart source file.
+        srcs: Additional Dart sources needed by the test.
+        dart_defines: Compile-time Dart environment values.
+        data: Runtime files made available to the host runner.
+        env: Environment variables passed to the host runner.
+    """
     metadata = name + "_metadata"
     parse_metadata(name = metadata, src = src, tags = ["manual"])
     all_srcs = [src] + srcs + DEVICE_DRIVER_SRCS + [":" + metadata]

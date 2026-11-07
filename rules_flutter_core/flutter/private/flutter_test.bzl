@@ -22,7 +22,6 @@ A flutter_test_suite is one flutter_test per test file, under one test_suite.
 """
 
 load(":pubspec.bzl", "FlutterPubspecInfo")
-
 load(":rules.bzl", "FlutterPackageInfo", "dart_test_kernel")
 load(":test_metadata.bzl", "parse_metadata")
 

@@ -31,7 +31,6 @@ load(
     _FlutterIntegrationTestInfo = "FlutterIntegrationTestInfo",
     _flutter_integration_test = "flutter_integration_test",
 )
-
 load("//flutter/private:pubspec.bzl", _FlutterPubspecInfo = "FlutterPubspecInfo", _flutter_pubspec = "flutter_pubspec")
 load(
     "//flutter/private:rules.bzl",
