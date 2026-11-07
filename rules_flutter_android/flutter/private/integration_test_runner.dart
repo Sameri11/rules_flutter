@@ -4,13 +4,27 @@ import 'dart:io';
 
 import '{{DECODER_IMPORT}}' as decoder;
 
+Map<String, String> _parseArgs(List<String> args) {
+  final options = <String, String>{};
+  for (var i = 0; i < args.length; i += 2) {
+    if (i + 1 >= args.length || !args[i].startsWith('--')) {
+      _fail('usage: runner --adb PATH --apk PATH --package ID --activity NAME --run-id ID');
+    }
+    options[args[i].substring(2)] = args[i + 1];
+  }
+  for (final key in ['adb', 'apk', 'package', 'activity', 'run-id']) {
+    if (!options.containsKey(key)) _fail('missing --$key');
+  }
+  return options;
+}
+
 Future<void> main(List<String> args) async {
-  if (args.length != 5) _fail('usage: runner adb apk package activity run-id');
-  final adb = args[0];
-  final apk = args[1];
-  final package = args[2];
-  final activity = args[3];
-  final runId = args[4];
+  final options = _parseArgs(args);
+  final adb = options['adb']!;
+  final apk = options['apk']!;
+  final package = options['package']!;
+  final activity = options['activity']!;
+  final runId = options['run-id']!;
   final port = int.tryParse(Platform.environment['ANDROID_ADB_SERVER_PORT'] ?? '5037');
   if (port == null || !await _reachable(port)) {
     _fail('ADB server is unreachable; start the emulator or run adb start-server on the host.');
@@ -84,9 +98,21 @@ Future<void> main(List<String> args) async {
     );
 
     final footer = 'RFT_END|$runId|';
-    final deadline = DateTime.now().add(const Duration(minutes: 2));
+    final timeout = int.tryParse(Platform.environment['TEST_TIMEOUT'] ?? '') ?? 120;
+    final deadlineSeconds = timeout > 20 ? timeout - 15 : timeout;
+    final deadline = DateTime.now().add(Duration(seconds: deadlineSeconds));
+    var timedOut = false;
     while (!captured.toString().contains(footer) && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    if (!captured.toString().contains(footer)) {
+      timedOut = true;
+      final text = captured.toString();
+      stdout.writeln('Integration test deadline exceeded; last events:');
+      final events = RegExp(r'RFT\|[^\n]*').allMatches(text).toList();
+      for (final event in events.skip(events.length > 20 ? events.length - 20 : 0)) {
+        stdout.writeln(event.group(0));
+      }
     }
     await logcat.kill();
     await captureSubscription.cancel();
@@ -100,7 +126,7 @@ Future<void> main(List<String> args) async {
         decoder.junitReport('device', decoded.cases, ''),
       );
     }
-    if (decoded.status != 0) exitCode = 1;
+    if (timedOut || decoded.status != 0) exitCode = 1;
   } finally {
     await subscription?.cancel();
     if (logcat != null) await logcat.kill();
