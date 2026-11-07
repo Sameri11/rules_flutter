@@ -87,9 +87,16 @@ java_test(
 
 flutter_android_integration_test_kernel(
     name = "integration_test_runner_kernel",
+    src = "integration_test_runner.dart",
     visibility = ["//visibility:private"],
+)
+
+flutter_android_integration_test_kernel(
+    name = "integration_test_runner_logic_test_kernel",
+    src = "integration_test_runner_logic_test.dart",
 )
 
 flutter_android_integration_test_logic_test(
     name = "integration_test_runner_logic_test",
+    kernel = ":integration_test_runner_logic_test_kernel",
 )
