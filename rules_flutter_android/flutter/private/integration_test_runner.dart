@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '{{LOGIC_IMPORT}}' as logic;
 import '{{DECODER_IMPORT}}' as decoder;
 
 Map<String, String> _parseArgs(List<String> args) {
@@ -31,26 +32,14 @@ Future<void> main(List<String> args) async {
   }
   final serverVersion = await _serverVersion(port);
   final clientVersion = await _clientVersion(adb);
-  if (serverVersion != clientVersion) {
-    _fail('ADB client/server version mismatch; start the server with the declared SDK adb.');
-  }
+  logic.compareVersions(serverVersion, clientVersion);
 
   final devicesResult = await Process.run(adb, ['devices']);
   _check(devicesResult, 'adb devices');
-  final devices = (devicesResult.stdout as String)
-      .split('\n')
-      .skip(1)
-      .map((line) => line.trim().split(RegExp(r'\s+')))
-      .where((fields) => fields.length > 1 && fields[1] == 'device')
-      .map((fields) => fields[0])
-      .toList();
+  final devices = logic.parseDevices(devicesResult.stdout as String);
   final serial = Platform.environment['ANDROID_SERIAL'];
-  final device = serial ?? (devices.length == 1 ? devices.single : null);
-  if (device == null || !devices.contains(device)) {
-    _fail(serial == null
-        ? 'Expected exactly one Android device; found ${devices.length}.'
-        : 'ANDROID_SERIAL $serial is not an available device.');
-  }
+  final device = logic.selectDevice(devices, serial);
+  final footer = 'RFT_END|$runId|';
 
   Process? logcat;
   StreamSubscription<String>? subscription;
@@ -58,6 +47,7 @@ Future<void> main(List<String> args) async {
     var install = await Process.run(adb, ['-s', device, 'install', '-r', '-g', apk]);
     if ((install.stdout.toString() + install.stderr.toString())
         .contains('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) {
+      stderr.writeln('Existing APK has a different signature; uninstalling before retry.');
       await Process.run(adb, ['-s', device, 'uninstall', package]);
       install = await Process.run(adb, ['-s', device, 'install', '-r', '-g', apk]);
     }
@@ -97,14 +87,13 @@ Future<void> main(List<String> args) async {
       'am start',
     );
 
-    final footer = 'RFT_END|$runId|';
     final timeout = int.tryParse(Platform.environment['TEST_TIMEOUT'] ?? '') ?? 120;
     final deadlineSeconds = timeout > 20 ? timeout - 15 : timeout;
     final deadline = DateTime.now().add(Duration(seconds: deadlineSeconds));
     var timedOut = false;
     var crashed = false;
     var lastPidCheck = DateTime.now();
-    while (!captured.toString().contains(footer) && DateTime.now().isBefore(deadline)) {
+    while (!logic.hasFooter(captured.toString(), runId) && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
       final current = captured.toString();
       final runningCase = _runningCase(current, runId);
@@ -118,7 +107,7 @@ Future<void> main(List<String> args) async {
         }
       }
     }
-    if (!captured.toString().contains(footer) && !crashed) {
+    if (!logic.hasFooter(captured.toString(), runId) && !crashed) {
       timedOut = true;
       final text = captured.toString();
       stdout.writeln('Integration test deadline exceeded; last events:');
@@ -156,24 +145,30 @@ Future<void> main(List<String> args) async {
     await subscription?.cancel();
     if (logcat != null) await logcat.kill();
     await Process.run(adb, ['-s', device, 'shell', 'am', 'force-stop', package]);
-    await Process.run(adb, ['-s', device, 'uninstall', package]);
-  }
-}
-String? _runningCase(String text, String runId) {
-  String? name;
-  for (final line in text.split('\n')) {
-    if (!line.contains('RFT|$runId|')) continue;
-    final match = RegExp(r'"type":"running","name":"((?:\\.|[^"\\])*)"')
-        .firstMatch(line);
-    if (match != null) {
-      name = (jsonDecode('"${match.group(1)}"') as String).replaceAllMapped(
-        RegExp(r'%u([0-9A-Fa-f]{4})'),
-        (match) => String.fromCharCode(int.parse(match.group(1)!, radix: 16)),
-      );
+    try {
+      await _copyOutputs(adb, device, package);
+    } finally {
+      await Process.run(adb, ['-s', device, 'uninstall', package]);
     }
   }
-  return name;
 }
+
+Future<void> _copyOutputs(String adb, String device, String package) async {
+  final destination = Platform.environment['TEST_UNDECLARED_OUTPUTS_DIR'];
+  if (destination == null) return;
+  await Directory(destination).create(recursive: true);
+  final archive = await Process.start(adb, [
+    '-s', device, 'exec-out', 'run-as', package, 'tar', '-C',
+    '/data/user/0/$package/code_cache/rules_flutter_test', '-cf', '-', 'outputs',
+  ]);
+  final extract = await Process.start('tar', ['-xf', '-', '-C', destination]);
+  await archive.stdout.pipe(extract.stdin);
+  final results = await Future.wait([archive.exitCode, extract.exitCode]);
+  if (results.any((code) => code != 0)) {
+    throw StateError('Could not retrieve integration test outputs.');
+  }
+}
+String? _runningCase(String text, String runId) => logic.runningCase(text, runId);
 
 
 Future<bool> _reachable(int port) async {

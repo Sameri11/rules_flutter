@@ -63,13 +63,17 @@ flutter_android_integration_test = rule(
 def _kernel_impl(ctx):
     toolchain = ctx.toolchains[_TOOLCHAIN].flutter
     decoder_sources = [file for file in ctx.files._decoder_srcs if file.basename == "device_decoder.dart"]
+    logic_source = ctx.file._logic_src
     if len(decoder_sources) != 1:
         fail("core decoder source target must contain one device_decoder.dart")
     generated = ctx.actions.declare_file(ctx.label.name + "_main.dart")
     ctx.actions.expand_template(
         template = ctx.file._runner_src,
         output = generated,
-        substitutions = {"{{DECODER_IMPORT}}": "org-dartlang-root:///" + decoder_sources[0].path},
+        substitutions = {
+            "{{DECODER_IMPORT}}": "org-dartlang-root:///" + decoder_sources[0].path,
+            "{{LOGIC_IMPORT}}": "org-dartlang-root:///" + logic_source.path,
+        },
     )
     kernel = ctx.actions.declare_file(ctx.label.name + ".dill")
     command = " ".join([
@@ -87,7 +91,7 @@ def _kernel_impl(ctx):
     ctx.actions.run_shell(
         outputs = [kernel],
         inputs = depset(
-            direct = [generated] + ctx.files._decoder_srcs + [toolchain.frontend_server, toolchain.vm_platform_strong],
+            direct = [generated, logic_source] + ctx.files._decoder_srcs + [toolchain.frontend_server, toolchain.vm_platform_strong],
             transitive = [toolchain.sdk_packages],
         ),
         tools = [toolchain.dartaotruntime],
@@ -102,6 +106,37 @@ flutter_android_integration_test_kernel = rule(
     attrs = {
         "_runner_src": attr.label(default = Label("//flutter/private:integration_test_runner.dart"), allow_single_file = True),
         "_decoder_srcs": attr.label(default = Label("@rules_flutter_core//flutter/private:device_decoder_library")),
+        "_logic_src": attr.label(default = Label("//flutter/private:integration_test_runner_logic.dart"), allow_single_file = True),
+    },
+    toolchains = [_TOOLCHAIN],
+)
+
+def _logic_test_impl(ctx):
+    toolchain = ctx.toolchains[_TOOLCHAIN].flutter
+    script = ctx.actions.declare_file(ctx.label.name + ".sh")
+    test_source = ctx.file._test_src
+    ctx.actions.write(
+        script,
+        "\n".join([
+            "#!/bin/bash",
+            "set -euo pipefail",
+            'ROOT="${TEST_SRCDIR:?TEST_SRCDIR is not set}"',
+            'DART="$ROOT/%s"' % _runfile(ctx, toolchain.dart),
+            '"$DART" "$ROOT/%s"' % _runfile(ctx, test_source),
+        ]) + "\n",
+        is_executable = True,
+    )
+    return [DefaultInfo(
+        executable = script,
+        runfiles = ctx.runfiles(files = [toolchain.dart, test_source, ctx.file._logic_src]),
+    )]
+
+flutter_android_integration_test_logic_test = rule(
+    implementation = _logic_test_impl,
+    test = True,
+    attrs = {
+        "_test_src": attr.label(default = Label("//flutter/private:integration_test_runner_logic_test.dart"), allow_single_file = True),
+        "_logic_src": attr.label(default = Label("//flutter/private:integration_test_runner_logic.dart"), allow_single_file = True),
     },
     toolchains = [_TOOLCHAIN],
 )
