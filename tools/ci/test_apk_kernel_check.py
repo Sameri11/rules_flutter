@@ -39,6 +39,7 @@ def apk_path(bazel: str, module: Path, label: str, bazel_args: list[str]) -> Pat
     return files[0]
 
 
+# Kernel artifacts are named by the core rule's private output target.
 def kernel_path(bazel: str, module: Path, label: str, bazel_args: list[str]) -> Path:
     files = [path for path in outputs(bazel, module, label + "_kernel", bazel_args) if path.suffix == ".dill" and path.is_file()]
     unique = {}
@@ -81,7 +82,6 @@ def input_paths(data: dict) -> set[str]:
     return paths
 
 
-# Kernel artifacts are named by the core rule's private output target.
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bazel", default="bazel")

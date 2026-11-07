@@ -223,9 +223,9 @@ def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_mani
     reserved = ["debug", "inputs", "manifest", "debug_manifest", "maven_repo_check", "check_test"]
     keys = sorted(test_apps.keys())
     for key in keys:
-        if not key or key in reserved or key.startswith("inputs_") or key.endswith("_core") or key.endswith("_manifest") or key.endswith("_check_test") or key.endswith("_assets"):
+        if not key or key in reserved or key.startswith("inputs_") or key.endswith(("_core", "_manifest", "_check_test", "_assets", "_core_kernel", "_core_kernel_neutral", "_core_bundle", "_core_bundle_action")):
             fail("flutter_android_app {}: test_apps key {} is reserved or collides with a generated target suffix.".format(name, key))
-        for suffix in ["_core", "_manifest", "_check_test", "_assets"]:
+        for suffix in ["_core", "_manifest", "_check_test", "_assets", "_core_kernel", "_core_kernel_neutral", "_core_bundle", "_core_bundle_action"]:
             if key + suffix in test_apps:
                 fail("flutter_android_app {}: test_apps keys {} and {} generate colliding targets.".format(name, key, key + suffix))
 

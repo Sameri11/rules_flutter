@@ -2,6 +2,8 @@
 
 load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
 
+visibility(["//flutter"])
+
 def _inputs_bundle_impl(ctx):
     src = ctx.attr.core[FlutterArtifactInfo].assets
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
@@ -22,8 +24,8 @@ _inputs_bundle = rule(
     },
 )
 
+# Keep the private binding so this remains a rule kind, not a macro or alias.
 flutter_android_assets = _inputs_bundle
-visibility(["//flutter"])
 
 def _flutter_android_manifest_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + "/AndroidManifest.xml")
