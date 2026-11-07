@@ -67,6 +67,25 @@ def _runner_impl(ctx):
         "#!/bin/bash",
         "set -euo pipefail",
         'ROOT="${TEST_SRCDIR:?TEST_SRCDIR is not set}"',
+    ]
+    for file in info.data:
+        runfile = _runfile(ctx, file)
+        lines.extend([
+            "if [[ ! -f \"$ROOT/%s\" ]]; then" % runfile,
+            "  printf '%%s\\n' %s >&2" % _shell_quote("Missing runner data: " + runfile),
+            "  exit 1",
+            "fi",
+            "printf '%%s\\n' %s" % _shell_quote("Runner data " + runfile + ": present"),
+        ])
+    for key in sorted(info.env.keys()):
+        lines.extend([
+            "if ! printenv %s >/dev/null; then" % _shell_quote(key),
+            "  printf '%%s\\n' %s >&2" % _shell_quote("Missing runner environment: " + key),
+            "  exit 1",
+            "fi",
+            "printf '%%s\\n' %s" % _shell_quote("Runner env " + key + ": present"),
+        ])
+    lines.extend([
         'DART="$ROOT/%s"' % _runfile(ctx, toolchain.dart),
         'ADB="$ROOT/%s"' % _runfile(ctx, ctx.executable._adb),
         'APK="$ROOT/%s"' % _runfile(ctx, apk_files[0]),
@@ -76,7 +95,7 @@ def _runner_impl(ctx):
             _shell_quote(ctx.attr.package),
             _shell_quote(ctx.attr.activity),
         ),
-    ]
+    ])
     ctx.actions.write(launcher, "\n".join(lines) + "\n", is_executable = True)
     files = [launcher, kernel, toolchain.dart, ctx.executable._adb, apk_files[0]] + info.data + decoder_files
     runfiles = ctx.runfiles(files = files, transitive_files = toolchain.sdk_packages)
