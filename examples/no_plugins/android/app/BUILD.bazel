@@ -15,7 +15,6 @@ flutter_android_app(
     name = "no_plugins",
     inputs = ":no_plugins_inputs",
     manifest_values = {"applicationId": "com.example.no_plugins"},
-    deps = [":main_activity"],
     test_apps = {
         "smoke": {
             "app": "//:core",
@@ -40,6 +39,7 @@ flutter_android_app(
             "manifest": "//integration_test:flutter_activity_manifest.xml",
         },
     },
+    deps = [":main_activity"],
 )
 
 kt_android_library(
@@ -47,4 +47,3 @@ kt_android_library(
     srcs = ["src/main/kotlin/com/example/no_plugins/MainActivity.kt"],
     deps = [":no_plugins_inputs"],
 )
-

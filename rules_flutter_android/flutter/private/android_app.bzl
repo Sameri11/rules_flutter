@@ -33,6 +33,7 @@ _UNSET = struct(sentinel = "plugins")
 _DEFAULT_DEBUG_MANIFEST = struct(sentinel = "debug_manifest")
 
 _TEST_APK_TAG = "flutter-test-apk"
+
 def flutter_android_app(
         name,
         core = None,
@@ -200,13 +201,12 @@ def flutter_android_app(
             tags = kwargs.get("tags", []),
             visibility = kwargs.get("visibility"),
         )
-    test_inputs_label = native.package_relative_label(inputs)
-    test_native_label = test_inputs_label.same_package_label(test_inputs_label.name + "_native")
     _declare_test_apps(
         name = name,
         test_apps = test_apps,
         app_core = core,
         inputs = inputs,
+        inputs_label = inputs_label,
         app_manifest = manifest,
         pubspec = pubspec,
         manifest_values = values,
@@ -216,14 +216,14 @@ def flutter_android_app(
         debug_manifest_deps = debug_manifest_deps,
         app_kwargs = kwargs,
         tags = kwargs.get("tags", []),
-        native_label = test_native_label,
+        native_label = native_label,
     )
 
-def _declare_test_apps(name, test_apps, app_core, inputs, app_manifest, pubspec, manifest_values, resource_files, app_deps, app_extra_deps, debug_manifest_deps, app_kwargs, tags, native_label):
-    reserved = ["inputs", "manifest", "debug_manifest", "check_test"]
+def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_manifest, pubspec, manifest_values, resource_files, app_deps, app_extra_deps, debug_manifest_deps, app_kwargs, tags, native_label):
+    reserved = ["debug", "inputs", "manifest", "debug_manifest", "maven_repo_check", "check_test"]
     keys = sorted(test_apps.keys())
     for key in keys:
-        if not key or key in reserved or key.endswith("_core") or key.endswith("_manifest") or key.endswith("_check_test") or key.endswith("_assets"):
+        if not key or key in reserved or key.startswith("inputs_") or key.endswith("_core") or key.endswith("_manifest") or key.endswith("_check_test") or key.endswith("_assets"):
             fail("flutter_android_app {}: test_apps key {} is reserved or collides with a generated target suffix.".format(name, key))
         for suffix in ["_core", "_manifest", "_check_test", "_assets"]:
             if key + suffix in test_apps:
@@ -242,17 +242,19 @@ def _declare_test_apps(name, test_apps, app_core, inputs, app_manifest, pubspec,
         if "core" not in entry:
             if app_core == None and "app" not in entry:
                 fail("flutter_android_app {}: test_apps[{}] needs `app` when the app call uses prebuilt `inputs`.".format(name, key))
+            if "entrypoint" not in entry:
+                fail("flutter_android_app {}: test_apps[{}] needs `entrypoint` or `core`.".format(name, key))
             test_core = target + "_core"
             flutter_debug_core(
                 name = test_core,
                 app = entry.pop("app", app_core),
-                entrypoint = entry.pop("entrypoint", "lib/main.dart"),
+                entrypoint = entry.pop("entrypoint"),
                 srcs = entry.pop("srcs", []),
                 dart_defines = entry.pop("dart_defines", {}),
                 tags = _test_tags(entry.get("tags", tags)),
                 testonly = entry.get("testonly", True),
                 visibility = entry.get("visibility", app_kwargs.get("visibility")),
-                target_compatible_with = entry.get("target_compatible_with", []),
+                target_compatible_with = entry.get("target_compatible_with", app_kwargs.get("target_compatible_with", [])),
             )
         else:
             test_core = entry.pop("core")
@@ -277,17 +279,13 @@ def _declare_test_apps(name, test_apps, app_core, inputs, app_manifest, pubspec,
         entry_tags = _test_tags(entry.pop("tags", tags))
         entry_resources = entry.pop("resource_files", resource_files)
         entry_deps = entry.pop("deps", [])
+        if "assets" in entry or "assets_dir" in entry:
+            fail("flutter_android_app {}: `assets` and `assets_dir` are set by the macro, which declares the asset bundle of `{}`. Remove them.".format(name, inputs))
         binary_kwargs = dict(app_kwargs)
         binary_kwargs.update(entry)
-        binary_kwargs.pop("assets", None)
-        binary_kwargs.pop("assets_dir", None)
-        binary_kwargs.pop("manifest", None)
-        binary_kwargs.pop("manifest_values", None)
-        binary_kwargs.pop("resource_files", None)
-        binary_kwargs.pop("deps", None)
         binary_kwargs["tags"] = entry_tags
         binary_kwargs["testonly"] = testonly
-        binary_kwargs["visibility"] = visibility if visibility != None else ["//visibility:public"]
+        binary_kwargs["visibility"] = visibility
         binary_kwargs["target_compatible_with"] = compatible
         binary_kwargs.setdefault("nocompress_extensions", [".so"])
         android_binary(
@@ -297,7 +295,7 @@ def _declare_test_apps(name, test_apps, app_core, inputs, app_manifest, pubspec,
             manifest = ":" + stamped,
             manifest_values = values,
             resource_files = entry_resources,
-            deps = app_deps + entry_deps + [native.package_relative_label(inputs)] + debug_manifest_deps + app_extra_deps,
+            deps = app_deps + entry_deps + [inputs_label] + debug_manifest_deps + app_extra_deps,
             **binary_kwargs
         )
         flutter_apk_check(name = target + "_check_test", binary = ":" + target, native = [native_label], tags = entry_tags, visibility = visibility, testonly = testonly)

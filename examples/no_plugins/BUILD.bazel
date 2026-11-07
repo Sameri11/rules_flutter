@@ -13,7 +13,6 @@ flutter_core(
     pub = "@pub",
 )
 
-
 # The host test reads core_test_package, declared by flutter_core for the
 # tester platform: no Android build environment is needed.
 flutter_test_suite(

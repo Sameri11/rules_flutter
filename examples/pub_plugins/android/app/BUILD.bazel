@@ -11,7 +11,6 @@ flutter_android_app(
     core = "//:app",
     manifest_values = {"applicationId": "com.example.pub_plugins"},
     plugins = "@flutter_plugins",
-    deps = [":main_activity"],
     test_apps = {
         "smoke": {
             "entrypoint": "//integration_test:debug_core_test.dart",
@@ -19,6 +18,7 @@ flutter_android_app(
             "dart_defines": {"DEBUG_CORE_MARK": "plugin-test-value"},
         },
     },
+    deps = [":main_activity"],
 )
 
 kt_android_library(

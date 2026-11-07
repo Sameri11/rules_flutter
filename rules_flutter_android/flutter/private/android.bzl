@@ -2,6 +2,27 @@
 
 load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
 
+def _inputs_bundle_impl(ctx):
+    src = ctx.attr.core[FlutterArtifactInfo].assets
+    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
+    ctx.actions.run_shell(
+        outputs = [out],
+        inputs = [src],
+        command = 'mkdir -p "{out}" && cp -RL "{src}"/. "{out}"/'.format(out = out.path, src = src.path),
+        mnemonic = "FlutterAssetCopy",
+        progress_message = "Copying the Flutter assets of %{label}",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+_inputs_bundle = rule(
+    implementation = _inputs_bundle_impl,
+    doc = "The core's flutter_assets tree, copied under this target's name.",
+    attrs = {
+        "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
+    },
+)
+
+flutter_android_assets = _inputs_bundle
 visibility(["//flutter"])
 
 def _flutter_android_manifest_impl(ctx):
@@ -27,30 +48,6 @@ def _flutter_android_manifest_impl(ctx):
         progress_message = "Injecting pubspec version into AndroidManifest %{label}",
     )
     return [DefaultInfo(files = depset([out]))]
-
-def _flutter_android_assets_impl(ctx):
-    artifact = ctx.attr.core[FlutterArtifactInfo]
-    if artifact.mode != "debug":
-        fail("{}: Flutter assets must come from a debug core, got mode {}.".format(ctx.label, artifact.mode))
-    src = artifact.assets
-    out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
-    ctx.actions.run_shell(
-        outputs = [out],
-        inputs = [src],
-        command = 'mkdir -p "{out}" && cp -RL "{src}"/. "{out}"/'.format(out = out.path, src = src.path),
-        mnemonic = "FlutterAssetCopy",
-        progress_message = "Copying the Flutter assets of %{label}",
-    )
-    return [DefaultInfo(files = depset([out]))]
-
-flutter_android_assets = rule(
-    implementation = _flutter_android_assets_impl,
-    doc = "Copies a flutter_core artifact's assets into an Android asset tree.",
-    attrs = {
-        "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
-    },
-)
-
 
 flutter_android_manifest = rule(
     implementation = _flutter_android_manifest_impl,

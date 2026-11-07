@@ -9,8 +9,8 @@ exports_files([
 
 flutter_debug_core(
     name = "prebuilt_core",
-    app = "//:core",
-    entrypoint = "debug_core_test.dart",
     srcs = ["debug_core_helper.dart"],
+    app = "//:core",
     dart_defines = {"DEBUG_CORE_MARK": "prebuilt-value"},
+    entrypoint = "debug_core_test.dart",
 )

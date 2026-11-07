@@ -80,6 +80,8 @@ def input_paths(data: dict) -> set[str]:
             paths |= visit(identifier)
     return paths
 
+
+# Kernel artifacts are named by the core rule's private output target.
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bazel", default="bazel")
@@ -105,7 +107,7 @@ def main() -> int:
             with zipfile.ZipFile(apk) as archive:
                 embedded = archive.read("assets/flutter_assets/kernel_blob.bin")
             if embedded != kernel.read_bytes():
-                raise RuntimeError("{} kernel_blob.bin differs from {}".format(apk_label, core_label + "_kernel"))
+                raise RuntimeError("{} kernel_blob.bin differs from {}_kernel".format(apk_label, core_label))
             graph = json.loads(run(args.bazel, module, [
                 "aquery", "--lockfile_mode=error", "--output=jsonproto",
                 "deps({})".format(apk_label),
