@@ -39,10 +39,14 @@ flutter_android_app(
             "manifest": "//integration_test:flutter_activity_manifest.xml",
         },
     },
-    integration_tests = [
-        "//:integration_pass",
-        "//:integration_fail",
-    ],
+    integration_tests = {
+        "//:integration_pass": {},
+        "//:integration_fail": {},
+        "//:integration_lifecycle": {},
+        "//:integration_timeout": {},
+        "//:integration_crash": {},
+        "//:integration_deadline": {"timeout": "short"},
+    },
     deps = [":main_activity"],
 )
 

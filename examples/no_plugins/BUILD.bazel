@@ -28,6 +28,30 @@ flutter_integration_test(
     src = "//integration_test:integration_fail_test.dart",
 )
 
+flutter_integration_test(
+    name = "integration_lifecycle",
+    app = ":core",
+    src = "//integration_test:integration_lifecycle_test.dart",
+)
+
+flutter_integration_test(
+    name = "integration_timeout",
+    app = ":core",
+    src = "//integration_test:integration_timeout_test.dart",
+)
+
+flutter_integration_test(
+    name = "integration_crash",
+    app = ":core",
+    src = "//integration_test:integration_crash_test.dart",
+)
+
+flutter_integration_test(
+    name = "integration_deadline",
+    app = ":core",
+    src = "//integration_test:integration_deadline_test.dart",
+)
+
 # The host test reads core_test_package, declared by flutter_core for the
 # tester platform: no Android build environment is needed.
 flutter_test_suite(

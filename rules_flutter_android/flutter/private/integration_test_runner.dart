@@ -102,10 +102,23 @@ Future<void> main(List<String> args) async {
     final deadlineSeconds = timeout > 20 ? timeout - 15 : timeout;
     final deadline = DateTime.now().add(Duration(seconds: deadlineSeconds));
     var timedOut = false;
+    var crashed = false;
+    var lastPidCheck = DateTime.now();
     while (!captured.toString().contains(footer) && DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final current = captured.toString();
+      final runningCase = _runningCase(current, runId);
+      if (runningCase != null && DateTime.now().difference(lastPidCheck).inSeconds >= 1) {
+        lastPidCheck = DateTime.now();
+        final pid = await Process.run(adb, ['-s', device, 'shell', 'pidof', package]);
+        if (pid.exitCode != 0 || pid.stdout.toString().trim().isEmpty) {
+          crashed = true;
+          stderr.writeln('Integration test process exited while running: $runningCase');
+          break;
+        }
+      }
     }
-    if (!captured.toString().contains(footer)) {
+    if (!captured.toString().contains(footer) && !crashed) {
       timedOut = true;
       final text = captured.toString();
       stdout.writeln('Integration test deadline exceeded; last events:');
@@ -116,17 +129,29 @@ Future<void> main(List<String> args) async {
     }
     await logcat.kill();
     await captureSubscription.cancel();
-    final decoded = decoder.decodeStream(captured.toString(), run: runId);
-    for (final testCase in decoded.cases) {
+    final output = captured.toString();
+    final runningCase = _runningCase(output, runId);
+    final decoded = timedOut || crashed ? null : decoder.decodeStream(output, run: runId);
+    final cases = decoded?.cases ?? [
+      decoder.CaseResult(
+        runningCase ?? 'integration test runner',
+        decoder.Outcome.error,
+        timedOut ? 'Overall runner deadline exceeded.' : 'Application exited before RFT_END.',
+      ),
+    ];
+    for (final testCase in cases) {
       stdout.writeln('${testCase.outcome.name.toUpperCase()}: ${testCase.name}');
+    }
+    if (runningCase != null && decoded == null) {
+      stderr.writeln('Integration test interrupted while running: $runningCase');
     }
     final xmlPath = Platform.environment['XML_OUTPUT_FILE'];
     if (xmlPath != null) {
       await File(xmlPath).writeAsString(
-        decoder.junitReport('device', decoded.cases, ''),
+        decoder.junitReport('device', cases, ''),
       );
     }
-    if (timedOut || decoded.status != 0) exitCode = 1;
+    if (timedOut || decoded == null || decoded.status != 0) exitCode = 1;
   } finally {
     await subscription?.cancel();
     if (logcat != null) await logcat.kill();
@@ -134,6 +159,22 @@ Future<void> main(List<String> args) async {
     await Process.run(adb, ['-s', device, 'uninstall', package]);
   }
 }
+String? _runningCase(String text, String runId) {
+  String? name;
+  for (final line in text.split('\n')) {
+    if (!line.contains('RFT|$runId|')) continue;
+    final match = RegExp(r'"type":"running","name":"((?:\\.|[^"\\])*)"')
+        .firstMatch(line);
+    if (match != null) {
+      name = (jsonDecode('"${match.group(1)}"') as String).replaceAllMapped(
+        RegExp(r'%u([0-9A-Fa-f]{4})'),
+        (match) => String.fromCharCode(int.parse(match.group(1)!, radix: 16)),
+      );
+    }
+  }
+  return name;
+}
+
 
 Future<bool> _reachable(int port) async {
   try {
