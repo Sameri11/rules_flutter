@@ -20,5 +20,3 @@ flutter_debug_core(
     dart_defines = {"DEBUG_CORE_MARK": "prebuilt-value"},
     entrypoint = "debug_core_test.dart",
 )
-
-

@@ -81,8 +81,8 @@ Future<void> _run(List<String> args, DateTime started) async {
     await _writeSettings(session, runId);
     _check(await session.adb(['logcat', '-c']), 'logcat clear');
     await session.startLogcat();
-    session.launched = true;
     _check(await session.shell(['am', 'start', '-W', '-n', '$package/$activity']), 'am start');
+    session.launched = true;
     await _await(session, runId, deadline);
   } finally {
     await session.cleanup();

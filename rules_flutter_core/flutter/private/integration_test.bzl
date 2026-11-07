@@ -38,7 +38,7 @@ def flutter_integration_test(name, app, src, srcs = [], dart_defines = {}, visib
         src: Integration-test Dart source file.
         srcs: Additional Dart sources needed by the test.
         dart_defines: Compile-time Dart environment values.
-        visibility: Visibility for this declaration and generated targets.
+        visibility: Visibility for this declaration.
     """
     metadata = name + "_metadata"
     parse_metadata(name = metadata, src = src, tags = ["manual"])

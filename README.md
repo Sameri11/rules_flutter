@@ -95,7 +95,8 @@ One measured warm four-command sequence took 1.500 seconds with the former suffi
 | Release signing | Gradle signing configuration | Not implemented | Sign the unsigned output outside the build. |
 | Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |
 | iOS, web, desktop | Platform-specific builds | Not implemented | Android only. |
-| Unit and widget tests | `flutter test` | Partial | `flutter_test` and `flutter_test_suite` run host tests; no devices or integration tests. |
+| Unit and widget tests | `flutter test` | Partial | `flutter_test` and `flutter_test_suite` run host tests. |
+| Integration tests | `flutter test integration_test` | Partial | `flutter_integration_test` with `flutter_android_app(integration_tests = ...)` runs on an Android device or emulator; no sharding, no apps with Android plugins. |
 
 ## Installing the rules
 

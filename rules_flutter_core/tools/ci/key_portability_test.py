@@ -1126,6 +1126,7 @@ def _file_contract(name):
         "android_integration_test": "T",
     }[name]
 
+
 def _string(node):
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
