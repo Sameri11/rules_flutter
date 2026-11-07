@@ -81,6 +81,7 @@ Future<void> _run(List<String> args, DateTime started) async {
     await _writeSettings(session, runId);
     _check(await session.adb(['logcat', '-c']), 'logcat clear');
     await session.startLogcat();
+    session.launched = true;
     _check(await session.shell(['am', 'start', '-W', '-n', '$package/$activity']), 'am start');
     await _await(session, runId, deadline);
   } finally {
@@ -103,6 +104,9 @@ final class _DeviceSession {
   Process? _logcat;
   StreamSubscription<String>? _capture;
   Future<void>? _cleanup;
+
+  /// Whether the app was started, so it may have written outputs.
+  bool launched = false;
 
   String get testDirectory => '/data/user/0/$package/code_cache/rules_flutter_test';
 
@@ -133,7 +137,7 @@ final class _DeviceSession {
     await stopLogcat();
     await shell(['am', 'force-stop', package]);
     try {
-      await _copyOutputs(this);
+      if (launched) await _copyOutputs(this);
     } on _RunnerFailure catch (error) {
       stderr.writeln('Android integration test runner: ${error.message}');
       exitCode = 1;
