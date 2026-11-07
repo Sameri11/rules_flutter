@@ -247,3 +247,34 @@ Select the ABI set using `--android_platforms`; keep the APK label unchanged. Bu
 The SDK, Android NDK and Android SDK are local, non-hermetic inputs. The Consumer Module owns Maven dependency resolution. `pubspec.lock` must be committed; hosted packages are pinned by sha256, Git sources are unsupported, and path dependencies must be declared. The Android plugin hub generates Java registrants for each mode; debug includes dev-only plugins and release excludes them. The checked-in debug Dart registrant is at `lib/dart_plugin_registrant.dart`; the hub generates release registration during the build. Core checks the committed debug registrant against pub metadata.
 
 Bazel emits debug-key-signed and unsigned APKs; sign release APKs outside Bazel. `ndk-build` and prebuilt-JNI plugins are unsupported by automatic generation. See the detailed quickstart for Package Recipes and plugin configuration.
+
+## Android integration tests
+
+Declare each `integration_test` file with `flutter_integration_test` in the
+package root, then attach it to the Android app:
+
+```python
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+
+flutter_integration_test(
+    name = "login",
+    app = ":core",
+    src = "integration_test/login_test.dart",
+)
+
+flutter_android_app(
+    name = "app",
+    integration_tests = {":login": {}},
+)
+```
+
+This generates `:app_login` (the test APK) and `:app_login_test` (the runner).
+Run with `bazel test --@rules_flutter_core//flutter:mode=debug
+//android:app_login_test`; adding that mode flag to `.bazelrc` is convenient.
+Start the emulator/device yourself and keep its adb server running. Set
+`ANDROID_SERIAL` when several devices are connected. Each run starts with fresh
+app data and uninstalls the test app afterward. Screenshots and other declared
+outputs are available under `test.outputs`; use `--test_filter` to select a
+case. Sharding is not supported yet, and apps with Android plugins are not
+supported yet.

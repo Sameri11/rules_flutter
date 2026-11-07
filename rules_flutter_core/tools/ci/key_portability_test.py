@@ -28,7 +28,7 @@ FILES = {
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
-ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip"))
+ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip", "android_integration_test"))
 
 
 class Checker:
@@ -1031,6 +1031,7 @@ class Checker:
                 self.fail("S", "debug_core.bzl must not name a host path, variable or the pub cache")
 
 
+
 _HOST_PATH = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")
 
 # Hub targets that a consumer .bzl names: (target, consumer file key, owner file key).
@@ -1085,7 +1086,6 @@ def _file_contract(name):
         "test": "I",
         "device_test": "R",
         "test_driver": "I",
-        "core": "K",
         "debug_core": "S",
         "android_inputs": "L",
         "apk_check": "M",
