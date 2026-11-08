@@ -380,7 +380,7 @@ def _module_segment(
         return regular
     debug_install_name = install_name + "_debug"
     debug = install(debug_install_name, debug_coordinates)
-    return regular + "\n# Debug-only Maven install.\nuse_repo(maven, \"{}\")\n".format(debug_install_name) + debug.replace(
+    return regular + "\n# Debug-only Maven install.\nuse_repo(maven, \"{}\")\n\n".format(debug_install_name) + debug.replace(
         "maven = use_extension(\"@rules_jvm_external//:extensions.bzl\", \"maven\")\n",
         "",
     )

@@ -334,6 +334,7 @@ build_test(
     name = "recipe_plugin_maven_test",
     targets = ["@flutter_plugins//recipe_plugin:recipe_plugin"],
 )
+
 genrule(
     name = "build_config_plugin_jar_check",
     srcs = ["@flutter_plugins//build_config_plugin"],

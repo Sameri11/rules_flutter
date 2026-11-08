@@ -91,8 +91,8 @@ namespace_plugin_metadata(
     build_config_marker = "//:fixtures/build_config_plugin/pubspec.yaml",
     call_marker = "//:fixtures/namespace_call/pubspec.yaml",
     fake_marker = "//:fixtures/fake_plugin/pubspec.yaml",
-    recipe_marker = "//:fixtures/recipe_plugin/pubspec.yaml",
     guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
+    recipe_marker = "//:fixtures/recipe_plugin/pubspec.yaml",
 )
 
 plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
