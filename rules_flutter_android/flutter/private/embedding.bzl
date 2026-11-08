@@ -51,11 +51,7 @@ FLUTTER_EMBEDDING_ARTIFACTS = [
 # the embedding needs the jvm artifact.
 ANNOTATION_JVM = "//:androidx_annotation_annotation_jvm"
 
-_TRANSITIVE_DEPS = [ANNOTATION_JVM]
-
-# Maven labels the plugin hub itself references in addition to the declared
-# embedding coordinates.
-TRANSITIVE_DEPS = _TRANSITIVE_DEPS
+TRANSITIVE_DEPS = [ANNOTATION_JVM]
 
 def flutter_embedding_deps(maven_repo = "@flutter_maven"):
     """Labels of the embedding's AndroidX dependencies in `maven_repo`.
@@ -66,4 +62,4 @@ def flutter_embedding_deps(maven_repo = "@flutter_maven"):
     return [
         maven_label(coordinate, repo = maven_repo)
         for coordinate in FLUTTER_EMBEDDING_ARTIFACTS
-    ] + [maven_repo + dep for dep in _TRANSITIVE_DEPS]
+    ] + [maven_repo + dep for dep in TRANSITIVE_DEPS]

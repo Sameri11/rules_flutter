@@ -1,11 +1,15 @@
-"""Recipe fixture that consumes Maven labels supplied by the plugin hub."""
+"""Compile recipe fixture plugins against resolved Maven coordinates."""
+
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 load("@rules_flutter_android//flutter:defs.bzl", "flutter_native_contribution")
 
 def recipe_fixture(name, info):
-    native.alias(
+    kt_android_library(
         name = name,
-        actual = info.coordinates[0],
+        srcs = info.android_srcs,
+        custom_package = info.namespace,
+        deps = [info.embedding] + info.plugin_deps + info.coordinates,
     )
     flutter_native_contribution(
         name = name + "_flutter_native",

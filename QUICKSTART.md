@@ -494,7 +494,6 @@ Run the update target when the check reports drift. Core independently checks
 the committed debug Dart registrant against pub metadata and prints its update
 command when that file is stale.
 
-
 The generator supplies package-scoped `BuildConfig` values for ordinary
 source-built Android plugins. It does not parse Gradle `buildConfigField`
 declarations; declare custom primitive or String fields in the Consumer Module's

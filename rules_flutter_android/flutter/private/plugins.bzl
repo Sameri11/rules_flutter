@@ -1514,7 +1514,7 @@ def _flutter_plugins_impl(ctx):
         package_root = roots.get(plugin["name"])
         if package_root == None:
             continue
-        build_gradle, coordinates, reasons, gated, _ = _plugin_maven_inputs(
+        _, coordinates, _, gated, _ = _plugin_maven_inputs(
             ctx,
             plugin["name"],
             package_root,
