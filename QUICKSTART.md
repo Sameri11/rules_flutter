@@ -467,34 +467,10 @@ use_repo(plugins, "flutter_plugins")
 Dev-only plugins are included in debug and excluded from release. If a dev-only
 plugin declares Maven dependencies, the generated segment also creates a
 debug-only install; release builds do not resolve or fetch that install.
-Consumer Android code sharing Maven artifacts with plugins should depend on
-`@flutter_plugins//maven:<artifact>` rather than `@flutter_maven//:<artifact>`.
-The generated alias selects the same mode-specific artifact as the plugins.
-
-### Testing a path package
-
-A path package's tests need its own development dependencies, independent of the
-application lock. Commit the package's `pubspec.lock`, declare a separate lock
-hub, and use a test package configured with that hub:
-
-```python
-# MODULE.bazel
-pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
-pub.lock(name = "pub_greeter", lock = "//packages/greeter:pubspec.lock")
-use_repo(pub, "pub_greeter")
-
-# packages/greeter/BUILD.bazel
-flutter_package(name = "greeter", pub = "@pub", pubspec = ":pubspec")
-flutter_package(
-    name = "greeter_test_package",
-    pub = "@pub_greeter",
-    pubspec = ":pubspec",
-)
-flutter_test_suite(name = "tests", app = ":greeter_test_package")
-```
-
-Keep the production package on the application hub; only the test package uses
-the package-specific hub.
+`@flutter_plugins//maven:<artifact>` aliases are generated for artifacts declared
+by plugins, the Flutter embedding, or `extra_artifacts`; add any other Maven
+artifact needed by consumer Android code to `extra_artifacts`. The generated
+alias selects the same mode-specific artifact as the plugins.
 
 In the root `BUILD.bazel`, load the standalone Maven guard once for the Consumer
 Module's plugin graph:
@@ -511,14 +487,37 @@ embedding target to the project tag. Generated plugin libraries compile
 against this mode-correct embedding without adding a second runtime embedding
 to the APK.
 
-
-
 Include the generated Maven segment in the Consumer Module after configuring
 its repository mapping. The guard macro creates check and update targets for
 the segment, plus a test target that ensures the per-project guards agree.
 Run the update target when the check reports drift. Core independently checks
 the committed debug Dart registrant against pub metadata and prints its update
 command when that file is stale.
+
+### Testing a path package
+
+A path package's tests need its own development dependencies, independent of the
+application lock. Commit the package's `pubspec.lock`, declare a separate lock
+hub, and use a test package configured with that hub:
+
+```python
+# MODULE.bazel
+pub_greeter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
+pub_greeter.lock(name = "pub_greeter", lock = "//packages/greeter:pubspec.lock")
+use_repo(pub_greeter, "pub_greeter")
+
+# packages/greeter/BUILD.bazel
+flutter_package(name = "greeter", pub = "@pub", pubspec = ":pubspec")
+flutter_package(
+    name = "greeter_test_package",
+    pub = "@pub_greeter",
+    pubspec = ":pubspec",
+)
+flutter_test_suite(name = "tests", app = ":greeter_test_package")
+```
+
+Keep the production package on the application hub; only the test package uses
+the package-specific hub.
 
 The generator supplies package-scoped `BuildConfig` values for ordinary
 source-built Android plugins. It does not parse Gradle `buildConfigField`

@@ -246,7 +246,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
                 maven_repo = maven_repo + "//:pin",
                 tags = helper_tags,
             )
-            embedding_deps = flutter_embedding_deps(maven_repo)
+            embedding_deps = [plugins + "//:flutter_embedding_deps"]
             validation = [":" + name + "_maven_repo_check"]
     else:
         maven_repo = maven_repo or "@flutter_maven"

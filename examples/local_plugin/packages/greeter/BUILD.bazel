@@ -21,8 +21,6 @@ flutter_package(
 flutter_test_suite(
     name = "tests",
     app = ":greeter_test_package",
-    # CI does not run example tests yet.
-    tags = ["manual"],
 )
 
 # Declare path-dependency sources explicitly: pubspec.lock does not hash them.

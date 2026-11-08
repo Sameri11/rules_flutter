@@ -380,7 +380,7 @@ def _module_segment(
         return regular
     debug_install_name = install_name + "_debug"
     debug = install(debug_install_name, debug_coordinates)
-    return regular + "\nuse_repo(maven, \"{}\")\n".format(debug_install_name) + debug.replace(
+    return regular + "\n# Debug-only Maven install.\nuse_repo(maven, \"{}\")\n".format(debug_install_name) + debug.replace(
         "maven = use_extension(\"@rules_jvm_external//:extensions.bzl\", \"maven\")\n",
         "",
     )
@@ -1421,25 +1421,20 @@ def _write_android_registrants(ctx, plugins, roots):
             render_android_registrant(entries),
         )
 
-def _write_maven_aliases(ctx, split, dev_coordinates):
-    release_deps = json.decode(ctx.read(Label(ctx.attr.maven_repo + "//:coursier-deps.json")))["dependencies"]
+def _write_maven_aliases(ctx, split, release_coordinates, all_coordinates):
     release_targets = sorted({
-        maven_label(dependency["coord"], repo = ctx.attr.maven_repo).split("//:")[1]: True
-        for dependency in release_deps
+        maven_label(coordinate, repo = "").split("//:")[1]: True
+        for coordinate in release_coordinates
     })
-    if not split:
-        targets = [
-            "alias(\n    name = {},\n    actual = {},\n)".format(
-                repr(target),
-                repr(ctx.attr.maven_repo + "//:" + target),
-            )
-            for target in release_targets
-        ]
-    else:
+    all_targets = sorted({
+        maven_label(coordinate, repo = "").split("//:")[1]: True
+        for coordinate in all_coordinates
+    })
+    if split:
         debug_repo = ctx.attr.maven_repo + "_debug"
         debug_targets = sorted({
             maven_label(coordinate, repo = debug_repo).split("//:")[1]: True
-            for coordinate in dev_coordinates
+            for coordinate in all_coordinates
         })
         debug_only = [target for target in debug_targets if target not in release_targets]
         targets = [
@@ -1461,6 +1456,14 @@ def _write_maven_aliases(ctx, split, dev_coordinates):
             )
             for target in debug_only
         ])
+    else:
+        targets = [
+            "alias(\n    name = {},\n    actual = {},\n)".format(
+                repr(target),
+                repr(ctx.attr.maven_repo + "//:" + target),
+            )
+            for target in all_targets
+        ]
     ctx.file(
         "maven/BUILD.bazel",
         "package(default_visibility = [\"//visibility:public\"])\n\n" +
@@ -1492,14 +1495,12 @@ def _flutter_plugins_impl(ctx):
             build_gradle = ctx.path("{}/build.gradle.kts".format(android))
         if not build_gradle.exists:
             continue
-        coordinates, _ = _extract_dependencies(ctx.read(build_gradle))
+        coordinates, reasons = _extract_dependencies(ctx.read(build_gradle))
         override = overrides.get(plugin["name"])
         if override != None:
-            coordinates = coordinates + [
-                c
-                for c in override
-                if c not in coordinates
-            ]
+            coordinates = coordinates + [c for c in override if c not in coordinates]
+        if any([reason in _GATED_REASONS for reason in reasons]) and plugin["name"] not in recipes:
+            continue
         dev_coordinates.extend([c for c in coordinates if c not in dev_coordinates])
 
     # Names a recipe was registered for that the plugin loop never reached --
@@ -1632,7 +1633,7 @@ def _flutter_plugins_impl(ctx):
                     "resource_files": repr(_list_files(root, "android/src/main/res", [])),
                     "namespace": repr(package),
                     "coordinates": repr([
-                        maven_label(c, repo = ctx.attr.maven_repo)
+                        "//maven:" + maven_label(c).split("//:")[1]
                         for c in coordinates
                     ]),
                     "maven_repo": ctx.attr.maven_repo,
@@ -1905,6 +1906,8 @@ def _flutter_plugins_impl(ctx):
     # It joins the Consumer Module's existing install rather than creating an
     # extension-owned repository. Derive its install name from the canonical
     # repository selected by plugins.project().
+    if dev_coordinates and ctx.attr.maven_resolver != "coursier":
+        fail("Dev-only plugins with Maven dependencies require maven_resolver = \"coursier\" when the debug Maven install is split; pinned resolvers cannot use separate install lock files.")
     ctx.file(
         "plugin_deps.MODULE.bazel",
         _module_segment(
@@ -2049,7 +2052,12 @@ def _flutter_plugins_impl(ctx):
             for abi in ctx.attr.abis
         ]) + _native_files_by_abi_target(ctx),
     )
-    _write_maven_aliases(ctx, bool(dev_coordinates), dev_coordinates)
+    _write_maven_aliases(
+        ctx,
+        bool(dev_coordinates),
+        FLUTTER_EMBEDDING_ARTIFACTS + (release_coordinates if dev_coordinates else all_coordinates) + ctx.attr.extra_artifacts,
+        FLUTTER_EMBEDDING_ARTIFACTS + all_coordinates + ctx.attr.extra_artifacts,
+    )
 
 flutter_plugins = repository_rule(
     implementation = _flutter_plugins_impl,
