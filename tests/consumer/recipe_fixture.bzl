@@ -1,8 +1,7 @@
 """Compile recipe fixture plugins against resolved Maven coordinates."""
 
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
-
 load("@rules_flutter_android//flutter:defs.bzl", "flutter_native_contribution")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 
 def recipe_fixture(name, info):
     kt_android_library(
