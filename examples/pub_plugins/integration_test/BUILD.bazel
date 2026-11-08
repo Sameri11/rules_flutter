@@ -1,4 +1,5 @@
 exports_files([
     "debug_core_helper.dart",
     "debug_core_test.dart",
+    "smoke_test.dart",
 ])

@@ -35,4 +35,12 @@ pub.lock(
 )
 use_repo(pub, "pub")
 
+# Resolve the path plugin's tests from its own lock, including its dev dependencies.
+pub_greeter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
+pub_greeter.lock(
+    name = "pub_greeter",
+    lock = "//packages/greeter:pubspec.lock",
+)
+use_repo(pub_greeter, "pub_greeter")
+
 include("//packages/host_app/android:config.MODULE.bazel")

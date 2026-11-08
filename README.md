@@ -96,7 +96,7 @@ One measured warm four-command sequence took 1.500 seconds with the former suffi
 | Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |
 | iOS, web, desktop | Platform-specific builds | Not implemented | Android only. |
 | Unit and widget tests | `flutter test` | Partial | `flutter_test` and `flutter_test_suite` run host tests. |
-| Integration tests | `flutter test integration_test` | Partial | `flutter_integration_test` with `flutter_android_app(integration_tests = ...)` runs on an Android device or emulator; no sharding, no apps with Android plugins. |
+| Integration tests | `flutter test integration_test` | Partial | `flutter_integration_test` with `flutter_android_app(integration_tests = ...)` runs on an Android device or emulator; no sharding. |
 
 ## Installing the rules
 
@@ -289,5 +289,4 @@ The runner copies those files into Bazel's `test.outputs` directory. It always
 adds `manual`, `external`, and `exclusive` tags. The rule has no `data` or `env`
 attributes; configure device-visible values with `dart_defines`. Use
 `--test_filter` to select cases.
-Sharding is not supported yet, and apps with Android plugins are not supported
-yet.
+Sharding is not supported yet.

@@ -1,4 +1,4 @@
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,10 +12,15 @@ flutter_package(
     pubspec = ":pubspec",
 )
 
-flutter_test(
-    name = "greeter_test",
-    src = "test/greeter_test.dart",
-    app = ":greeter",
+flutter_package(
+    name = "greeter_test_package",
+    pub = "@pub_greeter",
+    pubspec = ":pubspec",
+)
+
+flutter_test_suite(
+    name = "tests",
+    app = ":greeter_test_package",
     # CI does not run example tests yet.
     tags = ["manual"],
 )
