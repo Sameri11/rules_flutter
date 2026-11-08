@@ -95,7 +95,8 @@ One measured warm four-command sequence took 1.500 seconds with the former suffi
 | Release signing | Gradle signing configuration | Not implemented | Sign the unsigned output outside the build. |
 | Product flavors | `--flavor` | Not implemented | Declare separate Bazel targets instead. |
 | iOS, web, desktop | Platform-specific builds | Not implemented | Android only. |
-| Unit and widget tests | `flutter test` | Partial | `flutter_test` and `flutter_test_suite` run host tests; no devices or integration tests. |
+| Unit and widget tests | `flutter test` | Partial | `flutter_test` and `flutter_test_suite` run host tests. |
+| Integration tests | `flutter test integration_test` | Partial | `flutter_integration_test` with `flutter_android_app(integration_tests = ...)` runs on an Android device or emulator; no sharding, no apps with Android plugins. |
 
 ## Installing the rules
 
@@ -247,3 +248,46 @@ Select the ABI set using `--android_platforms`; keep the APK label unchanged. Bu
 The SDK, Android NDK and Android SDK are local, non-hermetic inputs. The Consumer Module owns Maven dependency resolution. `pubspec.lock` must be committed; hosted packages are pinned by sha256, Git sources are unsupported, and path dependencies must be declared. The Android plugin hub generates Java registrants for each mode; debug includes dev-only plugins and release excludes them. The checked-in debug Dart registrant is at `lib/dart_plugin_registrant.dart`; the hub generates release registration during the build. Core checks the committed debug registrant against pub metadata.
 
 Bazel emits debug-key-signed and unsigned APKs; sign release APKs outside Bazel. `ndk-build` and prebuilt-JNI plugins are unsupported by automatic generation. See the detailed quickstart for Package Recipes and plugin configuration.
+
+## Android integration tests
+
+Declare each `integration_test` file with `flutter_integration_test` in the
+package root, then attach it to the Android app:
+
+```python
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+
+flutter_integration_test(
+    name = "login",
+    app = ":core",
+    src = "integration_test/login_test.dart",
+)
+
+flutter_android_app(
+    name = "app",
+    integration_tests = {"//:login": {}},
+)
+```
+
+This generates `//android/app:app_login` (the test APK) and
+`//android/app:app_login_test` (the runner). Run with
+`bazel test --@rules_flutter_core//flutter:mode=debug //android/app:app_login_test`;
+adding that mode flag to `.bazelrc` is convenient.
+
+The host provides the emulator/device and runs its adb server. The server's adb
+version must match the adb from the declared Android SDK; start the emulator or
+start the server with that SDK's adb. Select a device with an exported
+`ANDROID_SERIAL`, or pass `--test_env=ANDROID_SERIAL=<serial>`; the exported
+variable is inherited by the test.
+
+The test APK has the same `applicationId` as the development app, replaces it
+while the test runs, and is uninstalled afterward. In the Dart test, create
+`${Directory.systemTemp.path}/rules_flutter_test/outputs/` and write files there
+(for example with `Directory.create(recursive: true)` and `File.writeAsString`).
+The runner copies those files into Bazel's `test.outputs` directory. It always
+adds `manual`, `external`, and `exclusive` tags. The rule has no `data` or `env`
+attributes; configure device-visible values with `dart_defines`. Use
+`--test_filter` to select cases.
+Sharding is not supported yet, and apps with Android plugins are not supported
+yet.

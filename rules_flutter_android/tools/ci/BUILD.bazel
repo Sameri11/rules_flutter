@@ -17,6 +17,7 @@ genrule(
         "//flutter/private:apk_check.bzl",
         "//flutter/private:ndk.bzl",
         "//flutter/private:plugins.bzl",
+        "//flutter/private:integration_test_runner.bzl",
     ],
     outs = ["key_portability_check.checked"],
     cmd = """set -euo pipefail

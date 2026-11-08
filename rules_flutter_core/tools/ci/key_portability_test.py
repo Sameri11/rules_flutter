@@ -25,10 +25,11 @@ FILES = {
     "pub_lock": "flutter/private/pub_lock.bzl",
     "native_build_env": "flutter/native_build_env.bzl",
     "native_strip": "flutter/private/native_strip.bzl",
+    "android_integration_test": "flutter/private/integration_test_runner.bzl",
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
-ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip"))
+ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip", "android_integration_test"))
 
 
 class Checker:
@@ -94,6 +95,7 @@ class Checker:
         self.check_q()
         self.check_r()
         self.check_s()
+        self.check_t()
         return self.failures
 
     def tree(self, name, contract):
@@ -894,6 +896,35 @@ class Checker:
         if re.search(r"attr='(environ|var|getenv)'|'(HOME|PUB_CACHE)'|use_default_shell_env", dumped):
             self.fail("R", "the device kernel action reads the host environment or a home or pub-cache path")
 
+    def check_t(self):
+        tree = self.tree("android_integration_test", "T")
+        if tree is None:
+            return
+        function = _function(tree, "_kernel_impl")
+        if function is None:
+            self.fail("T", "integration_test_runner.bzl must define _kernel_impl")
+            return
+        action = _action_call(function, "run_shell")
+        if action is None:
+            self.fail("T", "integration-test runner kernel must use ctx.actions.run_shell")
+            return
+        declared = _keyword(action, "inputs")
+        if not _contains_attr(declared, ["ctx", "files", "_decoder_srcs"]):
+            self.fail("T", "integration-test runner kernel inputs must include decoder sources")
+        for name, description in (
+            ("logic_source", "the logic source"),
+            ("generated", "the main source"),
+            ("frontend_server", "frontend_server"),
+            ("vm_platform_strong", "vm_platform_strong"),
+            ("sdk_packages", "sdk_packages"),
+        ):
+            if not _contains_name(declared, name) and not _contains_attr(declared, ["toolchain", name]):
+                self.fail("T", "integration-test runner kernel inputs must include {}".format(description))
+        if _keyword(action, "execution_requirements") is not None:
+            self.fail("T", "integration-test runner kernel must not set execution_requirements")
+        if _HOST_PATH.search(ast.dump(function)):
+            self.fail("T", "integration-test runner kernel must not contain a host absolute path")
+
     def check_p(self):
         # The Android SDK as a native build environment: exports and the action input.
         tree = self.tree("native_build_env", "P")
@@ -1031,6 +1062,7 @@ class Checker:
                 self.fail("S", "debug_core.bzl must not name a host path, variable or the pub cache")
 
 
+
 _HOST_PATH = re.compile(r"(?<![\w.])/(?:Users|home|opt)/|/private/(?:var|tmp)/")
 
 # Hub targets that a consumer .bzl names: (target, consumer file key, owner file key).
@@ -1085,12 +1117,13 @@ def _file_contract(name):
         "test": "I",
         "device_test": "R",
         "test_driver": "I",
-        "core": "K",
         "debug_core": "S",
+        "core": "K",
         "android_inputs": "L",
         "apk_check": "M",
         "dart_registrant": "N",
         "pub_lock": "O",
+        "android_integration_test": "T",
     }[name]
 
 
@@ -1397,7 +1430,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
-    print("OK: key portability contracts A-S hold")
+    print("OK: key portability contracts A-T hold")
     return 0
 
 

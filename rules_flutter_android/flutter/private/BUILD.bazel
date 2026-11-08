@@ -1,4 +1,5 @@
 load("@rules_java//java:defs.bzl", "java_binary", "java_test")
+load(":integration_test_runner.bzl", "flutter_android_integration_test_kernel", "flutter_android_integration_test_logic_test")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -12,6 +13,8 @@ exports_files(
         "apk_check.bzl",
         "ndk.bzl",
         "plugins.bzl",
+        "integration_test_runner.dart",
+        "integration_test_runner.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
 )
@@ -80,4 +83,20 @@ java_test(
     ],
     main_class = "ApkCheckTest",
     use_testrunner = False,
+)
+
+flutter_android_integration_test_kernel(
+    name = "integration_test_runner_kernel",
+    src = "integration_test_runner.dart",
+    visibility = ["//visibility:private"],
+)
+
+flutter_android_integration_test_kernel(
+    name = "integration_test_runner_logic_test_kernel",
+    src = "integration_test_runner_logic_test.dart",
+)
+
+flutter_android_integration_test_logic_test(
+    name = "integration_test_runner_logic_test",
+    kernel = ":integration_test_runner_logic_test_kernel",
 )

@@ -21,6 +21,7 @@ filter/shard variables for it.
 A flutter_test_suite is one flutter_test per test file, under one test_suite.
 """
 
+load(":pubspec.bzl", "FlutterPubspecInfo")
 load(":rules.bzl", "FlutterPackageInfo", "dart_test_kernel")
 load(":test_metadata.bzl", "parse_metadata")
 
@@ -179,7 +180,12 @@ def _find_config(test_path, pkg_dir, known):
 
 def _flutter_test_bootstrap_impl(ctx):
     test = ctx.file.src
-    pubspec = ctx.attr.app[FlutterPackageInfo].pubspec.src
+    if FlutterPackageInfo in ctx.attr.app:
+        pubspec = ctx.attr.app[FlutterPackageInfo].pubspec.src
+    elif FlutterPubspecInfo in ctx.attr.app:
+        pubspec = ctx.attr.app[FlutterPubspecInfo].src
+    else:
+        fail("{}: app must provide FlutterPackageInfo or FlutterPubspecInfo".format(ctx.label))
     pkg_dir = _parent(pubspec.short_path)
     known = {f.short_path: f for f in ctx.files.srcs}
     config = _find_config(test.short_path, pkg_dir, known)
@@ -234,8 +240,7 @@ _flutter_test_bootstrap = rule(
         ),
         "app": attr.label(
             mandatory = True,
-            providers = [FlutterPackageInfo],
-            doc = "The flutter_package the test belongs to.",
+            doc = "The flutter_package or flutter_core the test belongs to.",
         ),
         "test_label": attr.string(
             mandatory = True,
@@ -755,3 +760,7 @@ def flutter_test_suite(
         tests = generated + tests,
         **{k: kwargs[k] for k in ["tags", "visibility", "testonly"] if k in kwargs}
     )
+
+DEVICE_DRIVER_SRCS = _DEVICE_DRIVER_SRCS
+NATIVE_REPORT_DEFINE = _NATIVE_REPORT_DEFINE
+flutter_test_bootstrap = _flutter_test_bootstrap

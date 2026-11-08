@@ -26,6 +26,11 @@ load(
     _flutter_test = "flutter_test",
     _flutter_test_suite = "flutter_test_suite",
 )
+load(
+    "//flutter/private:integration_test.bzl",
+    _FlutterIntegrationTestInfo = "FlutterIntegrationTestInfo",
+    _flutter_integration_test = "flutter_integration_test",
+)
 load("//flutter/private:pubspec.bzl", _FlutterPubspecInfo = "FlutterPubspecInfo", _flutter_pubspec = "flutter_pubspec")
 load(
     "//flutter/private:rules.bzl",
@@ -63,6 +68,8 @@ FlutterArtifactInfo = _FlutterArtifactInfo
 
 # A debug artifact of an app's core, compiled from another entrypoint.
 flutter_debug_core = _flutter_debug_core
+flutter_integration_test = _flutter_integration_test
+FlutterIntegrationTestInfo = _FlutterIntegrationTestInfo
 
 # Read by rules_flutter_android for the version an APK declares.
 FlutterPubspecInfo = _FlutterPubspecInfo

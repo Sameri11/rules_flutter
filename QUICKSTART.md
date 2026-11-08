@@ -658,3 +658,44 @@ configuration. Use `bazel test --build_tests_only //...` to select the tests
 and their dependencies without unrelated non-test roots, or name a host suite
 explicitly when running only host tests. Consumer-declared platform-specific
 targets must declare their own `target_compatible_with`.
+
+## Android integration tests
+
+Place each `integration_test` source in the package root and declare it with
+`flutter_integration_test`. Pass its label to `flutter_android_app`:
+
+```python
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+
+flutter_integration_test(
+    name = "login",
+    app = ":core",
+    src = "integration_test/login_test.dart",
+)
+
+flutter_android_app(
+    name = "app",
+    integration_tests = {":login": {}},
+)
+```
+
+The app macro generates `//android/app:app_login` (test APK) and
+`//android/app:app_login_test` (runner). Run
+`bazel test --@rules_flutter_core//flutter:mode=debug //android/app:app_login_test`;
+consider putting the mode flag in `.bazelrc`.
+
+The host provides the emulator/device and adb server. The server's adb version
+must match the adb from the declared Android SDK; start the emulator or start
+the server with that SDK's adb. An exported `ANDROID_SERIAL` is inherited by the
+test; alternatively pass `--test_env=ANDROID_SERIAL=<serial>`.
+
+The test APK has the same `applicationId` as the development app, replaces it
+while running, and is uninstalled afterward. In the Dart test, create
+`${Directory.systemTemp.path}/rules_flutter_test/outputs/` and write files there
+(for example with `Directory.create(recursive: true)` and `File.writeAsString`).
+The runner copies those files into Bazel's `test.outputs` directory. It always
+adds `manual`, `external`, and `exclusive` tags. The rule has no `data` or `env`
+attributes; use `dart_defines` for device-visible configuration.
+`--test_filter` selects cases.
+Sharding and Android-plugin apps are not supported yet.

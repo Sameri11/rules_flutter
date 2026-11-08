@@ -5,6 +5,12 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "flutter_activity_manifest.xml",
     "identity_manifest.xml",
+    "integration_crash_test.dart",
+    "integration_deadline_test.dart",
+    "integration_fail_test.dart",
+    "integration_lifecycle_test.dart",
+    "integration_pass_test.dart",
+    "integration_timeout_test.dart",
 ])
 
 flutter_debug_core(
