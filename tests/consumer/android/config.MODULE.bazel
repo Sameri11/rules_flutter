@@ -91,6 +91,7 @@ namespace_plugin_metadata(
     build_config_marker = "//:fixtures/build_config_plugin/pubspec.yaml",
     call_marker = "//:fixtures/namespace_call/pubspec.yaml",
     fake_marker = "//:fixtures/fake_plugin/pubspec.yaml",
+    recipe_marker = "//:fixtures/recipe_plugin/pubspec.yaml",
     guarded_marker = "//:fixtures/namespace_guarded/pubspec.yaml",
 )
 
@@ -152,6 +153,11 @@ plugins.build_config_field(
 plugins.package(
     name = "build_config_plugin",
     consumer_rules = ["android/custom-consumer.pro"],
+)
+plugins.package(
+    name = "recipe_plugin",
+    bzl_file = "//:recipe_fixture.bzl",
+    macro = "recipe_fixture",
 )
 plugins.package(
     name = "namespace_call",

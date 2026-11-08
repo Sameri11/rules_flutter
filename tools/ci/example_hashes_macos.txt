@@ -1,6 +1,7 @@
 # Recorded APK hashes keyed by example, target, mode and ABI selection:
 #
 #   <example> <target> mode=<mode> abi=<selection> apk=<sha256> entries=<sha256>
+#
 # Valid for Android NDK 28.2.13676358, CI's: another NDK changes every
 # NDK-compiled library. See the docstring of tools/ci/example_hashes.py.
 #

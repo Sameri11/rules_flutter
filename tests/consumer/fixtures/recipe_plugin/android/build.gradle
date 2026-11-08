@@ -1,0 +1,10 @@
+group 'com.example.recipe_plugin'
+version '1.0'
+
+android {
+    namespace 'com.example.recipe_plugin'
+}
+
+dependencies {
+    implementation 'androidx.annotation:annotation-experimental:1.4.1'
+}
