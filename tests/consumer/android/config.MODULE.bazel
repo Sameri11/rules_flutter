@@ -156,12 +156,17 @@ plugins.package(
 )
 plugins.package(
     name = "recipe_plugin",
+    artifacts = ["androidx.annotation:annotation-experimental:1.4.0"],
     bzl_file = "//:recipe_fixture.bzl",
     macro = "recipe_fixture",
 )
 plugins.package(
     name = "namespace_call",
     consumer_rules = [],
+)
+plugins.package(
+    name = "fake_plugin",
+    artifacts = ["androidx.annotation:annotation-experimental:1.4.0"],
 )
 plugins.project(
     abis = ["arm64-v8a"],

@@ -10,7 +10,7 @@ maven.install(
     name = "plugin_maven",
     artifacts = [
         "androidx.annotation:annotation:1.8.1",
-        "androidx.annotation:annotation-experimental:1.4.1",
+        "androidx.annotation:annotation-experimental:1.4.0",
         "androidx.core:core:1.13.1",
         "androidx.exifinterface:exifinterface:1.4.1",
         "androidx.fragment:fragment:1.7.1",
