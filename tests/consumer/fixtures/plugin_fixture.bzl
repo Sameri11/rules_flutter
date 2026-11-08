@@ -19,6 +19,7 @@ def _namespace_plugin_metadata_impl(ctx):
         ("namespace_guarded", ctx.attr.guarded_marker, "com.example.namespace_guarded", "Plugin"),
         ("fake_plugin", ctx.attr.fake_marker, "com.example.fake_plugin", "FakePlugin"),
         ("build_config_plugin", ctx.attr.build_config_marker, "com.example.build_config_plugin", "BuildConfigPlugin"),
+        ("recipe_plugin", ctx.attr.recipe_marker, "com.example.recipe_plugin", "RecipePlugin"),
     ]:
         plugins.append({
             "name": name,
@@ -96,6 +97,10 @@ namespace_plugin_metadata = repository_rule(
             mandatory = True,
         ),
         "fake_marker": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+        ),
+        "recipe_marker": attr.label(
             allow_single_file = True,
             mandatory = True,
         ),

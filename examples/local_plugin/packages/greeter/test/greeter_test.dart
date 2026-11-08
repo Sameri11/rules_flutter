@@ -1,3 +1,4 @@
+import 'package:args/args.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:greeter/greeter.dart';
 import 'package:greeter/greeter_platform_interface.dart';
@@ -12,6 +13,10 @@ class MockGreeterPlatform
 }
 
 void main() {
+  test('args dev dependency parses a flag', () {
+    final parser = ArgParser()..addFlag('verbose');
+    expect(parser.parse(['--verbose'])['verbose'], isTrue);
+  });
   final GreeterPlatform initialPlatform = GreeterPlatform.instance;
 
   test('$MethodChannelGreeter is the default instance', () {

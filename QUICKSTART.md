@@ -464,6 +464,14 @@ plugins.project(
 use_repo(plugins, "flutter_plugins")
 ```
 
+Dev-only plugins are included in debug and excluded from release. If a dev-only
+plugin declares Maven dependencies, the generated segment also creates a
+debug-only install; release builds do not resolve or fetch that install.
+`@flutter_plugins//maven:<artifact>` aliases are generated for artifacts declared
+by plugins, the Flutter embedding, or `extra_artifacts`; add any other Maven
+artifact needed by consumer Android code to `extra_artifacts`. The generated
+alias selects the same mode-specific artifact as the plugins.
+
 In the root `BUILD.bazel`, load the standalone Maven guard once for the Consumer
 Module's plugin graph:
 
@@ -478,8 +486,6 @@ repository. Consumers do not declare an embedding `java_import` or pass an
 embedding target to the project tag. Generated plugin libraries compile
 against this mode-correct embedding without adding a second runtime embedding
 to the APK.
-
-
 
 Include the generated Maven segment in the Consumer Module after configuring
 its repository mapping. The guard macro creates check and update targets for
@@ -519,7 +525,10 @@ The generator handles ordinary Java/Kotlin and CMake plugin Android halves. Use
 `plugins.package(artifacts = [...])` when a Maven coordinate cannot be inferred.
 Use a Package Recipe when metadata requires Gradle evaluation, file I/O,
 unsupported plugin-native build methods, or package-specific native asset
-preparation. See [`examples/pub_plugins`](examples/pub_plugins/) and
+preparation. When a debug Maven install exists, recipe-only dependencies must be
+declared through `extra_artifacts` and referenced with `"//maven:<target>"` labels
+so the recipe selects the mode-correct artifact. See
+[`examples/pub_plugins`](examples/pub_plugins/) and
 [`examples/demo_app`](examples/demo_app/) for working plugin and recipe
 configurations.
 
@@ -551,6 +560,31 @@ filegroup(
 )
 ```
 
+
+### Testing a path package
+
+A path package's tests need its own development dependencies, independent of the
+application lock. Commit the package's `pubspec.lock`, declare a separate lock
+hub, and use a test package configured with that hub:
+
+```python
+# MODULE.bazel
+pub_greeter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
+pub_greeter.lock(name = "pub_greeter", lock = "//packages/greeter:pubspec.lock")
+use_repo(pub_greeter, "pub_greeter")
+
+# packages/greeter/BUILD.bazel
+flutter_package(name = "greeter", pub = "@pub", pubspec = ":pubspec")
+flutter_package(
+    name = "greeter_test_package",
+    pub = "@pub_greeter",
+    pubspec = ":pubspec",
+)
+flutter_test_suite(name = "tests", app = ":greeter_test_package")
+```
+
+Keep the production package on the application hub; only the test package uses
+the package-specific hub.
 
 ## Recipes and Dart native assets
 
@@ -698,4 +732,4 @@ The runner copies those files into Bazel's `test.outputs` directory. It always
 adds `manual`, `external`, and `exclusive` tags. The rule has no `data` or `env`
 attributes; use `dart_defines` for device-visible configuration.
 `--test_filter` selects cases.
-Sharding and Android-plugin apps are not supported yet.
+Sharding is not supported yet.
