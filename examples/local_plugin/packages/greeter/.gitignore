@@ -24,7 +24,6 @@ migrate_working_dir/
 #.vscode/
 
 # Flutter/Dart/Pub related
-# Committed because the package's test hub reads this lock.
 **/doc/api/
 .dart_tool/
 .flutter-plugins-dependencies
