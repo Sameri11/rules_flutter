@@ -26,10 +26,11 @@ FILES = {
     "native_build_env": "flutter/native_build_env.bzl",
     "native_strip": "flutter/private/native_strip.bzl",
     "android_integration_test": "flutter/private/integration_test_runner.bzl",
+    "composition": "flutter/composition.bzl",
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
-ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip", "android_integration_test"))
+ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip", "android_integration_test", "composition"))
 
 
 class Checker:
@@ -82,6 +83,7 @@ class Checker:
         self.check_d()
         self.check_e()
         self.check_f()
+        self.check_u()
         self.check_g()
         self.check_h()
         self.check_i()
@@ -494,6 +496,62 @@ class Checker:
         if rule is None:
             self.fail("F", "plugins.bzl must define flutter_plugins with repository_rule")
 
+    def check_u(self):
+        tree = self.tree("composition", "U")
+        if tree is None:
+            return
+        for rule_name, implementation_name, output_name in (
+            ("flutter_plugin_registrant", "_registrant_impl", "GeneratedPluginRegistrant.java"),
+            ("flutter_build_config", "_build_config_impl", "BuildConfig.java"),
+        ):
+            rule = _rule_decl(tree, rule_name)
+            if rule is None or not _rule_has_attr(tree, rule_name, "_mode"):
+                self.fail("U", "{} must be a mode-aware public rule".format(rule_name))
+                continue
+            implementation = _function(tree, implementation_name)
+            if implementation is None:
+                self.fail("U", "{} must define {}".format(rule_name, implementation_name))
+                continue
+            declaration = _action_call(implementation, "declare_file")
+            declaration_path = declaration.args[0] if declaration and declaration.args else None
+            if (
+                not isinstance(declaration_path, ast.BinOp)
+                or not isinstance(declaration_path.op, ast.Add)
+                or not _contains_attr(declaration_path, ["ctx", "label", "name"])
+                or not _contains_string(declaration_path, output_name)
+            ):
+                self.fail("U", "{} must declare a target-scoped Java output ending in {}".format(rule_name, output_name))
+            output_name_value = next(
+                (
+                    _name(target)
+                    for node in ast.walk(implementation)
+                    if isinstance(node, ast.Assign) and node.value is declaration
+                    for target in node.targets
+                    if isinstance(target, ast.Name)
+                ),
+                None,
+            )
+            default_info = next(
+                (
+                    node
+                    for node in ast.walk(implementation)
+                    if isinstance(node, ast.Call) and _call_path(node) == ["DefaultInfo"]
+                ),
+                None,
+            )
+            files = _keyword(default_info, "files")
+            depset = files if isinstance(files, ast.Call) and _call_path(files) == ["depset"] else None
+            output_list = depset.args[0] if depset and depset.args else None
+            if (
+                output_name_value is None
+                or not isinstance(output_list, ast.List)
+                or len(output_list.elts) != 1
+                or _name(output_list.elts[0]) != output_name_value
+            ):
+                self.fail("U", "{} must expose only its generated Java file through DefaultInfo".format(rule_name))
+            if _action_call(implementation, "write") is None:
+                self.fail("U", "{} must generate Java through ctx.actions.write".format(rule_name))
+
     def check_g(self):
         tree = self.tree("ndk", "G")
         if tree is None:
@@ -589,7 +647,7 @@ class Checker:
 
     def check_h(self):
         regions = []
-        for name in ("defs", "android", "plugins", "core", "android_inputs", "apk_check", "device_test"):
+        for name in ("defs", "android", "plugins", "core", "android_inputs", "apk_check", "device_test", "composition"):
             tree = self.trees.get(name)
             if tree is None:
                 continue
@@ -1123,7 +1181,7 @@ def _file_contract(name):
         "apk_check": "M",
         "dart_registrant": "N",
         "pub_lock": "O",
-        "android_integration_test": "T",
+        "composition": "U",
     }[name]
 
 
