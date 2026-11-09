@@ -42,7 +42,14 @@ def selftest():
                 raise
         else:
             raise ValueError("Android source guard accepted an empty source root")
-    print("PASS: Android source guard rejects planted and empty inputs")
+        try:
+            check(root / "missing")
+        except ValueError as error:
+            if "missing" not in str(error):
+                raise
+        else:
+            raise ValueError("Android source guard accepted a missing source root")
+    print("PASS: Android source guard rejects planted, missing and empty inputs")
 
 
 def main(argv=None):

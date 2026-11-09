@@ -195,6 +195,17 @@ jobs:
           bazel build -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:consumer_rules_r8
           python3 ../../tools/ci/consumer_rules_check.py
 
+      - name: Plugin hub guard against private loads
+        run: python3 tools/ci/plugin_hub_boundary_guard.py --selftest
+
+      - name: Example plugin hub public-load guard
+        working-directory: examples/pub_plugins
+        run: python3 ../../tools/ci/plugin_hub_boundary_guard.py @flutter_plugins//:generated_plugin_registrant_src
+
+      - name: Consumer plugin hubs public-load guard
+        working-directory: tests/consumer
+        run: python3 ../../tools/ci/plugin_hub_boundary_guard.py @flutter_plugins//:generated_plugin_registrant_src @composed_plugins//:generated_plugin_registrant_src @composed_override_plugins//:generated_plugin_registrant_src
+
 
       - name: Consumer hand-wired app mode and DEX checks
         working-directory: tests/consumer
@@ -279,6 +290,10 @@ jobs:
       - name: Registrant parity recapture
         working-directory: rules_flutter_android
         run: python3 tests/registrant_parity/capture.py --check
+      - name: Android source private-core guard
+        run: |
+          python3 tools/ci/android_core_boundary_guard.py --selftest
+          python3 tools/ci/android_core_boundary_guard.py
 
       - name: Report cache statistics
         if: always()
