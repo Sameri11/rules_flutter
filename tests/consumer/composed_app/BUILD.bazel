@@ -12,6 +12,7 @@ load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(
     "@rules_flutter_android//flutter:defs.bzl",
+    "FLUTTER_DEBUG_UNCOMPRESSED_ASSETS",
     "flutter_android_app",
 )
 
@@ -360,7 +361,10 @@ android_binary(
         "minSdkVersion": "24",
         "targetSdkVersion": "36",
     },
-    nocompress_extensions = [".so"],
+    nocompress_extensions = [".so"] + select({
+        "@rules_flutter_core//flutter:mode_debug": FLUTTER_DEBUG_UNCOMPRESSED_ASSETS,
+        "@rules_flutter_core//flutter:mode_release": [],
+    }),
     resource_files = [],
     deps = [
         ":composed_aar",
