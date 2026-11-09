@@ -618,41 +618,23 @@ shows recipe inputs and ABI-specific native contributions.
 
 ## Consumer-owned stock android_binary
 
-A consumer may package core outputs with its own stock `android_binary`. The
-four output groups are provided by `OutputGroupInfo` on a configured
-`flutter_core` target; `FlutterArtifactInfo` is a separate typed provider, not
-the output-group provider. Use `filegroup(output_group = ...)` to select the
-outputs. `flutter_assets` is the asset tree, `flutter_engine` is the whole
-selected engine-library set (which may contain multiple libraries for an ABI),
-`flutter_libapp` is release AOT output and empty in debug, and
-`flutter_embedding` is the selected mode's embedding jar. Use the mode-selecting
-embedding output directly rather than a hard-coded Maven release label.
+Use the convenience rules from `defs.bzl` for standard apps. A consumer that
+needs to own Android packaging can instead combine the public building blocks:
+`flutter_core` supplies the core outputs, `flutter_assets` selects its bundle,
+and the Android composition module provides `flutter_plugin_registrant`,
+`flutter_build_config`, and the mode-selected `embedding_jar`. Use
+`flutter_embedding_deps(maven_repo)` for the embedding's explicit AndroidX
+classpath. Stock `rules_android` rules then package those targets.
 
-For example, one group can be selected from the configured core like this:
-
-```python
-filegroup(
-    name = "direct_engine",
-    srcs = [":core"],
-    output_group = "flutter_engine",
-)
-```
-
-Select the other three groups with the same pattern and their respective
-`output_group` names. The checked fixture below shows those groups flowing into
-the stock binary together with the mode-selected Java embedding and raw
-ABI-pinned native inputs.
-
-The checked stock-binary fixture is
-[`tests/consumer/composed_app/BUILD.bazel`](tests/consumer/composed_app/BUILD.bazel),
-target `//composed_app:direct_apk`. It shows group selection, mode-selected
-embedding import with the explicit AndroidX dependency closure in
-[`tests/consumer/embedding_deps.bzl`](tests/consumer/embedding_deps.bzl), raw
-ABI-pinned native inputs, and a stock `android_binary`. The fixture's
-`direct_native` helper is consumer-owned demonstration code, not a public ruleset
-API. Android packaging owns normal JNI and strip handling; use the raw
-ABI-pinned strip path as appropriate for the consumer's native files. Do not
-assume a single engine `.so` or a minimal embedding classpath.
+The complete hand-written example is
+[`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel).
+It uses no plugin extension or convenience macros, and demonstrates regular and
+development-only Java plugins with mode-selected Maven dependencies. The build
+configuration and registrant rules each produce one Java source file suitable
+for `android_library.srcs`; development plugin code is included only in debug.
+Consumers using Kotlin Multiplatform Maven artifacts must name the platform
+artifact (such as an `-jvm` artifact) because `rules_jvm_external` does not
+resolve Gradle module metadata.
 
 ## ABI configuration and switching
 

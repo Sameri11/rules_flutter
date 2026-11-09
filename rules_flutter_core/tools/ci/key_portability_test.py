@@ -518,7 +518,7 @@ class Checker:
                 not isinstance(declaration_path, ast.BinOp)
                 or not isinstance(declaration_path.op, ast.Add)
                 or not _contains_attr(declaration_path, ["ctx", "label", "name"])
-                or not _contains_string(declaration_path, output_name)
+                or not _contains_string_part(declaration_path, output_name)
             ):
                 self.fail("U", "{} must declare a target-scoped Java output ending in {}".format(rule_name, output_name))
             output_name_value = next(

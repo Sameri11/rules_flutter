@@ -53,31 +53,36 @@ declarations are needed.
 
 ### Composition and ABI selection
 
-Declare one `flutter_core` from the core module per Bazel package; it owns that
-package's app outputs and package/test outputs. Declare
-`flutter_plugin_deps_guards` once in the package that owns the plugin graph to
-check its committed Maven segment. `flutter_android_app` is the standard helper
-entrypoint.
-`flutter_android_inputs`, `flutter_apk_check`, `flutter_android_manifest`,
-`flutter_assets_dir`, and `flutter_native_contribution` support custom
-composition.
+The convenience API is the default: load `flutter_core`, `flutter_package`,
+`flutter_pubspec`, `flutter_test`, and `flutter_test_suite` from
+`@rules_flutter_core//flutter:defs.bzl`, and `flutter_android_app` and related
+Android helpers from `@rules_flutter_android//flutter:defs.bzl`. For deliberate
+hand-wiring, the public `composition.bzl` modules expose lower-level providers,
+rules, and targets. `flutter_pubspec` remains in core `defs.bzl` because
+`flutter_package` requires it.
 
 Select APK ABIs with ordinary `--android_platforms`. Use one APK label for each
 existing app/mode variant and separate build commands for fat or single-ABI
 configurations. Capture each APK before the next configuration because the
 materialized APK path may be shared.
 
-A consumer-owned stock `android_binary` may consume configured core targets'
-`OutputGroupInfo`: `flutter_assets` is the bundle tree, `flutter_engine` is the
-complete selected engine-library set, `flutter_libapp` is release AOT (empty in
-debug), and `flutter_embedding` is the mode-selected embedding jar. The engine
-group can contain multiple libraries for one ABI. `FlutterArtifactInfo` is a
-separate typed provider. See the checked stock-binary example in
-[`tests/consumer/composed_app/BUILD.bazel`](tests/consumer/composed_app/BUILD.bazel),
-target `//composed_app:direct_apk`. Consumers own Android packaging and native
-library handling, including strip behavior required by their packaging graph.
+The core output groups remain available to hand-wired consumers, but embedding
+is owned by the Android ruleset. Use
+`@rules_flutter_android//flutter:embedding_jar` for the mode-selected jar;
+`flutter_embedding_deps(maven_repo)` supplies its explicit AndroidX classpath.
+For a complete stock `android_binary` example—including a plugin registrant,
+BuildConfig, and development-only Maven dependency—see
+[`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel).
 
-`flutter_debug_core` declares a debug artifact of an app's `flutter_core` built from another entrypoint, such as a test file under `integration_test/`, with its own `dart_defines`. Dart files outside `lib/` that the entrypoint imports go in `srcs`; an undeclared import fails the compile. The app's package inputs, mode-free bundle and debug engine are reused, so beyond the app's own outputs it adds only its kernel and a bundle copy. It is debug only: a release configuration reports it incompatible, and it is `manual` unless `tags` overrides that, so `bazel build //...` skips it under debug. Build it with `-c fastbuild --@rules_flutter_core//flutter:mode=debug` and an Android `--platforms`.
+`flutter_debug_core` is a lower-level core composition rule. It declares a debug
+artifact of an app's `flutter_core` built from another entrypoint, such as an
+integration-test file, with its own `dart_defines`. Dart files outside `lib/`
+that the entrypoint imports go in `srcs`; an undeclared import fails the
+compile. The app's package inputs, mode-free bundle, and debug engine are reused.
+It is debug-only and `manual` unless `tags` overrides that. Build it with
+`-c fastbuild --@rules_flutter_core//flutter:mode=debug` and an Android
+`--platforms`.
+
 
 One measured warm four-command sequence took 1.500 seconds with the former suffixed labels and 16.165 seconds with one label under successive ABI configurations. These timings are scoped to one machine/workflow, not a general speed promise. Expensive Flutter/native actions remained reusable, while Android packaging reran. Disk/remote-cache switching speed was not measured; shared materialized paths do not inherently collide in action caches.
 
