@@ -2,6 +2,7 @@
 """Reject generated plugin hubs that load ruleset-private modules."""
 
 import argparse
+import re
 import subprocess
 import sys
 import tempfile
@@ -15,9 +16,10 @@ def check(build_file):
     text = path.read_text()
     if not text.strip():
         raise ValueError("empty generated hub BUILD file: {}".format(path))
-    for line_number, line in enumerate(text.splitlines(), 1):
-        if line.lstrip().startswith("load(") and "/private" in line:
-            raise ValueError("{}:{} loads a private module: {}".format(path, line_number, line.strip()))
+    for match in re.finditer(r"load\s*\(\s*[\"']([^\"']+)[\"']", text, re.DOTALL):
+        label = match.group(1)
+        if "/private" in label:
+            raise ValueError("{} loads a private module: {}".format(path, label))
 
 
 def _hub_build(label):
@@ -38,7 +40,7 @@ def _hub_build(label):
 def selftest():
     with tempfile.TemporaryDirectory(prefix="flutter-hub-boundary-") as temp:
         build = Path(temp) / "BUILD.bazel"
-        build.write_text('load("@rules_flutter_android//flutter/private:x.bzl", "x")\n')
+        build.write_text('load(\n    "@rules_flutter_android//flutter/private:x.bzl",\n    "x",\n)\n')
         try:
             check(build)
         except ValueError as error:

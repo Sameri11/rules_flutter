@@ -11,7 +11,11 @@ def check(root):
     root = Path(root)
     if not root.is_dir():
         raise ValueError("missing Android source root: {}".format(root))
-    files = sorted(root.rglob("*.bzl"))
+    files = sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file() and (path.suffix == ".bzl" or path.name in ("BUILD", "BUILD.bazel"))
+    )
     if not files:
         raise ValueError("empty Android source root: {}".format(root))
     needle = "@rules_flutter_core//flutter/private:"
@@ -34,6 +38,16 @@ def selftest():
                 raise
         else:
             raise ValueError("Android source guard accepted a planted private-core reference")
+        (root / "android.bzl").write_text('load("@rules_flutter_core//flutter:composition.bzl", "x")\n')
+        (root / "BUILD.bazel").write_text('load("@rules_flutter_core//flutter/private:secret.bzl", "x")\n')
+        try:
+            check(root)
+        except ValueError as error:
+            if "core private target" not in str(error):
+                raise
+        else:
+            raise ValueError("Android source guard accepted a planted BUILD private-core reference")
+        (root / "BUILD.bazel").unlink()
         (root / "android.bzl").unlink()
         try:
             check(root)
