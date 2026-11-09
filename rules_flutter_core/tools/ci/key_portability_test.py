@@ -105,11 +105,28 @@ class Checker:
     def check_android_private(self):
         if self.android_root is None:
             return
-        for name in ANDROID_FILES:
-            source = self.sources.get(name, "")
+        root = self.android_root / "flutter"
+        if not root.is_dir():
+            self.fail("T", "Android Flutter source root is missing: {}".format(root))
+            return
+        files = sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file() and (path.suffix == ".bzl" or path.name.startswith("BUILD"))
+        )
+        if not files:
+            self.fail("T", "Android Flutter source root has no Starlark or BUILD files: {}".format(root))
+            return
+        for path in files:
+            try:
+                source = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as error:
+                self.fail("T", "{} cannot be read: {}".format(path.relative_to(self.android_root), error))
+                continue
             for line_number, line in enumerate(source.splitlines(), 1):
                 if _CORE_PRIVATE_LABEL.search(line):
-                    self.fail("T", "{}:{} references a core private target".format(FILES[name], line_number))
+                    relative = path.relative_to(self.android_root)
+                    self.fail("T", "{}:{} references a core private target".format(relative, line_number))
 
     def tree(self, name, contract):
         if not self._requested(name):

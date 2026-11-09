@@ -7,6 +7,12 @@ exports_files([
     "composition.bzl",
 ])
 
+filegroup(
+    name = "starlark_sources",
+    srcs = glob(["*.bzl"]) + ["BUILD.bazel"],
+    visibility = ["//tools/ci:__pkg__"],
+)
+
 # The embedding belongs to this ruleset; consumers need not import the repos.
 filegroup(
     name = "embedding_jar_debug",

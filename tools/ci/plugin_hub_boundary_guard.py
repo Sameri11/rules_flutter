@@ -111,6 +111,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except ValueError as error:
-        print(error, file=sys.stderr)
+        print("FAIL: {}".format(error), file=sys.stderr)
         sys.exit(1)
-

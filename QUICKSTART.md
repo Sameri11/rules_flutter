@@ -625,8 +625,8 @@ needs to own Android packaging can instead combine the public building blocks:
 per ABI, and `flutter_libapp` is empty in debug mode. The Android composition
 module provides `flutter_plugin_registrant`, `flutter_build_config`, and the
 mode-selected `embedding_jar`; use `flutter_embedding_deps(maven_repo)` for the
-embedding's explicit AndroidX classpath. `flutter_assets` is an output group,
-not a rule. Stock `rules_android` rules then package those targets; for native
+embedding's explicit AndroidX classpath. Here `flutter_assets` is `flutter_core`'s
+output group, not the `flutter_assets` rule. Stock `rules_android` rules then package those targets; for native
 packaging, see [`tests/consumer/composed_app:direct_apk`](tests/consumer/composed_app/BUILD.bazel).
 
 [`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel)
