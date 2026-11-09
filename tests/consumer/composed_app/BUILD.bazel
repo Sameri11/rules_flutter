@@ -363,7 +363,7 @@ android_binary(
     },
     nocompress_extensions = [".so"] + select({
         "@rules_flutter_core//flutter:mode_debug": FLUTTER_DEBUG_UNCOMPRESSED_ASSETS,
-        "//conditions:default": [],
+        "@rules_flutter_core//flutter:mode_release": [],
     }),
     resource_files = [],
     deps = [

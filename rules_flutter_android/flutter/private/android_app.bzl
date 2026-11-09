@@ -2,7 +2,7 @@
 
 `flutter_android_app` declares the binary and the glue a standard-layout Flutter app
 needs: the version stamp, the resources, the debug manifest, the native libraries
-and debug kernel files stored uncompressed, and the APK check. Each default is an
+and debug kernel and snapshot files stored uncompressed, and the APK check. Each default is an
 argument. Variants of one app share an inputs target through `inputs`, so the
 engine strip, the AOT library and the asset copy are built once.
 """
