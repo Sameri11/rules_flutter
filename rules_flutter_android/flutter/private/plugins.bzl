@@ -1474,23 +1474,37 @@ def _write_maven_aliases(ctx, split, release_coordinates, all_coordinates):
     )
 
 def _plugin_maven_inputs(ctx, name, package_root, overrides):
-    """Read a plugin's Maven inputs, apply overrides, and return its gate."""
+    """Read a plugin's Maven inputs and return its overrides and gate."""
     android = "{}/android".format(package_root)
     build_gradle = ctx.path("{}/build.gradle".format(android))
     if not build_gradle.exists:
         build_gradle = ctx.path("{}/build.gradle.kts".format(android))
     if not build_gradle.exists:
-        return None, [], [], [], False
+        return None, [], [], [], False, []
 
     coordinates, reasons = _extract_dependencies(ctx.read(build_gradle))
     raw_unresolved = "unresolved_dep" in reasons
     override = overrides.get(name)
+    contributed = []
     if override != None:
-        coordinates = coordinates + [c for c in override if c not in coordinates]
+        scraped = list(coordinates)
+        for replacement in override:
+            key = maven_label(replacement, repo = "")
+            match = None
+            for index, coordinate in enumerate(coordinates):
+                if maven_label(coordinate, repo = "") == key:
+                    match = index
+                    break
+            if match == None:
+                coordinates.append(replacement)
+            elif coordinates[match] != replacement:
+                coordinates[match] = replacement
+            if replacement not in scraped:
+                contributed.append(replacement)
         reasons = [reason for reason in reasons if reason != "unresolved_dep"]
 
     gated = [reason for reason in reasons if reason in _GATED_REASONS]
-    return build_gradle, coordinates, reasons, gated, raw_unresolved
+    return build_gradle, coordinates, reasons, gated, raw_unresolved, contributed
 
 def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
@@ -1514,7 +1528,7 @@ def _flutter_plugins_impl(ctx):
         package_root = roots.get(plugin["name"])
         if package_root == None:
             continue
-        _, coordinates, _, gated, _ = _plugin_maven_inputs(
+        _, coordinates, _, gated, _, _ = _plugin_maven_inputs(
             ctx,
             plugin["name"],
             package_root,
@@ -1588,7 +1602,7 @@ def _flutter_plugins_impl(ctx):
         # It is outside this repository, hence the staging below: Bazel cannot glob
         # outside the workspace.
         android = "{}/android".format(package_root)
-        build_gradle, coordinates, reasons, gated, raw_unresolved = _plugin_maven_inputs(
+        build_gradle, coordinates, reasons, gated, raw_unresolved, contributed = _plugin_maven_inputs(
             ctx,
             name,
             package_root,
@@ -1599,7 +1613,6 @@ def _flutter_plugins_impl(ctx):
 
         if name in overrides:
             used_overrides.append(name)
-            contributed = [c for c in overrides[name] if c not in coordinates]
             if not raw_unresolved and not contributed:
                 stale_overrides.append(name)
 
@@ -2207,13 +2220,9 @@ all.""",
         "extra_artifacts": attr.string_list(
             doc = """Maven coordinates to add to the resolution, attributable to no package.
 
-`plugins.package(artifacts = ...)` covers a coordinate some *plugin* needs, and
-adds it to that plugin's deps as well. This covers the rest: an artifact the
-resolution should have contained and did not, attached to no plugin. Prefer it
-whenever the scraper already found the label -- adding a coordinate a plugin
-already declares fails with "Label is duplicated in the deps attribute".
-
-Two uses, both seen on a real graph:
+Use `plugins.package(artifacts = ...)` for a plugin's own dependencies, including
+version pins. Use this for an artifact the resolution should contain but that
+belongs to no plugin. These coordinates join both debug and release installs.
 
 **Kotlin Multiplatform variants.** A KMP module publishes `-android` and `-jvm`
 (sometimes `-desktop`) children, and neither resolver picks the Android one: the
@@ -2227,11 +2236,7 @@ app compiles cleanly then dies on launch with NoClassDefFoundError. Naming the
 artifact at two incompatible hard versions down two paths. Naming the artifact
 here makes it one of the consumer's own coordinates, which
 `version_conflict_policy = "pinned"` then settles. smooth_app needed exactly
-three (`emoji2`, `lifecycle-viewmodel`, `savedstate`).
-
-Also the place to pin a version a package declares dynamically: Flutter's own
-integration_test asks for `androidx.test:runner:1.2+`, and `+` tracks upstream
-releases rather than pinning -- `1.4+` resolves to `1.4.1-alpha03`.""",
+three (`emoji2`, `lifecycle-viewmodel`, `savedstate`).""",
         ),
         "maven_resolver": attr.string(
             default = "coursier",
@@ -2293,10 +2298,10 @@ _package = tag_class(
             doc = "pub package name. Need not be a Flutter plugin.",
         ),
         "artifacts": attr.string_list(
-            doc = """Maven coordinates the scraper could not read statically.
-
-For a BOM-supplied version, or a variable defined outside the plugin's own
-build.gradle. Clears the `unresolved_dep` reason for this package.""",
+            doc = """Maven coordinates for this plugin. Each coordinate replaces
+the scraped coordinate with the same group:artifact, or adds a new one. Use this
+to pin a plugin's dynamic version, such as integration_test's
+`androidx.test:runner:1.2+`. Pins for dev-only plugins stay in the debug install.""",
         ),
         "consumer_rules": attr.string_list(
             default = [_CONSUMER_RULES_MISSING],

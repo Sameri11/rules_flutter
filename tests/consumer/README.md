@@ -148,6 +148,13 @@ repository:
   `@plugin_maven//:pin`. `external_app` imports that same repository as
   `@plugin_maven_alias`; its `maven_alias_inputs` target proves the helper accepts
   a distinct apparent name for the same canonical repository.
+- `:fake_plugin_test` builds the generated `fake_plugin` target with an override
+  of its scraped `androidx.annotation:annotation-experimental` coordinate.
+  `:fake_plugin_deps_check` verifies the committed install segment carries
+  version `1.4.0`, not the Gradle version `1.4.1`. Appending the override beside
+  the scraped coordinate instead would duplicate the versionless deps label and
+  fail analysis. `recipe_plugin` uses this coordinate too and gets the same pin
+  to keep the shared install aligned.
 - Four namespace parser fixtures use bare Android manifests and source packages
   that each reference its own `R.string.namespace_<case>_marker`; `:namespace_plugin_test`
   builds all four generated targets, making javac observe the exact namespace

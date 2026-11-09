@@ -522,12 +522,15 @@ that needs Gradle evaluation or arbitrary expressions belongs in a Package
 Recipe.
 
 The generator handles ordinary Java/Kotlin and CMake plugin Android halves. Use
-`plugins.package(artifacts = [...])` when a Maven coordinate cannot be inferred.
+`plugins.package(artifacts = [...])` when a Maven coordinate cannot be inferred,
+or to replace a scraped coordinate with the same group:artifact. This is also
+how to pin a plugin's dynamic version, such as integration_test's
+`androidx.test:runner:1.2+`. Pins for dev-only plugins stay in the debug install.
 Use a Package Recipe when metadata requires Gradle evaluation, file I/O,
 unsupported plugin-native build methods, or package-specific native asset
-preparation. When a debug Maven install exists, recipe-only dependencies must be
-declared through `extra_artifacts` and referenced with `"//maven:<target>"` labels
-so the recipe selects the mode-correct artifact. See
+preparation. Recipe-only dependencies must be declared through `extra_artifacts`
+and referenced with `"//maven:<target>"` labels; they join debug and release
+installs. See
 [`examples/pub_plugins`](examples/pub_plugins/) and
 [`examples/demo_app`](examples/demo_app/) for working plugin and recipe
 configurations.
