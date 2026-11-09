@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 
 def check(build_file):
@@ -31,40 +32,50 @@ def _hub_build(label):
     )
     if result.returncode:
         raise ValueError("hub query failed for {}:\n{}".format(label, result.stdout))
-    locations = [line.rsplit(":", 2)[0] for line in result.stdout.splitlines() if line.endswith("BUILD.bazel:1:1")]
+    locations = []
+    for line in result.stdout.splitlines():
+        match = re.match(r"^(.+?BUILD(?:\.bazel)?):\d+:\d+:", line)
+        if match:
+            locations.append(match.group(1))
     if len(locations) != 1:
         raise ValueError("hub query for {} returned no unique BUILD location:\n{}".format(label, result.stdout))
     return locations[0]
 
 
 def selftest():
+    label = "@flutter_plugins//:generated_plugin_registrant_src"
     with tempfile.TemporaryDirectory(prefix="flutter-hub-boundary-") as temp:
         build = Path(temp) / "BUILD.bazel"
-        build.write_text('load(\n    "@rules_flutter_android//flutter/private:x.bzl",\n    "x",\n)\n')
-        try:
-            check(build)
-        except ValueError as error:
-            if "private module" not in str(error):
-                raise
-        else:
-            raise ValueError("hub guard accepted a planted private load")
-        build.write_text("\n")
-        try:
-            check(build)
-        except ValueError as error:
-            if "empty" not in str(error):
-                raise
-        else:
-            raise ValueError("hub guard accepted an empty BUILD file")
-        build.unlink()
-        try:
-            check(build)
-        except ValueError as error:
-            if "missing" not in str(error):
-                raise
-        else:
-            raise ValueError("hub guard accepted a missing BUILD file")
-    print("PASS: generated-hub guard rejects planted private, empty and missing inputs")
+        location = "{}:7:1: flutter_plugin_registrant rule {}".format(build, label)
+
+        def run_main(content, expected, query_output=None, returncode=0):
+            if content is None:
+                build.unlink(missing_ok=True)
+            else:
+                build.write_text(content)
+            result = subprocess.CompletedProcess(
+                ["bazel", "query"],
+                returncode,
+                stdout=(location + "\n") if query_output is None else query_output,
+            )
+            with patch("subprocess.run", return_value=result):
+                try:
+                    main([label])
+                except ValueError as error:
+                    if expected not in str(error):
+                        raise
+                else:
+                    raise ValueError("hub guard accepted input expected to fail: {}".format(expected))
+
+        run_main(
+            'load(\n    "@rules_flutter_android//flutter/private:x.bzl",\n    "x",\n)\n',
+            "private module",
+        )
+        run_main("\n", "empty")
+        run_main(None, "missing")
+        run_main("filegroup(name = 'target')\n", "query failed", returncode=1, query_output="query error")
+        run_main("filegroup(name = 'target')\n", "no unique BUILD location", query_output="")
+    print("PASS: hub entrypoint rejects private, missing, empty, query-error and empty-result inputs")
 
 
 def main(argv=None):
