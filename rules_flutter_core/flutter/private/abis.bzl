@@ -177,8 +177,6 @@ def engine_libs_label(abi, mode):
     """
     return Label("@{}//jar:libs".format(engine_repo(abi, mode)))
 
-
-
 def aot_target_compatible_with():
     """target_compatible_with for a rule that only runs under an AOT-capable mode.
 

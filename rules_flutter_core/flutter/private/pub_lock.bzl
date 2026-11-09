@@ -395,7 +395,7 @@ dart_test_deps(
     pub_srcs = [":lib"],
 )
 """.format(
-        defs_bzl = rctx.attr.defs_bzl,
+        composition_bzl = rctx.attr.composition_bzl,
         hook_packages_bzl = rctx.attr.hook_packages_bzl,
         package_dirs = package_dirs_src,
         hub = rctx.attr.name,

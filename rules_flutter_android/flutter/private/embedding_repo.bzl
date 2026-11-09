@@ -4,7 +4,6 @@ visibility(["//:__pkg__"])
 
 _BASE = "https://storage.googleapis.com/download.flutter.io/io/flutter"
 
-
 def _embedding_impl(ctx):
     version = json.decode(ctx.read(ctx.path(ctx.attr.version_file)))
     artifact = "flutter_embedding_{}".format(ctx.attr.mode)
@@ -34,8 +33,7 @@ flutter_embedding_jar = repository_rule(
     },
 )
 
-
-def _embedding_extension_impl(ctx):
+def _embedding_extension_impl(_ctx):
     for mode in ["debug", "release"]:
         flutter_embedding_jar(name = "flutter_embedding_" + mode, mode = mode)
 

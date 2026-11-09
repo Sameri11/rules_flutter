@@ -2,7 +2,10 @@ load("//flutter:native_build_env.bzl", "native_build_env")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["native_build_env.bzl", "composition.bzl"])
+exports_files([
+    "native_build_env.bzl",
+    "composition.bzl",
+])
 
 # The embedding belongs to this ruleset; consumers need not import the repos.
 filegroup(

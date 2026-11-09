@@ -2,13 +2,13 @@
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("//flutter/private:android.bzl", _flutter_android_manifest = "flutter_android_manifest", _flutter_assets_dir = "flutter_assets_dir")
+load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
 load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
 load("//flutter/private:embedding.bzl", _FLUTTER_EMBEDDING_ARTIFACTS = "FLUTTER_EMBEDDING_ARTIFACTS", _flutter_embedding_deps = "flutter_embedding_deps")
 load("//flutter/private:maven_identity.bzl", _FlutterMavenRepositoryInfo = "FlutterMavenRepositoryInfo", _flutter_maven_repository = "flutter_maven_repository")
 load("//flutter/private:native_files.bzl", _FlutterNativeFilesByAbiInfo = "FlutterNativeFilesByAbiInfo", _flutter_native_files = "flutter_native_files", _flutter_native_files_by_abi = "flutter_native_files_by_abi")
 load("//flutter/private:native_strip.bzl", _android_native_files = "android_native_files")
 load("//flutter/private:registrant.bzl", "render_android_registrant")
-load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
 
 FlutterNativeFilesByAbiInfo = _FlutterNativeFilesByAbiInfo
 FlutterMavenRepositoryInfo = _FlutterMavenRepositoryInfo
@@ -24,7 +24,6 @@ flutter_embedding_deps = _flutter_embedding_deps
 FLUTTER_EMBEDDING_ARTIFACTS = _FLUTTER_EMBEDDING_ARTIFACTS
 
 _MODE = Label("@rules_flutter_core//flutter:mode")
-
 
 def _registrant_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value
@@ -47,7 +46,6 @@ flutter_plugin_registrant = rule(
         "_mode": attr.label(default = _MODE, providers = [BuildSettingInfo]),
     },
 )
-
 
 def _build_config_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value

@@ -21,13 +21,14 @@ exports_files(glob(["*/app/pubspec.*"]))
     diff_test(
         name = "{}_{}_test".format(case, mode),
         file1 = "{}/expected/{}/GeneratedPluginRegistrant.java".format(case, mode),
-        file2 = "@registrant_parity_{}_android//:android/{}/GeneratedPluginRegistrant.java".format(case, mode),
+        file2 = "@registrant_parity_{}_android//:generated_plugin_registrant_src".format(case),
+        target_compatible_with = select({
+            "@rules_flutter_core//flutter:mode_debug": [] if mode == "debug" else ["@platforms//:incompatible"],
+            "@rules_flutter_core//flutter:mode_release": [] if mode == "release" else ["@platforms//:incompatible"],
+        }),
     )
     for case in CASES
-    for mode in [
-        "debug",
-        "release",
-    ]
+    for mode in ("debug", "release")
 ]
 
 # What a plugin-free flutter_android_app compiles.

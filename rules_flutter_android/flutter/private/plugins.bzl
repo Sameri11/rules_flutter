@@ -62,7 +62,6 @@ load("@rules_java//java:defs.bzl", "java_import", "java_library")
 load("{composition}", "flutter_build_config", "flutter_maven_repository", "flutter_native_files", "flutter_native_files_by_abi", "flutter_plugin_registrant")
 """
 
-
 _MAVEN_TARGETS_TEMPLATE = """
 flutter_maven_repository(
     name = "maven_repository",
@@ -265,7 +264,6 @@ PACKAGE_INFO = struct(
     embedding = "{embedding}",
 )
 '''
-
 
 _REGISTRANT_SRC_TEMPLATE = """
 flutter_plugin_registrant(
@@ -717,7 +715,7 @@ def _package_version(ctx, package_root, package_name):
         package_name,
     ))
 
-def _build_config_sources(ctx, package_name, package_root, namespace, specs):
+def _build_config_sources(ctx, package_name, package_root, specs):
     builtins = ["DEBUG", "BUILD_TYPE", "LIBRARY_PACKAGE_NAME"]
     seen = {}
     custom = []
@@ -1749,7 +1747,6 @@ def _flutter_plugins_impl(ctx):
             ctx,
             name,
             package_root,
-            package,
             build_config_fields.get(name, []),
         )
         native = ""
@@ -1982,7 +1979,6 @@ def _flutter_plugins_impl(ctx):
     # contributes only a .so.
     dev = {p["name"]: p.get("dev_dependency", False) for p in plugins}
 
-
     # Preserve canonical Android manifest merge order; sort the Java edge below
     # so duplicate Java resources keep stable classpath precedence.
     embedding_deps = flutter_embedding_deps(maven_repo = ctx.attr.maven_repo)
@@ -2004,8 +2000,8 @@ def _flutter_plugins_impl(ctx):
         _EMBEDDING_TEMPLATE.format(
             mode_debug = ctx.attr.mode_debug,
             mode_release = ctx.attr.mode_release,
-            embedding_debug = ctx.attr.embedding_debug,
-            embedding_release = ctx.attr.embedding_release,
+            embedding_debug = str(ctx.attr.embedding_debug),
+            embedding_release = str(ctx.attr.embedding_release),
             embedding_all = _mode_selected_dependencies(
                 ctx,
                 [":flutter_embedding_jar"] + sorted_embedding_deps,
@@ -2368,8 +2364,8 @@ def _flutter_plugins_ext_impl(ctx):
             flutter_plugins(
                 name = project.name,
                 abis = project.abis,
-                embedding_debug = Label("@flutter_embedding_debug//jar:file"),
-                embedding_release = Label("@flutter_embedding_release//jar:file"),
+                embedding_debug = Label("//flutter:embedding_jar_debug"),
+                embedding_release = Label("//flutter:embedding_jar_release"),
                 metadata = project.metadata,
                 package_config = project.package_config,
                 coursier_options = project.coursier_options,
