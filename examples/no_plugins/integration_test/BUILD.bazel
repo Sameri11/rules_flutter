@@ -1,4 +1,4 @@
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
+load("@rules_flutter_core//flutter:composition.bzl", "flutter_debug_core")
 
 package(default_visibility = ["//visibility:public"])
 
