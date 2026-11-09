@@ -368,7 +368,7 @@ relative-import helpers:
 
 ```python
 # integration_test/BUILD.bazel
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
+load("@rules_flutter_core//flutter:composition.bzl", "flutter_debug_core")
 
 flutter_debug_core(
     name = "prebuilt_core",
