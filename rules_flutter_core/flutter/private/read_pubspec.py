@@ -73,14 +73,14 @@ def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument("--pubspec", required = True)
     parser.add_argument("--name-out", required = True)
-    parser.add_argument("--version-name-out", required = True)
-    parser.add_argument("--version-code-out", required = True)
+    parser.add_argument("--build-name-out", required = True)
+    parser.add_argument("--build-number-out", required = True)
     args = parser.parse_args()
 
-    version_name, version_code = version(args.pubspec)
+    build_name, build_number = version(args.pubspec)
     write(args.name_out, package_name(args.pubspec))
-    write(args.version_name_out, version_name)
-    write(args.version_code_out, version_code)
+    write(args.build_name_out, build_name)
+    write(args.build_number_out, build_number)
 
 
 if __name__ == "__main__":

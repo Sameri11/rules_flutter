@@ -193,7 +193,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "IQKKhDRQ2nv9172jyBf+8QrvfO6OoJlhXoR8YS+5fA8=",
+        "bzlTransitiveDigest": "pHde3iniWRI9xns1FriTvi2GR3M6nyoq5jGvluryGhs=",
         "usagesDigest": "3eQ7CSujwGo7HWistYKJNKsA65Je6fZw/a3upweGNLo=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk +flutter+flutter_sdk",
@@ -209,18 +209,6 @@
           "flutter_tools_packages": {
             "repoRuleId": "@@//flutter/private:repo.bzl%flutter_tools_packages",
             "attributes": {}
-          },
-          "flutter_embedding_release": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "flutter_embedding_release"
-            }
-          },
-          "flutter_embedding_debug": {
-            "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",
-            "attributes": {
-              "artifact": "flutter_embedding_debug"
-            }
           },
           "flutter_engine_arm64_v8a_release": {
             "repoRuleId": "@@//flutter/private:repo.bzl%flutter_engine_jar",

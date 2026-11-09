@@ -1,6 +1,6 @@
 """Android manifest and asset-path helpers used by composed app targets."""
 
-load("@rules_flutter_core//flutter:defs.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
+load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
 
 visibility(["//flutter"])
 
@@ -32,16 +32,16 @@ def _flutter_android_manifest_impl(ctx):
     args = ctx.actions.args()
     pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
     args.add(ctx.file._injector)
-    args.add("--version-name", pubspec.version_name)
-    args.add("--version-code", pubspec.version_code)
+    args.add("--version-name", pubspec.build_name)
+    args.add("--version-code", pubspec.build_number)
     args.add("--manifest", ctx.file.manifest)
     args.add("--out", out)
     ctx.actions.run_shell(
         command = 'exec python3 "$@"',
         arguments = [args],
         inputs = [
-            pubspec.version_name,
-            pubspec.version_code,
+            pubspec.build_name,
+            pubspec.build_number,
             ctx.file.manifest,
             ctx.file._injector,
         ],

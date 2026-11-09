@@ -177,35 +177,7 @@ def engine_libs_label(abi, mode):
     """
     return Label("@{}//jar:libs".format(engine_repo(abi, mode)))
 
-def embedding_repo(mode):
-    """Name of the repository holding the Java embedding jar for one mode.
 
-    Architecture-independent -- unlike engine_repo, there is no ABI axis --
-    but mode-keyed for the same reason: `BuildConfig.DEBUG` is a
-    `static final boolean`, so the jar a `MainActivity` compiles against fixes
-    the mode, and only the debug jar's carries service-protocol/JIT support.
-
-    Args:
-      mode: "release" or "debug".
-
-    Returns:
-      A repository name.
-    """
-    return "flutter_embedding_" + mode
-
-def embedding_jar_label(mode):
-    """The Java embedding jar for one mode, as a Label.
-
-    A `Label`, not a string, for the same repository-mapping reason as
-    engine_jar_label: the repository belongs to this module.
-
-    Args:
-      mode: "release" or "debug".
-
-    Returns:
-      A Label for the unstripped embedding jar.
-    """
-    return Label("@{}//jar:file".format(embedding_repo(mode)))
 
 def aot_target_compatible_with():
     """target_compatible_with for a rule that only runs under an AOT-capable mode.

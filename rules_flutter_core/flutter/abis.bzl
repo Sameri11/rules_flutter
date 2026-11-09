@@ -12,7 +12,6 @@ load(
     _ABI_PLATFORM_ATTRS = "ABI_PLATFORM_ATTRS",
     _MODES = "MODES",
     _abi_from_platform = "abi_from_platform",
-    _embedding_jar_label = "embedding_jar_label",
     _engine_jar_label = "engine_jar_label",
 )
 
@@ -33,5 +32,3 @@ abi_from_platform = _abi_from_platform
 # The prebuilt engine jar for one ABI and mode, as a Label.
 engine_jar_label = _engine_jar_label
 
-# The Java embedding jar for one mode, as a Label.
-embedding_jar_label = _embedding_jar_label

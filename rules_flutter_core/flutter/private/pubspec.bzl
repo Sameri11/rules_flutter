@@ -1,18 +1,7 @@
 """The app's pubspec, as one target every other rule reads its facts from.
 
-pubspec.yaml holds several facts the build needs -- the package name that makes
-a `package:` URI resolvable, the version Android publishes as versionCode and
-versionName, and the asset and font declarations `flutter build bundle` reads.
-Before this they were spelled out again in BUILD files, where a rename in the
-pubspec left them stale and the failure was silent: a mismatched package URI
-compiles in and changes nothing.
-
-So a consumer names the pubspec once, and the facts travel by provider.
-
-**One fact per file, deliberately.** Downstream actions depend on the file
-holding the fact they use, not on pubspec.yaml, so a version bump does not
-invalidate the kernel -- Bazel keys an action on the content of its inputs, and
-the package-name file is unchanged.
+The package name, build name and build number travel by provider; asset and
+font declarations remain inputs to `flutter build bundle`.
 """
 
 visibility(["//flutter"])
@@ -22,15 +11,15 @@ FlutterPubspecInfo = provider(
     fields = {
         "src": "The pubspec.yaml itself, for tools that parse it in full.",
         "package_name": "File holding the Dart package name.",
-        "version_name": "File holding the version's name part.",
-        "version_code": "File holding the version's build number.",
+        "build_name": "File holding Flutter's build name.",
+        "build_number": "File holding Flutter's build number.",
     },
 )
 
 def _flutter_pubspec_impl(ctx):
     name = ctx.actions.declare_file(ctx.label.name + "/package_name")
-    version_name = ctx.actions.declare_file(ctx.label.name + "/version_name")
-    version_code = ctx.actions.declare_file(ctx.label.name + "/version_code")
+    build_name = ctx.actions.declare_file(ctx.label.name + "/build_name")
+    build_number = ctx.actions.declare_file(ctx.label.name + "/build_number")
 
     args = ctx.actions.args()
 
@@ -38,8 +27,8 @@ def _flutter_pubspec_impl(ctx):
     args.add(ctx.file._reader)
     args.add("--pubspec", ctx.file.src)
     args.add("--name-out", name)
-    args.add("--version-name-out", version_name)
-    args.add("--version-code-out", version_code)
+    args.add("--build-name-out", build_name)
+    args.add("--build-number-out", build_number)
 
     # No env: this action reads one file and writes three, so its key carries no
     # machine-specific path and it can be served from a shared cache.
@@ -47,18 +36,18 @@ def _flutter_pubspec_impl(ctx):
         command = 'exec python3 "$@"',
         arguments = [args],
         inputs = [ctx.file.src, ctx.file._reader],
-        outputs = [name, version_name, version_code],
+        outputs = [name, build_name, build_number],
         mnemonic = "FlutterPubspec",
         progress_message = "Reading %{label}",
     )
 
     return [
-        DefaultInfo(files = depset([name, version_name, version_code])),
+        DefaultInfo(files = depset([name, build_name, build_number])),
         FlutterPubspecInfo(
             src = ctx.file.src,
             package_name = name,
-            version_name = version_name,
-            version_code = version_code,
+            build_name = build_name,
+            build_number = build_number,
         ),
     ]
 

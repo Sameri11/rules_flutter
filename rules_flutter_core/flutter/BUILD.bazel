@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "defs.bzl",
+    "composition.bzl",
     "extensions.bzl",
 ])
 
@@ -47,4 +48,15 @@ config_setting(
 config_setting(
     name = "mode_release",
     flag_values = {":mode": "release"},
+)
+
+# Host-side decoder for Flutter's device-test frame protocol.
+filegroup(
+    name = "device_test_decoder",
+    srcs = [
+        "//flutter/private/test/driver:device_decoder.dart",
+        "//flutter/private/test/driver:frame.dart",
+        "//flutter/private/test/driver:junit.dart",
+        "//flutter/private/test/driver:results.dart",
+    ],
 )

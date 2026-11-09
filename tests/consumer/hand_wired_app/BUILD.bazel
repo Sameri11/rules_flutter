@@ -1,0 +1,102 @@
+load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
+load("@rules_flutter_android//flutter:composition.bzl", "flutter_build_config", "flutter_embedding_deps", "flutter_plugin_registrant")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
+load("@rules_java//java:defs.bzl", "java_import")
+
+package(default_visibility = ["//visibility:private"])
+
+flutter_core(
+    name = "core",
+    pub = "@hand_wired_pub",
+    path_deps = ["//fixtures/hand_wired_regular:sources", "//fixtures/hand_wired_dev:sources"],
+    srcs = glob(["lib/**/*.dart"]),
+)
+
+filegroup(
+    name = "flutter_assets",
+    srcs = [":core"],
+    output_group = "flutter_assets",
+)
+
+java_import(
+    name = "flutter_embedding",
+    jars = ["@rules_flutter_android//flutter:embedding_jar"],
+    deps = select({
+        "@rules_flutter_core//flutter:mode_debug": flutter_embedding_deps("@hand_wired_debug"),
+        "@rules_flutter_core//flutter:mode_release": flutter_embedding_deps("@hand_wired_release"),
+    }),
+)
+
+flutter_build_config(
+    name = "regular_build_config",
+    package_name = "com.example.handwired.regular",
+)
+
+android_library(
+    name = "regular_plugin",
+    srcs = ["//fixtures/hand_wired_regular:java_sources", ":regular_build_config"],
+    deps = [":flutter_embedding"] + select({
+        "@rules_flutter_core//flutter:mode_debug": ["@hand_wired_debug//:com_google_code_gson_gson"],
+        "@rules_flutter_core//flutter:mode_release": ["@hand_wired_release//:com_google_code_gson_gson"],
+    }),
+)
+
+flutter_build_config(
+    name = "dev_build_config",
+    package_name = "com.example.handwired.dev",
+)
+
+android_library(
+    name = "dev_plugin",
+    srcs = ["//fixtures/hand_wired_dev:java_sources", ":dev_build_config"],
+    deps = [":flutter_embedding"] + select({
+        "@rules_flutter_core//flutter:mode_debug": ["@hand_wired_debug//:org_apache_commons_commons_lang3"],
+        "@rules_flutter_core//flutter:mode_release": ["@hand_wired_release//:org_apache_commons_commons_lang3"],
+    }),
+    target_compatible_with = select({
+        "@rules_flutter_core//flutter:mode_debug": [],
+        "@rules_flutter_core//flutter:mode_release": ["@platforms//:incompatible"],
+    }),
+)
+
+flutter_plugin_registrant(
+    name = "registrant_sources",
+    plugins = ["hand_wired_regular|com.example.handwired.regular.RegularPlugin"],
+    dev_plugins = ["hand_wired_dev|com.example.handwired.dev.DevPlugin"],
+)
+
+android_library(
+    name = "registrant",
+    srcs = [":registrant_sources"],
+    deps = [":flutter_embedding"] + select({
+        "@rules_flutter_core//flutter:mode_debug": [
+            ":regular_plugin",
+            ":dev_plugin",
+            "@hand_wired_debug//:androidx_annotation_annotation_jvm",
+        ],
+        "@rules_flutter_core//flutter:mode_release": [
+            ":regular_plugin",
+            "@hand_wired_release//:androidx_annotation_annotation_jvm",
+        ],
+    }),
+)
+
+android_library(
+    name = "main_activity",
+    srcs = ["src/main/java/com/example/handwired/MainActivity.java"],
+    deps = [":flutter_embedding"],
+)
+
+android_binary(
+    name = "hand_wired_app",
+    assets = [":flutter_assets"],
+    assets_dir = "core_bundle_action",
+    manifest = "src/main/AndroidManifest.xml",
+    manifest_values = {
+        "applicationId": "com.example.handwired",
+        "minSdkVersion": "24",
+        "targetSdkVersion": "36",
+    },
+    resource_files = [],
+    deps = [":main_activity", ":registrant", ":flutter_embedding"],
+)

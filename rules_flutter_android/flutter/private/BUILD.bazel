@@ -28,6 +28,11 @@ exports_files(
     visibility = ["//visibility:public"],
 )
 
+exports_files(
+    ["embedding_repo.bzl"],
+    visibility = ["//:__pkg__"],
+)
+
 # Attribute defaults of rules defined under //flutter. Those rules are
 # instantiated in consumer packages, so //flutter:__subpackages__ is enough.
 exports_files(

@@ -1,5 +1,5 @@
 load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
-load("//flutter:defs.bzl", "flutter_assets_dir")
+load("//flutter:composition.bzl", "flutter_assets_dir")
 
 # The root package exists so //:buildifier_test has a label in it to locate the
 # tree it should check.

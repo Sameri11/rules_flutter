@@ -30,11 +30,8 @@ test_metadata_parser_src(
     parser_source = "//flutter/private/test_metadata:parser.dart",
     version_file = "@flutter_sdk//:flutter.version.json",
 )
-
 use_repo(
     flutter,
-    "flutter_embedding_debug",
-    "flutter_embedding_release",
     "flutter_engine_arm64_v8a_debug",
     "flutter_engine_arm64_v8a_release",
     "flutter_engine_armeabi_v7a_debug",

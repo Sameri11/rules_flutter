@@ -4,21 +4,15 @@ Core rules load from @rules_flutter_core//flutter:defs.bzl. Android macros load 
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app", "flutter_android_inputs", "flutter_assets", "flutter_native_contribution", "flutter_plugin_deps_guards")
-load(
-    "@rules_flutter_core//flutter:defs.bzl",
-    "flutter_core",
-    "flutter_package",
-    "flutter_pubspec",
-    "flutter_test",
-    "pub_path_deps_check",
-)
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app", "flutter_assets", "flutter_native_contribution", "flutter_plugin_deps_guards")
+load("@rules_flutter_android//flutter:composition.bzl", "flutter_android_inputs", "flutter_embedding_deps")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_package", "flutter_pubspec", "flutter_test")
+load("@rules_flutter_core//flutter:composition.bzl", "pub_path_deps_check")
 load("@rules_java//java:defs.bzl", "java_binary", "java_import")
 load(
     "@rules_kotlin//kotlin:android.bzl",
     "kt_android_library",
 )
-load(":embedding_deps.bzl", "EMBEDDING_DEPS")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -367,11 +361,8 @@ build_test(
 
 java_import(
     name = "build_config_runtime_embedding",
-    jars = select({
-        "@rules_flutter_core//flutter:mode_debug": ["@flutter_embedding_debug//jar:file"],
-        "@rules_flutter_core//flutter:mode_release": ["@flutter_embedding_release//jar:file"],
-    }),
-    deps = EMBEDDING_DEPS,
+    jars = ["@rules_flutter_android//flutter:embedding_jar"],
+    deps = flutter_embedding_deps(),
 )
 
 java_binary(

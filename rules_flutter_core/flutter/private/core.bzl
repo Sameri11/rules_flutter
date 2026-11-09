@@ -13,7 +13,7 @@ The android_binary side takes the artifact through `FlutterArtifactInfo`. See
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "embedding_jar_label", "engine_libs_label")
+load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "engine_libs_label")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check", "pub_plugins_check")
 
@@ -54,7 +54,6 @@ FlutterArtifactInfo = provider(
         "abi": "The Android ABI of this split, or None on a host build.",
         "libapp": "File: the libapp.so of this ABI, or None under debug.",
         "engine_libs": "list of File: this ABI's engine .so files, unstripped.",
-        "embedding_jar": "File: the Java embedding jar for this mode.",
         "assets": "Directory: the flutter_assets bundle, with the debug overlay under debug.",
     },
 )
@@ -192,7 +191,6 @@ def _flutter_core_impl(ctx):
     abi = abi_from_platform(ctx)
     libapp = ctx.files.libapp
     engine_libs = ctx.files.engine_libs
-    embedding_jar = ctx.file.embedding
     assets = ctx.attr.assets[DefaultInfo].files.to_list()
     (mode_free_assets,) = ctx.files.mode_free_assets
     if len(assets) != 1:
@@ -206,19 +204,17 @@ def _flutter_core_impl(ctx):
             fail("{}: release ABI '{}' needs one libapp.so".format(ctx.label, abi))
 
     return [
-        DefaultInfo(files = depset(libapp + engine_libs + [embedding_jar, assets[0]])),
+        DefaultInfo(files = depset(libapp + engine_libs + [assets[0]])),
         OutputGroupInfo(
             flutter_assets = depset([assets[0]]),
             flutter_engine = depset(engine_libs),
             flutter_libapp = depset(libapp),
-            flutter_embedding = depset([embedding_jar]),
         ),
         FlutterArtifactInfo(
             mode = mode,
             abi = abi,
             libapp = libapp[0] if libapp else None,
             engine_libs = engine_libs,
-            embedding_jar = embedding_jar,
             assets = assets[0],
         ),
         FlutterCoreInfo(
@@ -241,7 +237,6 @@ _flutter_core = rule(
         {
             "libapp": attr.label_list(allow_files = True, doc = "The dart_aot_elf of this split's ABI; empty under debug and on a host build."),
             "engine_libs": attr.label_list(allow_files = True, doc = "This split's engine .so files; empty on a host build."),
-            "embedding": attr.label(allow_single_file = True, mandatory = True),
             "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
             "mode_free_assets": attr.label(allow_files = True, mandatory = True, cfg = _platform_neutral_transition, doc = "The flutter_assets tree before any debug overlay, built under the host platform. A flutter_debug_core overlays its own kernel on it, so the app's assets label is never named outside this package."),
             "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
@@ -455,10 +450,6 @@ def flutter_core(
             [(_split_label(abi, mode), [engine_libs_label(abi, mode)]) for abi in ABIS for mode in MODES] +
             [("//conditions:default", [])],
         )),
-        embedding = select({
-            Label("//flutter:mode_release"): embedding_jar_label("release"),
-            Label("//flutter:mode_debug"): embedding_jar_label("debug"),
-        }),
         assets = ":" + name + "_bundle",
         mode_free_assets = ":" + name + "_assets",
         pubspec = ":pubspec",

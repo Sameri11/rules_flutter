@@ -192,14 +192,3 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
-# Source closure imported by the Android host runner's compiled Dart kernel.
-filegroup(
-    name = "device_decoder_library",
-    srcs = [
-        "//flutter/private/test/driver:device_decoder.dart",
-        "//flutter/private/test/driver:frame.dart",
-        "//flutter/private/test/driver:junit.dart",
-        "//flutter/private/test/driver:results.dart",
-    ],
-    visibility = ["//visibility:public"],
-)

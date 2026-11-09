@@ -19,7 +19,7 @@ local_path_override(
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
 flutter.sdk(version = "3.47.3")
-use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")
+use_repo(flutter, "flutter_sdk")
 
 # Separate pub hubs for the root fixtures, the standard-layout app and the
 # composed app.
@@ -36,6 +36,64 @@ pub.lock(
     name = "composed_pub",
     lock = "//composed_app:pubspec.lock",
 )
-use_repo(pub, "composed_pub", "pub", "standard_layout_pub")
+pub.lock(
+    name = "hand_wired_pub",
+    lock = "//hand_wired_app:pubspec.lock",
+)
+use_repo(pub, "composed_pub", "hand_wired_pub", "pub", "standard_layout_pub")
 
 include("//android:config.MODULE.bazel")
+
+hand_wired_maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+hand_wired_maven.install(
+    name = "hand_wired_release",
+    artifacts = [
+        "androidx.lifecycle:lifecycle-common:2.7.0",
+        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
+        "androidx.lifecycle:lifecycle-process:2.7.0",
+        "androidx.lifecycle:lifecycle-runtime:2.7.0",
+        "androidx.fragment:fragment:1.7.1",
+        "androidx.annotation:annotation:1.8.1",
+        "androidx.tracing:tracing:1.2.0",
+        "androidx.core:core:1.13.1",
+        "androidx.window:window-java:1.2.0",
+        "androidx.window:window:1.2.0",
+        "androidx.exifinterface:exifinterface:1.4.1",
+        "com.getkeepsafe.relinker:relinker:1.4.5",
+        "com.google.code.gson:gson:2.11.0",
+        "androidx.annotation:annotation-jvm:1.8.1",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+hand_wired_maven.install(
+    name = "hand_wired_debug",
+    artifacts = [
+        "androidx.lifecycle:lifecycle-common:2.7.0",
+        "androidx.lifecycle:lifecycle-common-java8:2.7.0",
+        "androidx.lifecycle:lifecycle-process:2.7.0",
+        "androidx.lifecycle:lifecycle-runtime:2.7.0",
+        "androidx.fragment:fragment:1.7.1",
+        "androidx.annotation:annotation:1.8.1",
+        "androidx.tracing:tracing:1.2.0",
+        "androidx.core:core:1.13.1",
+        "androidx.window:window-java:1.2.0",
+        "androidx.window:window:1.2.0",
+        "androidx.exifinterface:exifinterface:1.4.1",
+        "com.getkeepsafe.relinker:relinker:1.4.5",
+        "com.google.code.gson:gson:2.11.0",
+        "org.apache.commons:commons-lang3:3.17.0",
+        "androidx.annotation:annotation-jvm:1.8.1",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://maven-central.storage-download.googleapis.com/maven2",
+        "https://repo1.maven.org/maven2",
+    ],
+    version_conflict_policy = "pinned",
+)
+use_repo(hand_wired_maven, "hand_wired_debug", "hand_wired_release")
