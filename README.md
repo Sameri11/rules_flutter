@@ -61,6 +61,10 @@ hand-wiring, the public `composition.bzl` modules expose lower-level providers,
 rules, and targets. `flutter_pubspec` remains in core `defs.bzl` because
 `flutter_package` requires it.
 
+Core's Flutter SDK repository exposes `@flutter_sdk//:flutter.version.json` as
+read-only version metadata. Android's embedding repositories derive their SDK
+version from that file; consumers do not need to name those repository labels.
+
 Select APK ABIs with ordinary `--android_platforms`. Use one APK label for each
 existing app/mode variant and separate build commands for fat or single-ABI
 configurations. Capture each APK before the next configuration because the
