@@ -40,9 +40,10 @@ def _registrant_impl(ctx):
 
 flutter_plugin_registrant = rule(
     implementation = _registrant_impl,
+    doc = "Generates GeneratedPluginRegistrant.java from plugin entries; dev_plugins are included only in debug mode.",
     attrs = {
-        "plugins": attr.string_list(),
-        "dev_plugins": attr.string_list(),
+        "plugins": attr.string_list(doc = "Plugin entries in name|fully.qualified.Class format."),
+        "dev_plugins": attr.string_list(doc = "Development plugin entries in name|fully.qualified.Class format; included only in debug mode."),
         "_mode": attr.label(default = _MODE, providers = [BuildSettingInfo]),
     },
 )
@@ -66,9 +67,10 @@ def _build_config_impl(ctx):
 
 flutter_build_config = rule(
     implementation = _build_config_impl,
+    doc = "Generates BuildConfig.java using the package name, selected mode, and extra field declaration lines.",
     attrs = {
-        "package_name": attr.string(mandatory = True),
-        "fields": attr.string_list(),
+        "package_name": attr.string(mandatory = True, doc = "Java package name for the generated BuildConfig class."),
+        "fields": attr.string_list(doc = "Raw Java field declaration lines; each entry is emitted verbatim followed by a newline."),
         "_mode": attr.label(default = _MODE, providers = [BuildSettingInfo]),
     },
 )

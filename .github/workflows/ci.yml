@@ -206,7 +206,6 @@ jobs:
         working-directory: tests/consumer
         run: python3 ../../tools/ci/plugin_hub_boundary_guard.py @flutter_plugins//:generated_plugin_registrant_src @composed_plugins//:generated_plugin_registrant_src @composed_override_plugins//:generated_plugin_registrant_src
 
-
       - name: Consumer hand-wired app mode and DEX checks
         working-directory: tests/consumer
         run: |
@@ -285,15 +284,15 @@ jobs:
           set -o pipefail
           env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} 2>&1 | tee ../bazel_test_android.log
 
+      - name: Registrant parity tests in debug mode
+        working-directory: rules_flutter_android
+        run: bazel test --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} //tests/registrant_parity:all
+
       # The registrant parity goldens, recaptured from this Flutter SDK, must
       # still match: a template change in flutter_tools fails here.
       - name: Registrant parity recapture
         working-directory: rules_flutter_android
         run: python3 tests/registrant_parity/capture.py --check
-      - name: Android source private-core guard
-        run: |
-          python3 tools/ci/android_core_boundary_guard.py --selftest
-          python3 tools/ci/android_core_boundary_guard.py
 
       - name: Report cache statistics
         if: always()

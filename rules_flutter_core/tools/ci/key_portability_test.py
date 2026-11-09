@@ -31,6 +31,7 @@ FILES = {
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
 ANDROID_FILES = frozenset(("android", "plugins", "ndk", "android_inputs", "apk_check", "native_build_env", "native_strip", "android_integration_test", "composition"))
+_CORE_PRIVATE_LABEL = re.compile(r"@@?rules_flutter_core[^/]*//flutter/private(?=[:/\"])")
 
 
 class Checker:
@@ -98,7 +99,17 @@ class Checker:
         self.check_r()
         self.check_s()
         self.check_t()
+        self.check_android_private()
         return self.failures
+
+    def check_android_private(self):
+        if self.android_root is None:
+            return
+        for name in ANDROID_FILES:
+            source = self.sources.get(name, "")
+            for line_number, line in enumerate(source.splitlines(), 1):
+                if _CORE_PRIVATE_LABEL.search(line):
+                    self.fail("T", "{}:{} references a core private target".format(FILES[name], line_number))
 
     def tree(self, name, contract):
         if not self._requested(name):
@@ -1181,6 +1192,7 @@ def _file_contract(name):
         "apk_check": "M",
         "dart_registrant": "N",
         "pub_lock": "O",
+        "android_integration_test": "T",
         "composition": "U",
     }[name]
 
@@ -1477,7 +1489,18 @@ def _action_regions(name, tree):
     return regions
 
 
+def _private_label_selftest():
+    cases = (
+        '@rules_flutter_core//flutter/private:target',
+        '@rules_flutter_core//flutter/private/subpackage:target',
+        '@@rules_flutter_core+//flutter/private:target',
+    )
+    if not all(_CORE_PRIVATE_LABEL.search(case) for case in cases):
+        raise AssertionError("core-private label matcher missed a supported label spelling")
+
+
 def main(argv=None):
+    _private_label_selftest()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=None, help="core module root; enables the core contracts")
     parser.add_argument("--android-root", type=Path, default=None, help="rules_flutter_android root; enables the Android contracts")
@@ -1488,7 +1511,7 @@ def main(argv=None):
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
-    print("OK: key portability contracts A-T hold")
+    print("OK: key portability contracts A-U hold")
     return 0
 
 

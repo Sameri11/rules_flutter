@@ -1,7 +1,7 @@
 """Implementation of the Flutter rules.
 
-Nothing here is supported API: Consumer Modules load //flutter:defs.bzl and
-//flutter:extensions.bzl. The `.bzl` files beside this file declare
+Nothing here is supported API: consumers load //flutter:defs.bzl and
+//flutter:extensions.bzl; hand-wired targets load //flutter:composition.bzl. The `.bzl` files beside this file declare
 `visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
 allows it to be loaded from the ruleset's root MODULE.bazel only, and
 `hook_packages.bzl`, whose public visibility allows generated pub hub

@@ -1,6 +1,8 @@
 """The supported BUILD API for a Consumer Module.
 
-Core rules load from @rules_flutter_core//flutter:defs.bzl. Android macros load from @rules_flutter_android//flutter:defs.bzl.
+Core rules load from @rules_flutter_core//flutter:defs.bzl. Hand-wired core
+targets may also load composition.bzl; Android macros load from
+@rules_flutter_android//flutter:defs.bzl, with hand-wired rules in composition.bzl.
 """
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")

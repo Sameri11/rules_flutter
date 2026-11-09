@@ -100,11 +100,11 @@ java_library(
 _KOTLIN_BUILD_LOADS = """load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 """
 
-# Loaded only into the BUILD of a plugin that actually has a CMake build, so a
-# project with no native plugins never pulls rules_foreign_cc into analysis.
-
+# Loaded only into plugin BUILD files that actually define a CMake build, so
+# projects without native plugins never pull rules_foreign_cc into analysis.
 _NATIVE_BUILD_LOADS = """load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 """
+
 _BUILD_PACKAGE = """
 package(default_visibility = ["//visibility:public"])
 """
@@ -122,6 +122,7 @@ flutter_build_config(
     srcs = {srcs} + [":build_config"],
     manifest = "android/src/main/AndroidManifest.xml",
     # Plugin permissions must reach android_binary through the manifest chain.
+    # kt_android_library uses integer booleans; android_library uses True/False.
     exports_manifest = {exports_manifest},
     custom_package = "{package}",
     resource_files = {resource_files},

@@ -70,13 +70,15 @@ existing app/mode variant and separate build commands for fat or single-ABI
 configurations. Capture each APK before the next configuration because the
 materialized APK path may be shared.
 
-The core output groups remain available to hand-wired consumers, but embedding
-is owned by the Android ruleset. Use
+Core output groups remain available to hand-wired consumers: `flutter_assets`,
+`flutter_engine` (possibly several libraries per ABI), and `flutter_libapp`
+(empty in debug mode). Embedding is owned by the Android ruleset. Use
 `@rules_flutter_android//flutter:embedding_jar` for the mode-selected jar;
 `flutter_embedding_deps(maven_repo)` supplies its explicit AndroidX classpath.
-For a complete stock `android_binary` example—including a plugin registrant,
-BuildConfig, and development-only Maven dependency—see
-[`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel).
+The [`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel)
+fixture demonstrates plugin, Java, and Maven wiring, but is not a complete APK.
+For native packaging, see
+[`tests/consumer/composed_app:direct_apk`](tests/consumer/composed_app/BUILD.bazel).
 
 `flutter_debug_core` is a lower-level core composition rule. It declares a debug
 artifact of an app's `flutter_core` built from another entrypoint, such as an

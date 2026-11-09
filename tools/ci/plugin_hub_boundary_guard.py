@@ -11,16 +11,22 @@ from unittest.mock import patch
 
 
 def check(build_file):
-    path = Path(build_file)
-    if not path.is_file():
-        raise ValueError("missing generated hub BUILD file: {}".format(path))
-    text = path.read_text()
-    if not text.strip():
-        raise ValueError("empty generated hub BUILD file: {}".format(path))
-    for match in re.finditer(r"load\s*\(\s*[\"']([^\"']+)[\"']", text, re.DOTALL):
-        label = match.group(1)
-        if "/private" in label:
-            raise ValueError("{} loads a private module: {}".format(path, label))
+    root_build = Path(build_file)
+    if not root_build.is_file():
+        raise ValueError("missing generated hub BUILD file: {}".format(root_build))
+    build_files = sorted(
+        set(root_build.parent.rglob("BUILD")) | set(root_build.parent.rglob("BUILD.bazel"))
+    )
+    if not build_files:
+        raise ValueError("generated hub has no BUILD files under: {}".format(root_build.parent))
+    for path in build_files:
+        text = path.read_text()
+        if not text.strip():
+            raise ValueError("empty generated hub BUILD file: {}".format(path))
+        for match in re.finditer(r"load\s*\(\s*[\"']([^\"']+)[\"']", text, re.DOTALL):
+            label = match.group(1)
+            if "/private" in label:
+                raise ValueError("{} loads a private module: {}".format(path, label))
 
 
 def _hub_build(label):
@@ -48,11 +54,17 @@ def selftest():
         build = Path(temp) / "BUILD.bazel"
         location = "{}:7:1: flutter_plugin_registrant rule {}".format(build, label)
 
-        def run_main(content, expected, query_output=None, returncode=0):
+        def run_main(content, expected, nested=False, query_output=None, returncode=0):
             if content is None:
                 build.unlink(missing_ok=True)
             else:
                 build.write_text(content)
+            nested_build = build.parent / "pkg" / "BUILD.bazel"
+            if nested:
+                nested_build.parent.mkdir()
+                nested_build.write_text('load("@rules_flutter_android//flutter/private:x.bzl", "x")\n')
+            else:
+                nested_build.unlink(missing_ok=True)
             result = subprocess.CompletedProcess(
                 ["bazel", "query"],
                 returncode,
@@ -71,11 +83,12 @@ def selftest():
             'load(\n    "@rules_flutter_android//flutter/private:x.bzl",\n    "x",\n)\n',
             "private module",
         )
+        run_main("filegroup(name = 'target')\n", "private module", nested=True)
         run_main("\n", "empty")
         run_main(None, "missing")
         run_main("filegroup(name = 'target')\n", "query failed", returncode=1, query_output="query error")
         run_main("filegroup(name = 'target')\n", "no unique BUILD location", query_output="")
-    print("PASS: hub entrypoint rejects private, missing, empty, query-error and empty-result inputs")
+    print("PASS: hub guard rejects private loads in root and nested BUILD files, missing, empty, query-error and empty-result inputs")
 
 
 def main(argv=None):
@@ -98,5 +111,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except ValueError as error:
-        print("FAIL: {}".format(error), file=sys.stderr)
+        print(error, file=sys.stderr)
         sys.exit(1)
+

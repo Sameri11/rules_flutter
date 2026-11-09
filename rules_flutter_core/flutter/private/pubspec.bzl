@@ -1,5 +1,6 @@
 """The app's pubspec, as one target every other rule reads its facts from.
 
+One fact per file, deliberately: consumers depend only on the fact they use.
 The package name, build name and build number travel by provider; asset and
 font declarations remain inputs to `flutter build bundle`.
 """

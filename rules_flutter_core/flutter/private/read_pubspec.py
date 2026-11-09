@@ -45,21 +45,20 @@ def package_name(path):
 
 
 def version(path):
-    """`version:` as (name, code)."""
+    """`version:` as (build_name, build_number)."""
     value = top_level(path, "version")
     if not value:
         fail("{}: no top-level `version:` key.".format(path))
 
     name, sep, code = value.partition("+")
     if not name:
-        fail("{}: version '{}' has no name part.".format(path, value))
+        fail("{}: version '{}' has no build name.".format(path, value))
 
     # Flutter's own default when the build number is omitted.
     code = code if sep else "1"
     if not code.isdigit():
         fail(
-            "{}: build number '{}' is not an integer. Android's versionCode "
-            "must be one.".format(path, code),
+            "{}: build number '{}' is not an integer.".format(path, code),
         )
     return name, code
 

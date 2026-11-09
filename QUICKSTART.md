@@ -620,21 +620,23 @@ shows recipe inputs and ABI-specific native contributions.
 
 Use the convenience rules from `defs.bzl` for standard apps. A consumer that
 needs to own Android packaging can instead combine the public building blocks:
-`flutter_core` supplies the core outputs, `flutter_assets` selects its bundle,
-and the Android composition module provides `flutter_plugin_registrant`,
-`flutter_build_config`, and the mode-selected `embedding_jar`. Use
-`flutter_embedding_deps(maven_repo)` for the embedding's explicit AndroidX
-classpath. Stock `rules_android` rules then package those targets.
+`flutter_core` exposes the `flutter_assets`, `flutter_engine`, and
+`flutter_libapp` output groups. The engine group may contain several libraries
+per ABI, and `flutter_libapp` is empty in debug mode. The Android composition
+module provides `flutter_plugin_registrant`, `flutter_build_config`, and the
+mode-selected `embedding_jar`; use `flutter_embedding_deps(maven_repo)` for the
+embedding's explicit AndroidX classpath. `flutter_assets` is an output group,
+not a rule. Stock `rules_android` rules then package those targets; for native
+packaging, see [`tests/consumer/composed_app:direct_apk`](tests/consumer/composed_app/BUILD.bazel).
 
-The complete hand-written example is
-[`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel).
-It uses no plugin extension or convenience macros, and demonstrates regular and
-development-only Java plugins with mode-selected Maven dependencies. The build
-configuration and registrant rules each produce one Java source file suitable
-for `android_library.srcs`; development plugin code is included only in debug.
-Consumers using Kotlin Multiplatform Maven artifacts must name the platform
-artifact (such as an `-jvm` artifact) because `rules_jvm_external` does not
-resolve Gradle module metadata.
+[`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel)
+demonstrates plugin, Java, and Maven wiring without plugin extensions or
+convenience macros; it is not a complete APK because it does not package the
+Flutter native libraries. The registrant and build-config rules each produce
+one Java source file suitable for `android_library.srcs`, and development
+plugin code is included only in debug. Consumers using Kotlin Multiplatform
+Maven artifacts must name the platform artifact (such as an `-jvm` artifact)
+because `rules_jvm_external` does not resolve Gradle module metadata.
 
 ## ABI configuration and switching
 
