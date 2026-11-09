@@ -2,9 +2,9 @@
 
 `flutter_android_app` declares the binary and the glue a standard-layout Flutter app
 needs: the version stamp, the resources, the debug manifest, the native libraries
-stored uncompressed, and the APK check. Each default is an argument. Variants of
-one app share an inputs target through `inputs`, so the engine strip, the AOT
-library and the asset copy are built once.
+and debug kernel files stored uncompressed, and the APK check. Each default is an
+argument. Variants of one app share an inputs target through `inputs`, so the
+engine strip, the AOT library and the asset copy are built once.
 """
 
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
@@ -27,6 +27,16 @@ _MODE_DEBUG = Label("@rules_flutter_core//flutter:mode_debug")
 _MODE_RELEASE = Label("@rules_flutter_core//flutter:mode_release")
 
 _INCOMPATIBLE = Label("@platforms//:incompatible")
+
+# The debug files a Dart edit changes. Stored rather than deflated, so a
+# rebuild copies ~65 MB instead of recompressing it inside resource packaging.
+FLUTTER_DEBUG_UNCOMPRESSED_ASSETS = ["kernel_blob.bin", "isolate_snapshot_data", "vm_snapshot_data"]
+
+def _default_nocompress():
+    return [".so"] + select({
+        _MODE_DEBUG: FLUTTER_DEBUG_UNCOMPRESSED_ASSETS,
+        _MODE_RELEASE: [],
+    })
 
 # Sentinels no caller can pass by accident. A string compare would also match a
 # consumer who writes the default path explicitly and expects it to be required.
@@ -189,7 +199,7 @@ def flutter_android_app(
             _MODE_RELEASE: [],
         })
 
-    kwargs.setdefault("nocompress_extensions", [".so"])
+    kwargs.setdefault("nocompress_extensions", _default_nocompress())
     android_binary(
         name = name,
         assets = [bundle],
@@ -315,7 +325,7 @@ def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_mani
         binary_kwargs["testonly"] = testonly
         binary_kwargs["visibility"] = visibility
         binary_kwargs["target_compatible_with"] = compatible
-        binary_kwargs.setdefault("nocompress_extensions", [".so"])
+        binary_kwargs.setdefault("nocompress_extensions", _default_nocompress())
         android_binary(
             name = target,
             assets = [":" + target + "_assets"],

@@ -9,7 +9,7 @@ load(
     _core_flutter_assets = "flutter_assets",
 )
 load("//flutter/private:android.bzl", _flutter_android_manifest = "flutter_android_manifest", _flutter_assets_dir = "flutter_assets_dir")
-load("//flutter/private:android_app.bzl", _flutter_android_app = "flutter_android_app")
+load("//flutter/private:android_app.bzl", _FLUTTER_DEBUG_UNCOMPRESSED_ASSETS = "FLUTTER_DEBUG_UNCOMPRESSED_ASSETS", _flutter_android_app = "flutter_android_app")
 load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
 load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
 load("//flutter/private:plugin_deps_guards.bzl", _flutter_plugin_deps_guards = "flutter_plugin_deps_guards")
@@ -29,3 +29,4 @@ flutter_android_manifest = _flutter_android_manifest
 flutter_assets_dir = _flutter_assets_dir
 flutter_android_app = _flutter_android_app
 flutter_plugin_deps_guards = _flutter_plugin_deps_guards
+FLUTTER_DEBUG_UNCOMPRESSED_ASSETS = _FLUTTER_DEBUG_UNCOMPRESSED_ASSETS

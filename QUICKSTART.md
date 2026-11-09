@@ -278,6 +278,19 @@ kt_android_library(
 
 The helper composes Flutter Android inputs, manifest, assets placement, and APK
 check with a stock Android binary. It does not create a second packaging API.
+For debug APKs, `kernel_blob.bin`, `isolate_snapshot_data` and
+`vm_snapshot_data` are stored uncompressed so Dart edits repackage quickly.
+Passing `nocompress_extensions` replaces its default; retain `.so` and add the
+debug assets explicitly:
+
+```python
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_DEBUG_UNCOMPRESSED_ASSETS")
+
+nocompress_extensions = [".so"] + select({
+    "@rules_flutter_core//flutter:mode_debug": FLUTTER_DEBUG_UNCOMPRESSED_ASSETS,
+    "@rules_flutter_core//flutter:mode_release": [],
+})
+```
 
 Build release and debug with their supported compilation modes. The first
 release build also writes `MODULE.bazel.lock`; commit it, then keep
