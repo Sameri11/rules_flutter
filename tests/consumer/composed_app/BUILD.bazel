@@ -10,13 +10,12 @@ load("@rules_android//rules:rules.bzl", "aar_import", "android_binary")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_flutter_android//flutter:composition.bzl", "android_native_files", "flutter_embedding_deps")
 load(
     "@rules_flutter_android//flutter:defs.bzl",
     "FLUTTER_DEBUG_UNCOMPRESSED_ASSETS",
     "flutter_android_app",
 )
-
-load("@rules_flutter_android//flutter:composition.bzl", "android_native_files", "flutter_embedding_deps")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 load("@rules_java//java:defs.bzl", "java_import", "java_library")
 load("@rules_java//java:java_single_jar.bzl", "java_single_jar")
@@ -307,7 +306,6 @@ filegroup(
     output_group = "flutter_libapp",
     tags = ["manual"],
 )
-
 
 java_import(
     name = "direct_embedding",
