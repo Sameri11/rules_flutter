@@ -38,6 +38,12 @@ def bazel_platform(abi):
 MIN_SDK = 21
 
 def check_abis(abis, where):
+    """Validate a non-empty ABI list against the supported Android ABI set.
+
+    Args:
+      abis: ABI names requested by the caller.
+      where: Context label used to identify validation failures.
+    """
     if not abis:
         fail("{}: `abis` must name at least one ABI, one of {}.".format(where, sorted(ABIS)))
     for abi in abis:
@@ -45,6 +51,14 @@ def check_abis(abis, where):
             fail("{}: unknown ABI '{}'. Supported: {}.".format(where, abi, sorted(ABIS)))
 
 def check_platform_abi(ctx):
+    """Check a rule's declared ABI against its configured Android platform.
+
+    Args:
+      ctx: The rule context with the declared platform and ABI.
+
+    Returns:
+      The verified ABI name.
+    """
     found = abi_from_platform(ctx)
     if found == None:
         fail("{}: target platform '{}' is not Android, or names no CPU.".format(ctx.label, ctx.attr.platform))
@@ -66,4 +80,3 @@ def check_platform_abi(ctx):
             ABIS[ctx.attr.abi].cpu_constraint,
         ))
     return found
-

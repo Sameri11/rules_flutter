@@ -60,7 +60,14 @@ ABI_PLATFORM_ATTRS = {
 }
 
 def abi_from_platform(ctx):
-    """Return the supported/unsupported Android ABI name or None for other OSes."""
+    """Return the supported/unsupported Android ABI name or None for other OSes.
+
+    Args:
+      ctx: The rule context whose target platform is being inspected.
+
+    Returns:
+      The ABI name, or None when the platform is not a supported Android ABI.
+    """
     android = ctx.attr._android_os[platform_common.ConstraintValueInfo]
     if not ctx.target_platform_has_constraint(android):
         return None

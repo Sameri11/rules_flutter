@@ -28,12 +28,15 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
-FlutterTargetSliceInfo = provider(fields = [
-    "target_platform",
-    "slice_id",
-    "target_os",
-])
 
+FlutterTargetSliceInfo = provider(
+    doc = "Platform metadata resolved for a configured Flutter target slice.",
+    fields = [
+        "target_platform",
+        "slice_id",
+        "target_os",
+    ],
+)
 
 _ANDROID_SPLIT_OUTPUTS = [
     "//command_line_option:Android configuration distinguisher",
@@ -70,7 +73,6 @@ def _flutter_target_slice_impl(ctx):
         slice_id = target.slice_id,
         target_os = target.target_os,
     )]
-
 
 flutter_target_slice = rule(
     implementation = _flutter_target_slice_impl,
@@ -437,10 +439,10 @@ keys are unchanged.""",
             providers = [FlutterTargetSliceInfo],
             doc = "Internal per-platform target-toolchain metadata.",
         ),
-
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
+
 # A test kernel's undeclared import is absent from the sandbox, so the frontend
 # reports it as not found. The hint says where the file has to be declared.
 # Shared with flutter_debug_core, which has the same sandbox.

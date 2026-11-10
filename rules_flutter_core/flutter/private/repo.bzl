@@ -334,7 +334,6 @@ def _flutter_impl(ctx):
 
     flutter_tools_packages(name = "flutter_tools_packages")
 
-
 _flutter_sdk_tag = tag_class(
     attrs = {
         "version": attr.string(mandatory = True),

@@ -12,7 +12,6 @@ load(":abis.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check", "pub_plugins_check")
 
-
 visibility(["//flutter/...", "//tests/..."])
 
 _TARGET_TOOLCHAIN_LABEL = "//flutter/private:flutter_target_toolchain_type"
@@ -71,7 +70,6 @@ FlutterCoreInfo = provider(
         "mode_free_assets": "File: the app's flutter_assets tree before any debug overlay, platform neutral.",
     },
 )
-
 
 _ANDROID_SPLIT_OUTPUTS = [
     # The options the Android split transition writes. The kernel and the bundle
@@ -274,7 +272,9 @@ def flutter_core(
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies.
+      dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: the native build environment for asset bundle hooks, or None.
+      dart_plugin_registrant: an optional plugin registrant Dart file to compile.
       android_target_platforms: platform labels used to configure target toolchains.
       aot_compatible_with: additional compatibility constraints for platform-specific AOT artifacts.
       **kwargs: visibility and tags passed to declared targets.

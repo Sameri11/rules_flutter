@@ -1,9 +1,9 @@
+"""Registers Android target toolchains for the current execution host."""
+
 load("//flutter:abis.bzl", "ABIS")
 load(":gen_snapshot_repo.bzl", "flutter_gen_snapshot", "flutter_gen_snapshot_availability")
 
 visibility(["//"])
-"""Registers Android target toolchains for the current execution host."""
-
 
 def _host_constraints(ctx):
     name = ctx.os.name.lower()
@@ -26,7 +26,6 @@ def _host_constraints(ctx):
     if host_cpu == None:
         return None
     return ["@platforms//os:" + host_os, "@platforms//cpu:" + host_cpu]
-
 
 def _android_toolchains_impl(ctx):
     host = _host_constraints(ctx)
@@ -68,7 +67,6 @@ def _android_toolchains_impl(ctx):
         ])
     ctx.file("BUILD.bazel", "\n".join(lines))
 
-
 _android_toolchains = repository_rule(
     implementation = _android_toolchains_impl,
     attrs = {
@@ -79,7 +77,6 @@ _android_toolchains = repository_rule(
         "toolchain_type": attr.string(mandatory = True),
     },
 )
-
 
 def _android_toolchains_extension_impl(_ctx):
     toolchain_targets = {}
@@ -107,7 +104,6 @@ def _android_toolchains_extension_impl(_ctx):
         toolchain_targets = toolchain_targets,
         toolchain_type = str(Label("@rules_flutter_core//flutter:target_toolchain_type")),
     )
-
 
 flutter_android_toolchains = module_extension(
     implementation = _android_toolchains_extension_impl,

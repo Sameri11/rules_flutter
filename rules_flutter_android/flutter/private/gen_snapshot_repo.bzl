@@ -2,7 +2,6 @@
 
 visibility(["//:__pkg__"])
 
-
 def _snapshot_path(ctx):
     version_file = ctx.path(ctx.attr.version_file).realpath
     sdk_root = version_file.dirname.dirname.dirname
@@ -24,16 +23,15 @@ def _snapshot_path(ctx):
         host = "windows-" + host_arch
     else:
         fail("Unsupported host OS for a Flutter build: '{}'.".format(ctx.os.name))
+
     # Flutter currently stores Android gen_snapshot in the x64 engine directory on macOS.
     return sdk_root.get_child("bin/cache/artifacts/engine").get_child(ctx.attr.engine_dir).get_child(host).get_child("gen_snapshot")
-
 
 def _availability_impl(ctx):
     path = _snapshot_path(ctx)
     available = path.exists
     ctx.file("available", "available\n" if available else "missing\n")
     ctx.file("BUILD.bazel", "package(default_visibility = [\"//visibility:public\"])\nexports_files([\"available\"])\n")
-
 
 flutter_gen_snapshot_availability = repository_rule(
     implementation = _availability_impl,
@@ -43,7 +41,6 @@ flutter_gen_snapshot_availability = repository_rule(
     },
     local = True,
 )
-
 
 def _gen_snapshot_impl(ctx):
     path = _snapshot_path(ctx)

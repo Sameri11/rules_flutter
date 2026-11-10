@@ -18,7 +18,6 @@ FlutterAotToolchainInfo = provider(
     },
 )
 
-
 def _flutter_target_toolchain_impl(ctx):
     return [platform_common.ToolchainInfo(flutter_target = FlutterTargetToolchainInfo(
         target_os = ctx.attr.target_os,
@@ -28,12 +27,10 @@ def _flutter_target_toolchain_impl(ctx):
         slice_id = ctx.attr.slice_id,
     ))]
 
-
 def _flutter_aot_toolchain_impl(ctx):
     return [platform_common.ToolchainInfo(flutter_aot = FlutterAotToolchainInfo(
         gen_snapshot_release = ctx.executable.gen_snapshot_release,
     ))]
-
 
 flutter_target_toolchain = rule(
     implementation = _flutter_target_toolchain_impl,

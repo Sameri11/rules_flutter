@@ -1,5 +1,5 @@
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core")
 load("@rules_flutter_android//flutter:composition.bzl", "flutter_android_inputs")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core")
 
 package(default_visibility = ["//visibility:public"])
 

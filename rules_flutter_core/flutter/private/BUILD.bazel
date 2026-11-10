@@ -23,9 +23,9 @@ host-compatible registration points at the public static toolchain target.
 
 load(":hook_packages_test.bzl", "staged_hook_packages_test")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
+load(":rules.bzl", "flutter_target_slice")
 load(":toolchain.bzl", "flutter_toolchain")
 
-load(":rules.bzl", "flutter_target_slice")
 package(default_visibility = ["//visibility:private"])
 
 exports_files(
@@ -101,7 +101,6 @@ flutter_target_slice(
     name = "target_slice",
     visibility = ["//visibility:public"],
 )
-
 
 # What the pub lock reader accepts and, as importantly, refuses.
 pub_lock_parser_test_suite(name = "pub_lock_parser_test")

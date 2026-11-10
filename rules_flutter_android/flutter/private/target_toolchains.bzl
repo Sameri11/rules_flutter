@@ -1,10 +1,9 @@
 """Declares the Android target toolchain implementations."""
 
-load("//flutter:abis.bzl", "ABIS")
 load("@rules_flutter_core//flutter:target_toolchain.bzl", "flutter_target_toolchain")
+load("//flutter:abis.bzl", "ABIS")
 
 visibility(["//flutter:__pkg__"])
-
 
 def flutter_android_target_toolchains():
     for abi, info in ABIS.items():

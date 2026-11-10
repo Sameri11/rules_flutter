@@ -7,15 +7,14 @@ Android-owned selection, and the plugin repository's libraries for that ABI.
 The libraries reach the APK through CcInfo, not through a jar the app wraps.
 """
 
-
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
 load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo")
 load("@rules_java//java:defs.bzl", "java_import")
+load("//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
 load(":android.bzl", "flutter_android_assets")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":maven_identity.bzl", "check_flutter_maven_repository", "flutter_maven_repository")
