@@ -376,18 +376,15 @@ def flutter_core(
         src = ":" + name + "_bundle_action",
     )
 
-    for abi in ABIS:
-        dart_aot_elf(
-            name = "{}_libapp_{}".format(name, abi),
-            dill = select({
-                Label("//flutter/private:target_os_android"): ":" + name + "_kernel",
-                "//conditions:default": None,
-            }),
-            abi = abi,
-            strip = True,
-            # Only the matching Android ABI has a libapp implementation.
-            target_compatible_with = [Label("@platforms//os:android"), ABIS[abi].cpu_constraint] + aot_target_compatible_with(),
-        )
+    dart_aot_elf(
+        name = name + "_libapp",
+        dill = select({
+            Label("//flutter/private:target_os_android"): ":" + name + "_kernel",
+            "//conditions:default": None,
+        }),
+        strip = True,
+        target_compatible_with = [Label("@platforms//os:android")] + aot_target_compatible_with(),
+    )
 
     guards = [":path_deps_check"]
     pub_path_deps_check(
@@ -418,12 +415,12 @@ def flutter_core(
         **kwargs
     )
 
-    # Each split names only its own ABI's libapp and engine libraries. The
-    # host build and any unmatched split get none, and fail downstream.
+    # Each Android split selects the same AOT target label; toolchain resolution
+    # supplies the ABI-specific implementation for that split.
     _flutter_core(
         name = name,
         libapp = select(dict(
-            [(_split_label(abi, "release"), [":{}_libapp_{}".format(name, abi)]) for abi in ABIS] +
+            [(_split_label(abi, "release"), [":" + name + "_libapp"]) for abi in ABIS] +
             [("//conditions:default", [])],
         )),
         assets = ":" + name + "_bundle",

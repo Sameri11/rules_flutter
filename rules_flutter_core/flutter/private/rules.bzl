@@ -992,17 +992,14 @@ flags, so existing keys are unchanged.""",
 
 def _dart_aot_elf_impl(ctx):
     # Under the target name, not at the package root. The basename is fixed --
-    # the engine's Dart_LoadELF is given "libapp.so" by the embedder, and
-    # jni_lib_jar packages whatever basename it is handed -- so the target name
-    # is the only thing left to disambiguate with. Two targets in one package
-    # (two ABIs, or Android beside iOS) both declaring `libapp.so` at the root
-    # is a duplicate-output analysis error.
+    # Android splits compile this same label against distinct target toolchains;
+    # configuration-specific output roots keep the resulting libapp.so files apart.
     so = ctx.actions.declare_file(ctx.label.name + "/libapp.so")
     if ctx.file.dill == None:
         fail(
-            "Target OS selection failed for label {} (ABI {}): no AOT kernel is configured.".format(
+            "Target OS selection failed for label {} (slice {}): no AOT kernel is configured.".format(
                 ctx.label,
-                ctx.attr.abi,
+                _flutter_target_toolchain(ctx).slice_id,
             ),
         )
 
@@ -1047,10 +1044,6 @@ dart_aot_elf = rule(
         "strip": attr.bool(
             default = True,
             doc = "Drop DWARF debug info from the ELF.",
-        ),
-        "abi": attr.string(
-            mandatory = True,
-            values = sorted(ABIS.keys()),
         ),
         "_mode": attr.label(
             default = "//flutter:mode",
