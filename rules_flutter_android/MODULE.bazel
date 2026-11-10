@@ -12,9 +12,10 @@ local_path_override(
 )
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
+use_repo(flutter, "flutter_sdk")
 
-# The embedding jars the Android rules compile against, by mode.
-use_repo(flutter, "flutter_embedding_debug", "flutter_embedding_release")
+flutter_android_embedding = use_extension("//flutter/private:embedding_repo.bzl", "flutter_android_embedding")
+use_repo(flutter_android_embedding, "flutter_embedding_debug", "flutter_embedding_release")
 
 # Pin for developing this repository as the root module. A dev dependency, so
 # consumers ignore it, as they ignore core's own pin.

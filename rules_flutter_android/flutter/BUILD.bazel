@@ -2,8 +2,35 @@ load("//flutter:native_build_env.bzl", "native_build_env")
 
 package(default_visibility = ["//visibility:public"])
 
-# Named as a source by //tools/ci:key_portability_check.
-exports_files(["native_build_env.bzl"])
+exports_files([
+    "native_build_env.bzl",
+    "composition.bzl",
+])
+
+filegroup(
+    name = "starlark_sources",
+    srcs = glob(["*.bzl"]) + ["BUILD.bazel"],
+    visibility = ["//tools/ci:__pkg__"],
+)
+
+# The embedding belongs to this ruleset; consumers need not import the repos.
+filegroup(
+    name = "embedding_jar_debug",
+    srcs = ["@flutter_embedding_debug//jar:file"],
+)
+
+filegroup(
+    name = "embedding_jar_release",
+    srcs = ["@flutter_embedding_release//jar:file"],
+)
+
+filegroup(
+    name = "embedding_jar",
+    srcs = select({
+        "@rules_flutter_core//flutter:mode_debug": [":embedding_jar_debug"],
+        "@rules_flutter_core//flutter:mode_release": [":embedding_jar_release"],
+    }),
+)
 
 # The Android SDK a native build hook reads. Pass this to a flutter_core call
 # explicitly when package hooks need the SDK.

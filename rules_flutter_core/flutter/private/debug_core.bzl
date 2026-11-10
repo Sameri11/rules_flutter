@@ -102,22 +102,20 @@ def _flutter_debug_core_impl(ctx):
     artifact = ctx.attr.app[FlutterArtifactInfo]
     (assets,) = ctx.files.bundle
 
-    # No libapp: a debug artifact runs its kernel from the bundle. The engine and
-    # embedding are the app's own, selected by the same configuration.
+    # No libapp: a debug artifact runs its kernel from the bundle. The engine is
+    # selected by the same configuration as the app.
     return [
-        DefaultInfo(files = depset(artifact.engine_libs + [artifact.embedding_jar, assets])),
+        DefaultInfo(files = depset(artifact.engine_libs + [assets])),
         OutputGroupInfo(
             flutter_assets = depset([assets]),
             flutter_engine = depset(artifact.engine_libs),
             flutter_libapp = depset([]),
-            flutter_embedding = depset([artifact.embedding_jar]),
         ),
         FlutterArtifactInfo(
             mode = "debug",
             abi = artifact.abi,
             libapp = None,
             engine_libs = artifact.engine_libs,
-            embedding_jar = artifact.embedding_jar,
             assets = assets,
         ),
         ctx.attr.app[FlutterPubspecInfo],

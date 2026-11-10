@@ -45,21 +45,20 @@ def package_name(path):
 
 
 def version(path):
-    """`version:` as (name, code)."""
+    """`version:` as (build_name, build_number)."""
     value = top_level(path, "version")
     if not value:
         fail("{}: no top-level `version:` key.".format(path))
 
     name, sep, code = value.partition("+")
     if not name:
-        fail("{}: version '{}' has no name part.".format(path, value))
+        fail("{}: version '{}' has no build name.".format(path, value))
 
     # Flutter's own default when the build number is omitted.
     code = code if sep else "1"
     if not code.isdigit():
         fail(
-            "{}: build number '{}' is not an integer. Android's versionCode "
-            "must be one.".format(path, code),
+            "{}: build number '{}' is not an integer.".format(path, code),
         )
     return name, code
 
@@ -73,14 +72,14 @@ def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument("--pubspec", required = True)
     parser.add_argument("--name-out", required = True)
-    parser.add_argument("--version-name-out", required = True)
-    parser.add_argument("--version-code-out", required = True)
+    parser.add_argument("--build-name-out", required = True)
+    parser.add_argument("--build-number-out", required = True)
     args = parser.parse_args()
 
-    version_name, version_code = version(args.pubspec)
+    build_name, build_number = version(args.pubspec)
     write(args.name_out, package_name(args.pubspec))
-    write(args.version_name_out, version_name)
-    write(args.version_code_out, version_code)
+    write(args.build_name_out, build_name)
+    write(args.build_number_out, build_number)
 
 
 if __name__ == "__main__":

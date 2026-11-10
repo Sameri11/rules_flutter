@@ -5,7 +5,7 @@ hooks find the SDK through ANDROID_HOME, so this rule exports it for the action
 that runs them.
 """
 
-load("@rules_flutter_core//flutter:defs.bzl", "FlutterNativeBuildEnvInfo")
+load("@rules_flutter_core//flutter:composition.bzl", "FlutterNativeBuildEnvInfo")
 
 def _native_build_env_impl(ctx):
     sdk = ctx.file._android_sdk

@@ -1,0 +1,11 @@
+package(default_visibility = ["//hand_wired_app:__pkg__"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+filegroup(
+    name = "java_sources",
+    srcs = glob(["android/**/*.java"]),
+)

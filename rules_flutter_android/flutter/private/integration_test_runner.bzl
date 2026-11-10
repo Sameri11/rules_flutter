@@ -1,6 +1,6 @@
 """Dart host runner for Android integration-test APKs."""
 
-load("@rules_flutter_core//flutter:defs.bzl", "FlutterIntegrationTestInfo")
+load("@rules_flutter_core//flutter:composition.bzl", "FlutterIntegrationTestInfo")
 
 _TOOLCHAIN = "@rules_flutter_core//flutter:toolchain_type"
 
@@ -105,7 +105,7 @@ flutter_android_integration_test_kernel = rule(
     implementation = _kernel_impl,
     attrs = {
         "src": attr.label(mandatory = True, allow_single_file = [".dart"]),
-        "_decoder_srcs": attr.label(default = Label("@rules_flutter_core//flutter/private:device_decoder_library")),
+        "_decoder_srcs": attr.label(default = Label("@rules_flutter_core//flutter:device_test_decoder")),
         "_logic_src": attr.label(default = Label("//flutter/private:integration_test_runner_logic.dart"), allow_single_file = True),
     },
     toolchains = [_TOOLCHAIN],

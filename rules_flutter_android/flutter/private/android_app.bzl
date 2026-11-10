@@ -8,7 +8,7 @@ engine strip, the AOT library and the asset copy are built once.
 """
 
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_debug_core")
+load("@rules_flutter_core//flutter:composition.bzl", "flutter_debug_core")
 load(":abis.bzl", "MIN_SDK")
 load(":android.bzl", "flutter_android_assets", "flutter_android_manifest", "flutter_assets_dir")
 load(":android_inputs_rules.bzl", "flutter_android_inputs")

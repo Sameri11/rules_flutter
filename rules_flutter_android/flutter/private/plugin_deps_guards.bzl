@@ -2,7 +2,7 @@
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@rules_flutter_core//flutter:defs.bzl", "pub_plugins_check")
+load("@rules_flutter_core//flutter:composition.bzl", "pub_plugins_check")
 
 _UPDATE_SCRIPT = """#!/usr/bin/env bash
 set -uo pipefail; set +e; f=bazel_tools/tools/bash/runfiles/runfiles.bash

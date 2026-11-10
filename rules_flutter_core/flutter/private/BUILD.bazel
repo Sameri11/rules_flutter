@@ -1,7 +1,7 @@
 """Implementation of the Flutter rules.
 
-Nothing here is supported API: Consumer Modules load //flutter:defs.bzl and
-//flutter:extensions.bzl. The `.bzl` files beside this file declare
+Nothing here is supported API: consumers load //flutter:defs.bzl and
+//flutter:extensions.bzl; hand-wired targets load //flutter:composition.bzl. The `.bzl` files beside this file declare
 `visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
 allows it to be loaded from the ruleset's root MODULE.bazel only, and
 `hook_packages.bzl`, whose public visibility allows generated pub hub
@@ -189,17 +189,5 @@ config_setting(
         "@platforms//cpu:armv7",
     ],
     flag_values = {"//flutter:mode": "debug"},
-    visibility = ["//visibility:public"],
-)
-
-# Source closure imported by the Android host runner's compiled Dart kernel.
-filegroup(
-    name = "device_decoder_library",
-    srcs = [
-        "//flutter/private/test/driver:device_decoder.dart",
-        "//flutter/private/test/driver:frame.dart",
-        "//flutter/private/test/driver:junit.dart",
-        "//flutter/private/test/driver:results.dart",
-    ],
     visibility = ["//visibility:public"],
 )

@@ -168,8 +168,6 @@ def _plugins_metadata(entries, root_name, deps, reached):
                 "plugin_class": info.get("pluginClass"),
             })
         plugins[platform] = plugin_list
-    if "android" not in plugins:
-        plugins["android"] = []
     return {"plugins": plugins}
 
 def _pub_hub_impl(rctx):
@@ -361,7 +359,7 @@ def _pub_hub_impl(rctx):
     }
     package_dirs_src = ", ".join(["{}: {}".format(repr(name), repr(path)) for name, path in package_dirs.items()])
 
-    rctx.file("BUILD.bazel", """load("{defs_bzl}", "dart_test_deps")
+    rctx.file("BUILD.bazel", """load("{composition_bzl}", "dart_test_deps")
 load("{hook_packages_bzl}", "flutter_hook_packages")
 package(default_visibility = ["//visibility:public"])
 
@@ -397,7 +395,7 @@ dart_test_deps(
     pub_srcs = [":lib"],
 )
 """.format(
-        defs_bzl = rctx.attr.defs_bzl,
+        composition_bzl = rctx.attr.composition_bzl,
         hook_packages_bzl = rctx.attr.hook_packages_bzl,
         package_dirs = package_dirs_src,
         hub = rctx.attr.name,
@@ -426,7 +424,7 @@ pub_hub = repository_rule(
             doc = "Packages left out of the test deps kernel. A test that imports one compiles it itself; see dart_test_deps.",
         ),
         "lock_name": attr.string(mandatory = True, doc = "The hub's name in pub.lock, for messages."),
-        "defs_bzl": attr.string(mandatory = True, doc = "The label of defs.bzl, which the generated BUILD file loads dart_test_deps from."),
+        "composition_bzl": attr.string(mandatory = True, doc = "The label of composition.bzl, which the generated BUILD file loads dart_test_deps from."),
         "hook_packages_bzl": attr.string(mandatory = True, doc = "Label loaded by generated hub BUILD files for private package metadata."),
     },
 )
@@ -468,7 +466,7 @@ def _pub_impl(mctx):
                 sdk = [package["name"] for package in resolved["sdk"]],
                 test_deps_exclude = lock.test_deps_exclude,
                 lock_name = lock.name,
-                defs_bzl = str(Label("//flutter:defs.bzl")),
+                composition_bzl = str(Label("//flutter:composition.bzl")),
                 hook_packages_bzl = str(Label("//flutter/private:hook_packages.bzl")),
             )
 

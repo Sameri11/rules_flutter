@@ -7,7 +7,7 @@ artifacts are fetched lazily by `flutter precache`, so a fully hermetic
 download rule is a separate concern. See README for that tradeoff.
 """
 
-load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "embedding_repo", "engine_repo")
+load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "engine_repo")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
@@ -428,13 +428,6 @@ def _flutter_impl(ctx):
 
     flutter_tools_packages(name = "flutter_tools_packages")
 
-    # Each artifact repository reads the version file through the SDK label.
-    # The label dependency makes Bazel re-resolve these URLs with that SDK.
-    for mode in MODES:
-        flutter_engine_jar(
-            name = embedding_repo(mode),
-            artifact = "flutter_embedding_" + mode,
-        )
     for abi, info in ABIS.items():
         for mode in MODES:
             flutter_engine_jar(
