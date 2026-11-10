@@ -1,7 +1,7 @@
 """ABI-pinned raw native library stripping for consumer packaging."""
 
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
-load("@rules_flutter_core//flutter:abis.bzl", "ABI_PLATFORM_ATTRS")
+load("//flutter:abis.bzl", "ABI_PLATFORM_ATTRS")
 load(":abis.bzl", "bazel_platform", "check_abis", "check_platform_abi")
 
 visibility("public")

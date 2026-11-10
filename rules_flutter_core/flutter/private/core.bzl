@@ -8,14 +8,17 @@ libraries belong to `rules_flutter_android`.
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform", "aot_target_compatible_with")
+load(":abis.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check", "pub_plugins_check")
 
 
 visibility(["//flutter/...", "//tests/..."])
 
-_TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
+_TARGET_TOOLCHAIN = config_common.toolchain_type(
+    Label("//flutter/private:flutter_target_toolchain_type"),
+    mandatory = False,
+)
 
 def _internal_tags(kwargs):
     tags = list(kwargs.get("tags", []))
@@ -67,10 +70,6 @@ FlutterCoreInfo = provider(
     },
 )
 
-def _split_label(abi, mode):
-    # A Label, not a string: select() keys in a macro resolve in the caller's
-    # repo mapping, and these config_settings belong to this ruleset.
-    return Label("//flutter/private:split_{}_{}".format(abi.replace("-", "_"), mode))
 
 _ANDROID_SPLIT_OUTPUTS = [
     # The options the Android split transition writes. The kernel and the bundle
@@ -183,7 +182,7 @@ assets_bundle = rule(
 
 def _flutter_core_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value
-    abi = abi_from_platform(ctx)
+    abi = ctx.toolchains[_TARGET_TOOLCHAIN].flutter_target.slice_id if _TARGET_TOOLCHAIN in ctx.toolchains else None
     libapp = ctx.files.libapp
     assets = ctx.attr.assets[DefaultInfo].files.to_list()
     (mode_free_assets,) = ctx.files.mode_free_assets
@@ -222,21 +221,19 @@ def _flutter_core_impl(ctx):
 _flutter_core = rule(
     implementation = _flutter_core_impl,
     doc = "Collects one split's view of a flutter_core into FlutterArtifactInfo.",
-    attrs = dict(
-        {
-            "libapp": attr.label_list(allow_files = True, doc = "The dart_aot_elf of this split's ABI; empty under debug and on a host build."),
-            "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
-            "mode_free_assets": attr.label(allow_files = True, mandatory = True, cfg = _platform_neutral_transition, doc = "The flutter_assets tree before any debug overlay, built under the host platform. A flutter_debug_core overlays its own kernel on it, so the app's assets label is never named outside this package."),
-            "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
-            "package_config": attr.label(allow_single_file = True, mandatory = True, doc = "The pub hub's package_config.json, read by a flutter_debug_core's kernel."),
-            "pub_srcs": attr.label_list(allow_files = True, allow_empty = False, mandatory = True, doc = "The pub hub's :lib, read by a flutter_debug_core's kernel."),
-            "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
-            "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
-            "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
-            "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
-        },
-        **ABI_PLATFORM_ATTRS
-    ),
+    attrs = {
+        "libapp": attr.label_list(allow_files = True, doc = "The dart_aot_elf of this split; empty under debug and on a host build."),
+        "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
+        "mode_free_assets": attr.label(allow_files = True, mandatory = True, cfg = _platform_neutral_transition, doc = "The flutter_assets tree before any debug overlay, built under the host platform. A flutter_debug_core overlays its own kernel on it, so the app's assets label is never named outside this package."),
+        "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
+        "package_config": attr.label(allow_single_file = True, mandatory = True, doc = "The pub hub's package_config.json, read by a flutter_debug_core's kernel."),
+        "pub_srcs": attr.label_list(allow_files = True, allow_empty = False, mandatory = True, doc = "The pub hub's :lib, read by a flutter_debug_core's kernel."),
+        "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
+        "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
+        "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
+        "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
+    },
+    toolchains = [_TARGET_TOOLCHAIN],
 )
 
 def _pub_labels(pub, who):
@@ -419,14 +416,12 @@ def flutter_core(
         **kwargs
     )
 
-    # Each Android split selects the same AOT target label; toolchain resolution
-    # supplies the ABI-specific implementation for that split.
     _flutter_core(
         name = name,
-        libapp = select(dict(
-            [(_split_label(abi, "release"), [":" + name + "_libapp"]) for abi in ABIS] +
-            [("//conditions:default", [])],
-        )),
+        libapp = select({
+            Label("//flutter/private:target_os_android_release"): [":" + name + "_libapp"],
+            "//conditions:default": [],
+        }),
         assets = ":" + name + "_bundle",
         mode_free_assets = ":" + name + "_assets",
         pubspec = ":pubspec",

@@ -1,4 +1,4 @@
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
+load("//flutter:abis.bzl", "ABIS")
 load(":gen_snapshot_repo.bzl", "flutter_gen_snapshot", "flutter_gen_snapshot_availability")
 
 visibility(["//"])

@@ -1,6 +1,6 @@
 """Android facade that supplies ABI data to the platform-neutral core macro."""
 
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
+load("//flutter:abis.bzl", "ABIS")
 load("//flutter/private:abis.bzl", "bazel_platform")
 load("@rules_flutter_core//flutter:defs.bzl", _flutter_core = "flutter_core")
 

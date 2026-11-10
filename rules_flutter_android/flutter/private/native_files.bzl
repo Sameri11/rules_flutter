@@ -1,6 +1,6 @@
 """Plugin native libraries as raw Files, one aggregate per Android ABI."""
 
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS")
+load("//flutter:abis.bzl", "ABIS")
 load(":recipe.bzl", "FlutterNativeInfo")
 
 visibility("public")
