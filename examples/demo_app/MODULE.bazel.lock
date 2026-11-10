@@ -409,13 +409,12 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "bQ2tAQzcoTjXinRtSP7bYMXeCcaiwauCGaq6FlTXFcg=",
+        "bzlTransitiveDigest": "BU1WOVcwt9F4tQDvq4zfTSsOBySgnyQOhrMId02dv4w=",
         "usagesDigest": "HFu4wseopxonsvDUd/4S1JEEWdwTssTyzt3rsp61Cg8=",
         "recordedInputs": [
+          "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android rules_android+",
-          "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android_ndk rules_android_ndk+",
-          "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+",
-          "REPO_MAPPING:sameri11_rules_flutter_core+,platforms platforms"
+          "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android_ndk rules_android_ndk+"
         ],
         "generatedRepoSpecs": {
           "androidndk": {
@@ -431,15 +430,15 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "bQ2tAQzcoTjXinRtSP7bYMXeCcaiwauCGaq6FlTXFcg=",
+        "bzlTransitiveDigest": "BU1WOVcwt9F4tQDvq4zfTSsOBySgnyQOhrMId02dv4w=",
         "usagesDigest": "NAsegc0NGgbnISf1WUvMP9+cZAMUJEHXC+unOFzUAKo=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
           "REPO_MAPPING:,pub sameri11_rules_flutter_core++pub+pub",
+          "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android rules_android+",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android_ndk rules_android_ndk+",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+",
-          "REPO_MAPPING:sameri11_rules_flutter_core+,platforms platforms",
           "REPO_MAPPING:sameri11_rules_flutter_android+,androidndk_cmake sameri11_rules_flutter_android++android_ndk+androidndk_cmake"
         ],
         "generatedRepoSpecs": {
@@ -477,12 +476,12 @@
     },
     "@@sameri11_rules_flutter_android+//flutter/private:embedding_repo.bzl%flutter_android_embedding": {
       "general": {
-        "bzlTransitiveDigest": "ovCtDHbQjFRXgqlEqET4JRNKNyDrk5SCH2y2sgOiyVM=",
+        "bzlTransitiveDigest": "GaxOFAOBcqPvXDirsYSnTzGRbAqxoPoV86RcOZP08bc=",
         "usagesDigest": "VDubd1CC/3EsTr4xz8tz3uu65g6E5r8qQxmJ5I7keKE=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",
-          "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+",
-          "REPO_MAPPING:sameri11_rules_flutter_core+,platforms platforms"
+          "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
+          "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+"
         ],
         "generatedRepoSpecs": {
           "flutter_embedding_release": {
@@ -538,18 +537,18 @@
     },
     "@@sameri11_rules_flutter_android+//flutter/private:target_toolchain_repo.bzl%flutter_android_toolchains": {
       "general": {
-        "bzlTransitiveDigest": "XCTVD7RvoVmCUlM0RFX4N5Krz8WCFmLmhm1K89ylTTg=",
+        "bzlTransitiveDigest": "tJtlv4P0rl5xMMlnoOFiB8hmJI1BKNHCxeY2yaOzurk=",
         "usagesDigest": "2WhXsIhHLINViYFxmWfqIy1rlYxnWFK11LB9vSRc2M0=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",
-          "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+",
-          "REPO_MAPPING:sameri11_rules_flutter_core+,platforms platforms",
+          "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
           "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_gen_snapshot_arm64_v8a sameri11_rules_flutter_android++flutter_android_toolchains+flutter_gen_snapshot_arm64_v8a",
           "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_gen_snapshot_availability_arm64_v8a sameri11_rules_flutter_android++flutter_android_toolchains+flutter_gen_snapshot_availability_arm64_v8a",
           "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_gen_snapshot_x86_64 sameri11_rules_flutter_android++flutter_android_toolchains+flutter_gen_snapshot_x86_64",
           "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_gen_snapshot_availability_x86_64 sameri11_rules_flutter_android++flutter_android_toolchains+flutter_gen_snapshot_availability_x86_64",
           "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_gen_snapshot_armeabi_v7a sameri11_rules_flutter_android++flutter_android_toolchains+flutter_gen_snapshot_armeabi_v7a",
-          "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_gen_snapshot_availability_armeabi_v7a sameri11_rules_flutter_android++flutter_android_toolchains+flutter_gen_snapshot_availability_armeabi_v7a"
+          "REPO_MAPPING:sameri11_rules_flutter_android+,flutter_gen_snapshot_availability_armeabi_v7a sameri11_rules_flutter_android++flutter_android_toolchains+flutter_gen_snapshot_availability_armeabi_v7a",
+          "REPO_MAPPING:sameri11_rules_flutter_android+,rules_flutter_core sameri11_rules_flutter_core+"
         ],
         "generatedRepoSpecs": {
           "flutter_gen_snapshot_availability_arm64_v8a": {

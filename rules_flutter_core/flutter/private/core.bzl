@@ -15,6 +15,7 @@ load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutte
 
 visibility(["//flutter/...", "//tests/..."])
 
+_TARGET_TOOLCHAIN_LABEL = "//flutter/private:flutter_target_toolchain_type"
 _TARGET_TOOLCHAIN = config_common.toolchain_type(
     Label("//flutter/private:flutter_target_toolchain_type"),
     mandatory = False,
@@ -183,7 +184,7 @@ assets_bundle = rule(
 
 def _flutter_core_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value
-    abi = ctx.toolchains[_TARGET_TOOLCHAIN].flutter_target.slice_id if _TARGET_TOOLCHAIN in ctx.toolchains else None
+    abi = ctx.toolchains[_TARGET_TOOLCHAIN_LABEL].flutter_target.slice_id if ctx.toolchains[_TARGET_TOOLCHAIN_LABEL] != None else None
     libapp = ctx.files.libapp
     assets = ctx.attr.assets[DefaultInfo].files.to_list()
     (mode_free_assets,) = ctx.files.mode_free_assets
