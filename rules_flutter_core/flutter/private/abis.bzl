@@ -133,49 +133,6 @@ def abi_from_platform(ctx):
             return name
     return None
 
-def engine_repo(abi, mode):
-    """Name of the repository holding one ABI's prebuilt engine jar in one mode.
-
-    Args:
-      abi: an Android ABI name, a key of ABIS.
-      mode: "release" or "debug".
-
-    Returns:
-      A repository name; `-` is not valid in one, so it becomes `_`.
-    """
-    return "flutter_engine_{}_{}".format(abi.replace("-", "_"), mode)
-
-def engine_jar_label(abi, mode):
-    """The prebuilt engine jar for one ABI in one mode.
-
-    A `Label`, not a string: a string handed to an attribute from inside a macro
-    resolves in the *caller's* repo mapping, and these repositories are our
-    extension's. Resolving here is what keeps the engine out of consumer BUILD
-    files.
-
-    Args:
-      abi: an Android ABI name, a key of ABIS.
-      mode: "release" or "debug".
-
-    Returns:
-      A Label for the unstripped engine jar.
-    """
-    return Label("@{}//jar:file".format(engine_repo(abi, mode)))
-
-def engine_libs_label(abi, mode):
-    """The native libraries extracted from one ABI's engine jar in one mode.
-
-    Same repository-mapping reason as engine_jar_label: resolve here, not in
-    the caller's package.
-
-    Args:
-      abi: an Android ABI name, a key of ABIS.
-      mode: "release" or "debug".
-
-    Returns:
-      A Label for the glob of the jar's lib/**/*.so files.
-    """
-    return Label("@{}//jar:libs".format(engine_repo(abi, mode)))
 
 def aot_target_compatible_with():
     """target_compatible_with for a rule that only runs under an AOT-capable mode.

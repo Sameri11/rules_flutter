@@ -15,7 +15,17 @@ flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter"
 use_repo(flutter, "flutter_sdk")
 
 flutter_android_embedding = use_extension("//flutter/private:embedding_repo.bzl", "flutter_android_embedding")
-use_repo(flutter_android_embedding, "flutter_embedding_debug", "flutter_embedding_release")
+use_repo(
+    flutter_android_embedding,
+    "flutter_embedding_debug",
+    "flutter_embedding_release",
+    "flutter_engine_arm64_v8a_debug",
+    "flutter_engine_arm64_v8a_release",
+    "flutter_engine_armeabi_v7a_debug",
+    "flutter_engine_armeabi_v7a_release",
+    "flutter_engine_x86_64_debug",
+    "flutter_engine_x86_64_release",
+)
 
 # Pin for developing this repository as the root module. A dev dependency, so
 # consumers ignore it, as they ignore core's own pin.

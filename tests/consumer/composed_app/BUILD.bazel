@@ -295,8 +295,7 @@ filegroup(
 
 filegroup(
     name = "direct_engine",
-    srcs = [":core"],
-    output_group = "flutter_engine",
+    srcs = ["@rules_flutter_android//flutter:engine_libs"],
     tags = ["manual"],
 )
 

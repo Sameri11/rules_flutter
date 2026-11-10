@@ -7,7 +7,7 @@ artifacts are fetched lazily by `flutter precache`, so a fully hermetic
 download rule is a separate concern. See README for that tradeoff.
 """
 
-load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "engine_repo")
+load(":abis.bzl", "ABIS", "AOT_MODES")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
@@ -345,71 +345,6 @@ flutter_sdk = repository_rule(
     # PATH is needed when FLUTTER_ROOT is unset. HOME and PUB_CACHE are not read.
     environ = ["FLUTTER_ROOT", "PATH"],
 )
-# The Android embedding is not in bin/cache -- Flutter fetches it from Maven at
-# Gradle time. The URLs are derivable from flutter.version.json, with one trap:
-# the *directory* is versioned by engineRevision while the *filename* uses
-# engineContentHash, and the artifacts are .jar, not .aar.
-
-_ENGINE_BASE = "https://storage.googleapis.com/download.flutter.io/io/flutter"
-
-# Builds Maven artifact URLs for engine and embedding jars.
-
-def _engine_url(artifact, revision, content_hash):
-    return "{base}/{a}/1.0.0-{rev}/{a}-1.0.0-{hash}.jar".format(
-        base = _ENGINE_BASE,
-        a = artifact,
-        rev = revision,
-        hash = content_hash,
-    )
-
-def _flutter_engine_jar_impl(ctx):
-    version = json.decode(ctx.read(ctx.path(ctx.attr.version_file)))
-    url = _engine_url(
-        ctx.attr.artifact,
-        version["engineRevision"],
-        version["engineContentHash"],
-    )
-    ctx.download(
-        url = url,
-        output = "jar/{}.jar".format(ctx.attr.artifact),
-        canonical_id = url,
-    )
-
-    # Only an ABI's engine jar carries the .so files that :libs globs; the embedding
-    # jar stays a file.
-    if ctx.attr.extract_libs:
-        ctx.extract(
-            archive = ctx.path("jar/{}.jar".format(ctx.attr.artifact)),
-            output = "jar",
-        )
-
-    # The jar's members are unknown until it is extracted, so the core takes each
-    # ABI's .so files through this glob rather than a list it would have to hardcode.
-    # The embedding jar carries no .so files, hence allow_empty.
-    ctx.file("jar/BUILD.bazel", """filegroup(
-    name = "file",
-    srcs = ["{}.jar"],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "libs",
-    srcs = glob(["lib/**/*.so"], allow_empty = True),
-    visibility = ["//visibility:public"],
-)
-""".format(ctx.attr.artifact))
-
-flutter_engine_jar = repository_rule(
-    implementation = _flutter_engine_jar_impl,
-    attrs = {
-        "artifact": attr.string(mandatory = True),
-        "extract_libs": attr.bool(default = False),
-        "version_file": attr.label(
-            allow_single_file = True,
-            default = Label("@flutter_sdk//:flutter.version.json"),
-        ),
-    },
-)
 
 def _flutter_impl(ctx):
     declared_version = ""
@@ -428,13 +363,6 @@ def _flutter_impl(ctx):
 
     flutter_tools_packages(name = "flutter_tools_packages")
 
-    for abi, info in ABIS.items():
-        for mode in MODES:
-            flutter_engine_jar(
-                name = engine_repo(abi, mode),
-                artifact = info.maven_artifact[mode],
-                extract_libs = True,
-            )
 
 _flutter_sdk_tag = tag_class(
     attrs = {

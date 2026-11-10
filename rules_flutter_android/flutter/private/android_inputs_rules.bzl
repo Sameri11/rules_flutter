@@ -1,15 +1,12 @@
 """The Android inputs of a flutter_core artifact, one split per Android ABI.
 
 `flutter_android_inputs` declares the android_library a consumer lists in its
-android_binary deps. Each configured split reads its ABI from the Bazel platform
-it is built for, takes that ABI's engine and AOT libraries from the core, and
-takes the plugin repository's libraries for that ABI. The libraries reach the
-APK through CcInfo, not through a jar the app wraps.
-
-A split built without an Android platform still analyses. It links a placeholder
-library whose action fails, so the failure comes when an APK asks for the split,
-not when the build graph is loaded.
+android_binary deps. Each configured split reads its ABI from the Bazel platform,
+takes the AOT library from core, the engine libraries from this ruleset's
+Android-owned selection, and the plugin repository's libraries for that ABI.
+The libraries reach the APK through CcInfo, not through a jar the app wraps.
 """
+
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_android//rules:rules.bzl", "android_library")
@@ -113,7 +110,7 @@ def _split_native_impl(ctx):
 
     # The engine is stripped here, as the engine jar was, so the APK carries
     # the same bytes the jar carried.
-    for f in info.engine_libs:
+    for f in ctx.files.engine_libs:
         stripped = ctx.actions.declare_file("{}/{}".format(ctx.label.name, f.basename))
         ctx.actions.run(
             executable = cc_toolchain.strip_executable,
@@ -166,6 +163,11 @@ platform. The ABI comes from that platform.""",
                 mandatory = True,
                 providers = [FlutterArtifactInfo],
                 doc = "The flutter_core target, configured for this split.",
+            ),
+            "engine_libs": attr.label_list(
+                allow_files = True,
+                default = [Label("//flutter:engine_libs")],
+                doc = "The Android ruleset's ABI-and-mode-selected engine libraries.",
             ),
             "native_files": attr.label(
                 providers = [FlutterNativeFilesByAbiInfo],

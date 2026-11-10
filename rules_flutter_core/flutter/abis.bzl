@@ -12,7 +12,6 @@ load(
     _ABI_PLATFORM_ATTRS = "ABI_PLATFORM_ATTRS",
     _MODES = "MODES",
     _abi_from_platform = "abi_from_platform",
-    _engine_jar_label = "engine_jar_label",
 )
 
 visibility("public")
@@ -29,5 +28,3 @@ ABI_PLATFORM_ATTRS = _ABI_PLATFORM_ATTRS
 # The ABI a rule's target platform selects, or None when it is not a known Android ABI.
 abi_from_platform = _abi_from_platform
 
-# The prebuilt engine jar for one ABI and mode, as a Label.
-engine_jar_label = _engine_jar_label

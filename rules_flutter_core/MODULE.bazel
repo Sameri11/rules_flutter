@@ -2,9 +2,8 @@ module(
     name = "sameri11_rules_flutter_core",
 )
 
-# The rules' own .bzl files name @flutter_sdk and the engine repositories, so
-# this module imports them. Which SDK version they hold is the root module's
-# choice: the extension reads flutter.sdk only from the root module.
+# The rules' own .bzl files name @flutter_sdk, so this module imports it. Which
+# SDK version they hold is the root module's choice: the extension reads flutter.sdk only from the root module.
 flutter = use_extension("//flutter:extensions.bzl", "flutter")
 
 # Pin for developing this repository as the root module. A dev dependency, so
@@ -33,12 +32,6 @@ test_metadata_parser_src(
 
 use_repo(
     flutter,
-    "flutter_engine_arm64_v8a_debug",
-    "flutter_engine_arm64_v8a_release",
-    "flutter_engine_armeabi_v7a_debug",
-    "flutter_engine_armeabi_v7a_release",
-    "flutter_engine_x86_64_debug",
-    "flutter_engine_x86_64_release",
     "flutter_sdk",
     "flutter_tools_packages",
 )
