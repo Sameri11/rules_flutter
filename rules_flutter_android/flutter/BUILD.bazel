@@ -1,3 +1,4 @@
+load("//flutter/private:target_toolchains.bzl", "flutter_android_target_toolchains")
 load("//flutter:native_build_env.bzl", "native_build_env")
 
 package(default_visibility = ["//visibility:public"])
@@ -91,3 +92,6 @@ filegroup(
 # The Android SDK a native build hook reads. Pass this to a flutter_core call
 # explicitly when package hooks need the SDK.
 native_build_env(name = "native_build_env")
+
+flutter_android_target_toolchains()
+

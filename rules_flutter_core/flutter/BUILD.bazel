@@ -17,6 +17,14 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+alias(
+    name = "target_toolchain_type",
+    actual = "//flutter/private:flutter_target_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["target_toolchain.bzl"])
+
 # Flutter runtime mode, independent of --compilation_mode.
 string_flag(
     name = "mode",

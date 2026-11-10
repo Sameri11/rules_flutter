@@ -27,6 +27,10 @@ use_repo(
     "flutter_engine_x86_64_release",
 )
 
+flutter_android_toolchains = use_extension("//flutter/private:target_toolchain_repo.bzl", "flutter_android_toolchains")
+use_repo(flutter_android_toolchains, "flutter_android_target_toolchains")
+register_toolchains("@flutter_android_target_toolchains//:all")
+
 # Pin for developing this repository as the root module. A dev dependency, so
 # consumers ignore it, as they ignore core's own pin.
 flutter_dev = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter", dev_dependency = True)

@@ -87,6 +87,11 @@ toolchain_type(
     visibility = ["//visibility:public"],
 )
 
+toolchain_type(
+    name = "flutter_target_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
 # The ABI table is implementation, so these assertions live beside it rather
 # than in the Consumer Module fixture: a wrong snapshot flag or CPU constraint
 # mislabels a platform, and nothing else in the build would notice.

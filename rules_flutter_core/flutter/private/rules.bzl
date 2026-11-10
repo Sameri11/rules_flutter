@@ -159,6 +159,9 @@ _REGISTRANT_SOURCE_ARGS = '--source "{uri}" --source "package:flutter/src/dart_p
 def _flutter_toolchain(ctx):
     return ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
 
+def _flutter_target_toolchain(ctx):
+    return ctx.toolchains["//flutter/private:flutter_target_toolchain_type"].flutter_target
+
 def _dart_aot_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
 
@@ -192,7 +195,7 @@ def _dart_aot_kernel_impl(ctx):
     args.add("--tfa")
     args.add("-Ddart.vm.product=true")
 
-    args.add("--target-os", ctx.attr.target_os)
+    args.add("--target-os", _flutter_target_toolchain(ctx).target_os)
     args.add_all(_dart_define_flags(ctx.attr.dart_defines))
 
     # The package config is the pub hub's: every rootUri is relative, so it is
@@ -354,11 +357,6 @@ Point this at a filegroup in the dependency's own package, e.g.
 `path_deps = ["//packages/mylib:srcs"]`. Bazel globs cannot cross package
 boundaries, so the dependency needs its own BUILD file.""",
         ),
-        "target_os": attr.string(
-            mandatory = True,
-            values = ["android", "ios", "macos", "linux", "windows", "fuchsia"],
-            doc = "Target OS for `--target-os`.",
-        ),
         "dart_defines": attr.string_dict(
             doc = """Compile-time constants, passed as `-D<name>=<value>`.
 
@@ -369,9 +367,11 @@ changing a value recompiles the kernel; an empty dict adds no flags, so existing
 keys are unchanged.""",
         ),
     },
-    toolchains = ["//flutter/private:flutter_toolchain_type"],
+    toolchains = [
+        "//flutter/private:flutter_toolchain_type",
+        "//flutter/private:flutter_target_toolchain_type",
+    ],
 )
-
 # A test kernel's undeclared import is absent from the sandbox, so the frontend
 # reports it as not found. The hint says where the file has to be declared.
 # Shared with flutter_debug_core, which has the same sandbox.
@@ -1012,7 +1012,7 @@ def _dart_aot_elf_impl(ctx):
     # therefore safe to cache. Verified: identical sha256 over repeat builds.
     args.add("--deterministic")
     args.add("--snapshot_kind=app-aot-elf")
-    args.add_all(ctx.attr.snapshot_flags)
+    args.add_all(_flutter_target_toolchain(ctx).snapshot_flags)
 
     # gen_snapshot only accepts the --flag=value form here; a space-separated
     # pair makes it print usage and exit non-zero.
@@ -1027,10 +1027,7 @@ def _dart_aot_elf_impl(ctx):
     args.add(ctx.file.dill)
 
     ctx.actions.run(
-        executable = _flutter_toolchain(ctx).gen_snapshots["{}_{}".format(
-            ctx.attr.abi,
-            ctx.attr._mode[BuildSettingInfo].value,
-        )],
+        executable = _flutter_target_toolchain(ctx).gen_snapshots[ctx.attr._mode[BuildSettingInfo].value],
         arguments = [args],
         inputs = [ctx.file.dill],
         outputs = [so],
@@ -1059,15 +1056,8 @@ dart_aot_elf = rule(
             default = "//flutter:mode",
             providers = [BuildSettingInfo],
         ),
-        "snapshot_flags": attr.string_list(
-            doc = """Extra gen_snapshot flags for this ABI.
-
-Table-driven rather than derived here: armv7 is the only ABI that needs any,
-and omitting them yields a snapshot that installs and then executes an
-unsupported instruction.""",
-        ),
     },
-    toolchains = ["//flutter/private:flutter_toolchain_type"],
+    toolchains = ["//flutter/private:flutter_target_toolchain_type"],
 )
 
 def _pub_hub_labels(pub, who):

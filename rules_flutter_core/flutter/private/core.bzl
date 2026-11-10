@@ -308,16 +308,9 @@ def flutter_core(
         path_deps = path_deps,
         dart_plugin_registrant = aot_registrant,
         dart_defines = dart_defines,
-        target_os = "android",
-        target_compatible_with = aot_target_compatible_with(),
+        target_compatible_with = [Label("@platforms//os:android")] + aot_target_compatible_with(),
     )
 
-    # Keep the OS-specific kernel shared across ABI splits through the existing
-    # host transition.
-    platform_neutral_files(
-        name = name + "_kernel_neutral",
-        src = ":" + name + "_kernel",
-    )
 
     dart_jit_kernel(
         name = name + "_jit_kernel",
@@ -387,11 +380,10 @@ def flutter_core(
         dart_aot_elf(
             name = "{}_libapp_{}".format(name, abi),
             dill = select({
-                Label("//flutter/private:target_os_android"): ":" + name + "_kernel_neutral",
+                Label("//flutter/private:target_os_android"): ":" + name + "_kernel",
                 "//conditions:default": None,
             }),
             abi = abi,
-            snapshot_flags = ABIS[abi].snapshot_flags,
             strip = True,
             # Only the matching Android ABI has a libapp implementation.
             target_compatible_with = [Label("@platforms//os:android"), ABIS[abi].cpu_constraint] + aot_target_compatible_with(),
