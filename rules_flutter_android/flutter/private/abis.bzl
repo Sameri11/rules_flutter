@@ -33,7 +33,7 @@ _ = _check_bazel_platforms()
 
 def bazel_platform(abi):
     """The rules_android platform label that selects one ABI's toolchain."""
-    return _BAZEL_PLATFORMS[abi]
+    return Label(_BAZEL_PLATFORMS[abi])
 
 MIN_SDK = 21
 
