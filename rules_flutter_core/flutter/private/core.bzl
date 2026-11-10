@@ -19,6 +19,7 @@ _TARGET_TOOLCHAIN = config_common.toolchain_type(
     Label("//flutter/private:flutter_target_toolchain_type"),
     mandatory = False,
 )
+_TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
 
 def _internal_tags(kwargs):
     tags = list(kwargs.get("tags", []))
