@@ -1,7 +1,7 @@
 """Registers Android target toolchains for the current execution host."""
 
 load("//flutter:abis.bzl", "ABIS")
-load(":gen_snapshot_repo.bzl", "flutter_gen_snapshot", "flutter_gen_snapshot_availability")
+load(":gen_snapshot_repo.bzl", "flutter_gen_snapshot")
 
 visibility(["//"])
 
@@ -52,9 +52,7 @@ def _android_toolchains_impl(ctx):
             "",
         ])
 
-    for label, abi in ctx.attr.availability_files.items():
-        if ctx.read(ctx.path(label)).strip() != "available":
-            continue
+    for abi in sorted(ctx.attr.aot_toolchain_targets.keys()):
         lines.extend([
             "toolchain(",
             '    name = "flutter_android_aot_' + abi.replace("-", "_") + '",',
@@ -72,7 +70,6 @@ _android_toolchains = repository_rule(
     attrs = {
         "aot_toolchain_targets": attr.string_dict(mandatory = True),
         "aot_toolchain_type": attr.string(mandatory = True),
-        "availability_files": attr.label_keyed_string_dict(mandatory = True),
         "toolchain_targets": attr.string_dict(mandatory = True),
         "toolchain_type": attr.string(mandatory = True),
     },
@@ -81,26 +78,19 @@ _android_toolchains = repository_rule(
 def _android_toolchains_extension_impl(_ctx):
     toolchain_targets = {}
     aot_toolchain_targets = {}
-    availability_files = {}
     for abi, info in ABIS.items():
         suffix = abi.replace("-", "_")
-        flutter_gen_snapshot_availability(
-            name = "flutter_gen_snapshot_availability_" + suffix,
-            engine_dir = info.engine_dir["release"],
-        )
         flutter_gen_snapshot(
             name = "flutter_gen_snapshot_" + suffix,
             engine_dir = info.engine_dir["release"],
         )
         toolchain_targets[abi] = str(Label("//flutter:target_toolchain_" + suffix))
         aot_toolchain_targets[abi] = str(Label("@flutter_gen_snapshot_" + suffix + "//:aot_toolchain"))
-        availability_files[str(Label("@flutter_gen_snapshot_availability_" + suffix + "//:available"))] = abi
 
     _android_toolchains(
         name = "flutter_android_target_toolchains",
         aot_toolchain_targets = aot_toolchain_targets,
         aot_toolchain_type = str(Label("@rules_flutter_core//flutter:aot_toolchain_type")),
-        availability_files = availability_files,
         toolchain_targets = toolchain_targets,
         toolchain_type = str(Label("@rules_flutter_core//flutter:target_toolchain_type")),
     )

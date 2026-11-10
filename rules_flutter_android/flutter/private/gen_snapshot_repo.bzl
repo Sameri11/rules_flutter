@@ -27,21 +27,6 @@ def _snapshot_path(ctx):
     # Flutter currently stores Android gen_snapshot in the x64 engine directory on macOS.
     return sdk_root.get_child("bin/cache/artifacts/engine").get_child(ctx.attr.engine_dir).get_child(host).get_child("gen_snapshot")
 
-def _availability_impl(ctx):
-    path = _snapshot_path(ctx)
-    available = path.exists
-    ctx.file("available", "available\n" if available else "missing\n")
-    ctx.file("BUILD.bazel", "package(default_visibility = [\"//visibility:public\"])\nexports_files([\"available\"])\n")
-
-flutter_gen_snapshot_availability = repository_rule(
-    implementation = _availability_impl,
-    attrs = {
-        "engine_dir": attr.string(mandatory = True),
-        "version_file": attr.label(allow_single_file = True, default = Label("@flutter_sdk//:flutter.version.json")),
-    },
-    local = True,
-)
-
 def _gen_snapshot_impl(ctx):
     path = _snapshot_path(ctx)
     if path.exists:
@@ -58,7 +43,7 @@ flutter_aot_toolchain(
 )
 """)
     else:
-        ctx.file("BUILD.bazel", "package(default_visibility = [\"//visibility:public\"])\n")
+        fail("No cached Android gen_snapshot for {}. Run `flutter precache --android` to install the missing payload.".format(ctx.attr.engine_dir))
 
 flutter_gen_snapshot = repository_rule(
     implementation = _gen_snapshot_impl,

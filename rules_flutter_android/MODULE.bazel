@@ -34,12 +34,6 @@ register_toolchains("@flutter_android_target_toolchains//:all")
 
 use_repo(
     flutter_android_toolchains,
-    "flutter_gen_snapshot_availability_arm64_v8a",
-    "flutter_gen_snapshot_availability_armeabi_v7a",
-    "flutter_gen_snapshot_availability_x86_64",
-)
-use_repo(
-    flutter_android_toolchains,
     "flutter_gen_snapshot_arm64_v8a",
     "flutter_gen_snapshot_armeabi_v7a",
     "flutter_gen_snapshot_x86_64",

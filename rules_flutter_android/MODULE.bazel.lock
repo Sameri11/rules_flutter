@@ -300,7 +300,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "BU1WOVcwt9F4tQDvq4zfTSsOBySgnyQOhrMId02dv4w=",
+        "bzlTransitiveDigest": "VoaopLd1M7TuwcHJoO7DYcW5efKCQzz7l3mXaKMUYfw=",
         "usagesDigest": "BSiKVNTHy3EXCSxrVE2lcJp20b5h/Z0f4xjsXF45WZ0=",
         "recordedInputs": [
           "REPO_MAPPING:,platforms platforms",
@@ -321,7 +321,7 @@
     },
     "//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "BU1WOVcwt9F4tQDvq4zfTSsOBySgnyQOhrMId02dv4w=",
+        "bzlTransitiveDigest": "VoaopLd1M7TuwcHJoO7DYcW5efKCQzz7l3mXaKMUYfw=",
         "usagesDigest": "9owEpU8N8w2F4asd++mkiTNLiSzbTw8JI0PGfMv4MyM=",
         "recordedInputs": [
           "REPO_MAPPING:,parity_maven rules_jvm_external++maven+parity_maven",
@@ -462,7 +462,7 @@
     },
     "//flutter/private:embedding_repo.bzl%flutter_android_embedding": {
       "general": {
-        "bzlTransitiveDigest": "GaxOFAOBcqPvXDirsYSnTzGRbAqxoPoV86RcOZP08bc=",
+        "bzlTransitiveDigest": "3eqHOPboGukDJg90t58rNh9rmebP4fSAVaS1+Xd+5d4=",
         "usagesDigest": "JpFePUNenAgojvGWTEykSWOR1tW+yKsbSwtNkwh8Zis=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",
@@ -523,48 +523,27 @@
     },
     "//flutter/private:target_toolchain_repo.bzl%flutter_android_toolchains": {
       "general": {
-        "bzlTransitiveDigest": "pjZj6nXwJ+E+kZ5+7RjqM0V6mrbyc3ncnNMF6j9GPxc=",
+        "bzlTransitiveDigest": "0D9Q8Q4AQrFirqM6wLGtrv3QlasjcQ2c2i2OxhVYFfI=",
         "usagesDigest": "X0W+UJfnyCDYkAN+wssgobE3kRonFYUkhzx27KR7fCI=",
         "recordedInputs": [
           "REPO_MAPPING:,flutter_sdk sameri11_rules_flutter_core++flutter+flutter_sdk",
           "REPO_MAPPING:,platforms platforms",
           "REPO_MAPPING:,flutter_gen_snapshot_arm64_v8a +flutter_android_toolchains+flutter_gen_snapshot_arm64_v8a",
-          "REPO_MAPPING:,flutter_gen_snapshot_availability_arm64_v8a +flutter_android_toolchains+flutter_gen_snapshot_availability_arm64_v8a",
           "REPO_MAPPING:,flutter_gen_snapshot_x86_64 +flutter_android_toolchains+flutter_gen_snapshot_x86_64",
-          "REPO_MAPPING:,flutter_gen_snapshot_availability_x86_64 +flutter_android_toolchains+flutter_gen_snapshot_availability_x86_64",
           "REPO_MAPPING:,flutter_gen_snapshot_armeabi_v7a +flutter_android_toolchains+flutter_gen_snapshot_armeabi_v7a",
-          "REPO_MAPPING:,flutter_gen_snapshot_availability_armeabi_v7a +flutter_android_toolchains+flutter_gen_snapshot_availability_armeabi_v7a",
           "REPO_MAPPING:,rules_flutter_core sameri11_rules_flutter_core+"
         ],
         "generatedRepoSpecs": {
-          "flutter_gen_snapshot_availability_arm64_v8a": {
-            "repoRuleId": "@@//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot_availability",
-            "attributes": {
-              "engine_dir": "android-arm64-release"
-            }
-          },
           "flutter_gen_snapshot_arm64_v8a": {
             "repoRuleId": "@@//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot",
             "attributes": {
               "engine_dir": "android-arm64-release"
             }
           },
-          "flutter_gen_snapshot_availability_x86_64": {
-            "repoRuleId": "@@//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot_availability",
-            "attributes": {
-              "engine_dir": "android-x64-release"
-            }
-          },
           "flutter_gen_snapshot_x86_64": {
             "repoRuleId": "@@//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot",
             "attributes": {
               "engine_dir": "android-x64-release"
-            }
-          },
-          "flutter_gen_snapshot_availability_armeabi_v7a": {
-            "repoRuleId": "@@//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot_availability",
-            "attributes": {
-              "engine_dir": "android-arm-release"
             }
           },
           "flutter_gen_snapshot_armeabi_v7a": {
@@ -582,11 +561,6 @@
                 "armeabi-v7a": "'@@+flutter_android_toolchains+flutter_gen_snapshot_armeabi_v7a//:aot_toolchain'"
               },
               "aot_toolchain_type": "'@@sameri11_rules_flutter_core+//flutter:aot_toolchain_type'",
-              "availability_files": {
-                "@@+flutter_android_toolchains+flutter_gen_snapshot_availability_arm64_v8a//:available": "arm64-v8a",
-                "@@+flutter_android_toolchains+flutter_gen_snapshot_availability_x86_64//:available": "x86_64",
-                "@@+flutter_android_toolchains+flutter_gen_snapshot_availability_armeabi_v7a//:available": "armeabi-v7a"
-              },
               "toolchain_targets": {
                 "arm64-v8a": "'@@//flutter:target_toolchain_arm64_v8a'",
                 "x86_64": "'@@//flutter:target_toolchain_x86_64'",
