@@ -58,6 +58,6 @@ def android_native_files(name, src, abi, **kwargs):
         name = name,
         src = src,
         abi = abi,
-        platform = bazel_platform(abi),
+        platform = str(bazel_platform(abi)),
         **kwargs
     )
