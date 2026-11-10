@@ -7,7 +7,6 @@ artifacts are fetched lazily by `flutter precache`, so a fully hermetic
 download rule is a separate concern. See README for that tradeoff.
 """
 
-load(":abis.bzl", "ABIS", "AOT_MODES")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
@@ -31,7 +30,7 @@ exports_files([
     "flutter_tester",
     "icudtl.dat",
     "flutter.version.json",
-] + {gen_snapshots})
+])
 
 # Patched SDK containing platform_strong.dill. `--sdk-root` wants the directory,
 # so the whole tree is exposed as one filegroup.
@@ -88,15 +87,6 @@ def _host_engine_dir(ctx):
     flutter_cache.dart:267-282 unpacks `darwin-$arch/artifacts.zip` into
     `darwin-x64` on macOS whatever the arch, and `linux-$arch` on Linux.
     """
-    host = _host_platform_name(ctx)
-    return "darwin-x64" if host.startswith("darwin-") else host
-
-def _gen_snapshot_host_dir(ctx):
-    """Host directory of the Android gen_snapshot executables."""
-
-    # TODO(flutter/flutter#152281): delete the collapse and return
-    # _host_platform_name(ctx) directly, once the engine ships an arm64-native
-    # Android gen_snapshot.
     host = _host_platform_name(ctx)
     return "darwin-x64" if host.startswith("darwin-") else host
 
@@ -278,18 +268,7 @@ def _flutter_sdk_impl(ctx):
         "flutter_patched_sdk",
     )
 
-    # Create a snapshot symlink for each ABI and AOT mode.
-    host = _gen_snapshot_host_dir(ctx)
-    for abi, info in ABIS.items():
-        for mode in AOT_MODES:
-            gen_snapshot = "{}/{}/{}/gen_snapshot".format(engine, info.engine_dir[mode], host)
-
-            if not ctx.path(gen_snapshot).exists:
-                fail(
-                    "gen_snapshot for {} missing at {}.\n".format(abi, gen_snapshot) +
-                    "Run `flutter precache --android` on this host.",
-                )
-            ctx.symlink(gen_snapshot, "gen_snapshot_{}_{}".format(abi, mode))
+    # Android owns its per-ABI gen_snapshot repositories.
 
     # The host-engine files: the debug snapshots the debug overlay ships as
     # vm_snapshot_data and isolate_snapshot_data, and the test runtime
@@ -322,22 +301,14 @@ def _flutter_sdk_impl(ctx):
         sdk_globs = repr(
             ["{}/lib/**".format(r) for r in sdk_package_roots] +
             ["{}/pubspec.yaml".format(r) for r in sdk_package_roots] +
-            # The bundle action's license collector reads `<root>/NOTICES` or
-            # `<root>/LICENSE` of every package (sky_engine's is 1.3 MB of engine
-            # third-party licenses). Absent, NOTICES.Z silently loses them.
             ["{}/LICENSE*".format(r) for r in sdk_package_roots] +
             ["{}/NOTICES*".format(r) for r in sdk_package_roots],
         ),
-        gen_snapshots = repr([
-            "gen_snapshot_{}_{}".format(abi, mode)
-            for abi in ABIS
-            for mode in AOT_MODES
-        ]),
     ))
 
 flutter_sdk = repository_rule(
     implementation = _flutter_sdk_impl,
-    doc = "Exposes the declared Flutter SDK's compiler + snapshotter to Bazel.",
+    doc = "Exposes the declared Flutter SDK's host tools to Bazel.",
     attrs = {
         "version": attr.string(mandatory = True),
     },

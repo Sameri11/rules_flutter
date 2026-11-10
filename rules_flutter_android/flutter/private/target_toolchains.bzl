@@ -8,10 +8,10 @@ visibility(["//flutter:__pkg__"])
 
 def flutter_android_target_toolchains():
     for abi, info in ABIS.items():
+        suffix = abi.replace("-", "_")
         flutter_target_toolchain(
-            name = "target_toolchain_" + abi.replace("-", "_"),
+            name = "target_toolchain_" + suffix,
             target_os = "android",
-            gen_snapshot_release = "@flutter_sdk//:gen_snapshot_{}_release".format(abi),
             snapshot_flags = info.snapshot_flags,
             native_assets_key = info.manifest_key,
             target_platform = info.target_platform,

@@ -93,6 +93,12 @@ toolchain_type(
     visibility = ["//visibility:public"],
 )
 
+toolchain_type(
+    name = "flutter_aot_toolchain_type",
+    no_match_error = "No Flutter AOT toolchain is registered for this platform. For Android, run `flutter precache --android` on this host to fetch the missing gen_snapshot payload.",
+    visibility = ["//visibility:public"],
+)
+
 flutter_target_slice(
     name = "target_slice",
     visibility = ["//visibility:public"],

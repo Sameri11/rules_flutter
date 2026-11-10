@@ -23,6 +23,12 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+alias(
+    name = "aot_toolchain_type",
+    actual = "//flutter/private:flutter_aot_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
 exports_files(["target_toolchain.bzl"])
 
 # Flutter runtime mode, independent of --compilation_mode.

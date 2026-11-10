@@ -193,11 +193,9 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "hfeF7F5AhCOqfQjsAonrcq33v/m6EJi7YFzLyWzx4XE=",
+        "bzlTransitiveDigest": "3NMrG0nXpSZ0pHEhXjzhBP38d0n7FQjd/9/U6KZNY94=",
         "usagesDigest": "3eQ7CSujwGo7HWistYKJNKsA65Je6fZw/a3upweGNLo=",
-        "recordedInputs": [
-          "REPO_MAPPING:,platforms platforms"
-        ],
+        "recordedInputs": [],
         "generatedRepoSpecs": {
           "flutter_sdk": {
             "repoRuleId": "@@//flutter/private:repo.bzl%flutter_sdk",

@@ -205,6 +205,9 @@ def _flutter_toolchain(ctx):
 def _flutter_target_toolchain(ctx):
     return ctx.toolchains["//flutter/private:flutter_target_toolchain_type"].flutter_target
 
+def _flutter_aot_toolchain(ctx):
+    return ctx.toolchains["//flutter/private:flutter_aot_toolchain_type"].flutter_aot
+
 def _dart_aot_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
 
@@ -1067,7 +1070,7 @@ def _dart_aot_elf_impl(ctx):
     args.add(ctx.file.dill)
 
     ctx.actions.run(
-        executable = _flutter_target_toolchain(ctx).gen_snapshots[ctx.attr._mode[BuildSettingInfo].value],
+        executable = _flutter_aot_toolchain(ctx).gen_snapshot_release,
         arguments = [args],
         inputs = [ctx.file.dill],
         outputs = [so],
@@ -1093,7 +1096,10 @@ dart_aot_elf = rule(
             providers = [BuildSettingInfo],
         ),
     },
-    toolchains = ["//flutter/private:flutter_target_toolchain_type"],
+    toolchains = [
+        "//flutter/private:flutter_target_toolchain_type",
+        "//flutter/private:flutter_aot_toolchain_type",
+    ],
 )
 
 def _pub_hub_labels(pub, who):
