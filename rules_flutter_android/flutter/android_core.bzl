@@ -8,6 +8,7 @@ load("@rules_flutter_core//flutter:defs.bzl", _flutter_core = "flutter_core")
 def flutter_android_core(**kwargs):
     _flutter_core(
         android_target_platforms = [bazel_platform(abi) for abi in ABIS],
+        aot_compatible_with = [Label("@platforms//os:android")],
         **kwargs
     )
 

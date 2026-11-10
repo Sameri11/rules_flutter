@@ -257,6 +257,7 @@ def flutter_core(
         native_build_env = None,
         dart_plugin_registrant = None,
         android_target_platforms = None,
+        aot_compatible_with = [],
         **kwargs):
     """Declares an app's Flutter artifacts and host-test inputs.
 
@@ -274,8 +275,8 @@ def flutter_core(
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies.
       native_build_env: the native build environment for asset bundle hooks, or None.
-      dart_plugin_registrant: the Dart plugin registrant under lib/, or None.
-      android_target_platforms: Android platform labels used to configure target toolchains.
+      android_target_platforms: platform labels used to configure target toolchains.
+      aot_compatible_with: additional compatibility constraints for platform-specific AOT artifacts.
       **kwargs: visibility and tags passed to declared targets.
     """
     if srcs == None:
@@ -311,9 +312,14 @@ def flutter_core(
         path_deps = path_deps,
         dart_plugin_registrant = aot_registrant,
         dart_defines = dart_defines,
-        target_compatible_with = [Label("@platforms//os:android")] + aot_target_compatible_with(),
+        target_platforms = android_target_platforms,
+        target_compatible_with = aot_target_compatible_with(),
     )
 
+    platform_neutral_files(
+        name = name + "_kernel_neutral",
+        src = ":" + name + "_kernel",
+    )
 
     dart_jit_kernel(
         name = name + "_jit_kernel",
@@ -381,12 +387,9 @@ def flutter_core(
 
     dart_aot_elf(
         name = name + "_libapp",
-        dill = select({
-            Label("//flutter/private:target_os_android"): ":" + name + "_kernel",
-            "//conditions:default": None,
-        }),
+        dill = ":" + name + "_kernel_neutral",
         strip = True,
-        target_compatible_with = [Label("@platforms//os:android")] + aot_target_compatible_with(),
+        target_compatible_with = aot_compatible_with + aot_target_compatible_with(),
     )
 
     guards = [":path_deps_check"]

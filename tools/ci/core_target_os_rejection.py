@@ -86,15 +86,19 @@ def main():
                     )
                 )
             original = core_rules_copy.read_text()
+            android_core = (ROOT / "rules_flutter_android/flutter/android_core.bzl").read_text()
             fallback = '"//conditions:default": None,'
-            compatibility = 'target_compatible_with = [Label("@platforms//os:android")] + aot_target_compatible_with(),'
+            compatibility = "aot_compatible_with + aot_target_compatible_with()"
+            android_constraint = 'aot_compatible_with = [Label("@platforms//os:android")]'
             target_type = '"//flutter/private:flutter_target_toolchain_type"'
             if (
                 original.count(fallback) != 1
-                or original.count(compatibility) < 1
+                or compatibility not in original
+                or "@platforms//os:android" in original
+                or android_constraint not in android_core
                 or target_type not in (ROOT / "rules_flutter_core/flutter/private/rules.bzl").read_text()
             ):
-                sys.exit("FAIL: expected an Android-only libapp with target-toolchain resolution")
+                sys.exit("FAIL: expected Android compatibility to come from the Android facade")
             print("PASS: host libapp rejects as incompatible; Android fallback is absent")
         finally:
             subprocess.run(

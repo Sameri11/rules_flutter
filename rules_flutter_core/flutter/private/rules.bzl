@@ -31,7 +31,9 @@ load(":pubspec.bzl", "FlutterPubspecInfo")
 FlutterTargetSliceInfo = provider(fields = [
     "target_platform",
     "slice_id",
+    "target_os",
 ])
+
 
 _ANDROID_SPLIT_OUTPUTS = [
     "//command_line_option:Android configuration distinguisher",
@@ -66,7 +68,9 @@ def _flutter_target_slice_impl(ctx):
     return [FlutterTargetSliceInfo(
         target_platform = target.target_platform,
         slice_id = target.slice_id,
+        target_os = target.target_os,
     )]
+
 
 flutter_target_slice = rule(
     implementation = _flutter_target_slice_impl,
@@ -241,7 +245,19 @@ def _dart_aot_kernel_impl(ctx):
     args.add("--tfa")
     args.add("-Ddart.vm.product=true")
 
-    args.add("--target-os", _flutter_target_toolchain(ctx).target_os)
+    target_slices = ctx.split_attr.target_slice
+
+    target_os_values = {
+        target[FlutterTargetSliceInfo].target_os: True
+        for target in target_slices.values()
+    }
+    if not target_os_values:
+        fail("dart_aot_kernel requires at least one target platform")
+    if len(target_os_values) != 1:
+        fail("dart_aot_kernel target platforms must agree on target_os; got {}".format(sorted(target_os_values.keys())))
+    target_os = target_os_values.keys()[0]
+    args.add("--target-os", target_os)
+
     args.add_all(_dart_define_flags(ctx.attr.dart_defines))
 
     # The package config is the pub hub's: every rootUri is relative, so it is
@@ -412,11 +428,18 @@ not get these values, and returns the default. They are in the action key, so
 changing a value recompiles the kernel; an empty dict adds no flags, so existing
 keys are unchanged.""",
         ),
+        "target_platforms": attr.label_list(
+            doc = "Platforms whose target toolchains provide kernel target-OS metadata.",
+        ),
+        "target_slice": attr.label(
+            default = Label("//flutter/private:target_slice"),
+            cfg = _target_platform_split,
+            providers = [FlutterTargetSliceInfo],
+            doc = "Internal per-platform target-toolchain metadata.",
+        ),
+
     },
-    toolchains = [
-        "//flutter/private:flutter_toolchain_type",
-        "//flutter/private:flutter_target_toolchain_type",
-    ],
+    toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 # A test kernel's undeclared import is absent from the sandbox, so the frontend
 # reports it as not found. The hint says where the file has to be declared.
