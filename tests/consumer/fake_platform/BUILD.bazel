@@ -1,0 +1,50 @@
+load("@rules_flutter_core//flutter:target_toolchain.bzl", "flutter_aot_toolchain", "flutter_target_toolchain")
+load("//fake_platform:fake_gen_snapshot.bzl", "fake_gen_snapshot")
+
+package(default_visibility = ["//visibility:public"])
+
+constraint_setting(name = "fake_os")
+
+constraint_value(
+    name = "fake_os_value",
+    constraint_setting = ":fake_os",
+)
+
+platform(
+    name = "fake_target",
+    constraint_values = [":fake_os_value"],
+)
+
+fake_gen_snapshot(name = "fake_gen_snapshot")
+
+flutter_target_toolchain(
+    name = "fake_target_data",
+    native_assets_key = "ios",
+    slice_id = "fake",
+    snapshot_flags = [],
+    target_os = "ios",
+    target_platform = "ios",
+)
+
+toolchain(
+    name = "fake_target_toolchain",
+    target_compatible_with = [":fake_os_value"],
+    toolchain = ":fake_target_data",
+    toolchain_type = "@rules_flutter_core//flutter/private:flutter_target_toolchain_type",
+)
+
+flutter_aot_toolchain(
+    name = "fake_aot_data",
+    gen_snapshot_release = ":fake_gen_snapshot",
+    output_flag = "--assembly=",
+    output_kind = "assembly",
+    output_name = "app.S",
+    snapshot_kind = "app-aot-assembly",
+)
+
+toolchain(
+    name = "fake_aot_toolchain",
+    target_compatible_with = [":fake_os_value"],
+    toolchain = ":fake_aot_data",
+    toolchain_type = "@rules_flutter_core//flutter/private:flutter_aot_toolchain_type",
+)
