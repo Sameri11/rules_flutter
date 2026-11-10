@@ -257,7 +257,7 @@ def flutter_core(
         dart_defines = {},
         native_build_env = None,
         dart_plugin_registrant = None,
-        android_target_data = None,
+        android_target_platforms = None,
         **kwargs):
     """Declares an app's Flutter artifacts and host-test inputs.
 
@@ -276,7 +276,7 @@ def flutter_core(
       path_deps: sources of `path:` dependencies.
       native_build_env: the native build environment for asset bundle hooks, or None.
       dart_plugin_registrant: the Dart plugin registrant under lib/, or None.
-      android_target_data: Android ABI/Flutter target-platform data for the merged asset bundle.
+      android_target_platforms: Android platform labels used to configure target toolchains.
       **kwargs: visibility and tags passed to declared targets.
     """
     if srcs == None:
@@ -286,8 +286,8 @@ def flutter_core(
     if name == "pubspec":
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
 
-    if android_target_data == None:
-        fail("flutter_core: Android asset bundling requires platform data; use flutter_android_core from rules_flutter_android.")
+    if android_target_platforms == None:
+        fail("flutter_core: Android asset bundling requires target platforms; use flutter_android_core from rules_flutter_android.")
 
     package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
 
@@ -335,8 +335,7 @@ def flutter_core(
 
     flutter_assets(
         name = name + "_assets",
-        abis = [entry.abi for entry in android_target_data],
-        target_platforms = {entry.abi: entry.target_platform for entry in android_target_data},
+        target_platforms = android_target_platforms,
         native_build_env = native_build_env,
         assets = assets,
         pubspec = ":pubspec",

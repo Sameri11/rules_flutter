@@ -28,6 +28,50 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
+FlutterTargetSliceInfo = provider(fields = [
+    "target_platform",
+    "slice_id",
+])
+
+_ANDROID_SPLIT_OUTPUTS = [
+    "//command_line_option:Android configuration distinguisher",
+    "//command_line_option:android_compiler",
+    "//command_line_option:android_platforms",
+    "//command_line_option:compiler",
+    "//command_line_option:dynamic_mode",
+    "//command_line_option:platforms",
+]
+
+def _target_platform_split_impl(_settings, attr):
+    return {
+        str(platform): {
+            "//command_line_option:Android configuration distinguisher": "main",
+            "//command_line_option:android_compiler": None,
+            "//command_line_option:android_platforms": [],
+            "//command_line_option:compiler": None,
+            "//command_line_option:dynamic_mode": "default",
+            "//command_line_option:platforms": [str(platform)],
+        }
+        for platform in attr.target_platforms
+    }
+
+_target_platform_split = transition(
+    implementation = _target_platform_split_impl,
+    inputs = [],
+    outputs = _ANDROID_SPLIT_OUTPUTS,
+)
+
+def _flutter_target_slice_impl(ctx):
+    target = ctx.toolchains["//flutter/private:flutter_target_toolchain_type"].flutter_target
+    return [FlutterTargetSliceInfo(
+        target_platform = target.target_platform,
+        slice_id = target.slice_id,
+    )]
+
+flutter_target_slice = rule(
+    implementation = _flutter_target_slice_impl,
+    toolchains = ["//flutter/private:flutter_target_toolchain_type"],
+)
 
 visibility(["//flutter"])
 
@@ -1456,10 +1500,21 @@ python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         snapshot = toolchain.tools_snapshot.path,
         merger = ctx.file._merger.path,
-        bundles = "\n".join([_bundle_command(out, abi, i, ctx.attr.target_platforms[abi]) for i, abi in enumerate(ctx.attr.abis)]),
+        bundles = "\n".join([
+            _bundle_command(
+                out,
+                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id,
+                i,
+                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].target_platform,
+            )
+            for i, platform in enumerate(ctx.attr.target_platforms)
+        ]),
         merge_args = " ".join([
-            '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
-            for i, abi in enumerate(ctx.attr.abis)
+            '--bundle "{}={}"'.format(
+                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id,
+                _bundle_dir(out, ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id, i),
+            )
+            for i, platform in enumerate(ctx.attr.target_platforms)
         ]),
     )
 
@@ -1525,13 +1580,13 @@ than a fact read out of it.""",
             allow_files = True,
             doc = "Sources of `path:` dependencies, staged and declared. See dart_aot_kernel.path_deps.",
         ),
-        "abis": attr.string_list(
-            default = [],
-            doc = """Android ABIs to include in the merged bundle. Android rules pass these with
-their target-platform data; host-only core users may omit them.""",
+        "target_platforms": attr.label_list(
+            doc = "Platforms whose target toolchains provide asset-bundle metadata.",
         ),
-        "target_platforms": attr.string_dict(
-            doc = "Android ABI to Flutter bundle target-platform mapping supplied by the Android ruleset.",
+        "target_slice": attr.label(
+            default = Label("//flutter/private:target_slice"),
+            cfg = _target_platform_split,
+            doc = "Internal per-platform target-toolchain metadata.",
         ),
         "native_build_env": attr.label(
             providers = [FlutterNativeBuildEnvInfo],

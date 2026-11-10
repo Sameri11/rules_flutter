@@ -27,6 +27,7 @@ load(":hook_packages_test.bzl", "staged_hook_packages_test")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":toolchain.bzl", "flutter_toolchain")
 
+load(":rules.bzl", "flutter_target_slice")
 package(default_visibility = ["//visibility:private"])
 
 exports_files(
@@ -89,6 +90,11 @@ toolchain_type(
 
 toolchain_type(
     name = "flutter_target_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+flutter_target_slice(
+    name = "target_slice",
     visibility = ["//visibility:public"],
 )
 
