@@ -299,7 +299,7 @@ filegroup(
 filegroup(
     name = "direct_libapp",
     srcs = [":core"],
-    output_group = "flutter_libapp",
+    output_group = "flutter_aot",
     tags = ["manual"],
 )
 
