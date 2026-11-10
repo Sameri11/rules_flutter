@@ -1,11 +1,10 @@
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
-load("@rules_flutter_android//flutter:composition.bzl", "flutter_build_config", "flutter_embedding_deps", "flutter_plugin_registrant")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core", "flutter_build_config", "flutter_embedding_deps", "flutter_plugin_registrant")
 load("@rules_java//java:defs.bzl", "java_import")
 
 package(default_visibility = ["//visibility:private"])
 
-flutter_core(
+flutter_android_core(
     name = "core",
     srcs = glob(["lib/**/*.dart"]),
     path_deps = [

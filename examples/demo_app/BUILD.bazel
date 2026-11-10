@@ -1,14 +1,14 @@
 # Dart targets for the flat demo app. The core owns the standard Flutter package
 # layout, and its outputs are composed into Android targets in android/app.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_plugin_deps_guards")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_test", "flutter_test_suite")
+load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core", "flutter_plugin_deps_guards")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 flutter_plugin_deps_guards(plugins = "@flutter_plugins")
 
-flutter_core(
+flutter_android_core(
     name = "app",
     srcs = glob(["lib/**/*.dart"]) + [":lib/gen_info.dart"],
     dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
