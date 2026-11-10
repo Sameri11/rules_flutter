@@ -22,7 +22,7 @@ def run(workspace, output_user_root):
             "--nobuild",
             "--lockfile_mode=update",
             "--platforms=@platforms//host:host",
-            "//:app_core_libapp",
+            "//:app_core_android_aot",
         ],
         cwd=workspace,
         stdout=subprocess.PIPE,
@@ -64,12 +64,12 @@ def main():
             if rejected.returncode == 0:
                 sys.exit("FAIL: host-configured macro-generated libapp unexpectedly analyzed")
             explicit_error = (
-                "Target //:app_core_libapp is incompatible and cannot be built, "
+                "Target //:app_core_android_aot is incompatible and cannot be built, "
                 "but was explicitly requested"
             )
             if explicit_error not in rejected.stdout:
                 sys.exit("FAIL: rejection lacked {!r}:\n{}".format(explicit_error, rejected.stdout))
-            target_line = "//:app_core_libapp"
+            target_line = "//:app_core_android_aot"
             dependency_chain = rejected.stdout.partition("Dependency chain:")[2]
             has_target_os_rejection = (
                 target_line in dependency_chain
