@@ -38,32 +38,21 @@ FlutterTargetSliceInfo = provider(
     ],
 )
 
-_ANDROID_SPLIT_OUTPUTS = [
-    "//command_line_option:Android configuration distinguisher",
-    "//command_line_option:android_compiler",
-    "//command_line_option:android_platforms",
-    "//command_line_option:compiler",
-    "//command_line_option:dynamic_mode",
-    "//command_line_option:platforms",
-]
+FlutterTargetSlicesInfo = provider(
+    doc = "Platform metadata for the selected target slices.",
+    fields = ["slices"],
+)
 
-def _target_platform_split_impl(_settings, attr):
+def _platform_slice_transition_impl(_settings, attr):
     return {
-        str(platform): {
-            "//command_line_option:Android configuration distinguisher": "main",
-            "//command_line_option:android_compiler": None,
-            "//command_line_option:android_platforms": [],
-            "//command_line_option:compiler": None,
-            "//command_line_option:dynamic_mode": "default",
-            "//command_line_option:platforms": [str(platform)],
-        }
+        str(platform): {"//command_line_option:platforms": [str(platform)]}
         for platform in attr.target_platforms
     }
 
-_target_platform_split = transition(
-    implementation = _target_platform_split_impl,
+_platform_slice_transition = transition(
+    implementation = _platform_slice_transition_impl,
     inputs = [],
-    outputs = _ANDROID_SPLIT_OUTPUTS,
+    outputs = ["//command_line_option:platforms"],
 )
 
 def _flutter_target_slice_impl(ctx):
@@ -88,6 +77,28 @@ flutter_target_slice = rule(
         mandatory = False,
     )],
 )
+
+def _flutter_target_slices_impl(ctx):
+    return [FlutterTargetSlicesInfo(slices = [
+        ctx.split_attr.targets[str(platform.label)][0][FlutterTargetSliceInfo]
+        for platform in ctx.attr.target_platforms
+    ])]
+
+def flutter_target_slices_rule(slice_transition):
+    """Creates a rule that gathers target-slice metadata using a platform transition."""
+    return rule(
+        implementation = _flutter_target_slices_impl,
+        attrs = {
+            "target_platforms": attr.label_list(mandatory = True),
+            "targets": attr.label_list(
+                default = [Label("//flutter/private:target_slice")],
+                cfg = slice_transition,
+                providers = [FlutterTargetSliceInfo],
+            ),
+        },
+    )
+
+flutter_target_slices = flutter_target_slices_rule(_platform_slice_transition)
 
 visibility(["//flutter"])
 
@@ -259,11 +270,15 @@ def _dart_aot_kernel_impl(ctx):
 
     target_os = ctx.attr.target_os
     if not target_os:
-        target_slices = ctx.split_attr.target_slice
+        target_slices = [
+            slice
+            for target in ctx.attr.target_slices
+            for slice in target[FlutterTargetSlicesInfo].slices
+        ]
         target_os_values = {
-            target[FlutterTargetSliceInfo].target_os: True
-            for target in target_slices.values()
-            if target[FlutterTargetSliceInfo].target_os
+            target.target_os: True
+            for target in target_slices
+            if target.target_os
         }
         if not target_os_values:
             fail("dart_aot_kernel has no Flutter target toolchain for {}; set target_os or register a platform ruleset".format(
@@ -450,11 +465,10 @@ keys are unchanged.""",
         "target_os": attr.string(
             doc = "Target OS override; otherwise derived from the registered platform toolchain.",
         ),
-        "target_slice": attr.label(
-            default = Label("//flutter/private:target_slice"),
-            cfg = _target_platform_split,
-            providers = [FlutterTargetSliceInfo],
-            doc = "Internal per-platform target-toolchain metadata.",
+        "target_slices": attr.label_list(
+            mandatory = True,
+            providers = [FlutterTargetSlicesInfo],
+            doc = "Per-platform target-toolchain metadata.",
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
@@ -1513,6 +1527,11 @@ def _flutter_assets_impl(ctx):
     # Code assets belong in APK JNI libraries, not the asset tree. Packaging
     # recipes install them under lib/<abi>/; discard flutter_tools' duplicate.
     # NativeAssetsManifest.json is retained beside the bundle for runtime lookup.
+    target_slices = [
+        slice
+        for target in ctx.attr.target_slices
+        for slice in target[FlutterTargetSlicesInfo].slices
+    ]
     cmd = staged.command + """# flutter_tools takes the project directory as two levels above --target, so
 # the stub sits in its own directory. It is compiled only for record-use and
 # imports nothing.
@@ -1532,18 +1551,18 @@ python3 "$EXECROOT/{merger}" {merge_args}
         bundles = "\n".join([
             _bundle_command(
                 out,
-                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id,
+                target_slice.slice_id,
                 i,
-                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].target_platform,
+                target_slice.target_platform,
             )
-            for i, platform in enumerate(ctx.attr.target_platforms)
+            for i, target_slice in enumerate(target_slices)
         ]),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(
-                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id,
-                _bundle_dir(out, ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id, i),
+                target_slice.slice_id,
+                _bundle_dir(out, target_slice.slice_id, i),
             )
-            for i, platform in enumerate(ctx.attr.target_platforms)
+            for i, target_slice in enumerate(target_slices)
         ]),
     )
 
@@ -1612,10 +1631,10 @@ than a fact read out of it.""",
         "target_platforms": attr.label_list(
             doc = "Platforms whose target toolchains provide asset-bundle metadata.",
         ),
-        "target_slice": attr.label(
-            default = Label("//flutter/private:target_slice"),
-            cfg = _target_platform_split,
-            doc = "Internal per-platform target-toolchain metadata.",
+        "target_slices": attr.label_list(
+            mandatory = True,
+            providers = [FlutterTargetSlicesInfo],
+            doc = "Per-platform target-toolchain metadata.",
         ),
         "native_build_env": attr.label(
             providers = [FlutterNativeBuildEnvInfo],

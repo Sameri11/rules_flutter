@@ -76,32 +76,15 @@ FlutterCoreInfo = provider(
     },
 )
 
-_PLATFORM_SPLIT_OUTPUTS = [
-    # These options are written by rules_android's split transition. Reset them
-    # so the shared kernel and bundle use one host configuration.
-    "//command_line_option:Android configuration distinguisher",
-    "//command_line_option:android_compiler",
-    "//command_line_option:android_platforms",
-    "//command_line_option:compiler",
-    "//command_line_option:dynamic_mode",
-    "//command_line_option:platforms",
-]
+_PLATFORM_NEUTRAL_OUTPUTS = ["//command_line_option:platforms"]
 
 def _platform_neutral_transition_impl(_settings, _attr):
-    # The values match a host configuration independent of the requesting split.
-    return {
-        "//command_line_option:Android configuration distinguisher": "main",
-        "//command_line_option:android_compiler": None,
-        "//command_line_option:android_platforms": [],
-        "//command_line_option:compiler": None,
-        "//command_line_option:dynamic_mode": "default",
-        "//command_line_option:platforms": ["@platforms//host:host"],
-    }
+    return {"//command_line_option:platforms": ["@platforms//host:host"]}
 
 _platform_neutral_transition = transition(
     implementation = _platform_neutral_transition_impl,
     inputs = [],
-    outputs = _PLATFORM_SPLIT_OUTPUTS,
+    outputs = _PLATFORM_NEUTRAL_OUTPUTS,
 )
 
 def _platform_neutral_files_impl(ctx):
@@ -110,16 +93,20 @@ def _platform_neutral_files_impl(ctx):
     (src,) = ctx.attr.src
     return [DefaultInfo(files = src[DefaultInfo].files)]
 
-platform_neutral_files = rule(
-    implementation = _platform_neutral_files_impl,
-    doc = "Passes a target's files through, built under the host platform.",
-    attrs = {
-        "src": attr.label(
-            mandatory = True,
-            cfg = _platform_neutral_transition,
-        ),
-    },
-)
+def platform_neutral_files_rule(configuration_transition):
+    """Creates a file pass-through rule with the supplied platform reset."""
+    return rule(
+        implementation = _platform_neutral_files_impl,
+        doc = "Passes a target's files through, built under a neutral platform.",
+        attrs = {
+            "src": attr.label(
+                mandatory = True,
+                cfg = configuration_transition,
+            ),
+        },
+    )
+
+platform_neutral_files = platform_neutral_files_rule(_platform_neutral_transition)
 
 def assets_bundle_action(ctx, src, kernel_files):
     """Declares the flutter_assets tree of `src`, with the debug overlay of the kernel when given.
@@ -225,7 +212,7 @@ _flutter_core = rule(
     attrs = {
         "aot": attr.label_list(allow_files = True, doc = "The selected platform's AOT artifact; empty under debug or on host."),
         "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
-        "mode_free_assets": attr.label(allow_files = True, mandatory = True, cfg = _platform_neutral_transition, doc = "The flutter_assets tree before any debug overlay, built under the host platform. A flutter_debug_core overlays its own kernel on it, so the app's assets label is never named outside this package."),
+        "mode_free_assets": attr.label(allow_files = True, mandatory = True, doc = "The platform-neutral flutter_assets tree before any debug overlay."),
         "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
         "package_config": attr.label(allow_single_file = True, mandatory = True, doc = "The pub hub's package_config.json, read by a flutter_debug_core's kernel."),
         "pub_srcs": attr.label_list(allow_files = True, allow_empty = False, mandatory = True, doc = "The pub hub's :lib, read by a flutter_debug_core's kernel."),
@@ -303,6 +290,15 @@ def flutter_core(
 
     flutter_pubspec(name = "pubspec", src = "pubspec.yaml", visibility = kwargs.get("visibility"))
 
+    platform_slices = {}
+    platform_jit_kernel_neutral = {}
+    for platform in platforms:
+        slices_name = name + "_" + platform.name + "_slices"
+        platform.slices_rule(
+            name = slices_name,
+            target_platforms = platform.target_platforms,
+        )
+        platform_slices[platform.name] = ":" + slices_name
     kernel_neutral = {}
     for platform in platforms:
         kernel = name + "_" + platform.name + "_kernel"
@@ -316,11 +312,12 @@ def flutter_core(
             path_deps = path_deps,
             dart_plugin_registrant = aot_registrant,
             dart_defines = dart_defines,
+            target_slices = [platform_slices[platform.name]],
             target_platforms = platform.target_platforms,
             target_compatible_with = aot_target_compatible_with(),
         )
         neutral = kernel + "_neutral"
-        platform_neutral_files(name = neutral, src = ":" + kernel)
+        platform.neutral_files_rule(name = neutral, src = ":" + kernel)
         kernel_neutral[platform.name] = ":" + neutral
     release_aot = {}
     for platform in platforms:
@@ -349,14 +346,22 @@ def flutter_core(
         dart_defines = dart_defines,
     )
 
-    platform_neutral_files(
+    jit_neutral_select = {}
+    for platform in platforms:
+        neutral = name + "_jit_kernel_neutral_" + platform.name
+        platform.neutral_files_rule(name = neutral, src = ":" + name + "_jit_kernel")
+        platform_jit_kernel_neutral[platform.name] = ":" + neutral
+        jit_neutral_select[platform.constraint] = [":" + neutral]
+    jit_neutral_select["//conditions:default"] = [platform_jit_kernel_neutral[platforms[0].name]]
+    native.filegroup(
         name = name + "_jit_kernel_neutral",
-        src = ":" + name + "_jit_kernel",
+        srcs = select(jit_neutral_select),
     )
 
     flutter_assets(
         name = name + "_assets",
         target_platforms = target_platforms,
+        target_slices = [platform_slices[platform.name] for platform in platforms],
         native_build_env = native_build_env,
         assets = assets,
         pubspec = ":pubspec",
@@ -395,10 +400,23 @@ def flutter_core(
         }),
     )
 
-    platform_neutral_files(
-        name = name + "_bundle",
-        src = ":" + name + "_bundle_action",
-    )
+    platform_assets = {}
+    platform_bundles = {}
+    assets_select = {}
+    bundle_select = {}
+    for platform in platforms:
+        assets_neutral = name + "_assets_neutral_" + platform.name
+        bundle_neutral = name + "_bundle_" + platform.name
+        platform.neutral_files_rule(name = assets_neutral, src = ":" + name + "_assets")
+        platform.neutral_files_rule(name = bundle_neutral, src = ":" + name + "_bundle_action")
+        platform_assets[platform.name] = ":" + assets_neutral
+        platform_bundles[platform.name] = ":" + bundle_neutral
+        assets_select[platform.constraint] = [":" + assets_neutral]
+        bundle_select[platform.constraint] = [":" + bundle_neutral]
+    assets_select["//conditions:default"] = [platform_assets[platforms[0].name]]
+    bundle_select["//conditions:default"] = [platform_bundles[platforms[0].name]]
+    native.filegroup(name = name + "_mode_free_assets", srcs = select(assets_select))
+    native.filegroup(name = name + "_bundle", srcs = select(bundle_select))
 
     guards = [":path_deps_check"]
     pub_path_deps_check(
@@ -434,7 +452,7 @@ def flutter_core(
         name = name,
         aot = select(release_aot),
         assets = ":" + name + "_bundle",
-        mode_free_assets = ":" + name + "_assets",
+        mode_free_assets = ":" + name + "_mode_free_assets",
         pubspec = ":pubspec",
         package_config = package_config,
         pub_srcs = [pub_lib],

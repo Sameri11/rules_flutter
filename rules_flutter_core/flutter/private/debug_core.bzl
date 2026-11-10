@@ -177,8 +177,7 @@ def flutter_debug_core(name, app, entrypoint, dart_defines = {}, srcs = [], **kw
         **internal
     )
 
-    # Built under the host platform, as the app's kernel is, so the Android
-    # split transitions run it once.
+    # Build under the host platform, independently of the requesting platform.
     platform_neutral_files(
         name = name + "_kernel_neutral",
         src = ":" + name + "_kernel",
