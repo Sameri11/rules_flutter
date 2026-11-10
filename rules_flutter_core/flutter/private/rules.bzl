@@ -26,7 +26,6 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 
@@ -1288,7 +1287,7 @@ def _bundle_dir(out, abi, index):
         return "$EXECROOT/{}".format(out.path)
     return "$STAGE/bundles/{}".format(abi)
 
-def _bundle_command(out, abi, index):
+def _bundle_command(out, abi, index, target_platform):
     # `flutter_tool` (defined in the action preamble) runs the tool's snapshot
     # directly: bin/flutter writes engine.stamp into the SDK, which a sandbox
     # forbids. `--no-version-check` skips the update check, which runs `git fetch`
@@ -1306,8 +1305,8 @@ def _bundle_command(out, abi, index):
     --suppress-analytics >/dev/null
 rm -f "{dir}/.last_build_id"
 rm -rf "{dir}/native_assets"
-""".format(
-        platform = ABIS[abi].target_platform,
+    """.format(
+        platform = target_platform,
         dir = _bundle_dir(out, abi, index),
     )
 
@@ -1457,7 +1456,7 @@ python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         snapshot = toolchain.tools_snapshot.path,
         merger = ctx.file._merger.path,
-        bundles = "\n".join([_bundle_command(out, abi, i) for i, abi in enumerate(ctx.attr.abis)]),
+        bundles = "\n".join([_bundle_command(out, abi, i, ctx.attr.target_platforms[abi]) for i, abi in enumerate(ctx.attr.abis)]),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(abi, _bundle_dir(out, abi, i))
             for i, abi in enumerate(ctx.attr.abis)
@@ -1527,13 +1526,12 @@ than a fact read out of it.""",
             doc = "Sources of `path:` dependencies, staged and declared. See dart_aot_kernel.path_deps.",
         ),
         "abis": attr.string_list(
-            mandatory = True,
-            doc = """ABIs to bundle for. Required, always a list.
-
-`flutter build bundle` runs once per ABI inside this one action, because
-exactly one file it produces -- NativeAssetsManifest.json -- is keyed by
-architecture. The manifests are merged and everything else is compared, so a
-bundle that started varying by architecture fails here rather than shipping.""",
+            default = [],
+            doc = """Android ABIs to include in the merged bundle. Android rules pass these with
+their target-platform data; host-only core users may omit them.""",
+        ),
+        "target_platforms": attr.string_dict(
+            doc = "Android ABI to Flutter bundle target-platform mapping supplied by the Android ruleset.",
         ),
         "native_build_env": attr.label(
             providers = [FlutterNativeBuildEnvInfo],

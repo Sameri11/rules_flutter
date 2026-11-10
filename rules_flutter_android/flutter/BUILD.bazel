@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "native_build_env.bzl",
     "composition.bzl",
+    "android_core.bzl",
 ])
 
 filegroup(
