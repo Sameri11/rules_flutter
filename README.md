@@ -195,13 +195,14 @@ module and `.bazelrc` configuration.
 Create the root BUILD file:
 
 ```python
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 package(default_visibility = ["//visibility:public"])
 
 flutter_core(
     name = "core",
-    assets = [],
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 ```

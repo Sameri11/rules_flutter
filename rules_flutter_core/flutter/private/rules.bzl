@@ -1078,61 +1078,42 @@ flags, so existing keys are unchanged.""",
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def _dart_aot_elf_impl(ctx):
-    # Under the target name, not at the package root. The basename is fixed --
-    # Android splits compile this same label against distinct target toolchains;
-    # configuration-specific output roots keep the resulting libapp.so files apart.
-    so = ctx.actions.declare_file(ctx.label.name + "/libapp.so")
+def _dart_aot_snapshot_impl(ctx):
+    toolchain = _flutter_aot_toolchain(ctx)
+    artifact = ctx.actions.declare_file(ctx.label.name + "/" + toolchain.output_name)
     if ctx.file.dill == None:
         fail(
-            "Target OS selection failed for label {} (slice {}): no AOT kernel is configured.".format(
+            "Target platform selection failed for label {} (slice {}): no AOT kernel is configured.".format(
                 ctx.label,
                 _flutter_target_toolchain(ctx).slice_id,
             ),
         )
 
     args = ctx.actions.args()
-
-    # --deterministic is what makes this output byte-stable across runs, and
-    # therefore safe to cache. Verified: identical sha256 over repeat builds.
     args.add("--deterministic")
-    args.add("--snapshot_kind=app-aot-elf")
+    args.add("--snapshot_kind=" + toolchain.snapshot_kind)
     args.add_all(_flutter_target_toolchain(ctx).snapshot_flags)
-
-    # gen_snapshot only accepts the --flag=value form here; a space-separated
-    # pair makes it print usage and exit non-zero.
-    args.add(so, format = "--elf=%s")
-    if ctx.attr.strip:
-        args.add("--strip")
-
-    # Note Flutter's --split-debug-info (--save-debugging-info plus
-    # --dwarf-stack-traces) is deliberately not wired up. Without it a release
-    # snapshot keeps Dart's name table inline, so stack traces are already
-    # symbolic; the flag trades that away for ~512 KB. Not worth it here.
+    args.add(artifact, format = toolchain.output_flag + "%s")
+    if ctx.attr.strip and toolchain.strip_flag:
+        args.add(toolchain.strip_flag)
     args.add(ctx.file.dill)
 
     ctx.actions.run(
         executable = _flutter_aot_toolchain(ctx).gen_snapshot_release,
         arguments = [args],
         inputs = [ctx.file.dill],
-        outputs = [so],
-        mnemonic = "DartAotElf",
-        progress_message = "Generating AOT ELF %{label}",
+        outputs = [artifact],
+        mnemonic = "DartAotSnapshot",
+        progress_message = "Generating AOT artifact %{label}",
     )
+    return [DefaultInfo(files = depset([artifact]))]
 
-    return [DefaultInfo(files = depset([so]))]
-
-dart_aot_elf = rule(
-    implementation = _dart_aot_elf_impl,
-    doc = "Turns a kernel .dill into a stripped AOT libapp.so via gen_snapshot.",
+dart_aot_snapshot = rule(
+    implementation = _dart_aot_snapshot_impl,
+    doc = "Turns an AOT kernel into the artifact declared by its platform toolchain.",
     attrs = {
-        "dill": attr.label(
-            allow_single_file = [".dill"],
-        ),
-        "strip": attr.bool(
-            default = True,
-            doc = "Drop DWARF debug info from the ELF.",
-        ),
+        "dill": attr.label(allow_single_file = [".dill"]),
+        "strip": attr.bool(default = True),
         "_mode": attr.label(
             default = "//flutter:mode",
             providers = [BuildSettingInfo],

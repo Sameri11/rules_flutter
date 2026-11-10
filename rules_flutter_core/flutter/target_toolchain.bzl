@@ -12,9 +12,14 @@ FlutterTargetToolchainInfo = provider(
 )
 
 FlutterAotToolchainInfo = provider(
-    doc = "AOT compiler executable for a target platform.",
+    doc = "AOT compiler and artifact format for a target platform.",
     fields = {
-        "gen_snapshot_release": "Host executable used to produce the release AOT ELF.",
+        "gen_snapshot_release": "Host executable used to produce the release AOT artifact.",
+        "output_kind": "Neutral artifact kind, such as elf or assembly.",
+        "output_name": "Artifact basename produced by the compiler.",
+        "snapshot_kind": "gen_snapshot snapshot kind argument.",
+        "output_flag": "gen_snapshot output argument prefix.",
+        "strip_flag": "Optional compiler flag for stripping the artifact.",
     },
 )
 
@@ -30,6 +35,11 @@ def _flutter_target_toolchain_impl(ctx):
 def _flutter_aot_toolchain_impl(ctx):
     return [platform_common.ToolchainInfo(flutter_aot = FlutterAotToolchainInfo(
         gen_snapshot_release = ctx.executable.gen_snapshot_release,
+        output_kind = ctx.attr.output_kind,
+        output_name = ctx.attr.output_name,
+        snapshot_kind = ctx.attr.snapshot_kind,
+        output_flag = ctx.attr.output_flag,
+        strip_flag = ctx.attr.strip_flag,
     ))]
 
 flutter_target_toolchain = rule(
@@ -52,5 +62,10 @@ flutter_aot_toolchain = rule(
             cfg = "exec",
             allow_single_file = True,
         ),
+        "output_kind": attr.string(mandatory = True),
+        "output_name": attr.string(mandatory = True),
+        "snapshot_kind": attr.string(mandatory = True),
+        "output_flag": attr.string(mandatory = True),
+        "strip_flag": attr.string(),
     },
 )

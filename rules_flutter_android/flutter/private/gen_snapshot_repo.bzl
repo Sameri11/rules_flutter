@@ -40,6 +40,11 @@ exports_files(["gen_snapshot"])
 flutter_aot_toolchain(
     name = "aot_toolchain",
     gen_snapshot_release = ":gen_snapshot",
+    output_kind = "elf",
+    output_name = "libapp.so",
+    snapshot_kind = "app-aot-elf",
+    output_flag = "--elf=",
+    strip_flag = "--strip",
 )
 """)
     else:

@@ -1,11 +1,13 @@
 # A standard Flutter package layout with a nondefault entrypoint.
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_android_core(
+flutter_core(
     name = "core",
     entrypoint = "lib/alternate$release.dart",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    platforms = [FLUTTER_ANDROID],
     pub = "@standard_layout_pub",
 )

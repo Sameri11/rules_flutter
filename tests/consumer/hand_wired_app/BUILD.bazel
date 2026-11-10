@@ -1,17 +1,19 @@
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_flutter_android//flutter:composition.bzl", "flutter_build_config", "flutter_embedding_deps", "flutter_plugin_registrant")
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core")
-load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
+load("@rules_java//java:java_import.bzl", "java_import")
 
 package(default_visibility = ["//visibility:private"])
 
-flutter_android_core(
+flutter_core(
     name = "core",
     srcs = glob(["lib/**/*.dart"]),
     path_deps = [
         "//fixtures/hand_wired_regular:sources",
         "//fixtures/hand_wired_dev:sources",
     ],
+    platforms = [FLUTTER_ANDROID],
     pub = "@hand_wired_pub",
 )
 

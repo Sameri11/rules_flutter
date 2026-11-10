@@ -7,6 +7,17 @@ load("//flutter/private:pubspec.bzl", _flutter_pubspec = "flutter_pubspec")
 load("//flutter/private:rules.bzl", _flutter_package = "flutter_package")
 
 flutter_core = _flutter_core
+
+def flutter_platform(name, target_platforms, constraint):
+    """Describes target slices and compatibility for flutter_core."""
+    if not target_platforms:
+        fail("flutter_platform: target_platforms must not be empty.")
+    return struct(
+        name = name,
+        target_platforms = target_platforms,
+        constraint = constraint,
+    )
+
 flutter_package = _flutter_package
 flutter_test = _flutter_test
 flutter_test_suite = _flutter_test_suite

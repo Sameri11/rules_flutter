@@ -107,12 +107,13 @@ def _flutter_debug_core_impl(ctx):
         DefaultInfo(files = depset([assets])),
         OutputGroupInfo(
             flutter_assets = depset([assets]),
-            flutter_libapp = depset([]),
+            flutter_aot = depset([]),
         ),
         FlutterArtifactInfo(
             mode = "debug",
-            abi = artifact.abi,
-            libapp = None,
+            target_slice = artifact.target_slice,
+            aot = None,
+            aot_kind = None,
             assets = assets,
         ),
         ctx.attr.app[FlutterPubspecInfo],

@@ -104,8 +104,8 @@ def _split_native_impl(ctx):
     info = ctx.attr.core[FlutterArtifactInfo]
 
     libraries = []
-    if info.libapp != None:
-        libraries.append(info.libapp)
+    if info.aot != None:
+        libraries.append(info.aot)
 
     # The engine is stripped here, as the engine jar was, so the APK carries
     # the same bytes the jar carried.

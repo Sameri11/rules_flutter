@@ -227,12 +227,14 @@ Start from a Flutter Android project with `pubspec.yaml`, current
 assets, set `assets = []` explicitly. Create root `BUILD.bazel`:
 
 ```python
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 package(default_visibility = ["//visibility:public"])
 
 flutter_core(
     name = "core",
+    platforms = [FLUTTER_ANDROID],
     srcs = glob(["lib/**/*.dart"]),
     assets = [],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
@@ -562,7 +564,7 @@ For example, the app core declares the plugin source target:
 ```python
 flutter_core(
     name = "app",
-    path_deps = ["//packages/greeter:srcs"],
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 ```

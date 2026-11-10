@@ -1,16 +1,16 @@
 # Dart targets for a plugin-free app.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test", "flutter_test_suite")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_integration_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_android_core(
+flutter_core(
     name = "core",
-    srcs = glob(["lib/**/*.dart"]),
     # flutter create declares no assets.
     assets = [],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 
