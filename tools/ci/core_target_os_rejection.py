@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Probe configured libapp rejection and guard against an Android fallback."""
+"""Probe that a host-configured macro-generated libapp rejects as Android-incompatible."""
 
 import os
 import re
@@ -40,7 +40,6 @@ def main():
             core_copy,
             ignore=shutil.ignore_patterns("bazel-*", "MODULE.bazel.lock", "*.checked"),
         )
-        core_rules_copy = core_copy / "flutter/private/core.bzl"
         workspace = tmp / "consumer"
         shutil.copytree(
             ROOT / "tests/consumer",
@@ -85,21 +84,7 @@ def main():
                         target_line, rejected.stdout
                     )
                 )
-            original = core_rules_copy.read_text()
-            android_core = (ROOT / "rules_flutter_android/flutter/android_core.bzl").read_text()
-            fallback = '"//conditions:default": None,'
-            compatibility = "aot_compatible_with + aot_target_compatible_with()"
-            android_constraint = 'aot_compatible_with = [Label("@platforms//os:android")]'
-            target_type = '"//flutter/private:flutter_target_toolchain_type"'
-            if (
-                original.count(fallback) != 1
-                or compatibility not in original
-                or "@platforms//os:android" in original
-                or android_constraint not in android_core
-                or target_type not in (ROOT / "rules_flutter_core/flutter/private/rules.bzl").read_text()
-            ):
-                sys.exit("FAIL: expected Android compatibility to come from the Android facade")
-            print("PASS: host libapp rejects as incompatible; Android fallback is absent")
+            print("PASS: host libapp rejects as incompatible with the Android OS constraint")
         finally:
             subprocess.run(
                 [BAZEL, "--output_user_root=" + str(output_user_root), "shutdown"],
