@@ -67,7 +67,14 @@ _target_platform_split = transition(
 )
 
 def _flutter_target_slice_impl(ctx):
-    target = ctx.toolchains["//flutter/private:flutter_target_toolchain_type"].flutter_target
+    target = ctx.toolchains["//flutter/private:flutter_target_toolchain_type"]
+    if target == None:
+        return [FlutterTargetSliceInfo(
+            target_platform = "",
+            slice_id = "",
+            target_os = "",
+        )]
+    target = target.flutter_target
     return [FlutterTargetSliceInfo(
         target_platform = target.target_platform,
         slice_id = target.slice_id,
@@ -76,7 +83,10 @@ def _flutter_target_slice_impl(ctx):
 
 flutter_target_slice = rule(
     implementation = _flutter_target_slice_impl,
-    toolchains = ["//flutter/private:flutter_target_toolchain_type"],
+    toolchains = [config_common.toolchain_type(
+        Label("//flutter/private:flutter_target_toolchain_type"),
+        mandatory = False,
+    )],
 )
 
 visibility(["//flutter"])
@@ -247,17 +257,21 @@ def _dart_aot_kernel_impl(ctx):
     args.add("--tfa")
     args.add("-Ddart.vm.product=true")
 
-    target_slices = ctx.split_attr.target_slice
-
-    target_os_values = {
-        target[FlutterTargetSliceInfo].target_os: True
-        for target in target_slices.values()
-    }
-    if not target_os_values:
-        fail("dart_aot_kernel requires at least one target platform")
-    if len(target_os_values) != 1:
-        fail("dart_aot_kernel target platforms must agree on target_os; got {}".format(sorted(target_os_values.keys())))
-    target_os = target_os_values.keys()[0]
+    target_os = ctx.attr.target_os
+    if not target_os:
+        target_slices = ctx.split_attr.target_slice
+        target_os_values = {
+            target[FlutterTargetSliceInfo].target_os: True
+            for target in target_slices.values()
+            if target[FlutterTargetSliceInfo].target_os
+        }
+        if not target_os_values:
+            fail("dart_aot_kernel has no Flutter target toolchain for {}; set target_os or register a platform ruleset".format(
+                ctx.attr.target_platforms[0] if ctx.attr.target_platforms else ctx.label,
+            ))
+        if len(target_os_values) != 1:
+            fail("dart_aot_kernel target platforms must agree on target_os; got {}".format(sorted(target_os_values.keys())))
+        target_os = target_os_values.keys()[0]
     args.add("--target-os", target_os)
 
     args.add_all(_dart_define_flags(ctx.attr.dart_defines))
@@ -432,6 +446,9 @@ keys are unchanged.""",
         ),
         "target_platforms": attr.label_list(
             doc = "Platforms whose target toolchains provide kernel target-OS metadata.",
+        ),
+        "target_os": attr.string(
+            doc = "Target OS override; otherwise derived from the registered platform toolchain.",
         ),
         "target_slice": attr.label(
             default = Label("//flutter/private:target_slice"),

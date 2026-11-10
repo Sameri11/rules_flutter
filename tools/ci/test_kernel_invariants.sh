@@ -103,7 +103,7 @@ find_build() {
     if grep -E -q "$1" "$f"; then echo "$f"; fi
   done | sed -n 1p
 }
-app_build=$(find_build '^flutter_(android_)?core(')
+app_build=$(find_build '^flutter_(android_)?core\(')
 if [ -z "$app_build" ]; then
   echo "FAIL: no flutter_core or flutter_android_core package for the undeclared-import probe" >&2
   exit 1
