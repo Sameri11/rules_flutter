@@ -2,9 +2,9 @@
 
 `flutter_debug_core` compiles its own `entrypoint` with its own `dart_defines`,
 against the app's package inputs, and pairs that kernel with the app's
-mode-free bundle and debug engine. The result is a debug FlutterArtifactInfo
-with the same shape as the app's, so packaging consumes it the same way. Both
-kernels and both bundles come from the shared actions in rules.bzl and core.bzl.
+mode-free bundle. The result is a debug FlutterArtifactInfo with the same shape
+as the app's, so packaging consumes it the same way. Both kernels and both
+bundles come from the shared actions in rules.bzl and core.bzl.
 
 The app is reached only through its FlutterCoreInfo provider, so it may live in
 another package, behind a restrictive visibility, or be an alias.
@@ -102,20 +102,17 @@ def _flutter_debug_core_impl(ctx):
     artifact = ctx.attr.app[FlutterArtifactInfo]
     (assets,) = ctx.files.bundle
 
-    # No libapp: a debug artifact runs its kernel from the bundle. The engine is
-    # selected by the same configuration as the app.
+    # No libapp: a debug artifact runs its kernel from the bundle.
     return [
-        DefaultInfo(files = depset(artifact.engine_libs + [assets])),
+        DefaultInfo(files = depset([assets])),
         OutputGroupInfo(
             flutter_assets = depset([assets]),
-            flutter_engine = depset(artifact.engine_libs),
             flutter_libapp = depset([]),
         ),
         FlutterArtifactInfo(
             mode = "debug",
             abi = artifact.abi,
             libapp = None,
-            engine_libs = artifact.engine_libs,
             assets = assets,
         ),
         ctx.attr.app[FlutterPubspecInfo],
@@ -123,7 +120,7 @@ def _flutter_debug_core_impl(ctx):
 
 _flutter_debug_core = rule(
     implementation = _flutter_debug_core_impl,
-    doc = "Collects a debug FlutterArtifactInfo from the app's engine and the test bundle.",
+    doc = "Collects a debug FlutterArtifactInfo from the app and the test bundle.",
     attrs = {
         "app": attr.label(
             mandatory = True,

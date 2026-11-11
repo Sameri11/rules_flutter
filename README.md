@@ -70,9 +70,10 @@ existing app/mode variant and separate build commands for fat or single-ABI
 configurations. Capture each APK before the next configuration because the
 materialized APK path may be shared.
 
-Core output groups remain available to hand-wired consumers: `flutter_assets`,
-`flutter_engine` (possibly several libraries per ABI), and `flutter_libapp`
-(empty in debug mode). Embedding is owned by the Android ruleset. Use
+Core output groups remain available to hand-wired consumers: `flutter_assets`
+and `flutter_libapp` (empty in debug mode). Android engine libraries, possibly
+several per ABI, are provided by `@rules_flutter_android//flutter:engine_libs`.
+Embedding is owned by the Android ruleset. Use
 `@rules_flutter_android//flutter:embedding_jar` for the mode-selected jar;
 `flutter_embedding_deps(maven_repo)` supplies its explicit AndroidX classpath.
 The [`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel)

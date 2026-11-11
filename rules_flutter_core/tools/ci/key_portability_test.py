@@ -301,8 +301,21 @@ class Checker:
             aot_action = _action_call(aot_function, "run")
             if aot_action is None:
                 self.fail("C", "_dart_aot_elf_impl must create its AOT action with ctx.actions.run")
-            if not _rule_uses_toolchain(tree, "dart_aot_elf"):
-                self.fail("C", "dart_aot_elf must declare the Flutter toolchain type")
+            else:
+                executable = _keyword(aot_action, "executable")
+                if (
+                    not isinstance(executable, ast.Attribute)
+                    or executable.attr != "gen_snapshot_release"
+                    or _call_path(executable.value) != ["_flutter_aot_toolchain"]
+                ):
+                    self.fail("C", "DartAotElf executable must come from its declared AOT toolchain")
+                aot_toolchain = _function(tree, "_flutter_aot_toolchain")
+                if aot_toolchain is None or not _contains_string(aot_toolchain, "//flutter/private:flutter_aot_toolchain_type"):
+                    self.fail("C", "DartAotElf executable helper must read its declared AOT toolchain")
+            if not _rule_uses_toolchain(tree, "dart_aot_elf", "//flutter/private:flutter_target_toolchain_type"):
+                self.fail("C", "dart_aot_elf must declare the Flutter target toolchain type")
+            if not _rule_uses_toolchain(tree, "dart_aot_elf", "//flutter/private:flutter_aot_toolchain_type"):
+                self.fail("C", "dart_aot_elf must declare the Flutter AOT toolchain type")
 
         for target in (
             "_dartaotruntime",

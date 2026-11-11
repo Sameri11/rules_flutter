@@ -1,18 +1,9 @@
-"""Android-only facts for each ABI, keyed by the names in the public ABI table.
+"""Android-only toolchain and SDK facts."""
 
-The table itself is public in `@rules_flutter_core//flutter:abis.bzl`. What only
-the Android rules need lives here: the rules_android platform that selects an
-ABI's NDK toolchain, the minimum SDK, and the names of the plugin repository's
-per-ABI aggregates.
-"""
-
-load("@rules_flutter_core//flutter:abis.bzl", "ABIS", "abi_from_platform")
+load("//flutter:abis.bzl", "ABIS", "abi_from_platform")
 
 visibility(["//flutter/...", "//tests/..."])
 
-# The platform rules_android packages an ABI's native libraries under. The name
-# must equal the ABI: rules_android writes them to lib/<platform name>/, so a
-# mismatch would place this ABI's libraries under another ABI's directory.
 _BAZEL_PLATFORMS = {
     "arm64-v8a": "@rules_android//:arm64-v8a",
     "x86_64": "@rules_android//:x86_64",
@@ -42,65 +33,45 @@ _ = _check_bazel_platforms()
 
 def bazel_platform(abi):
     """The rules_android platform label that selects one ABI's toolchain."""
-    return _BAZEL_PLATFORMS[abi]
+    return Label(_BAZEL_PLATFORMS[abi])
 
-# The floor these rules ask for. rules_android applies its own floor during
-# resource processing and clamps manifest_values against it, so an APK can
-# declare a higher minimum than this.
 MIN_SDK = 21
 
 def check_abis(abis, where):
-    """Fails with the supported set listed, rather than a KeyError.
+    """Validate a non-empty ABI list against the supported Android ABI set.
 
     Args:
-      abis: the ABI names a caller asked for.
-      where: what to name in the failure, usually the calling target.
+      abis: ABI names requested by the caller.
+      where: Context label used to identify validation failures.
     """
     if not abis:
-        fail("{}: `abis` must name at least one ABI, one of {}.".format(
-            where,
-            sorted(ABIS),
-        ))
+        fail("{}: `abis` must name at least one ABI, one of {}.".format(where, sorted(ABIS)))
     for abi in abis:
         if abi not in ABIS:
-            fail("{}: unknown ABI '{}'. Supported: {}.".format(
-                where,
-                abi,
-                sorted(ABIS),
-            ))
+            fail("{}: unknown ABI '{}'. Supported: {}.".format(where, abi, sorted(ABIS)))
 
 def check_platform_abi(ctx):
-    """Verify that a platform transition selected the platform for `ctx.attr.abi`.
-
-    Only valid on rules that transition `--platforms` from `abi`; returns
-    `ctx.attr.abi`.
+    """Check a rule's declared ABI against its configured Android platform.
 
     Args:
-      ctx: the rule context; must carry ABI_PLATFORM_ATTRS and an `abi` attribute.
+      ctx: The rule context with the declared platform and ABI.
 
     Returns:
-      `ctx.attr.abi`, after verifying it against the target platform.
+      The verified ABI name.
     """
     found = abi_from_platform(ctx)
     if found == None:
-        fail((
-            "{}: target platform '{}' is not Android, or names no CPU " +
-            "constraint this ruleset recognizes, so it cannot be checked " +
-            "against abi = '{}'. This rule transitions --platforms from its " +
-            "own `abi` attribute; if that transition is ever removed, this " +
-            "check should go with it."
-        ).format(ctx.label, ctx.attr.platform, ctx.attr.abi))
+        fail("{}: target platform '{}' is not Android, or names no CPU.".format(ctx.label, ctx.attr.platform))
     if found not in ABIS:
-        fail((
-            "{}: target platform '{}' is Android/{}, which this ruleset does " +
-            "not support (abi = '{}'). Supported: {}."
-        ).format(ctx.label, ctx.attr.platform, found, ctx.attr.abi, sorted(ABIS)))
+        fail("{}: target platform '{}' is Android/{}, which this ruleset does not support (abi = '{}'). Supported: {}.".format(
+            ctx.label,
+            ctx.attr.platform,
+            found,
+            ctx.attr.abi,
+            sorted(ABIS),
+        ))
     if found != ctx.attr.abi:
-        fail((
-            "{}: abi = '{}' but target platform '{}' carries the CPU " +
-            "constraint for '{}'. ABIS['{}'].cpu_constraint = {} names the " +
-            "wrong ABI."
-        ).format(
+        fail("{}: abi = '{}' but target platform '{}' carries the CPU constraint for '{}'. ABIS['{}'].cpu_constraint = {} names the wrong ABI.".format(
             ctx.label,
             ctx.attr.abi,
             ctx.attr.platform,

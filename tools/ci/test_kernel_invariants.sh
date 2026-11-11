@@ -100,15 +100,15 @@ fi
 # its BUILD.bazel is restored on exit.
 find_build() {
   find . -name BUILD.bazel -not -path './bazel-*' -print | LC_ALL=C sort | while read -r f; do
-    if grep -q "$1" "$f"; then echo "$f"; fi
+    if grep -E -q "$1" "$f"; then echo "$f"; fi
   done | sed -n 1p
 }
-app_build=$(find_build '^flutter_core(')
+app_build=$(find_build '^flutter_(android_)?core\(')
 if [ -z "$app_build" ]; then
-  echo "FAIL: no flutter_core package for the undeclared-import probe" >&2
+  echo "FAIL: no flutter_core or flutter_android_core package for the undeclared-import probe" >&2
   exit 1
 fi
-core_name=$(awk '/^flutter_core\(/ { f = 1 } f && /name = "/ { match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit }' "$app_build")
+core_name=$(awk '/^flutter_(android_)?core\(/ { f = 1 } f && /name = "/ { match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit }' "$app_build")
 app_target=":${core_name}_test_package"
 probe_dir=$(dirname "$app_build")
 app_pkg=${probe_dir#.}

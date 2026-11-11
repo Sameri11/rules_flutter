@@ -1,24 +1,24 @@
-"""The core artifact: an app's Dart outputs and engine libraries, with no APK packaging.
+"""The core artifact: an app's Dart outputs and host-test inputs.
 
-`flutter_core` declares the platform-neutral inputs once. The kernel and the
-asset bundle are built under a host platform transition, so an android_binary
-with N splits runs each action once rather than once per split. The per-ABI
-snapshot and engine libraries are chosen by `select()` on the split's
-config_settings, so each split names only its own ABI.
-
-The android_binary side takes the artifact through `FlutterArtifactInfo`. See
-`flutter_android_inputs` for the packaging half.
+`flutter_core` declares an app's platform-neutral inputs once. Its AOT outputs
+are selected by `select()` on target-platform config settings; Android engine
+libraries belong to `rules_flutter_android`.
 """
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load(":abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "MODES", "abi_from_platform", "aot_target_compatible_with", "engine_libs_label")
+load(":abis.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "dart_aot_elf", "dart_aot_kernel", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check", "pub_plugins_check")
 
 visibility(["//flutter/...", "//tests/..."])
 
+_TARGET_TOOLCHAIN_LABEL = "//flutter/private:flutter_target_toolchain_type"
+_TARGET_TOOLCHAIN = config_common.toolchain_type(
+    Label("//flutter/private:flutter_target_toolchain_type"),
+    mandatory = False,
+)
 _TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
 
 def _internal_tags(kwargs):
@@ -53,7 +53,6 @@ FlutterArtifactInfo = provider(
         "mode": "`release` or `debug`.",
         "abi": "The Android ABI of this split, or None on a host build.",
         "libapp": "File: the libapp.so of this ABI, or None under debug.",
-        "engine_libs": "list of File: this ABI's engine .so files, unstripped.",
         "assets": "Directory: the flutter_assets bundle, with the debug overlay under debug.",
     },
 )
@@ -71,11 +70,6 @@ FlutterCoreInfo = provider(
         "mode_free_assets": "File: the app's flutter_assets tree before any debug overlay, platform neutral.",
     },
 )
-
-def _split_label(abi, mode):
-    # A Label, not a string: select() keys in a macro resolve in the caller's
-    # repo mapping, and these config_settings belong to this ruleset.
-    return Label("//flutter/private:split_{}_{}".format(abi.replace("-", "_"), mode))
 
 _ANDROID_SPLIT_OUTPUTS = [
     # The options the Android split transition writes. The kernel and the bundle
@@ -188,33 +182,27 @@ assets_bundle = rule(
 
 def _flutter_core_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value
-    abi = abi_from_platform(ctx)
+    abi = ctx.toolchains[_TARGET_TOOLCHAIN_LABEL].flutter_target.slice_id if ctx.toolchains[_TARGET_TOOLCHAIN_LABEL] != None else None
     libapp = ctx.files.libapp
-    engine_libs = ctx.files.engine_libs
     assets = ctx.attr.assets[DefaultInfo].files.to_list()
     (mode_free_assets,) = ctx.files.mode_free_assets
     if len(assets) != 1:
         fail("{}: expected one assets directory, got {}".format(ctx.label, len(assets)))
     if len(libapp) > 1:
         fail("{}: expected at most one libapp.so, got {}".format(ctx.label, len(libapp)))
-    if abi != None:
-        if not engine_libs:
-            fail("{}: ABI '{}' has no engine libraries".format(ctx.label, abi))
-        if mode == "release" and len(libapp) != 1:
-            fail("{}: release ABI '{}' needs one libapp.so".format(ctx.label, abi))
+    if abi != None and mode == "release" and len(libapp) != 1:
+        fail("{}: release ABI '{}' needs one libapp.so".format(ctx.label, abi))
 
     return [
-        DefaultInfo(files = depset(libapp + engine_libs + [assets[0]])),
+        DefaultInfo(files = depset(libapp + [assets[0]])),
         OutputGroupInfo(
             flutter_assets = depset([assets[0]]),
-            flutter_engine = depset(engine_libs),
             flutter_libapp = depset(libapp),
         ),
         FlutterArtifactInfo(
             mode = mode,
             abi = abi,
             libapp = libapp[0] if libapp else None,
-            engine_libs = engine_libs,
             assets = assets[0],
         ),
         FlutterCoreInfo(
@@ -233,22 +221,19 @@ def _flutter_core_impl(ctx):
 _flutter_core = rule(
     implementation = _flutter_core_impl,
     doc = "Collects one split's view of a flutter_core into FlutterArtifactInfo.",
-    attrs = dict(
-        {
-            "libapp": attr.label_list(allow_files = True, doc = "The dart_aot_elf of this split's ABI; empty under debug and on a host build."),
-            "engine_libs": attr.label_list(allow_files = True, doc = "This split's engine .so files; empty on a host build."),
-            "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
-            "mode_free_assets": attr.label(allow_files = True, mandatory = True, cfg = _platform_neutral_transition, doc = "The flutter_assets tree before any debug overlay, built under the host platform. A flutter_debug_core overlays its own kernel on it, so the app's assets label is never named outside this package."),
-            "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
-            "package_config": attr.label(allow_single_file = True, mandatory = True, doc = "The pub hub's package_config.json, read by a flutter_debug_core's kernel."),
-            "pub_srcs": attr.label_list(allow_files = True, allow_empty = False, mandatory = True, doc = "The pub hub's :lib, read by a flutter_debug_core's kernel."),
-            "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
-            "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
-            "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
-            "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
-        },
-        **ABI_PLATFORM_ATTRS
-    ),
+    attrs = {
+        "libapp": attr.label_list(allow_files = True, doc = "The dart_aot_elf of this split; empty under debug and on a host build."),
+        "assets": attr.label(mandatory = True, doc = "The platform-neutral bundle."),
+        "mode_free_assets": attr.label(allow_files = True, mandatory = True, cfg = _platform_neutral_transition, doc = "The flutter_assets tree before any debug overlay, built under the host platform. A flutter_debug_core overlays its own kernel on it, so the app's assets label is never named outside this package."),
+        "pubspec": attr.label(mandatory = True, providers = [FlutterPubspecInfo]),
+        "package_config": attr.label(allow_single_file = True, mandatory = True, doc = "The pub hub's package_config.json, read by a flutter_debug_core's kernel."),
+        "pub_srcs": attr.label_list(allow_files = True, allow_empty = False, mandatory = True, doc = "The pub hub's :lib, read by a flutter_debug_core's kernel."),
+        "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
+        "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
+        "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
+        "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
+    },
+    toolchains = [_TARGET_TOOLCHAIN],
 )
 
 def _pub_labels(pub, who):
@@ -269,6 +254,8 @@ def flutter_core(
         dart_defines = {},
         native_build_env = None,
         dart_plugin_registrant = None,
+        android_target_platforms = None,
+        aot_compatible_with = [],
         **kwargs):
     """Declares an app's Flutter artifacts and host-test inputs.
 
@@ -285,9 +272,11 @@ def flutter_core(
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies.
-      dart_defines: `-D` constants the kernels compile with.
+      dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: the native build environment for asset bundle hooks, or None.
-      dart_plugin_registrant: the Dart plugin registrant under lib/, or None.
+      dart_plugin_registrant: an optional plugin registrant Dart file to compile.
+      android_target_platforms: platform labels used to configure target toolchains.
+      aot_compatible_with: additional compatibility constraints for platform-specific AOT artifacts.
       **kwargs: visibility and tags passed to declared targets.
     """
     if srcs == None:
@@ -296,6 +285,9 @@ def flutter_core(
         assets = native.glob(["assets/**"], allow_empty = True)
     if name == "pubspec":
         fail("flutter_core: `name` may not be \"pubspec\", which the core declares.")
+
+    if android_target_platforms == None:
+        fail("flutter_core: Android asset bundling requires target platforms; use flutter_android_core from rules_flutter_android.")
 
     package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
 
@@ -320,12 +312,10 @@ def flutter_core(
         path_deps = path_deps,
         dart_plugin_registrant = aot_registrant,
         dart_defines = dart_defines,
-        target_os = "android",
+        target_platforms = android_target_platforms,
         target_compatible_with = aot_target_compatible_with(),
     )
 
-    # Keep the OS-specific kernel shared across ABI splits through the existing
-    # host transition.
     platform_neutral_files(
         name = name + "_kernel_neutral",
         src = ":" + name + "_kernel",
@@ -350,7 +340,7 @@ def flutter_core(
 
     flutter_assets(
         name = name + "_assets",
-        abis = list(ABIS),
+        target_platforms = android_target_platforms,
         native_build_env = native_build_env,
         assets = assets,
         pubspec = ":pubspec",
@@ -395,19 +385,12 @@ def flutter_core(
         src = ":" + name + "_bundle_action",
     )
 
-    for abi in ABIS:
-        dart_aot_elf(
-            name = "{}_libapp_{}".format(name, abi),
-            dill = select({
-                Label("//flutter/private:target_os_android"): ":" + name + "_kernel_neutral",
-                "//conditions:default": None,
-            }),
-            abi = abi,
-            snapshot_flags = ABIS[abi].snapshot_flags,
-            strip = True,
-            # Only the matching Android ABI has a libapp implementation.
-            target_compatible_with = [Label("@platforms//os:android"), ABIS[abi].cpu_constraint] + aot_target_compatible_with(),
-        )
+    dart_aot_elf(
+        name = name + "_libapp",
+        dill = ":" + name + "_kernel_neutral",
+        strip = True,
+        target_compatible_with = aot_compatible_with + aot_target_compatible_with(),
+    )
 
     guards = [":path_deps_check"]
     pub_path_deps_check(
@@ -438,18 +421,12 @@ def flutter_core(
         **kwargs
     )
 
-    # Each split names only its own ABI's libapp and engine libraries. The
-    # host build and any unmatched split get none, and fail downstream.
     _flutter_core(
         name = name,
-        libapp = select(dict(
-            [(_split_label(abi, "release"), [":{}_libapp_{}".format(name, abi)]) for abi in ABIS] +
-            [("//conditions:default", [])],
-        )),
-        engine_libs = select(dict(
-            [(_split_label(abi, mode), [engine_libs_label(abi, mode)]) for abi in ABIS for mode in MODES] +
-            [("//conditions:default", [])],
-        )),
+        libapp = select({
+            Label("//flutter/private:target_os_android_release"): [":" + name + "_libapp"],
+            "//conditions:default": [],
+        }),
         assets = ":" + name + "_bundle",
         mode_free_assets = ":" + name + "_assets",
         pubspec = ":pubspec",

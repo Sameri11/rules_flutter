@@ -21,10 +21,9 @@ Two mechanical exceptions need a label, and only those:
 host-compatible registration points at the public static toolchain target.
 """
 
-load("//tools/ci:assertions.bzl", "expect_equal", "expect_label_equal")
-load(":abis.bzl", "ABIS")
 load(":hook_packages_test.bzl", "staged_hook_packages_test")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
+load(":rules.bzl", "flutter_target_slice")
 load(":toolchain.bzl", "flutter_toolchain")
 
 package(default_visibility = ["//visibility:private"])
@@ -87,34 +86,20 @@ toolchain_type(
     visibility = ["//visibility:public"],
 )
 
-# The ABI table is implementation, so these assertions live beside it rather
-# than in the Consumer Module fixture: a wrong snapshot flag or CPU constraint
-# mislabels a platform, and nothing else in the build would notice.
-expect_equal(
-    ABIS["armeabi-v7a"].snapshot_flags,
-    [
-        "--no-sim-use-hardfp",
-        "--no-use-integer-division",
-    ],
-    "armeabi-v7a snapshot_flags",
+toolchain_type(
+    name = "flutter_target_toolchain_type",
+    visibility = ["//visibility:public"],
 )
 
-expect_label_equal(
-    ABIS["arm64-v8a"].cpu_constraint,
-    "@platforms//cpu:arm64",
-    "arm64-v8a cpu_constraint",
+toolchain_type(
+    name = "flutter_aot_toolchain_type",
+    no_match_error = "No Flutter AOT toolchain is registered for this platform. For Android, run `flutter precache --android` on this host to fetch the missing gen_snapshot payload.",
+    visibility = ["//visibility:public"],
 )
 
-expect_label_equal(
-    ABIS["x86_64"].cpu_constraint,
-    "@platforms//cpu:x86_64",
-    "x86_64 cpu_constraint",
-)
-
-expect_label_equal(
-    ABIS["armeabi-v7a"].cpu_constraint,
-    "@platforms//cpu:armv7",
-    "armeabi-v7a cpu_constraint",
+flutter_target_slice(
+    name = "target_slice",
+    visibility = ["//visibility:public"],
 )
 
 # What the pub lock reader accepts and, as importantly, refuses.
@@ -122,10 +107,7 @@ pub_lock_parser_test_suite(name = "pub_lock_parser_test")
 
 staged_hook_packages_test(name = "staged_hook_packages_test")
 
-# One split per ABI and mode. The core selects its per-ABI libraries on these,
-# so a 3-ABI build gets exactly one split per ABI rather than one per platform.
 # Public because the core's select() is expanded in the consumer's package.
-# Spelled out: Bazel does not allow `for` in BUILD files.
 config_setting(
     name = "target_os_android",
     constraint_values = ["@platforms//os:android"],
@@ -133,61 +115,8 @@ config_setting(
 )
 
 config_setting(
-    name = "split_arm64_v8a_release",
-    constraint_values = [
-        "@platforms//os:android",
-        "@platforms//cpu:arm64",
-    ],
+    name = "target_os_android_release",
+    constraint_values = ["@platforms//os:android"],
     flag_values = {"//flutter:mode": "release"},
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "split_arm64_v8a_debug",
-    constraint_values = [
-        "@platforms//os:android",
-        "@platforms//cpu:arm64",
-    ],
-    flag_values = {"//flutter:mode": "debug"},
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "split_x86_64_release",
-    constraint_values = [
-        "@platforms//os:android",
-        "@platforms//cpu:x86_64",
-    ],
-    flag_values = {"//flutter:mode": "release"},
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "split_x86_64_debug",
-    constraint_values = [
-        "@platforms//os:android",
-        "@platforms//cpu:x86_64",
-    ],
-    flag_values = {"//flutter:mode": "debug"},
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "split_armeabi_v7a_release",
-    constraint_values = [
-        "@platforms//os:android",
-        "@platforms//cpu:armv7",
-    ],
-    flag_values = {"//flutter:mode": "release"},
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "split_armeabi_v7a_debug",
-    constraint_values = [
-        "@platforms//os:android",
-        "@platforms//cpu:armv7",
-    ],
-    flag_values = {"//flutter:mode": "debug"},
     visibility = ["//visibility:public"],
 )

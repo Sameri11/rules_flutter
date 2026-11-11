@@ -620,14 +620,16 @@ shows recipe inputs and ABI-specific native contributions.
 
 Use the convenience rules from `defs.bzl` for standard apps. A consumer that
 needs to own Android packaging can instead combine the public building blocks:
-`flutter_core` exposes the `flutter_assets`, `flutter_engine`, and
-`flutter_libapp` output groups. The engine group may contain several libraries
-per ABI, and `flutter_libapp` is empty in debug mode. The Android composition
-module provides `flutter_plugin_registrant`, `flutter_build_config`, and the
-mode-selected `embedding_jar`; use `flutter_embedding_deps(maven_repo)` for the
-embedding's explicit AndroidX classpath. Here `flutter_assets` is `flutter_core`'s
-output group, not the `flutter_assets` rule. Stock `rules_android` rules then package those targets; for native
-packaging, see [`tests/consumer/composed_app:direct_apk`](tests/consumer/composed_app/BUILD.bazel).
+`flutter_core` exposes the `flutter_assets` and `flutter_libapp` output groups;
+`flutter_libapp` is empty in debug mode. Android engine libraries, possibly
+several per ABI, come from `@rules_flutter_android//flutter:engine_libs`. The
+Android composition module provides `flutter_plugin_registrant`,
+`flutter_build_config`, and the mode-selected `embedding_jar`; use
+`flutter_embedding_deps(maven_repo)` for the embedding's explicit AndroidX
+classpath. Here `flutter_assets` is `flutter_core`'s output group, not the
+`flutter_assets` rule. Stock `rules_android` rules then package those targets;
+for native packaging, see
+[`tests/consumer/composed_app:direct_apk`](tests/consumer/composed_app/BUILD.bazel).
 
 [`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel)
 demonstrates plugin, Java, and Maven wiring without plugin extensions or
