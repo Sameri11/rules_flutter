@@ -93,7 +93,7 @@ toolchain_type(
 
 toolchain_type(
     name = "flutter_aot_toolchain_type",
-    no_match_error = "No Flutter AOT toolchain is registered for this platform. For Android, run `flutter precache --android` on this host to fetch the missing gen_snapshot payload.",
+    no_match_error = "No Flutter AOT toolchain is registered for this target platform. Ensure the platform ruleset has installed its gen_snapshot payload.",
     visibility = ["//visibility:public"],
 )
 
@@ -106,17 +106,3 @@ flutter_target_slice(
 pub_lock_parser_test_suite(name = "pub_lock_parser_test")
 
 staged_hook_packages_test(name = "staged_hook_packages_test")
-
-# Public because the core's select() is expanded in the consumer's package.
-config_setting(
-    name = "target_os_android",
-    constraint_values = ["@platforms//os:android"],
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "target_os_android_release",
-    constraint_values = ["@platforms//os:android"],
-    flag_values = {"//flutter:mode": "release"},
-    visibility = ["//visibility:public"],
-)

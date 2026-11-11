@@ -71,11 +71,34 @@ configurations. Capture each APK before the next configuration because the
 materialized APK path may be shared.
 
 Core output groups remain available to hand-wired consumers: `flutter_assets`
-and `flutter_libapp` (empty in debug mode). Android engine libraries, possibly
-several per ABI, are provided by `@rules_flutter_android//flutter:engine_libs`.
-Embedding is owned by the Android ruleset. Use
-`@rules_flutter_android//flutter:embedding_jar` for the mode-selected jar;
-`flutter_embedding_deps(maven_repo)` supplies its explicit AndroidX classpath.
+and `flutter_aot` (empty in debug mode). Android engine libraries are provided
+by `@rules_flutter_android//flutter:engine_libs`; callers compose the core API
+with `flutter_core(platforms = [FLUTTER_ANDROID])`.
+The Android app adapter resolves this group using the first `--android_platforms`
+value, or the first `FLUTTER_ANDROID` target platform when that flag is unset.
+Hand-wired selects follow the requesting target's platform configuration and
+default to the first descriptor.
+The embedding is owned by the Android ruleset; use
+`@rules_flutter_android//flutter:embedding_jar` for its mode-selected jar and
+`flutter_embedding_deps(maven_repo)` for its explicit AndroidX classpath.
+
+Breaking changes: `platforms` is required on `flutter_core`,
+`flutter_debug_core`, and `flutter_integration_test`.
+`flutter_assets(target_slices = ...)` and Android wrapper
+`flutter_assets(target_platforms = ...)` replace the old ABI-oriented
+`flutter_assets(abis = ...)` API. `FlutterArtifactInfo.abi`, `.libapp`, and
+`.engine_libs` become `.target_slice`, `.aot`, and `.aot_kind`.
+`flutter_libapp` is renamed to `flutter_aot`; the `flutter_engine` output group
+and public `engine_jar_label` are removed. Android engine libraries now come
+from `@rules_flutter_android//flutter:engine_libs` or explicit
+`engine_libs_<abi>_<mode>` overrides. Core's `flutter/abis.bzl` is removed:
+load Android's `@rules_flutter_android//flutter:abis.bzl` for `ABIS` and core's
+`@rules_flutter_core//flutter:modes.bzl` for `MODES`. A platform descriptor may
+provide `native_build_env`, which `flutter_core` can override per platform.
+Hand-wired Android `assets_dir` changes from `core_bundle_action` to the
+selected output directory, `<core>_<platform>_bundle_action` (for example,
+`core_android_bundle_action`).
+AOT and asset actions miss caches once after upgrading.
 The [`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel)
 fixture demonstrates plugin, Java, and Maven wiring, but is not a complete APK.
 For native packaging, see
@@ -196,6 +219,7 @@ module and `.bazelrc` configuration.
 Create the root BUILD file:
 
 ```python
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 package(default_visibility = ["//visibility:public"])
@@ -203,6 +227,7 @@ package(default_visibility = ["//visibility:public"])
 flutter_core(
     name = "core",
     assets = [],
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 ```
@@ -268,12 +293,13 @@ package root, then attach it to the Android app:
 
 ```python
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test")
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID", "flutter_android_app")
 
 flutter_integration_test(
     name = "login",
     app = ":core",
     src = "integration_test/login_test.dart",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_android_app(

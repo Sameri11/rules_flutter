@@ -60,6 +60,7 @@ def flutter_android_app(
         test_apps = {},
         integration_tests = [],
         integration_test_defaults = {},
+        debug_platforms = None,
         **kwargs):
     """A stock android_binary `name` with Flutter's defaults for a standard layout.
 
@@ -106,6 +107,7 @@ def flutter_android_app(
         as its adb runner. `shard_count` is refused.
       integration_test_defaults: loading-time attributes shared by the generated
         integration runner tests, overridden by each entry's attributes.
+      debug_platforms: descriptors used by generated debug cores.
       **kwargs: forwarded to android_binary, and tags and visibility also to
         `<name>_check_test`. `assets` and `assets_dir` are set by the macro and
         refused here.
@@ -235,6 +237,7 @@ def flutter_android_app(
         app_kwargs = kwargs,
         tags = kwargs.get("tags", []),
         native_label = native_label,
+        debug_platforms = debug_platforms,
     )
 
     _declare_integration_tests(
@@ -255,15 +258,25 @@ def flutter_android_app(
         debug_manifest_deps = debug_manifest_deps,
         tags = kwargs.get("tags", []),
         native_label = native_label,
+        debug_platforms = debug_platforms,
     )
 
-def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_manifest, pubspec, manifest_values, resource_files, app_deps, app_extra_deps, debug_manifest_deps, app_kwargs, tags, native_label):
+def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_manifest, pubspec, manifest_values, resource_files, app_deps, app_extra_deps, debug_manifest_deps, app_kwargs, tags, native_label, debug_platforms):
     reserved = ["debug", "inputs", "manifest", "debug_manifest", "maven_repo_check", "check_test"]
     keys = sorted(test_apps.keys())
+    generated_suffixes = ["_core", "_manifest", "_check_test", "_assets", "_core_kernel", "_core_bundle"]
+    for platform in debug_platforms or []:
+        generated_suffixes.append("_core_kernel_" + platform.name)
+    for platform in debug_platforms or []:
+        generated_suffixes.extend([
+            "_core_kernel_neutral_" + platform.name,
+            "_core_bundle_action_" + platform.name,
+            "_core_bundle_" + platform.name,
+        ])
     for key in keys:
-        if not key or key in reserved or key.startswith("inputs_") or key.endswith(("_core", "_manifest", "_check_test", "_assets", "_core_kernel", "_core_kernel_neutral", "_core_bundle", "_core_bundle_action")):
+        if not key or key in reserved or key.startswith("inputs_") or any([key.endswith(suffix) for suffix in generated_suffixes]):
             fail("flutter_android_app {}: test_apps key {} is reserved or collides with a generated target suffix.".format(name, key))
-        for suffix in ["_core", "_manifest", "_check_test", "_assets", "_core_kernel", "_core_kernel_neutral", "_core_bundle", "_core_bundle_action"]:
+        for suffix in generated_suffixes:
             if key + suffix in test_apps:
                 fail("flutter_android_app {}: test_apps keys {} and {} generate colliding targets.".format(name, key, key + suffix))
 
@@ -287,6 +300,7 @@ def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_mani
                 name = test_core,
                 app = entry.pop("app", app_core),
                 entrypoint = entry.pop("entrypoint"),
+                platforms = debug_platforms,
                 srcs = entry.pop("srcs", []),
                 dart_defines = entry.pop("dart_defines", {}),
                 tags = _test_tags(entry.get("tags", tags)),
@@ -338,7 +352,7 @@ def _declare_test_apps(name, test_apps, app_core, inputs, inputs_label, app_mani
         )
         flutter_apk_check(name = target + "_check_test", binary = ":" + target, native = [native_label], tags = entry_tags, visibility = visibility, testonly = testonly)
 
-def _declare_integration_tests(name, integration_tests, defaults, app_kwargs, manifest_values, test_apps, app_core, inputs, inputs_label, app_manifest, pubspec, resource_files, app_deps, app_extra_deps, debug_manifest_deps, tags, native_label):
+def _declare_integration_tests(name, integration_tests, defaults, app_kwargs, manifest_values, test_apps, app_core, inputs, inputs_label, app_manifest, pubspec, resource_files, app_deps, app_extra_deps, debug_manifest_deps, tags, native_label, debug_platforms):
     if "shard_count" in defaults:
         fail("flutter_android_app {}: shard_count is not supported for integration_tests.".format(name))
     if type(integration_tests) == "list":
@@ -380,6 +394,7 @@ def _declare_integration_tests(name, integration_tests, defaults, app_kwargs, ma
             app_kwargs = app_kwargs,
             tags = tags,
             native_label = native_label,
+            debug_platforms = debug_platforms,
         )
 
     for label_text, overrides in entries.items():

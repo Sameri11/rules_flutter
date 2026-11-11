@@ -5,6 +5,9 @@ android_binary deps. Each configured split reads its ABI from the Bazel platform
 takes the AOT library from core, the engine libraries from this ruleset's
 Android-owned selection, and the plugin repository's libraries for that ABI.
 The libraries reach the APK through CcInfo, not through a jar the app wraps.
+If a split is analyzed without an Android platform, it yields a placeholder so
+graph queries and `--nobuild` analysis can proceed; building the placeholder
+fails with a clear diagnostic.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
@@ -104,8 +107,8 @@ def _split_native_impl(ctx):
     info = ctx.attr.core[FlutterArtifactInfo]
 
     libraries = []
-    if info.libapp != None:
-        libraries.append(info.libapp)
+    if info.aot != None:
+        libraries.append(info.aot)
 
     # The engine is stripped here, as the engine jar was, so the APK carries
     # the same bytes the jar carried.

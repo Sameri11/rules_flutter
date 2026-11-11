@@ -215,6 +215,12 @@ jobs:
           python3 ../../tools/ci/hand_wired_dex_check.py debug "$apk"
           bazel build -c opt --@rules_flutter_core//flutter:mode=release --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //hand_wired_app:hand_wired_app
           python3 ../../tools/ci/hand_wired_dex_check.py release "$apk"
+
+      - name: Consumer mixed-platform debug and Android asset selection
+        working-directory: tests/consumer
+        run: |
+          set -euo pipefail
+          bazel build -c fastbuild --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //mixed_platform:fake_debug_app //mixed_platform:android_app_mixed_debug //mixed_platform:android_app
       # Composed app: the APK check fails the build on a planted mismatch.
       - name: Consumer composed app release APK check
         working-directory: tests/consumer

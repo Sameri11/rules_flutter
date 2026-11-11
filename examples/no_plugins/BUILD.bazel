@@ -1,16 +1,17 @@
 # Dart targets for a plugin-free app.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test", "flutter_test_suite")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_integration_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-flutter_android_core(
+flutter_core(
     name = "core",
     srcs = glob(["lib/**/*.dart"]),
     # flutter create declares no assets.
     assets = [],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 
@@ -18,36 +19,42 @@ flutter_integration_test(
     name = "integration_pass",
     src = "//integration_test:integration_pass_test.dart",
     app = ":core",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_integration_test(
     name = "integration_fail",
     src = "//integration_test:integration_fail_test.dart",
     app = ":core",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_integration_test(
     name = "integration_lifecycle",
     src = "//integration_test:integration_lifecycle_test.dart",
     app = ":core",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_integration_test(
     name = "integration_timeout",
     src = "//integration_test:integration_timeout_test.dart",
     app = ":core",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_integration_test(
     name = "integration_crash",
     src = "//integration_test:integration_crash_test.dart",
     app = ":core",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_integration_test(
     name = "integration_deadline",
     src = "//integration_test:integration_deadline_test.dart",
     app = ":core",
+    platforms = [FLUTTER_ANDROID],
 )
 
 # The host test reads core_test_package, declared by flutter_core for the

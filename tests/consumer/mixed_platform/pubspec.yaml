@@ -1,0 +1,9 @@
+name: mixed_platform
+version: 1.0.0+1
+environment:
+  sdk: ^3.12.2
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  uses-material-design: true

@@ -34,11 +34,7 @@ def _android_toolchains_impl(ctx):
         return
 
     lines = ['package(default_visibility = ["//visibility:public"])', ""]
-    cpu_constraints = {
-        "arm64-v8a": "arm64",
-        "armeabi-v7a": "armv7",
-        "x86_64": "x86_64",
-    }
+    cpu_constraints = ctx.attr.cpu_constraints
 
     for abi in sorted(ctx.attr.toolchain_targets.keys()):
         lines.extend([
@@ -47,7 +43,7 @@ def _android_toolchains_impl(ctx):
             '    toolchain = "' + ctx.attr.toolchain_targets[abi] + '",',
             '    toolchain_type = "' + ctx.attr.toolchain_type + '",',
             "    exec_compatible_with = " + repr(host) + ",",
-            '    target_compatible_with = ["@platforms//os:android", "@platforms//cpu:' + cpu_constraints[abi] + '"],',
+            '    target_compatible_with = ["@platforms//os:android", "' + cpu_constraints[abi] + '"],',
             ")",
             "",
         ])
@@ -59,7 +55,7 @@ def _android_toolchains_impl(ctx):
             '    toolchain = "' + ctx.attr.aot_toolchain_targets[abi] + '",',
             '    toolchain_type = "' + ctx.attr.aot_toolchain_type + '",',
             "    exec_compatible_with = " + repr(host) + ",",
-            '    target_compatible_with = ["@platforms//os:android", "@platforms//cpu:' + cpu_constraints[abi] + '"],',
+            '    target_compatible_with = ["@platforms//os:android", "' + cpu_constraints[abi] + '"],',
             ")",
             "",
         ])
@@ -70,6 +66,7 @@ _android_toolchains = repository_rule(
     attrs = {
         "aot_toolchain_targets": attr.string_dict(mandatory = True),
         "aot_toolchain_type": attr.string(mandatory = True),
+        "cpu_constraints": attr.string_dict(mandatory = True),
         "toolchain_targets": attr.string_dict(mandatory = True),
         "toolchain_type": attr.string(mandatory = True),
     },
@@ -78,6 +75,7 @@ _android_toolchains = repository_rule(
 def _android_toolchains_extension_impl(_ctx):
     toolchain_targets = {}
     aot_toolchain_targets = {}
+    cpu_constraints = {}
     for abi, info in ABIS.items():
         suffix = abi.replace("-", "_")
         flutter_gen_snapshot(
@@ -87,10 +85,12 @@ def _android_toolchains_extension_impl(_ctx):
         toolchain_targets[abi] = str(Label("//flutter:target_toolchain_" + suffix))
         aot_toolchain_targets[abi] = str(Label("@flutter_gen_snapshot_" + suffix + "//:aot_toolchain"))
 
+        cpu_constraints[abi] = str(info.cpu_constraint)
     _android_toolchains(
         name = "flutter_android_target_toolchains",
         aot_toolchain_targets = aot_toolchain_targets,
         aot_toolchain_type = str(Label("@rules_flutter_core//flutter:aot_toolchain_type")),
+        cpu_constraints = cpu_constraints,
         toolchain_targets = toolchain_targets,
         toolchain_type = str(Label("@rules_flutter_core//flutter:target_toolchain_type")),
     )

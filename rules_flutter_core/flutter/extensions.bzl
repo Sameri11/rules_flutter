@@ -4,8 +4,7 @@ Consumers declare the expected host SDK version with the `flutter.sdk` tag.
 The extension stays independent of the host SDK; version validation happens
 when the local SDK repository is fetched.
 
-Android extensions (`android_ndk`, `flutter_plugins_ext`) load from
-`@rules_flutter_android//flutter:extensions.bzl`.
+Platform-specific extensions load from their owning ruleset.
 """
 
 load("//flutter/private:pub_lock.bzl", _pub = "pub")

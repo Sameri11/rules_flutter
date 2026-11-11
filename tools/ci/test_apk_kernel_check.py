@@ -39,14 +39,15 @@ def apk_path(bazel: str, module: Path, label: str, bazel_args: list[str]) -> Pat
     return files[0]
 
 
-# Kernel artifacts are named by the core rule's private output target.
+# Kernel artifacts are named by the core rule's private platform-specific output target.
 def kernel_path(bazel: str, module: Path, label: str, bazel_args: list[str]) -> Path:
-    files = [path for path in outputs(bazel, module, label + "_kernel", bazel_args) if path.suffix == ".dill" and path.is_file()]
+    kernel_label = label + "_kernel_android"
+    files = [path for path in outputs(bazel, module, kernel_label, bazel_args) if path.suffix == ".dill" and path.is_file()]
     unique = {}
     for path in files:
         unique.setdefault(hashlib.sha256(path.read_bytes()).digest(), path)
     if len(unique) != 1:
-        raise RuntimeError("{} has no unique built kernel contents: {}".format(label, files))
+        raise RuntimeError("{} has no unique built Android kernel contents: {}".format(label, files))
     return next(iter(unique.values()))
 
 
@@ -107,7 +108,7 @@ def main() -> int:
             with zipfile.ZipFile(apk) as archive:
                 embedded = archive.read("assets/flutter_assets/kernel_blob.bin")
             if embedded != kernel.read_bytes():
-                raise RuntimeError("{} kernel_blob.bin differs from {}_kernel".format(apk_label, core_label))
+                raise RuntimeError("{} kernel_blob.bin differs from {}_kernel_android".format(apk_label, core_label))
             graph = json.loads(run(args.bazel, module, [
                 "aquery", "--lockfile_mode=error", "--output=jsonproto",
                 "deps({})".format(apk_label),

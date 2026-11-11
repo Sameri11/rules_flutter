@@ -29,13 +29,14 @@ _integration_test_info = rule(
     },
 )
 
-def flutter_integration_test(name, app, src, srcs = [], dart_defines = {}, visibility = None):
+def flutter_integration_test(name, app, src, platforms, srcs = [], dart_defines = {}, visibility = None):
     """Declares one platform-neutral integration-test file.
 
     Args:
         name: Name for the generated targets.
         app: Flutter application target used to compile the test.
         src: Integration-test Dart source file.
+        platforms: descriptors used to select the debug artifact's bundle.
         srcs: Additional Dart sources needed by the test.
         dart_defines: Compile-time Dart environment values.
         visibility: Visibility for this declaration.
@@ -62,6 +63,7 @@ def flutter_integration_test(name, app, src, srcs = [], dart_defines = {}, visib
         name = core,
         app = app,
         entrypoint = ":" + bootstrap,
+        platforms = platforms,
         srcs = all_srcs,
         dart_defines = defines,
         tags = ["manual"],

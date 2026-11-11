@@ -10,8 +10,13 @@ The app is reached only through its FlutterCoreInfo provider, so it may live in
 another package, behind a restrictive visibility, or be an alias.
 """
 
-load(":abis.bzl", "debug_target_compatible_with")
-load(":core.bzl", "FlutterArtifactInfo", "FlutterCoreInfo", "assets_bundle_action", "platform_neutral_files")
+load(
+    ":core.bzl",
+    "FlutterArtifactInfo",
+    "FlutterCoreInfo",
+    "assets_bundle_action",
+)
+load(":modes.bzl", "debug_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 load(":rules.bzl", "TEST_IMPORT_HINT", "jit_kernel_action")
 
@@ -19,9 +24,19 @@ visibility(["//flutter/..."])
 
 _TOOLCHAIN = "//flutter/private:flutter_toolchain_type"
 
+def _debug_bundle_platform_transition_impl(_settings, attr):
+    return {"//command_line_option:platforms": [attr.target_platform]}
+
+_debug_bundle_platform_transition = transition(
+    implementation = _debug_bundle_platform_transition_impl,
+    inputs = [],
+    outputs = ["//command_line_option:platforms"],
+)
+
 def _flutter_debug_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
-    core = ctx.attr.app[FlutterCoreInfo]
+    (app,) = ctx.attr.app
+    core = app[FlutterCoreInfo]
 
     # The app's inputs, read from its provider. The action is the one
     # dart_jit_kernel runs, so the test kernel and the app's debug kernel differ
@@ -30,7 +45,7 @@ def _flutter_debug_kernel_impl(ctx):
         ctx,
         dill = dill,
         pkg = struct(
-            package_name = ctx.attr.app[FlutterPubspecInfo].package_name,
+            package_name = app[FlutterPubspecInfo].package_name,
             package_config = core.package_config,
             pub_srcs = core.pub_srcs,
             path_deps = core.path_deps,
@@ -54,9 +69,11 @@ _flutter_debug_kernel = rule(
     attrs = {
         "app": attr.label(
             mandatory = True,
+            cfg = _debug_bundle_platform_transition,
             providers = [FlutterCoreInfo, FlutterPubspecInfo],
             doc = "The app's flutter_core target.",
         ),
+        "target_platform": attr.string(mandatory = True),
         "entrypoint": attr.label(
             allow_single_file = [".dart"],
             mandatory = True,
@@ -74,26 +91,27 @@ _flutter_debug_kernel = rule(
 )
 
 def _flutter_debug_bundle_impl(ctx):
-    core = ctx.attr.app[FlutterCoreInfo]
+    (app,) = ctx.attr.app
+    core = app[FlutterCoreInfo]
     (kernel,) = ctx.files.kernel
-    return [DefaultInfo(files = depset([assets_bundle_action(ctx, core.mode_free_assets, [kernel])]))]
+    mode_free_assets = core.mode_free_assets
+    return [DefaultInfo(files = depset([assets_bundle_action(ctx, mode_free_assets, [kernel])]))]
 
-# Wrapped in platform_neutral_files, so the app is read in the platform-neutral
-# configuration, as its own bundle is, and the bundle is built once.
+# A descriptor's neutral wrapper resets this action before it reads the app
+# bundle, so the kernel overlay does not inherit the requesting split settings.
 _flutter_debug_bundle_action = rule(
     implementation = _flutter_debug_bundle_impl,
     doc = "Overlays a debug kernel on an app's mode-free flutter_assets tree.",
     attrs = {
+        # Resolve the app edge under this descriptor so the overlay uses its asset tree.
         "app": attr.label(
             mandatory = True,
+            cfg = _debug_bundle_platform_transition,
             providers = [FlutterCoreInfo],
             doc = "The app's flutter_core target.",
         ),
-        "kernel": attr.label_list(
-            mandatory = True,
-            allow_files = True,
-            doc = "The debug kernel of this artifact's entrypoint.",
-        ),
+        "target_platform": attr.string(mandatory = True),
+        "kernel": attr.label_list(mandatory = True, allow_files = True, doc = "The debug kernel of this artifact's entrypoint."),
     },
     toolchains = [_TOOLCHAIN],
 )
@@ -107,12 +125,13 @@ def _flutter_debug_core_impl(ctx):
         DefaultInfo(files = depset([assets])),
         OutputGroupInfo(
             flutter_assets = depset([assets]),
-            flutter_libapp = depset([]),
+            flutter_aot = depset([]),
         ),
         FlutterArtifactInfo(
             mode = "debug",
-            abi = artifact.abi,
-            libapp = None,
+            target_slice = artifact.target_slice,
+            aot = None,
+            aot_kind = None,
             assets = assets,
         ),
         ctx.attr.app[FlutterPubspecInfo],
@@ -135,7 +154,7 @@ _flutter_debug_core = rule(
     },
 )
 
-def flutter_debug_core(name, app, entrypoint, dart_defines = {}, srcs = [], **kwargs):
+def flutter_debug_core(name, app, entrypoint, platforms, dart_defines = {}, srcs = [], **kwargs):
     """Declares a debug artifact of an app's core, compiled from another entrypoint.
 
     The artifact is debug only: a release configuration reports it incompatible,
@@ -143,60 +162,76 @@ def flutter_debug_core(name, app, entrypoint, dart_defines = {}, srcs = [], **kw
 
     Args:
       name: the artifact's target name.
-      app: the app's `flutter_core` target. It may be in another package, under a
+      app: the app's `flutter_core` target. It may be in another package, under
         restrictive visibility, or an alias; only its own visibility applies.
       entrypoint: the Dart file compiled as `main`. A file under the app's lib/
-        compiles as `package:<app>/...`, the same library the app itself loads;
-        any other .dart file compiles by its execroot path, as dart_jit_kernel
-        compiles them.
+        compiles as `package:<app>/...`; other files compile by their execroot path.
+      platforms: descriptors returned by flutter_platform; required to select the
+        platform-specific neutral bundle and asset tree.
       dart_defines: `-D` constants of this artifact's kernel. The app's are not inherited.
       srcs: Dart files outside lib/ that the entrypoint imports by relative path,
-        such as a helper under integration_test/. Undeclared, they are missing
-        from the kernel's sandbox and the compile fails.
-      **kwargs: `tags`, default `["manual"]`; `target_compatible_with`, combined
-        with the debug-only constraint; `testonly`, applied to every helper target;
-        and `visibility` for the artifact.
+        such as helpers under integration_test/. They must be declared for the
+        kernel's sandbox.
+      **kwargs: `tags`, default ["manual"]; `target_compatible_with`, combined
+        with the debug-only constraint; `testonly` for every helper; and
+        `visibility` for the artifact.
     """
+
+    if not platforms:
+        fail("flutter_debug_core: at least one platform is required.")
     testonly = kwargs.pop("testonly", False)
     tags = kwargs.pop("tags", ["manual"])
 
     # The debug-only constraint is always kept; a caller's constraints add to it.
+    # Keep every helper manual and debug-only so wildcard builds cannot request
+    # an intermediate target in a configuration where the public artifact is incompatible.
     compatible = debug_target_compatible_with() + kwargs.pop("target_compatible_with", [])
-
-    # Helpers are manual and debug-only as well, so no wildcard build reaches them
-    # in a configuration that the artifact itself is incompatible with.
     internal = {"tags": ["manual"], "target_compatible_with": compatible, "testonly": testonly}
 
-    _flutter_debug_kernel(
-        name = name + "_kernel",
-        app = app,
-        entrypoint = entrypoint,
-        dart_defines = dart_defines,
-        srcs = srcs,
-        **internal
-    )
+    bundle_select = {}
 
-    # Built under the host platform, as the app's kernel is, so the Android
-    # split transitions run it once.
-    platform_neutral_files(
-        name = name + "_kernel_neutral",
-        src = ":" + name + "_kernel",
-        **internal
-    )
+    for platform in platforms:
+        kernel = name + "_kernel_" + platform.name
+        _flutter_debug_kernel(
+            name = kernel,
+            app = app,
+            target_platform = str(platform.target_platforms[0]),
+            entrypoint = entrypoint,
+            dart_defines = dart_defines,
+            srcs = srcs,
+            **internal
+        )
+        kernel_neutral = name + "_kernel_neutral_" + platform.name
+        platform.neutral_files_rule(
+            name = kernel_neutral,
+            src = ":" + kernel,
+            **internal
+        )
+        bundle_action = name + "_bundle_action_" + platform.name
+        _flutter_debug_bundle_action(
+            name = bundle_action,
+            app = app,
+            target_platform = str(platform.target_platforms[0]),
+            kernel = [":" + kernel_neutral],
+            **internal
+        )
+        bundle = name + "_bundle_" + platform.name
+        platform.neutral_files_rule(
+            name = bundle,
+            src = ":" + bundle_action,
+            **internal
+        )
+        bundle_select[platform.constraint] = [":" + bundle]
+    bundle_select["//conditions:default"] = [":" + name + "_bundle_" + platforms[0].name]
 
-    _flutter_debug_bundle_action(
-        name = name + "_bundle_action",
-        app = app,
-        kernel = [":" + name + "_kernel_neutral"],
-        **internal
-    )
-
-    platform_neutral_files(
+    native.filegroup(
         name = name + "_bundle",
-        src = ":" + name + "_bundle_action",
-        **internal
+        srcs = select(bundle_select),
+        tags = tags,
+        testonly = testonly,
+        target_compatible_with = compatible,
+        visibility = kwargs.get("visibility"),
     )
-
     _flutter_debug_core(
         name = name,
         app = app,

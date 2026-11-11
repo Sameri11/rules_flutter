@@ -2,16 +2,16 @@
 
 The Flutter build decomposes into two independent halves:
 
-  1. Dart:     .dart sources -> app.dill (kernel) -> libapp.so (AOT ELF)
-  2. Platform: libapp.so + libflutter.so + flutter_assets -> APK/IPA
+  1. Dart:     .dart sources -> app.dill -> platform-declared AOT artifact
+  2. Platform: Flutter artifacts -> platform-native application
 
-These rules cover half 1 only, producing a plain `cc`-consumable .so that
-rules_android / rules_apple can package in half 2. Nothing here shells out to
-`flutter build`; the underlying frontend_server and gen_snapshot are driven
-directly.
+These rules cover the Dart half only, producing neutral Dart outputs that
+platform rulesets package into their native applications. Nothing here shells
+out to `flutter build`; the underlying frontend_server and gen_snapshot are
+driven directly.
 
-Half 2 is per-platform and is not loaded from here: see android.bzl. Keeping
-them apart is what lets a consumer load only the platforms they build.
+Platform packaging is per-platform and is not loaded from here. Keeping it
+separate lets a consumer load only the platforms it builds.
 
 Package resolution
 ------------------
@@ -38,32 +38,26 @@ FlutterTargetSliceInfo = provider(
     ],
 )
 
-_ANDROID_SPLIT_OUTPUTS = [
-    "//command_line_option:Android configuration distinguisher",
-    "//command_line_option:android_compiler",
-    "//command_line_option:android_platforms",
-    "//command_line_option:compiler",
-    "//command_line_option:dynamic_mode",
-    "//command_line_option:platforms",
-]
+FlutterTargetSlicesInfo = provider(
+    doc = "Platform metadata for the selected target slices.",
+    fields = ["slices"],
+)
 
-def _target_platform_split_impl(_settings, attr):
+FlutterAotSnapshotInfo = provider(
+    doc = "The AOT artifact kind produced by a snapshot action.",
+    fields = ["kind"],
+)
+
+def _platform_slice_transition_impl(_settings, attr):
     return {
-        str(platform): {
-            "//command_line_option:Android configuration distinguisher": "main",
-            "//command_line_option:android_compiler": None,
-            "//command_line_option:android_platforms": [],
-            "//command_line_option:compiler": None,
-            "//command_line_option:dynamic_mode": "default",
-            "//command_line_option:platforms": [str(platform)],
-        }
+        str(platform): {"//command_line_option:platforms": [str(platform)]}
         for platform in attr.target_platforms
     }
 
-_target_platform_split = transition(
-    implementation = _target_platform_split_impl,
+_platform_slice_transition = transition(
+    implementation = _platform_slice_transition_impl,
     inputs = [],
-    outputs = _ANDROID_SPLIT_OUTPUTS,
+    outputs = ["//command_line_option:platforms"],
 )
 
 def _flutter_target_slice_impl(ctx):
@@ -88,6 +82,28 @@ flutter_target_slice = rule(
         mandatory = False,
     )],
 )
+
+def _flutter_target_slices_impl(ctx):
+    return [FlutterTargetSlicesInfo(slices = [
+        ctx.split_attr.targets[str(platform.label)][0][FlutterTargetSliceInfo]
+        for platform in ctx.attr.target_platforms
+    ])]
+
+def flutter_target_slices_rule(slice_transition):
+    """Creates a split rule keyed by `str(platform_label)` for target-slice metadata."""
+    return rule(
+        implementation = _flutter_target_slices_impl,
+        attrs = {
+            "target_platforms": attr.label_list(mandatory = True),
+            "targets": attr.label_list(
+                default = [Label("//flutter/private:target_slice")],
+                cfg = slice_transition,
+                providers = [FlutterTargetSliceInfo],
+            ),
+        },
+    )
+
+flutter_target_slices = flutter_target_slices_rule(_platform_slice_transition)
 
 visibility(["//flutter"])
 
@@ -259,16 +275,18 @@ def _dart_aot_kernel_impl(ctx):
 
     target_os = ctx.attr.target_os
     if not target_os:
-        target_slices = ctx.split_attr.target_slice
+        target_slices = [
+            slice
+            for target in ctx.attr.target_slices
+            for slice in target[FlutterTargetSlicesInfo].slices
+        ]
         target_os_values = {
-            target[FlutterTargetSliceInfo].target_os: True
-            for target in target_slices.values()
-            if target[FlutterTargetSliceInfo].target_os
+            target.target_os: True
+            for target in target_slices
+            if target.target_os
         }
         if not target_os_values:
-            fail("dart_aot_kernel has no Flutter target toolchain for {}; set target_os or register a platform ruleset".format(
-                ctx.attr.target_platforms[0] if ctx.attr.target_platforms else ctx.label,
-            ))
+            fail("dart_aot_kernel has no Flutter target toolchain for {}; set target_os or register a platform ruleset".format(ctx.label))
         if len(target_os_values) != 1:
             fail("dart_aot_kernel target platforms must agree on target_os; got {}".format(sorted(target_os_values.keys())))
         target_os = target_os_values.keys()[0]
@@ -444,17 +462,13 @@ not get these values, and returns the default. They are in the action key, so
 changing a value recompiles the kernel; an empty dict adds no flags, so existing
 keys are unchanged.""",
         ),
-        "target_platforms": attr.label_list(
-            doc = "Platforms whose target toolchains provide kernel target-OS metadata.",
-        ),
         "target_os": attr.string(
             doc = "Target OS override; otherwise derived from the registered platform toolchain.",
         ),
-        "target_slice": attr.label(
-            default = Label("//flutter/private:target_slice"),
-            cfg = _target_platform_split,
-            providers = [FlutterTargetSliceInfo],
-            doc = "Internal per-platform target-toolchain metadata.",
+        "target_slices": attr.label_list(
+            mandatory = True,
+            providers = [FlutterTargetSlicesInfo],
+            doc = "Per-platform target-toolchain metadata.",
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
@@ -1078,14 +1092,15 @@ flags, so existing keys are unchanged.""",
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def _dart_aot_elf_impl(ctx):
-    # Under the target name, not at the package root. The basename is fixed --
-    # Android splits compile this same label against distinct target toolchains;
-    # configuration-specific output roots keep the resulting libapp.so files apart.
-    so = ctx.actions.declare_file(ctx.label.name + "/libapp.so")
+def _dart_aot_snapshot_impl(ctx):
+    toolchain = _flutter_aot_toolchain(ctx)
+
+    # Keep the toolchain's output basename under the target's directory. Different
+    # targets can emit the same basename; the label path prevents duplicate outputs.
+    artifact = ctx.actions.declare_file(ctx.label.name + "/" + toolchain.output_name)
     if ctx.file.dill == None:
         fail(
-            "Target OS selection failed for label {} (slice {}): no AOT kernel is configured.".format(
+            "Target platform selection failed for label {} (slice {}): no AOT kernel is configured.".format(
                 ctx.label,
                 _flutter_target_toolchain(ctx).slice_id,
             ),
@@ -1093,50 +1108,42 @@ def _dart_aot_elf_impl(ctx):
 
     args = ctx.actions.args()
 
-    # --deterministic is what makes this output byte-stable across runs, and
-    # therefore safe to cache. Verified: identical sha256 over repeat builds.
+    # Deterministic output omits timestamps that would otherwise perturb caches.
     args.add("--deterministic")
-    args.add("--snapshot_kind=app-aot-elf")
+
+    # gen_snapshot accepts these options only as --name=value.
+    args.add("--snapshot_kind=" + toolchain.snapshot_kind)
+
+    # armv7 requires compatibility flags provided by the target toolchain.
     args.add_all(_flutter_target_toolchain(ctx).snapshot_flags)
+    args.add(artifact, format = toolchain.output_flag + "%s")
+    if ctx.attr.strip and toolchain.strip_flag:
+        args.add(toolchain.strip_flag)
 
-    # gen_snapshot only accepts the --flag=value form here; a space-separated
-    # pair makes it print usage and exit non-zero.
-    args.add(so, format = "--elf=%s")
-    if ctx.attr.strip:
-        args.add("--strip")
-
-    # Note Flutter's --split-debug-info (--save-debugging-info plus
-    # --dwarf-stack-traces) is deliberately not wired up. Without it a release
-    # snapshot keeps Dart's name table inline, so stack traces are already
-    # symbolic; the flag trades that away for ~512 KB. Not worth it here.
+    # Split-debug-info is deliberately not wired up. Without it the release
+    # snapshot retains Dart's name table inline, so stack traces remain symbolic;
+    # splitting trades that away for roughly 512 KB, which is not worthwhile here.
     args.add(ctx.file.dill)
 
     ctx.actions.run(
         executable = _flutter_aot_toolchain(ctx).gen_snapshot_release,
         arguments = [args],
         inputs = [ctx.file.dill],
-        outputs = [so],
-        mnemonic = "DartAotElf",
-        progress_message = "Generating AOT ELF %{label}",
+        outputs = [artifact],
+        mnemonic = "DartAotSnapshot",
+        progress_message = "Generating AOT artifact %{label}",
     )
+    return [
+        DefaultInfo(files = depset([artifact])),
+        FlutterAotSnapshotInfo(kind = toolchain.output_kind),
+    ]
 
-    return [DefaultInfo(files = depset([so]))]
-
-dart_aot_elf = rule(
-    implementation = _dart_aot_elf_impl,
-    doc = "Turns a kernel .dill into a stripped AOT libapp.so via gen_snapshot.",
+dart_aot_snapshot = rule(
+    implementation = _dart_aot_snapshot_impl,
+    doc = "Turns an AOT kernel into the artifact declared by its platform toolchain.",
     attrs = {
-        "dill": attr.label(
-            allow_single_file = [".dill"],
-        ),
-        "strip": attr.bool(
-            default = True,
-            doc = "Drop DWARF debug info from the ELF.",
-        ),
-        "_mode": attr.label(
-            default = "//flutter:mode",
-            providers = [BuildSettingInfo],
-        ),
+        "dill": attr.label(allow_single_file = [".dill"]),
+        "strip": attr.bool(default = True),
     },
     toolchains = [
         "//flutter/private:flutter_target_toolchain_type",
@@ -1368,18 +1375,17 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
         **kwargs
     )
 
-def _bundle_dir(out, abi, index):
-    """Where one ABI's bundle goes.
+def _bundle_dir(out, slice_id, index):
+    """Where one target slice's bundle goes.
 
-    The first is the declared output itself, so the shared files are written
-    once rather than copied in afterwards; the rest are action-local scratch
-    used only for comparison and to read their manifests.
+    The first is the declared output itself, so shared files are written once.
+    Other slices use action-local scratch for comparison and manifest reading.
     """
     if index == 0:
         return "$EXECROOT/{}".format(out.path)
-    return "$STAGE/bundles/{}".format(abi)
+    return "$STAGE/bundles/{}".format(slice_id)
 
-def _bundle_command(out, abi, index, target_platform):
+def _bundle_command(out, slice_id, index, target_platform):
     # `flutter_tool` (defined in the action preamble) runs the tool's snapshot
     # directly: bin/flutter writes engine.stamp into the SDK, which a sandbox
     # forbids. `--no-version-check` skips the update check, which runs `git fetch`
@@ -1397,15 +1403,15 @@ def _bundle_command(out, abi, index, target_platform):
     --suppress-analytics >/dev/null
 rm -f "{dir}/.last_build_id"
 rm -rf "{dir}/native_assets"
-    """.format(
+""".format(
         platform = target_platform,
-        dir = _bundle_dir(out, abi, index),
+        dir = _bundle_dir(out, slice_id, index),
     )
 
 def _stage_flutter_assets(ctx, toolchain, platform_env):
     """Declares a flutter_assets bundle's inputs and stages them for flutter_tools.
 
-    The Android bundle and the tester bundle read the same files, so both stage
+    The application bundle and the tester bundle read the same files, so both stage
     them here. Returns the declared files, the manifest that lists them, and the
     shell that stages them and leaves it in the project root with FLUTTER_ROOT
     set. platform_env is shell that exports the platform's environment, if any.
@@ -1503,8 +1509,8 @@ FlutterNativeBuildEnvInfo = provider(
 )
 
 def _flutter_assets_impl(ctx):
-    # The directory must be named flutter_assets: android_binary derives the
-    # in-APK path from the artifact path with assets_dir stripped, and Flutter
+    # The directory must be named flutter_assets: consumers derive the
+    # runtime path from the artifact path with assets_dir stripped, and Flutter
     # requires the bundle at assets/flutter_assets/ at runtime.
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
 
@@ -1529,9 +1535,20 @@ def _flutter_assets_impl(ctx):
                 ),
             )
 
-    # Code assets belong in APK JNI libraries, not the asset tree. Packaging
-    # recipes install them under lib/<abi>/; discard flutter_tools' duplicate.
-    # NativeAssetsManifest.json is retained beside the bundle for runtime lookup.
+    target_slices = [
+        slice
+        for target in ctx.attr.target_slices
+        for slice in target[FlutterTargetSlicesInfo].slices
+    ]
+    if not target_slices:
+        fail("{}: flutter_assets requires at least one target slice.".format(ctx.label))
+    for target_slice in target_slices:
+        if not target_slice.slice_id or not target_slice.target_platform:
+            fail("{}: flutter_assets has no Flutter target toolchain for slice metadata.".format(ctx.label))
+
+    # Code assets belong in platform native libraries, not the asset tree.
+    # Packaging recipes install them in native library directories; discard
+    # flutter_tools' duplicate. NativeAssetsManifest.json stays beside the bundle for runtime lookup.
     cmd = staged.command + """# flutter_tools takes the project directory as two levels above --target, so
 # the stub sits in its own directory. It is compiled only for record-use and
 # imports nothing.
@@ -1551,18 +1568,18 @@ python3 "$EXECROOT/{merger}" {merge_args}
         bundles = "\n".join([
             _bundle_command(
                 out,
-                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id,
+                target_slice.slice_id,
                 i,
-                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].target_platform,
+                target_slice.target_platform,
             )
-            for i, platform in enumerate(ctx.attr.target_platforms)
+            for i, target_slice in enumerate(target_slices)
         ]),
         merge_args = " ".join([
             '--bundle "{}={}"'.format(
-                ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id,
-                _bundle_dir(out, ctx.split_attr.target_slice[str(platform.label)][FlutterTargetSliceInfo].slice_id, i),
+                target_slice.slice_id,
+                _bundle_dir(out, target_slice.slice_id, i),
             )
-            for i, platform in enumerate(ctx.attr.target_platforms)
+            for i, target_slice in enumerate(target_slices)
         ]),
     )
 
@@ -1628,20 +1645,21 @@ than a fact read out of it.""",
             allow_files = True,
             doc = "Sources of `path:` dependencies, staged and declared. See dart_aot_kernel.path_deps.",
         ),
-        "target_platforms": attr.label_list(
-            doc = "Platforms whose target toolchains provide asset-bundle metadata.",
-        ),
-        "target_slice": attr.label(
-            default = Label("//flutter/private:target_slice"),
-            cfg = _target_platform_split,
-            doc = "Internal per-platform target-toolchain metadata.",
+        "target_slices": attr.label_list(
+            mandatory = True,
+            providers = [FlutterTargetSlicesInfo],
+            doc = """Target slices to bundle for. Required, always a list.
+
+`flutter build bundle` runs once per target slice inside this action, because
+NativeAssetsManifest.json is keyed by target architecture. The manifests are
+merged and everything else is compared, so an architecture-varying bundle fails
+instead of shipping.""",
         ),
         "native_build_env": attr.label(
             providers = [FlutterNativeBuildEnvInfo],
             doc = """The native build environment: shell exports and the input files they read,
-provided by a native build environment rule. Android builds pass the rule from
-rules_flutter_android so that native build hooks find the Android SDK. Omit it for a
-build that has no Android SDK.""",
+provided by a platform-specific native build environment rule. Omit it for a
+build that has no native SDK.""",
         ),
         "_merger": attr.label(
             default = "//flutter/private:merge_native_assets.py",
@@ -1687,7 +1705,7 @@ flutter_test_assets = rule(
     doc = """The asset bundle host tests read, built for flutter_tester's platform.
 
 Takes the flutter_assets inputs (pubspec, package config, pub hub, declared assets,
-path dependencies), but no ABIs and no Android SDK. Built through flutter_tools'
+path dependencies), but no target slices or native SDK. Built through flutter_tools'
 AssetBundle and writeBundle with TargetPlatform.tester, as `flutter test` builds it:
 `flutter build bundle` does not accept that platform.""",
     attrs = {

@@ -1,17 +1,18 @@
 # Dart targets for the flat pub-plugin example.
 
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_core", "flutter_plugin_deps_guards")
-load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test", "flutter_test_suite")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID", "flutter_plugin_deps_guards")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_integration_test", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 flutter_plugin_deps_guards(plugins = "@flutter_plugins")
 
-flutter_android_core(
+flutter_core(
     name = "app",
     assets = [],
     dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 
@@ -19,6 +20,7 @@ flutter_integration_test(
     name = "smoke_integration",
     src = "//integration_test:smoke_test.dart",
     app = ":app",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_test_suite(

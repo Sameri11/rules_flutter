@@ -1,11 +1,26 @@
 """Android manifest and asset-path helpers used by composed app targets."""
 
 load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo", "FlutterPubspecInfo")
+load("//flutter:abis.bzl", "ABIS")
+load("//flutter/private:abis.bzl", "bazel_platform")
 
 visibility(["//flutter"])
+_ANDROID_DEFAULT_PLATFORM = bazel_platform(ABIS.keys()[0])
+
+def _android_assets_platform_transition_impl(settings, _attr):
+    android_platforms = settings["//command_line_option:android_platforms"]
+    platforms = android_platforms[:1] if android_platforms else [_ANDROID_DEFAULT_PLATFORM]
+    return {"//command_line_option:platforms": platforms}
+
+_android_assets_platform_transition = transition(
+    implementation = _android_assets_platform_transition_impl,
+    inputs = ["//command_line_option:android_platforms"],
+    outputs = ["//command_line_option:platforms"],
+)
 
 def _inputs_bundle_impl(ctx):
-    src = ctx.attr.core[FlutterArtifactInfo].assets
+    (core,) = ctx.attr.core
+    src = core[FlutterArtifactInfo].assets
     out = ctx.actions.declare_directory(ctx.label.name + "/flutter_assets")
     ctx.actions.run_shell(
         outputs = [out],
@@ -20,7 +35,7 @@ _inputs_bundle = rule(
     implementation = _inputs_bundle_impl,
     doc = "The core's flutter_assets tree, copied under this target's name.",
     attrs = {
-        "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo]),
+        "core": attr.label(mandatory = True, providers = [FlutterArtifactInfo], cfg = _android_assets_platform_transition),
     },
 )
 

@@ -12,7 +12,6 @@ def flutter_android_target_toolchains():
             name = "target_toolchain_" + suffix,
             target_os = "android",
             snapshot_flags = info.snapshot_flags,
-            native_assets_key = info.manifest_key,
             target_platform = info.target_platform,
             slice_id = abi,
         )

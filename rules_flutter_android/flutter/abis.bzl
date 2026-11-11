@@ -11,12 +11,11 @@ _UNSUPPORTED_ANDROID_CPU_CONSTRAINTS = {
     Label("@platforms//cpu:riscv64"): "riscv64",
 }
 
-def _abi(target_platform, engine_dir, maven_artifact, manifest_key, cpu_constraint, snapshot_flags = []):
+def _abi(target_platform, engine_dir, maven_artifact, cpu_constraint, snapshot_flags = []):
     return struct(
         target_platform = target_platform,
         engine_dir = engine_dir,
         maven_artifact = maven_artifact,
-        manifest_key = manifest_key,
         cpu_constraint = cpu_constraint,
         snapshot_flags = snapshot_flags,
     )
@@ -26,22 +25,20 @@ ABIS = {
         target_platform = "android-arm64",
         engine_dir = {"release": "android-arm64-release"},
         maven_artifact = {"release": "arm64_v8a_release", "debug": "arm64_v8a_debug"},
-        manifest_key = "android_arm64",
         cpu_constraint = Label("@platforms//cpu:arm64"),
     ),
     "x86_64": _abi(
         target_platform = "android-x64",
         engine_dir = {"release": "android-x64-release"},
         maven_artifact = {"release": "x86_64_release", "debug": "x86_64_debug"},
-        manifest_key = "android_x64",
         cpu_constraint = Label("@platforms//cpu:x86_64"),
     ),
     "armeabi-v7a": _abi(
         target_platform = "android-arm",
         engine_dir = {"release": "android-arm-release"},
         maven_artifact = {"release": "armeabi_v7a_release", "debug": "armeabi_v7a_debug"},
-        manifest_key = "android_arm",
         cpu_constraint = Label("@platforms//cpu:armv7"),
+        # Keep gen_snapshot output compatible with Flutter's armv7 engine ABI.
         snapshot_flags = ["--no-sim-use-hardfp", "--no-use-integer-division"],
     ),
 }

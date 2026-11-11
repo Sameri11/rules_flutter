@@ -217,7 +217,7 @@ def _flutter_sdk_impl(ctx):
     if not ctx.path(engine).exists:
         fail(
             "Flutter engine artifacts missing at {}.\n".format(engine) +
-            "Run `flutter precache --android` first.",
+            "Run `flutter precache` first.",
         )
 
     ctx.symlink(
@@ -268,7 +268,7 @@ def _flutter_sdk_impl(ctx):
         "flutter_patched_sdk",
     )
 
-    # Android owns its per-ABI gen_snapshot repositories.
+    # Platform rulesets own their target AOT payload repositories.
 
     # The host-engine files: the debug snapshots the debug overlay ships as
     # vm_snapshot_data and isolate_snapshot_data, and the test runtime
@@ -280,7 +280,7 @@ def _flutter_sdk_impl(ctx):
         if not ctx.path(path).exists:
             fail(
                 "{} missing at {}.\n".format(name, path) +
-                "Run `flutter precache --android` on this host.",
+                "Run `flutter precache` on this host.",
             )
         ctx.symlink(path, name)
 
@@ -297,6 +297,8 @@ def _flutter_sdk_impl(ctx):
     for pkg_root in sdk_package_roots:
         ctx.symlink("{}/{}".format(root, pkg_root), pkg_root)
 
+    # The bundle action collects package-root LICENSE and NOTICES files; keep them
+    # declared so the SDK's third-party notices reach the final bundle.
     ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
         sdk_globs = repr(
             ["{}/lib/**".format(r) for r in sdk_package_roots] +

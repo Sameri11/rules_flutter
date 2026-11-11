@@ -13,7 +13,7 @@ The `pub` module extension reads a consumer's `pubspec.lock` and creates
         `flutter build bundle` only reads `.dart_tool/package_config.json`, so the
         bundle action copies this one there inside its stage.
       - `package_graph.json`, the other file `flutter build bundle` reads there.
-      - `plugins_metadata.json`, platform-specific plugin lists; Android's list is consumed by `plugins.project`.
+      - `plugins_metadata.json`, platform-specific plugin lists consumed by the corresponding plugin-project rules.
       - `dart_plugin_registrant.dart`, the Dart registrant over the same plugins.
       - filegroups `:lib` (every hosted package's packageUri tree and pubspec) and
         `:all` (every hosted package file, for the bundle), and `:test_deps` (the debug

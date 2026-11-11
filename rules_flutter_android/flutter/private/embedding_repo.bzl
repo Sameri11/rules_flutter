@@ -1,6 +1,6 @@
 """Repositories for the Java embedding and Android engine artifacts."""
 
-load("@rules_flutter_core//flutter:abis.bzl", "MODES")
+load("@rules_flutter_core//flutter:modes.bzl", "MODES")
 load("//flutter:abis.bzl", "ABIS")
 
 visibility(["//:__pkg__"])

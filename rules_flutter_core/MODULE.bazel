@@ -3,7 +3,7 @@ module(
 )
 
 # The rules' own .bzl files name @flutter_sdk, so this module imports it. Which
-# SDK version they hold is the root module's choice: the extension reads flutter.sdk only from the root module.
+# SDK version is selected by the root module's flutter.sdk setting.
 flutter = use_extension("//flutter:extensions.bzl", "flutter")
 
 # Pin for developing this repository as the root module. A dev dependency, so
@@ -53,8 +53,8 @@ bazel_dep(name = "bazel_skylib", version = "1.8.2")
 
 bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
 
-# The ABI table and the split config_settings name @platforms constraints
-# (os:android, cpu:*), so the platforms module is a core dependency.
+# Platform descriptors use @platforms constraints, so the platforms module is
+# a core dependency.
 bazel_dep(name = "platforms", version = "1.0.0")
 
 pub_dev = use_extension("//flutter:extensions.bzl", "pub", dev_dependency = True)
