@@ -515,8 +515,8 @@ Include the generated Maven segment in the Consumer Module after configuring
 its repository mapping. The guard macro creates check and update targets for
 the segment, plus a test target that ensures the per-project guards agree.
 The core and its generated test-package target check the committed debug Dart
-registrant on every build. When the attribute is set, the core's package
-contains the `dart_registrant_update` target.
+registrant on every build. When `dart_plugin_registrant` is set, the core's
+package contains the `dart_registrant_update` target.
 
 The generator supplies package-scoped `BuildConfig` values for ordinary
 source-built Android plugins. It does not parse Gradle `buildConfigField`
