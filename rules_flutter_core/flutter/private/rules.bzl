@@ -1293,8 +1293,17 @@ def _flutter_package_impl(ctx):
         ctx.file._checker,
         ctx.file.lock_project_dir,
     )
+    validations = [validation]
+    if ctx.file.registrant:
+        validations.append(pub_plugins_check_action(
+            ctx,
+            ctx.actions.declare_file(ctx.label.name + ".registrant.checked"),
+            ctx.file.registrant,
+            ctx.file.expected_registrant,
+            ctx.attr.registrant_updater,
+        ))
     return [
-        OutputGroupInfo(_validation = depset([validation])),
+        OutputGroupInfo(_validation = depset(validations)),
         FlutterPackageInfo(
             pubspec = pubspec,
             srcs = ctx.files.srcs,
@@ -1349,6 +1358,9 @@ _flutter_package = rule(
         "assets": attr.label(
             doc = "A flutter_assets directory, passed to tests as --flutter-assets-dir.",
         ),
+        "registrant": attr.label(allow_single_file = [".dart"]),
+        "expected_registrant": attr.label(allow_single_file = [".dart"]),
+        "registrant_updater": attr.label(),
         "_lib_entry": attr.label(
             default = "//flutter/private:lib_entry.py",
             allow_single_file = True,
@@ -1357,7 +1369,7 @@ _flutter_package = rule(
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = None, **kwargs):
+def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = None, _registrant_check = None, **kwargs):
     """The inputs a host test reads from a Dart package, with no app build.
 
     Declares no app build. `flutter_core` declares a core artifact; a package
@@ -1376,6 +1388,7 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
       srcs: the package's lib/ Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies; checked against the pub hub's lock during build validation.
       assets: a flutter_assets target, passed to tests as --flutter-assets-dir.
+      _registrant_check: internal registrant validation used by flutter_core.
       **kwargs: visibility, tags.
     """
     package_config, _, pub_lib, _, pubspec_lock, lock_project_dir = _pub_hub_labels(pub, "flutter_package " + name)
@@ -1393,6 +1406,9 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
         pub_srcs = [pub_lib],
         path_deps = path_deps,
         assets = assets,
+        registrant = _registrant_check[0] if _registrant_check else None,
+        expected_registrant = _registrant_check[1] if _registrant_check else None,
+        registrant_updater = _registrant_check[2] if _registrant_check else None,
         **kwargs
     )
 
@@ -1770,11 +1786,12 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
     """Declares a validation action for a package's path dependencies.
 
     Args:
-      ctx: The rule context.
-      marker: The validation output file.
-      pubspec_lock: The package's lockfile.
-      path_deps: Declared source files for path dependencies.
-      checker: The path dependency checker script.
+      ctx: the rule context.
+      marker: the validation output file.
+      pubspec_lock: the package's lock file.
+      path_deps: declared source files for path dependencies.
+      checker: the path dependency checker script.
+      lock_project_dir: directory containing the pub hub lock, when different from this package.
 
     Returns:
       The validation marker output.
@@ -1792,6 +1809,7 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
 
     # Bazel 9 has no native py_binary and rules_python is not worth a dependency
     # for one check script, so invoke the interpreter directly.
+    # run_shell reserves $0; the argument vector begins at $1.
     ctx.actions.run_shell(
         command = 'exec python3 "$@"',
         arguments = [args],
@@ -1824,14 +1842,14 @@ Use this target to check a `pubspec.lock` that is not owned by either macro.""",
 )
 
 def pub_plugins_check_action(ctx, marker, committed, expected, updater_target):
-    """Check committed plugin metadata and expose a marker when it matches.
+    """Check the committed generated Dart registrant and expose a marker on match.
 
     Args:
-      ctx: Action context for the owning target.
-      marker: Output file touched when the metadata matches.
-      committed: Checked-in plugin metadata.
-      expected: Generated plugin metadata.
-      updater_target: Optional target that regenerates committed metadata.
+      ctx: action context for the owning target.
+      marker: output file touched when the registrant matches.
+      committed: checked-in Dart registrant.
+      expected: generated Dart registrant.
+      updater_target: optional target that regenerates the registrant.
 
     Returns:
       The marker output file.

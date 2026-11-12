@@ -444,6 +444,8 @@ test -e plugin_deps.MODULE.bazel || touch plugin_deps.MODULE.bazel
 test -e lib/dart_plugin_registrant.dart || touch lib/dart_plugin_registrant.dart
 ```
 
+After adding a plugin, run `bazel run //:dart_registrant_update` before the first build; the build checks the committed Dart registrant.
+
 `plugin_deps.MODULE.bazel` is the generated Maven dependency segment;
 `lib/dart_plugin_registrant.dart` is the Dart registrant. Android Java
 registrants are generated separately per mode: debug includes dev-only plugins,
@@ -509,9 +511,7 @@ to the APK.
 Include the generated Maven segment in the Consumer Module after configuring
 its repository mapping. The guard macro creates check and update targets for
 the segment, plus a test target that ensures the per-project guards agree.
-Run the update target when the check reports drift. Core independently checks
-the committed debug Dart registrant against pub metadata and prints its update
-command when that file is stale.
+Core and its generated test-package target check the committed debug Dart registrant on every build. When stale, the error prints `bazel run //:dart_registrant_update`.
 
 The generator supplies package-scoped `BuildConfig` values for ordinary
 source-built Android plugins. It does not parse Gradle `buildConfigField`
@@ -559,8 +559,8 @@ configurations.
 Keep each app's `pubspec.yaml`, `pubspec.lock`, and `flutter_core` in the same
 Bazel package. Declare every local path dependency's source files in
 `path_deps`; Bazel does not infer or hash undeclared path contents. Both
-`flutter_core` and `flutter_package` check declarations during every build;
-`--run_validations=false` opts out. The example
+`flutter_core` and `flutter_package` validate declarations against the `pub`
+hub's lock on every build; `--run_validations=false` opts out. The example
 [`examples/local_plugin`](examples/local_plugin/) places its host app under
 `packages/host_app` and its plugin under `packages/greeter`. Create one core in
 the app package and point the Android helper at that package-local target.

@@ -275,7 +275,7 @@ def flutter_core(
       assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies; checked against `pubspec.lock` by build validation.
+      path_deps: sources of `path:` dependencies; checked against the pub hub lock during build validation.
       dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: one label override for all platforms, a dict keyed by platform name, or None to use each descriptor's default.
       dart_plugin_registrant: an optional plugin registrant Dart file to compile.
@@ -386,6 +386,8 @@ def flutter_core(
         )
         platform_asset_actions[platform.name] = ":" + asset_action
 
+    registrant_label = _workspace_label(dart_plugin_registrant) if dart_plugin_registrant else None
+
     # The host test reads this bundle and package, built for flutter_tester.
     flutter_test_assets(
         name = name + "_test_assets",
@@ -404,6 +406,11 @@ def flutter_core(
         srcs = srcs,
         path_deps = path_deps,
         assets = ":" + name + "_test_assets",
+        _registrant_check = (
+            registrant_label,
+            pub + "//:dart_plugin_registrant.dart",
+            ":dart_registrant_update",
+        ) if registrant_label else None,
         tags = ["manual"],
     )
 
@@ -438,9 +445,7 @@ def flutter_core(
     native.filegroup(name = name + "_assets", srcs = select(assets_select))
     native.filegroup(name = name + "_bundle", srcs = select(bundle_select))
 
-    registrant_label = None
     if dart_plugin_registrant:
-        registrant_label = _workspace_label(dart_plugin_registrant)
         _write_source_file(
             name = "dart_registrant_update",
             source = pub + "//:dart_plugin_registrant.dart",

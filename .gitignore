@@ -35,6 +35,8 @@ __pycache__/
 /examples/*/packages/*/.config/
 
 # Flutter projects ignore their build output and pub-generated tool state.
+**/.dart_tool/
+
 
 # Local output of tools/ci/example_hashes.py.
 /_ci_hashes/
