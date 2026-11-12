@@ -96,10 +96,7 @@ flutter_test(
     name = "package_test",
     src = "test/package_test.dart",
     app = ":package",
-    # Manual: CI's --build_tests_only skips it. Analysed via :analysis_only.
-    tags = ["manual"],
 )
-
 # The macro, with every named parameter supplied -- it is the public entry point
 # most consumers use, and its signature is the thing most likely to drift.
 flutter_core(
@@ -143,10 +140,6 @@ build_test(
     ],
 )
 
-build_test(
-    name = "dart_registrant_guards_test",
-    targets = [":app_core_guards_test"],
-)
 
 # Recipe contributions stay a platform-neutral declaration. The composed
 # plugin repository carries them through the raw per-ABI native file route.

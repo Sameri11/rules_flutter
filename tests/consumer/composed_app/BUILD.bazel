@@ -180,6 +180,7 @@ cc_library(
     name = "composed_jni",
     srcs = ["native/composed_jni.cc"],
     tags = ["manual"],
+    target_compatible_with = ["@platforms//os:android"],
     deps = [":marker_dependency_shared"],
     alwayslink = True,
 )
@@ -316,6 +317,7 @@ direct_native(
     engine = ":direct_engine",
     libapp = ":direct_libapp",
     tags = ["manual"],
+    target_compatible_with = ["@platforms//os:android"],
 )
 
 cc_library(
