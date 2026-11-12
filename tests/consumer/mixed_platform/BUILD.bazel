@@ -33,8 +33,8 @@ flutter_fake_app(
 
 flutter_fake_app(
     name = "fake_debug_app",
-    core = ":core",
     testonly = True,
+    core = ":core",
     verify_debug_marker = True,
 )
 
