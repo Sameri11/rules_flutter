@@ -97,6 +97,7 @@ flutter_test(
     src = "test/package_test.dart",
     app = ":package",
 )
+
 # The macro, with every named parameter supplied -- it is the public entry point
 # most consumers use, and its signature is the thing most likely to drift.
 flutter_core(
@@ -139,7 +140,6 @@ build_test(
         ":package",
     ],
 )
-
 
 # Recipe contributions stay a platform-neutral declaration. The composed
 # plugin repository carries them through the raw per-ABI native file route.
