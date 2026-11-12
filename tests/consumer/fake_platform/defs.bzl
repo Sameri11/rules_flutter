@@ -16,7 +16,8 @@ def _fake_neutral_files_impl(ctx):
     if src.is_directory:
         out = ctx.actions.declare_directory(ctx.label.name + "/files")
         command = 'cp -RL "$1"/. "$2"/'
-        command += ' && touch "$2/FAKE_PLATFORM_MARKER"'
+        if ctx.label.name.endswith("_assets_neutral_fake"):
+            command += ' && touch "$2/FAKE_PLATFORM_MARKER"'
         ctx.actions.run_shell(
             inputs = [src],
             outputs = [out],

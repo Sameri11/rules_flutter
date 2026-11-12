@@ -26,9 +26,7 @@ flutter_plugin_deps_guards(
 
 exports_files(["build_config_probe.py"])
 
-# The sources of the path plugin composed_app depends on. pub_path_deps_check
-# requires every `path:` dependency's files to be declared, and a package cannot
-# glob another package's directory.
+# Sources for composed_app's path dependencies; Bazel cannot glob another package's directory.
 filegroup(
     name = "composed_plugin_srcs",
     srcs = glob(["fixtures/composed_plugin/**"]),

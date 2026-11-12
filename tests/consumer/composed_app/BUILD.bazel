@@ -31,7 +31,7 @@ flutter_core(
     srcs = glob(["lib/**/*.dart"]),
     assets = ["assets/composed-marker.txt"],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
-    # Sources of the path plugin, declared so pub_path_deps_check accepts it.
+    # These sources are required because the dependency is a local path package.
     path_deps = [
         "//:cmake_plugin_srcs",
         "//:composed_plugin_srcs",

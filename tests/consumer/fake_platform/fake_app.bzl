@@ -25,17 +25,17 @@ def _fake_app_impl(ctx):
         return [DefaultInfo(files = depset([artifact.aot, artifact.assets]))]
 
     if artifact.mode == "debug":
-        outputs = [artifact.assets]
-        if ctx.attr.verify_debug_marker:
-            verified = ctx.actions.declare_file(ctx.label.name + ".verified")
-            ctx.actions.run_shell(
-                inputs = [artifact.assets],
-                outputs = [verified],
-                arguments = [artifact.assets.path, verified.path],
-                command = 'test -f "$1/FAKE_PLATFORM_MARKER" || { echo "missing fake-platform asset marker" >&2; exit 1; }; touch "$2"',
-            )
-            outputs.append(verified)
-        return [DefaultInfo(files = depset(outputs))]
+        if artifact.aot != None:
+            fail("{}: expected no AOT file in debug mode, got {}".format(ctx.label, artifact.aot))
+        verified = ctx.actions.declare_file(ctx.label.name + ".verified")
+        marker_check = 'test -f "$1/FAKE_PLATFORM_MARKER" || { echo "missing fake-platform asset marker" >&2; exit 1; }; ' if ctx.attr.expect_neutral_assets_marker else ""
+        ctx.actions.run_shell(
+            inputs = [artifact.assets],
+            outputs = [verified],
+            arguments = [artifact.assets.path, verified.path],
+            command = 'test -f "$1/kernel_blob.bin" || { echo "missing debug kernel asset" >&2; exit 1; }; ' + marker_check + 'touch "$2"',
+        )
+        return [DefaultInfo(files = depset([artifact.assets, verified]))]
 
     fail("{}: unsupported artifact mode {}".format(ctx.label, artifact.mode))
 
@@ -47,6 +47,6 @@ flutter_fake_app = rule(
             providers = [FlutterArtifactInfo],
             cfg = _fake_platform_transition,
         ),
-        "verify_debug_marker": attr.bool(default = False),
+        "expect_neutral_assets_marker": attr.bool(mandatory = True),
     },
 )

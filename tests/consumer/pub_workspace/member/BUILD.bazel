@@ -7,8 +7,8 @@ flutter_pubspec(
 
 flutter_package(
     name = "package",
+    path_deps = ["//:dev_only_probe_srcs"],
     pub = "@workspace_pub",
     pubspec = ":pubspec",
-    path_deps = ["//:dev_only_probe_srcs"],
     visibility = ["//visibility:public"],
 )

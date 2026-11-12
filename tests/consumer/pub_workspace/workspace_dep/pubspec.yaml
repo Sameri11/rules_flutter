@@ -1,6 +1,0 @@
-name: workspace_dep
-publish_to: none
-resolution: workspace
-
-environment:
-  sdk: ">=3.6.0 <4.0.0"

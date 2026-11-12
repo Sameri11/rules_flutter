@@ -29,13 +29,14 @@ flutter_debug_core(
 flutter_fake_app(
     name = "fake_app",
     core = ":core",
+    expect_neutral_assets_marker = False,
 )
 
 flutter_fake_app(
     name = "fake_debug_app",
     testonly = True,
-    core = ":core",
-    verify_debug_marker = True,
+    core = ":mixed_debug_core",
+    expect_neutral_assets_marker = True,
 )
 
 flutter_android_app(

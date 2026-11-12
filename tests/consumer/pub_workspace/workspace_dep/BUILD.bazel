@@ -1,5 +1,0 @@
-filegroup(
-    name = "srcs",
-    srcs = glob(["**"]),
-    visibility = ["//pub_workspace/member:__pkg__"],
-)

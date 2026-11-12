@@ -6,7 +6,5 @@ environment:
   sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
-  workspace_dep:
-    path: ../workspace_dep
   dev_only_probe:
     path: ../../fixtures/dev_only_probe
