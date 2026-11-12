@@ -1154,7 +1154,7 @@ dart_aot_snapshot = rule(
 def _pub_hub_labels(pub, who):
     """The hub labels a Dart rule takes from `pub = "@<hub>"`.
 
-    Returns `(package_config, project_package_config, lib, all)`.
+    Returns `(package_config, project_package_config, lib, all, lock, lock_dir)`.
     """
     if not pub or not pub.startswith("@") or "//" in pub or ":" in pub:
         fail((
@@ -1166,6 +1166,8 @@ def _pub_hub_labels(pub, who):
         pub + "//:project_package_config.json",
         pub + "//:lib",
         pub + "//:all",
+        pub + "//:pubspec.lock",
+        pub + "//:lock_project_dir",
     )
 
 def _lib_tier(ctx, pubspec):
@@ -1289,6 +1291,7 @@ def _flutter_package_impl(ctx):
         ctx.file.pubspec_lock,
         ctx.files.path_deps,
         ctx.file._checker,
+        ctx.file.lock_project_dir,
     )
     return [
         OutputGroupInfo(_validation = depset([validation])),
@@ -1309,6 +1312,7 @@ _flutter_package = rule(
     doc = "Declares a Dart package's inputs to host tests. See flutter_package.",
     attrs = {
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
+        "lock_project_dir": attr.label(allow_single_file = True, mandatory = True),
         "_checker": attr.label(
             default = "//flutter/private:check_path_deps.py",
             allow_single_file = True,
@@ -1370,17 +1374,18 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
       pub: the `pub.lock` hub repository, e.g. `"@pub"`.
       pubspec: the package's flutter_pubspec target.
       srcs: the package's lib/ Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies; checked against `pubspec.lock` by build validation.
+      path_deps: sources of `path:` dependencies; checked against the pub hub's lock during build validation.
       assets: a flutter_assets target, passed to tests as --flutter-assets-dir.
       **kwargs: visibility, tags.
     """
-    package_config, _, pub_lib, _ = _pub_hub_labels(pub, "flutter_package " + name)
+    package_config, _, pub_lib, _, pubspec_lock, lock_project_dir = _pub_hub_labels(pub, "flutter_package " + name)
     if srcs == None:
         srcs = native.glob(["lib/**/*.dart"])
 
     _flutter_package(
         name = name,
-        pubspec_lock = "pubspec.lock",
+        pubspec_lock = pubspec_lock,
+        lock_project_dir = lock_project_dir,
         pubspec = pubspec,
         srcs = srcs,
         package_config = package_config,
@@ -1761,7 +1766,7 @@ AssetBundle and writeBundle with TargetPlatform.tester, as `flutter test` builds
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker):
+def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lock_project_dir = None):
     """Declares a validation action for a package's path dependencies.
 
     Args:
@@ -1777,7 +1782,11 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker):
     args = ctx.actions.args()
     args.add(checker)
     args.add("--lock", pubspec_lock)
-    args.add("--package-dir", ctx.label.package)
+    if lock_project_dir:
+        args.add("--package-dir-file", lock_project_dir)
+    else:
+        args.add("--package-dir", ctx.label.package)
+    args.add("--self-dir", ctx.label.package)
     args.add("--out", marker)
     args.add_all("--declared", path_deps)
 
@@ -1786,7 +1795,7 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker):
     ctx.actions.run_shell(
         command = 'exec python3 "$@"',
         arguments = [args],
-        inputs = [pubspec_lock, checker] + path_deps,
+        inputs = [pubspec_lock, checker] + ([lock_project_dir] if lock_project_dir else []) + path_deps,
         outputs = [marker],
         mnemonic = "PubPathDepsCheck",
         progress_message = "Checking path: dependencies %{label}",

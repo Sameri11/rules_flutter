@@ -1,0 +1,14 @@
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_package", "flutter_pubspec")
+
+flutter_pubspec(
+    name = "pubspec",
+    src = "pubspec.yaml",
+)
+
+flutter_package(
+    name = "package",
+    pub = "@workspace_pub",
+    pubspec = ":pubspec",
+    path_deps = ["//:dev_only_probe_srcs"],
+    visibility = ["//visibility:public"],
+)

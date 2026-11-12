@@ -41,21 +41,30 @@ def path_dependencies(lock_text):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--lock", required=True)
-    parser.add_argument("--package-dir", required=True,
-                        help="Bazel package of the app, e.g. 'app'.")
+    parser.add_argument("--package-dir", default="",
+                        help="Lockfile directory, execroot-relative.")
     parser.add_argument("--declared", nargs="*", default=[],
                         help="Files declared via path_deps, execroot-relative.")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--package-dir-file",
+                        help="File containing the lockfile directory, execroot-relative.")
+    parser.add_argument("--self-dir", default="",
+                        help="Package being checked, excluded from path dependencies.")
     args = parser.parse_args()
 
+    package_dir = args.package_dir
+    if args.package_dir_file:
+        with open(args.package_dir_file) as handle:
+            package_dir = handle.read().strip()
+    self_dir = os.path.normpath(args.self_dir) if args.self_dir else ""
     with open(args.lock) as handle:
         deps = list(path_dependencies(handle.read()))
 
     missing = []
     for name, raw in deps:
-        # pubspec.lock paths are relative to the app; declared files are
-        # execroot-relative, so rebase before comparing.
-        rooted = os.path.normpath(os.path.join(args.package_dir, raw))
+        rooted = os.path.normpath(os.path.join(package_dir, raw))
+        if self_dir and rooted == self_dir:
+            continue
         covered = any(
             os.path.normpath(f).startswith(rooted + os.sep)
             for f in args.declared

@@ -68,6 +68,7 @@ filegroup(
 filegroup(
     name = "dev_only_probe_srcs",
     srcs = glob(["fixtures/dev_only_probe/**"]),
+    visibility = ["//pub_workspace/member:__pkg__"],
 )
 
 # `//standard_layout` exercises `flutter_core` defaults for standard-layout
@@ -138,6 +139,7 @@ build_test(
     targets = [
         ":app_core",
         ":package",
+        "//pub_workspace/member:package",
     ],
 )
 

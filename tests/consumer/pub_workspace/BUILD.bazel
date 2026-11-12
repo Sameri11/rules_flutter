@@ -1,0 +1,4 @@
+exports_files([
+    "pubspec.yaml",
+    "pubspec.lock",
+])

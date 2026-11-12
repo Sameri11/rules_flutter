@@ -1,0 +1,82 @@
+{
+  "roots": [
+    "consumer_pub_workspace",
+    "workspace_dep",
+    "workspace_member"
+  ],
+  "packages": [
+    {
+      "name": "consumer_pub_workspace",
+      "version": "0.0.0",
+      "dependencies": [],
+      "devDependencies": []
+    },
+    {
+      "name": "workspace_member",
+      "version": "0.0.0",
+      "dependencies": [
+        "dev_only_probe",
+        "workspace_dep"
+      ],
+      "devDependencies": []
+    },
+    {
+      "name": "workspace_dep",
+      "version": "0.0.0",
+      "dependencies": [],
+      "devDependencies": []
+    },
+    {
+      "name": "dev_only_probe",
+      "version": "0.0.1",
+      "dependencies": [
+        "flutter"
+      ]
+    },
+    {
+      "name": "flutter",
+      "version": "0.0.0",
+      "dependencies": [
+        "characters",
+        "collection",
+        "material_color_utilities",
+        "meta",
+        "sky_engine",
+        "vector_math"
+      ]
+    },
+    {
+      "name": "sky_engine",
+      "version": "0.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "material_color_utilities",
+      "version": "0.13.0",
+      "dependencies": [
+        "collection"
+      ]
+    },
+    {
+      "name": "collection",
+      "version": "1.19.1",
+      "dependencies": []
+    },
+    {
+      "name": "characters",
+      "version": "1.4.1",
+      "dependencies": []
+    },
+    {
+      "name": "meta",
+      "version": "1.19.0",
+      "dependencies": []
+    },
+    {
+      "name": "vector_math",
+      "version": "2.4.4",
+      "dependencies": []
+    }
+  ],
+  "configVersion": 1
+}

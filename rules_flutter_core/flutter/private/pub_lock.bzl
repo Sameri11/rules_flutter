@@ -188,6 +188,8 @@ def _pub_hub_impl(rctx):
     if lock_label.repo_name:
         workspace_root = hub_dir.dirname.dirname
     project = _segments(str(project_dir))[len(_segments(str(workspace_root))):]
+    rctx.file("pubspec.lock", rctx.read(lock_label))
+    rctx.file("lock_project_dir", "/".join(project))
 
     # Both config locations, as execroot-relative segment lists.
     hub_base = ["external", hub_dir.basename]
@@ -370,6 +372,8 @@ exports_files([
     "plugins_metadata.json",
     "dart_plugin_registrant.dart",
     "dart_plugin_registrant_release.dart",
+    "pubspec.lock",
+    "lock_project_dir",
 ])
 
 filegroup(
