@@ -7,7 +7,7 @@ targets may also load composition.bzl; Android macros load from
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_flutter_android//flutter:composition.bzl", "flutter_android_inputs", "flutter_embedding_deps")
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app", "flutter_assets", "flutter_native_contribution", "flutter_plugin_deps_guards")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID", "flutter_android_app", "flutter_assets", "flutter_native_contribution", "flutter_plugin_deps_guards")
 load("@rules_flutter_core//flutter:composition.bzl", "pub_path_deps_check")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_package", "flutter_pubspec", "flutter_test")
 load("@rules_java//java:defs.bzl", "java_binary", "java_import")
@@ -107,16 +107,17 @@ flutter_core(
         ":production_probe_srcs",
         ":shared_probe_srcs",
     ],
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 
 flutter_assets(
     name = "assets",
-    abis = ["arm64-v8a"],
     assets = [],
     package_config = "@pub//:project_package_config.json",
     pub_srcs = ["@pub//:all"],
     pubspec = ":fixture_pubspec",
+    target_platforms = ["@rules_android//:arm64-v8a"],
 )
 
 pub_path_deps_check(

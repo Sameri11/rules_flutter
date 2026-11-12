@@ -40,9 +40,18 @@ pub.lock(
     name = "hand_wired_pub",
     lock = "//hand_wired_app:pubspec.lock",
 )
-use_repo(pub, "composed_pub", "hand_wired_pub", "pub", "standard_layout_pub")
+pub.lock(
+    name = "mixed_pub",
+    lock = "//mixed_platform:pubspec.lock",
+)
+use_repo(pub, "composed_pub", "hand_wired_pub", "mixed_pub", "pub", "standard_layout_pub")
 
 include("//android:config.MODULE.bazel")
+
+register_toolchains(
+    "//fake_platform:fake_target_toolchain",
+    "//fake_platform:fake_aot_toolchain",
+)
 
 hand_wired_maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 hand_wired_maven.install(

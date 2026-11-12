@@ -64,7 +64,7 @@ def main():
             missing = _run(workspace, output_root, "//:app_core_assets")
             if missing.returncode == 0:
                 sys.exit("FAIL: production staged hook did not require native_build_env")
-            expected = ("Error in fail:", "//:app_core_assets", "native_build_env", "production_probe", "hook/build.dart")
+            expected = ("Error in fail:", "//:app_core_android_assets_action", "native_build_env", "production_probe", "hook/build.dart")
             diagnostic = next(
                 (line for line in missing.stdout.splitlines() if all(part in line for part in expected)),
                 None,

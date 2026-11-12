@@ -1,7 +1,8 @@
 load("@rules_android//rules:rules.bzl", "android_binary", "android_library")
 load("@rules_flutter_android//flutter:composition.bzl", "flutter_build_config", "flutter_embedding_deps", "flutter_plugin_registrant")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
-load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_java//java:java_import.bzl", "java_import")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -12,6 +13,7 @@ flutter_core(
         "//fixtures/hand_wired_regular:sources",
         "//fixtures/hand_wired_dev:sources",
     ],
+    platforms = [FLUTTER_ANDROID],
     pub = "@hand_wired_pub",
 )
 
@@ -99,7 +101,7 @@ android_library(
 android_binary(
     name = "hand_wired_app",
     assets = [":flutter_assets"],
-    assets_dir = "core_bundle_action",
+    assets_dir = "core_android_bundle_action",
     manifest = "src/main/AndroidManifest.xml",
     manifest_values = {
         "applicationId": "com.example.handwired",

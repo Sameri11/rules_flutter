@@ -11,11 +11,7 @@ load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_flutter_android//flutter:composition.bzl", "android_native_files", "flutter_embedding_deps")
-load(
-    "@rules_flutter_android//flutter:defs.bzl",
-    "FLUTTER_DEBUG_UNCOMPRESSED_ASSETS",
-    "flutter_android_app",
-)
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID", "FLUTTER_DEBUG_UNCOMPRESSED_ASSETS", "flutter_android_app")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 load("@rules_java//java:defs.bzl", "java_import", "java_library")
 load("@rules_java//java:java_single_jar.bzl", "java_single_jar")
@@ -44,6 +40,7 @@ flutter_core(
         "//:recipe_package_srcs",
         "//:shared_probe_srcs",
     ],
+    platforms = [FLUTTER_ANDROID],
     pub = "@composed_pub",
 )
 
@@ -295,15 +292,14 @@ filegroup(
 
 filegroup(
     name = "direct_engine",
-    srcs = [":core"],
-    output_group = "flutter_engine",
+    srcs = ["@rules_flutter_android//flutter:engine_libs"],
     tags = ["manual"],
 )
 
 filegroup(
     name = "direct_libapp",
     srcs = [":core"],
-    output_group = "flutter_libapp",
+    output_group = "flutter_aot",
     tags = ["manual"],
 )
 
@@ -343,7 +339,7 @@ kt_android_library(
 android_binary(
     name = "direct_apk",
     assets = [":direct_assets"],
-    assets_dir = "core_bundle_action",
+    assets_dir = "core_android_bundle_action",
     manifest = "AndroidManifest.xml",
     manifest_values = {
         "applicationId": "com.example.composed_app.direct",

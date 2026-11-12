@@ -7,7 +7,6 @@ artifacts are fetched lazily by `flutter precache`, so a fully hermetic
 download rule is a separate concern. See README for that tradeoff.
 """
 
-load(":abis.bzl", "ABIS", "AOT_MODES", "MODES", "engine_repo")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
@@ -31,7 +30,7 @@ exports_files([
     "flutter_tester",
     "icudtl.dat",
     "flutter.version.json",
-] + {gen_snapshots})
+])
 
 # Patched SDK containing platform_strong.dill. `--sdk-root` wants the directory,
 # so the whole tree is exposed as one filegroup.
@@ -88,15 +87,6 @@ def _host_engine_dir(ctx):
     flutter_cache.dart:267-282 unpacks `darwin-$arch/artifacts.zip` into
     `darwin-x64` on macOS whatever the arch, and `linux-$arch` on Linux.
     """
-    host = _host_platform_name(ctx)
-    return "darwin-x64" if host.startswith("darwin-") else host
-
-def _gen_snapshot_host_dir(ctx):
-    """Host directory of the Android gen_snapshot executables."""
-
-    # TODO(flutter/flutter#152281): delete the collapse and return
-    # _host_platform_name(ctx) directly, once the engine ships an arm64-native
-    # Android gen_snapshot.
     host = _host_platform_name(ctx)
     return "darwin-x64" if host.startswith("darwin-") else host
 
@@ -227,7 +217,7 @@ def _flutter_sdk_impl(ctx):
     if not ctx.path(engine).exists:
         fail(
             "Flutter engine artifacts missing at {}.\n".format(engine) +
-            "Run `flutter precache --android` first.",
+            "Run `flutter precache` first.",
         )
 
     ctx.symlink(
@@ -278,18 +268,7 @@ def _flutter_sdk_impl(ctx):
         "flutter_patched_sdk",
     )
 
-    # Create a snapshot symlink for each ABI and AOT mode.
-    host = _gen_snapshot_host_dir(ctx)
-    for abi, info in ABIS.items():
-        for mode in AOT_MODES:
-            gen_snapshot = "{}/{}/{}/gen_snapshot".format(engine, info.engine_dir[mode], host)
-
-            if not ctx.path(gen_snapshot).exists:
-                fail(
-                    "gen_snapshot for {} missing at {}.\n".format(abi, gen_snapshot) +
-                    "Run `flutter precache --android` on this host.",
-                )
-            ctx.symlink(gen_snapshot, "gen_snapshot_{}_{}".format(abi, mode))
+    # Platform rulesets own their target AOT payload repositories.
 
     # The host-engine files: the debug snapshots the debug overlay ships as
     # vm_snapshot_data and isolate_snapshot_data, and the test runtime
@@ -301,7 +280,7 @@ def _flutter_sdk_impl(ctx):
         if not ctx.path(path).exists:
             fail(
                 "{} missing at {}.\n".format(name, path) +
-                "Run `flutter precache --android` on this host.",
+                "Run `flutter precache` on this host.",
             )
         ctx.symlink(path, name)
 
@@ -318,97 +297,26 @@ def _flutter_sdk_impl(ctx):
     for pkg_root in sdk_package_roots:
         ctx.symlink("{}/{}".format(root, pkg_root), pkg_root)
 
+    # The bundle action collects package-root LICENSE and NOTICES files; keep them
+    # declared so the SDK's third-party notices reach the final bundle.
     ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
         sdk_globs = repr(
             ["{}/lib/**".format(r) for r in sdk_package_roots] +
             ["{}/pubspec.yaml".format(r) for r in sdk_package_roots] +
-            # The bundle action's license collector reads `<root>/NOTICES` or
-            # `<root>/LICENSE` of every package (sky_engine's is 1.3 MB of engine
-            # third-party licenses). Absent, NOTICES.Z silently loses them.
             ["{}/LICENSE*".format(r) for r in sdk_package_roots] +
             ["{}/NOTICES*".format(r) for r in sdk_package_roots],
         ),
-        gen_snapshots = repr([
-            "gen_snapshot_{}_{}".format(abi, mode)
-            for abi in ABIS
-            for mode in AOT_MODES
-        ]),
     ))
 
 flutter_sdk = repository_rule(
     implementation = _flutter_sdk_impl,
-    doc = "Exposes the declared Flutter SDK's compiler + snapshotter to Bazel.",
+    doc = "Exposes the declared Flutter SDK's host tools to Bazel.",
     attrs = {
         "version": attr.string(mandatory = True),
     },
     local = True,
     # PATH is needed when FLUTTER_ROOT is unset. HOME and PUB_CACHE are not read.
     environ = ["FLUTTER_ROOT", "PATH"],
-)
-# The Android embedding is not in bin/cache -- Flutter fetches it from Maven at
-# Gradle time. The URLs are derivable from flutter.version.json, with one trap:
-# the *directory* is versioned by engineRevision while the *filename* uses
-# engineContentHash, and the artifacts are .jar, not .aar.
-
-_ENGINE_BASE = "https://storage.googleapis.com/download.flutter.io/io/flutter"
-
-# Builds Maven artifact URLs for engine and embedding jars.
-
-def _engine_url(artifact, revision, content_hash):
-    return "{base}/{a}/1.0.0-{rev}/{a}-1.0.0-{hash}.jar".format(
-        base = _ENGINE_BASE,
-        a = artifact,
-        rev = revision,
-        hash = content_hash,
-    )
-
-def _flutter_engine_jar_impl(ctx):
-    version = json.decode(ctx.read(ctx.path(ctx.attr.version_file)))
-    url = _engine_url(
-        ctx.attr.artifact,
-        version["engineRevision"],
-        version["engineContentHash"],
-    )
-    ctx.download(
-        url = url,
-        output = "jar/{}.jar".format(ctx.attr.artifact),
-        canonical_id = url,
-    )
-
-    # Only an ABI's engine jar carries the .so files that :libs globs; the embedding
-    # jar stays a file.
-    if ctx.attr.extract_libs:
-        ctx.extract(
-            archive = ctx.path("jar/{}.jar".format(ctx.attr.artifact)),
-            output = "jar",
-        )
-
-    # The jar's members are unknown until it is extracted, so the core takes each
-    # ABI's .so files through this glob rather than a list it would have to hardcode.
-    # The embedding jar carries no .so files, hence allow_empty.
-    ctx.file("jar/BUILD.bazel", """filegroup(
-    name = "file",
-    srcs = ["{}.jar"],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "libs",
-    srcs = glob(["lib/**/*.so"], allow_empty = True),
-    visibility = ["//visibility:public"],
-)
-""".format(ctx.attr.artifact))
-
-flutter_engine_jar = repository_rule(
-    implementation = _flutter_engine_jar_impl,
-    attrs = {
-        "artifact": attr.string(mandatory = True),
-        "extract_libs": attr.bool(default = False),
-        "version_file": attr.label(
-            allow_single_file = True,
-            default = Label("@flutter_sdk//:flutter.version.json"),
-        ),
-    },
 )
 
 def _flutter_impl(ctx):
@@ -427,14 +335,6 @@ def _flutter_impl(ctx):
     )
 
     flutter_tools_packages(name = "flutter_tools_packages")
-
-    for abi, info in ABIS.items():
-        for mode in MODES:
-            flutter_engine_jar(
-                name = engine_repo(abi, mode),
-                artifact = info.maven_artifact[mode],
-                extract_libs = True,
-            )
 
 _flutter_sdk_tag = tag_class(
     attrs = {

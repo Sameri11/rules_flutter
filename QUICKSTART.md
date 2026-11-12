@@ -227,23 +227,27 @@ Start from a Flutter Android project with `pubspec.yaml`, current
 assets, set `assets = []` explicitly. Create root `BUILD.bazel`:
 
 ```python
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 package(default_visibility = ["//visibility:public"])
 
 flutter_core(
     name = "core",
+    platforms = [FLUTTER_ANDROID],
     srcs = glob(["lib/**/*.dart"]),
     assets = [],
-    native_build_env = "@rules_flutter_android//flutter:native_build_env",
     pub = "@pub",
 )
 ```
 
 If a production package (including the app package) contains a staged
 `hook/build.dart`, `flutter_core` requires `native_build_env` during analysis.
-The Android environment shown above supplies the SDK needed by Flutter's native
-build-hook runner. Dev-only dependencies do not trigger this requirement.
+`FLUTTER_ANDROID` does not supply an environment by default. Set
+`native_build_env = "@rules_flutter_android//flutter:native_build_env"` on
+`flutter_core` when hooks need Android SDK inputs.
+
+Dev-only dependencies do not trigger this requirement.
 Host-test asset targets do not run native build hooks and need no app
 environment.
 
@@ -369,12 +373,14 @@ relative-import helpers:
 ```python
 # integration_test/BUILD.bazel
 load("@rules_flutter_core//flutter:composition.bzl", "flutter_debug_core")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 
 flutter_debug_core(
     name = "prebuilt_core",
     app = "//:core",
     entrypoint = "smoke.dart",
     srcs = ["helper.dart"],
+    platforms = [FLUTTER_ANDROID],
     dart_defines = {"TEST_MARK": "prebuilt"},
 )
 ```
@@ -560,9 +566,11 @@ the app package and point the Android helper at that package-local target.
 For example, the app core declares the plugin source target:
 
 ```python
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 flutter_core(
     name = "app",
     path_deps = ["//packages/greeter:srcs"],
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 ```
@@ -619,15 +627,42 @@ shows recipe inputs and ABI-specific native contributions.
 ## Consumer-owned stock android_binary
 
 Use the convenience rules from `defs.bzl` for standard apps. A consumer that
-needs to own Android packaging can instead combine the public building blocks:
-`flutter_core` exposes the `flutter_assets`, `flutter_engine`, and
-`flutter_libapp` output groups. The engine group may contain several libraries
-per ABI, and `flutter_libapp` is empty in debug mode. The Android composition
-module provides `flutter_plugin_registrant`, `flutter_build_config`, and the
-mode-selected `embedding_jar`; use `flutter_embedding_deps(maven_repo)` for the
-embedding's explicit AndroidX classpath. Here `flutter_assets` is `flutter_core`'s
-output group, not the `flutter_assets` rule. Stock `rules_android` rules then package those targets; for native
-packaging, see [`tests/consumer/composed_app:direct_apk`](tests/consumer/composed_app/BUILD.bazel).
+needs to own Android packaging can combine the public building blocks:
+`flutter_core` exposes the `flutter_assets` and `flutter_aot` output groups;
+Android engine libraries come from
+`@rules_flutter_android//flutter:engine_libs`. Declare the platform with
+`flutter_core(platforms = [FLUTTER_ANDROID])`.
+
+Android app assets resolve the core under the first `--android_platforms` value,
+or the first `FLUTTER_ANDROID` target platform when that flag is unset.
+Hand-wired selects follow the requesting target's platform configuration and
+default to the first descriptor.
+
+Breaking changes: `platforms` is required on `flutter_core`,
+`flutter_debug_core`, and `flutter_integration_test`.
+`flutter_assets(target_slices = ...)` and Android wrapper
+`flutter_assets(target_platforms = ...)` replace the old ABI-oriented
+`flutter_assets(abis = ...)` API. `FlutterArtifactInfo.abi`, `.libapp`, and
+`.engine_libs` become `.target_slice`, `.aot`, and `.aot_kind`.
+`flutter_libapp` is renamed to `flutter_aot`; the `flutter_engine` output group
+and public `engine_jar_label` are removed. Android engine libraries now come
+from `@rules_flutter_android//flutter:engine_libs` or explicit
+`engine_libs_<abi>_<mode>` overrides. Core's `flutter/abis.bzl` is removed:
+load Android's `@rules_flutter_android//flutter:abis.bzl` for `ABIS` and core's
+`@rules_flutter_core//flutter:modes.bzl` for `MODES`. A platform descriptor may
+provide `native_build_env`, which `flutter_core` can override per platform.
+AOT and asset actions miss caches once after upgrading.
+Hand-wired Android `assets_dir` changes from `core_bundle_action` to the
+selected output directory, `<core>_<platform>_bundle_action` (for example,
+`core_android_bundle_action`).
+
+The Android composition module provides `flutter_plugin_registrant`,
+`flutter_build_config`, and the mode-selected `embedding_jar`; use
+`flutter_embedding_deps(maven_repo)` for the embedding's explicit AndroidX
+classpath. Here `flutter_assets` is `flutter_core`'s output group, not the
+`flutter_assets` rule. Stock `rules_android` rules then package those targets;
+for native packaging, see
+[`tests/consumer/composed_app:direct_apk`](tests/consumer/composed_app/BUILD.bazel).
 
 [`tests/consumer/hand_wired_app/BUILD.bazel`](tests/consumer/hand_wired_app/BUILD.bazel)
 demonstrates plugin, Java, and Maven wiring without plugin extensions or
@@ -700,12 +735,13 @@ Place each `integration_test` source in the package root and declare it with
 
 ```python
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_integration_test")
-load("@rules_flutter_android//flutter:defs.bzl", "flutter_android_app")
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID", "flutter_android_app")
 
 flutter_integration_test(
     name = "login",
     app = ":core",
     src = "integration_test/login_test.dart",
+    platforms = [FLUTTER_ANDROID],
 )
 
 flutter_android_app(

@@ -1,0 +1,48 @@
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID", "flutter_android_app")
+load("@rules_flutter_core//flutter:composition.bzl", "flutter_debug_core")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
+load("//fake_platform:defs.bzl", "FLUTTER_FAKE")
+load("//fake_platform:fake_app.bzl", "flutter_fake_app", "flutter_fake_debug_app")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_core(
+    name = "core",
+    platforms = [
+        FLUTTER_FAKE,
+        FLUTTER_ANDROID,
+    ],
+    pub = "@mixed_pub",
+)
+
+flutter_debug_core(
+    name = "mixed_debug_core",
+    testonly = True,
+    app = ":core",
+    entrypoint = "lib/main.dart",
+    platforms = [
+        FLUTTER_ANDROID,
+        FLUTTER_FAKE,
+    ],
+)
+
+flutter_fake_app(
+    name = "fake_app",
+    core = ":core",
+)
+
+flutter_fake_debug_app(
+    name = "fake_debug_app",
+    testonly = True,
+    core = ":mixed_debug_core",
+)
+
+flutter_android_app(
+    name = "android_app",
+    core = ":core",
+    manifest = "AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.mixed_platform"},
+    plugins = None,
+    resource_files = [],
+    test_apps = {"mixed_debug": {"core": ":mixed_debug_core"}},
+)

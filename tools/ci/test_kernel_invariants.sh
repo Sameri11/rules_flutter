@@ -100,10 +100,10 @@ fi
 # its BUILD.bazel is restored on exit.
 find_build() {
   find . -name BUILD.bazel -not -path './bazel-*' -print | LC_ALL=C sort | while read -r f; do
-    if grep -q "$1" "$f"; then echo "$f"; fi
+    if grep -E -q "$1" "$f"; then echo "$f"; fi
   done | sed -n 1p
 }
-app_build=$(find_build '^flutter_core(')
+app_build=$(find_build '^flutter_core\(')
 if [ -z "$app_build" ]; then
   echo "FAIL: no flutter_core package for the undeclared-import probe" >&2
   exit 1

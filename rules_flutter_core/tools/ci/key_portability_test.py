@@ -294,15 +294,28 @@ class Checker:
             if _contains_string(tree, token):
                 self.fail("C", "rules.bzl must not use the {} execution requirement".format(token))
 
-        aot_function = _function(tree, "_dart_aot_elf_impl")
+        aot_function = _function(tree, "_dart_aot_snapshot_impl")
         if aot_function is None:
-            self.fail("C", "{} must define _dart_aot_elf_impl".format(FILES["defs"]))
+            self.fail("C", "{} must define _dart_aot_snapshot_impl".format(FILES["defs"]))
         else:
             aot_action = _action_call(aot_function, "run")
             if aot_action is None:
-                self.fail("C", "_dart_aot_elf_impl must create its AOT action with ctx.actions.run")
-            if not _rule_uses_toolchain(tree, "dart_aot_elf"):
-                self.fail("C", "dart_aot_elf must declare the Flutter toolchain type")
+                self.fail("C", "_dart_aot_snapshot_impl must create its AOT action with ctx.actions.run")
+            else:
+                executable = _keyword(aot_action, "executable")
+                if (
+                    not isinstance(executable, ast.Attribute)
+                    or executable.attr != "gen_snapshot_release"
+                    or _call_path(executable.value) != ["_flutter_aot_toolchain"]
+                ):
+                    self.fail("C", "DartAotSnapshot executable must come from its declared AOT toolchain")
+                aot_toolchain = _function(tree, "_flutter_aot_toolchain")
+                if aot_toolchain is None or not _contains_string(aot_toolchain, "//flutter/private:flutter_aot_toolchain_type"):
+                    self.fail("C", "DartAotSnapshot executable helper must read its declared AOT toolchain")
+            if not _rule_uses_toolchain(tree, "dart_aot_snapshot", "//flutter/private:flutter_target_toolchain_type"):
+                self.fail("C", "dart_aot_snapshot must declare the Flutter target toolchain type")
+            if not _rule_uses_toolchain(tree, "dart_aot_snapshot", "//flutter/private:flutter_aot_toolchain_type"):
+                self.fail("C", "dart_aot_snapshot must declare the Flutter AOT toolchain type")
 
         for target in (
             "_dartaotruntime",
@@ -1095,7 +1108,7 @@ class Checker:
         # Each pkg field comes from the app's provider or the rule's own srcs, so a
         # dropped or substituted input changes the shape and fails here.
         expected = {
-            "package_name": "ctx.attr.app[FlutterPubspecInfo].package_name",
+            "package_name": "app[FlutterPubspecInfo].package_name",
             "package_config": "core.package_config",
             "pub_srcs": "core.pub_srcs",
             "path_deps": "core.path_deps",
@@ -1113,11 +1126,11 @@ class Checker:
             if values != expected:
                 self.fail("S", "the debug kernel's pkg struct must take each field from the app's FlutterCoreInfo or ctx.files.srcs: {}".format(values))
         kernel = _function(tree, "_flutter_debug_kernel_impl")
-        if kernel is None or "ctx.attr.app[FlutterCoreInfo]" not in ast.unparse(kernel):
-            self.fail("S", "_flutter_debug_kernel_impl must read the app through FlutterCoreInfo")
+        if kernel is None or "app[FlutterCoreInfo]" not in ast.unparse(kernel):
+            self.fail("S", "_flutter_debug_kernel_impl must read the transitioned app through FlutterCoreInfo")
         bundle = _function(tree, "_flutter_debug_bundle_impl")
         if bundle is None or "core.mode_free_assets" not in ast.unparse(bundle):
-            self.fail("S", "_flutter_debug_bundle_impl must overlay the app's mode-free assets from FlutterCoreInfo")
+            self.fail("S", "_flutter_debug_bundle_impl must overlay the app's selected mode-free assets from FlutterCoreInfo")
 
         # The provider's values must come from the app's own files, not from a label
         # the debug artifact derives.
@@ -1137,7 +1150,7 @@ class Checker:
                 "debug_registrant": "ctx.file.debug_registrant",
                 "registrant_path": "library_path(ctx, ctx.file.debug_registrant, 'dart_plugin_registrant') if ctx.file.debug_registrant else ''",
                 "lib": "lib_root(ctx.label)",
-                "mode_free_assets": "mode_free_assets",
+                "mode_free_assets": "mode_free_assets[0]",
             }
             if fields != filled:
                 self.fail("S", "FlutterCoreInfo must be filled from the app's own files and labels: {}".format(fields))

@@ -1,3 +1,4 @@
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core", "flutter_test_suite")
 
 package(default_visibility = ["//visibility:public"])
@@ -11,6 +12,7 @@ flutter_core(
     # pubspec.lock carries no hash for it and its content is otherwise an
     # undeclared input.
     path_deps = ["//packages/greeter:srcs"],
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
 )
 

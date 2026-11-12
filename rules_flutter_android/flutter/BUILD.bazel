@@ -1,4 +1,5 @@
 load("//flutter:native_build_env.bzl", "native_build_env")
+load("//flutter/private:target_toolchains.bzl", "flutter_android_target_toolchains")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,6 +33,111 @@ filegroup(
     }),
 )
 
+config_setting(
+    name = "engine_split_arm64_v8a_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {"@rules_flutter_core//flutter:mode": "release"},
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "engine_split_arm64_v8a_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {"@rules_flutter_core//flutter:mode": "debug"},
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "engine_split_x86_64_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {"@rules_flutter_core//flutter:mode": "release"},
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "engine_split_x86_64_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {"@rules_flutter_core//flutter:mode": "debug"},
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "engine_split_armeabi_v7a_release",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
+    flag_values = {"@rules_flutter_core//flutter:mode": "release"},
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "engine_split_armeabi_v7a_debug",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:armv7",
+    ],
+    flag_values = {"@rules_flutter_core//flutter:mode": "debug"},
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "engine_libs_arm64_v8a_release",
+    srcs = ["@flutter_engine_arm64_v8a_release//jar:libs"],
+)
+
+filegroup(
+    name = "engine_libs_arm64_v8a_debug",
+    srcs = ["@flutter_engine_arm64_v8a_debug//jar:libs"],
+)
+
+filegroup(
+    name = "engine_libs_x86_64_release",
+    srcs = ["@flutter_engine_x86_64_release//jar:libs"],
+)
+
+filegroup(
+    name = "engine_libs_x86_64_debug",
+    srcs = ["@flutter_engine_x86_64_debug//jar:libs"],
+)
+
+filegroup(
+    name = "engine_libs_armeabi_v7a_release",
+    srcs = ["@flutter_engine_armeabi_v7a_release//jar:libs"],
+)
+
+filegroup(
+    name = "engine_libs_armeabi_v7a_debug",
+    srcs = ["@flutter_engine_armeabi_v7a_debug//jar:libs"],
+)
+
+filegroup(
+    name = "engine_libs",
+    srcs = select({
+        ":engine_split_arm64_v8a_release": [":engine_libs_arm64_v8a_release"],
+        ":engine_split_arm64_v8a_debug": [":engine_libs_arm64_v8a_debug"],
+        ":engine_split_x86_64_release": [":engine_libs_x86_64_release"],
+        ":engine_split_x86_64_debug": [":engine_libs_x86_64_debug"],
+        ":engine_split_armeabi_v7a_release": [":engine_libs_armeabi_v7a_release"],
+        ":engine_split_armeabi_v7a_debug": [":engine_libs_armeabi_v7a_debug"],
+        "//conditions:default": [],
+    }),
+)
+
 # The Android SDK a native build hook reads. Pass this to a flutter_core call
 # explicitly when package hooks need the SDK.
 native_build_env(name = "native_build_env")
+
+flutter_android_target_toolchains()

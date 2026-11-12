@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "int_flag", "string_flag")
-load(":abis.bzl", "MODES")
+load(":modes.bzl", "MODES")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,6 +7,7 @@ exports_files([
     "defs.bzl",
     "composition.bzl",
     "extensions.bzl",
+    "target_toolchain.bzl",
 ])
 
 # The Flutter SDK toolchain type, for rules outside this module. The type is
@@ -14,6 +15,19 @@ exports_files([
 alias(
     name = "toolchain_type",
     actual = "//flutter/private:flutter_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+# Platform rulesets register these public toolchain types by label.
+alias(
+    name = "target_toolchain_type",
+    actual = "//flutter/private:flutter_target_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "aot_toolchain_type",
+    actual = "//flutter/private:flutter_aot_toolchain_type",
     visibility = ["//visibility:public"],
 )
 

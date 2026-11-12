@@ -78,8 +78,7 @@ def flutter_pubspec(name = "pubspec", src = "pubspec.yaml", **kwargs):
 
         flutter_pubspec()
 
-        flutter_core(name = "app", pub = "@pub", ...)
-        flutter_android_app(name = "demo_app", core = "//:app", ...)
+        flutter_core(name = "app", pub = "@pub", platforms = [platform])
 
     The defaults live here rather than on the rule's attribute deliberately. A
     label default on a rule resolves in the package that *defines* the rule, so

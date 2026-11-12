@@ -1,3 +1,4 @@
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:composition.bzl", "flutter_debug_core")
 
 package(default_visibility = ["//visibility:public"])
@@ -19,4 +20,5 @@ flutter_debug_core(
     app = "//:core",
     dart_defines = {"DEBUG_CORE_MARK": "prebuilt-value"},
     entrypoint = "debug_core_test.dart",
+    platforms = [FLUTTER_ANDROID],
 )
