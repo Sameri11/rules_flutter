@@ -444,7 +444,10 @@ test -e plugin_deps.MODULE.bazel || touch plugin_deps.MODULE.bazel
 test -e lib/dart_plugin_registrant.dart || touch lib/dart_plugin_registrant.dart
 ```
 
-After adding a plugin, run `bazel run //:dart_registrant_update` before the first build; the build checks the committed Dart registrant.
+When `flutter_core` sets `dart_plugin_registrant`, run its generated update
+target before the first build: `bazel run //<package-path>:dart_registrant_update`
+(replace `<package-path>` with the core's Bazel package). Builds check the
+committed Dart registrant.
 
 `plugin_deps.MODULE.bazel` is the generated Maven dependency segment;
 `lib/dart_plugin_registrant.dart` is the Dart registrant. Android Java
@@ -511,7 +514,9 @@ to the APK.
 Include the generated Maven segment in the Consumer Module after configuring
 its repository mapping. The guard macro creates check and update targets for
 the segment, plus a test target that ensures the per-project guards agree.
-Core and its generated test-package target check the committed debug Dart registrant on every build. When stale, the error prints `bazel run //:dart_registrant_update`.
+The core and its generated test-package target check the committed debug Dart
+registrant on every build. When the attribute is set, the core's package
+contains the `dart_registrant_update` target.
 
 The generator supplies package-scoped `BuildConfig` values for ordinary
 source-built Android plugins. It does not parse Gradle `buildConfigField`
@@ -558,9 +563,10 @@ configurations.
 
 Keep each app's `pubspec.yaml`, `pubspec.lock`, and `flutter_core` in the same
 Bazel package. Declare every local path dependency's source files in
-`path_deps`; Bazel does not infer or hash undeclared path contents. Both
-`flutter_core` and `flutter_package` validate declarations against the `pub`
-hub's lock on every build; `--run_validations=false` opts out. The example
+`path_deps`; Bazel does not infer or hash undeclared path contents. `flutter_core`
+checks declarations against its package's `pubspec.lock`; `flutter_package`
+checks against the `pub` hub's lock. Both run on every build;
+`--run_validations=false` opts out. The example
 [`examples/local_plugin`](examples/local_plugin/) places its host app under
 `packages/host_app` and its plugin under `packages/greeter`. Create one core in
 the app package and point the Android helper at that package-local target.

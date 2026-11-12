@@ -25,6 +25,7 @@ their keys and outputs do not depend on where the packages sit. The flutter
 tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 """
 
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
@@ -1369,7 +1370,7 @@ _flutter_package = rule(
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = None, _registrant_check = None, **kwargs):
+def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = None, **kwargs):
     """The inputs a host test reads from a Dart package, with no app build.
 
     Declares no app build. `flutter_core` declares a core artifact; a package
@@ -1388,8 +1389,22 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
       srcs: the package's lib/ Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
       path_deps: sources of `path:` dependencies; checked against the pub hub's lock during build validation.
       assets: a flutter_assets target, passed to tests as --flutter-assets-dir.
-      _registrant_check: internal registrant validation used by flutter_core.
       **kwargs: visibility, tags.
+    """
+    flutter_package_targets(name, pub, pubspec, srcs, path_deps, assets, registrant_check = None, **kwargs)
+
+def flutter_package_targets(name, pub, pubspec, srcs = None, path_deps = [], assets = None, registrant_check = None, **kwargs):
+    """Declare package targets, with optional validation for flutter_core.
+
+    Args:
+      name: the target's name.
+      pub: the pub.lock hub repository.
+      pubspec: the package's flutter_pubspec target.
+      srcs: Dart sources for the package.
+      path_deps: declared source files for path dependencies.
+      assets: the flutter_assets target.
+      registrant_check: optional (committed, expected, updater) labels.
+      **kwargs: attributes passed to the declared package target.
     """
     package_config, _, pub_lib, _, pubspec_lock, lock_project_dir = _pub_hub_labels(pub, "flutter_package " + name)
     if srcs == None:
@@ -1406,9 +1421,9 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
         pub_srcs = [pub_lib],
         path_deps = path_deps,
         assets = assets,
-        registrant = _registrant_check[0] if _registrant_check else None,
-        expected_registrant = _registrant_check[1] if _registrant_check else None,
-        registrant_updater = _registrant_check[2] if _registrant_check else None,
+        registrant = registrant_check[0] if registrant_check else None,
+        expected_registrant = registrant_check[1] if registrant_check else None,
+        registrant_updater = registrant_check[2] if registrant_check else None,
         **kwargs
     )
 
@@ -1799,11 +1814,12 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
     args = ctx.actions.args()
     args.add(checker)
     args.add("--lock", pubspec_lock)
+    package_dir = paths.join(ctx.label.workspace_root, ctx.label.package)
     if lock_project_dir:
         args.add("--package-dir-file", lock_project_dir)
     else:
-        args.add("--package-dir", ctx.label.package)
-    args.add("--self-dir", ctx.label.package)
+        args.add("--package-dir", package_dir)
+    args.add("--self-dir", package_dir)
     args.add("--out", marker)
     args.add_all("--declared", path_deps)
 

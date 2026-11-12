@@ -8,7 +8,7 @@ load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":modes.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check_action")
+load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package_targets", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check_action")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -275,7 +275,8 @@ def flutter_core(
       assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies; checked against the pub hub lock during build validation.
+      path_deps: sources of `path:` dependencies; checked against this package's
+        `pubspec.lock` during build validation.
       dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: one label override for all platforms, a dict keyed by platform name, or None to use each descriptor's default.
       dart_plugin_registrant: an optional plugin registrant Dart file to compile.
@@ -399,14 +400,14 @@ def flutter_core(
         tags = ["manual"],
     )
 
-    flutter_package(
+    flutter_package_targets(
         name = name + "_test_package",
         pub = pub,
         pubspec = ":pubspec",
         srcs = srcs,
         path_deps = path_deps,
         assets = ":" + name + "_test_assets",
-        _registrant_check = (
+        registrant_check = (
             registrant_label,
             pub + "//:dart_plugin_registrant.dart",
             ":dart_registrant_update",
