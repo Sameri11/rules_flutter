@@ -1283,21 +1283,36 @@ def _flutter_package_impl(ctx):
         fail("{}: assets must be one flutter_assets directory, got {} files".format(ctx.label, len(assets)))
     pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
     deps_lib = _lib_tier(ctx, pubspec)
-    return [FlutterPackageInfo(
-        pubspec = pubspec,
-        srcs = ctx.files.srcs,
-        package_config = ctx.file.package_config,
-        test_deps = ctx.file.test_deps,
-        deps_lib = deps_lib,
-        pub_srcs = ctx.files.pub_srcs,
-        path_deps = ctx.files.path_deps,
-        assets = assets[0] if assets else None,
-    )]
+    validation = pub_path_deps_check_action(
+        ctx,
+        ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
+        ctx.file.pubspec_lock,
+        ctx.files.path_deps,
+        ctx.file._checker,
+    )
+    return [
+        OutputGroupInfo(_validation = depset([validation])),
+        FlutterPackageInfo(
+            pubspec = pubspec,
+            srcs = ctx.files.srcs,
+            package_config = ctx.file.package_config,
+            test_deps = ctx.file.test_deps,
+            deps_lib = deps_lib,
+            pub_srcs = ctx.files.pub_srcs,
+            path_deps = ctx.files.path_deps,
+            assets = assets[0] if assets else None,
+        ),
+    ]
 
 _flutter_package = rule(
     implementation = _flutter_package_impl,
     doc = "Declares a Dart package's inputs to host tests. See flutter_package.",
     attrs = {
+        "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
+        "_checker": attr.label(
+            default = "//flutter/private:check_path_deps.py",
+            allow_single_file = True,
+        ),
         "pubspec": attr.label(
             mandatory = True,
             providers = [FlutterPubspecInfo],
@@ -1355,7 +1370,7 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
       pub: the `pub.lock` hub repository, e.g. `"@pub"`.
       pubspec: the package's flutter_pubspec target.
       srcs: the package's lib/ Dart sources. Defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies.
+      path_deps: sources of `path:` dependencies; checked against `pubspec.lock` by build validation.
       assets: a flutter_assets target, passed to tests as --flutter-assets-dir.
       **kwargs: visibility, tags.
     """
@@ -1365,6 +1380,7 @@ def flutter_package(name, pub, pubspec, srcs = None, path_deps = [], assets = No
 
     _flutter_package(
         name = name,
+        pubspec_lock = "pubspec.lock",
         pubspec = pubspec,
         srcs = srcs,
         package_config = package_config,
@@ -1745,40 +1761,49 @@ AssetBundle and writeBundle with TargetPlatform.tester, as `flutter test` builds
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def _pub_path_deps_check_impl(ctx):
-    marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker):
+    """Declares a validation action for a package's path dependencies.
 
+    Args:
+      ctx: The rule context.
+      marker: The validation output file.
+      pubspec_lock: The package's lockfile.
+      path_deps: Declared source files for path dependencies.
+      checker: The path dependency checker script.
+
+    Returns:
+      The validation marker output.
+    """
     args = ctx.actions.args()
-
-    # run_shell reserves $0 for an empty placeholder, so the script arrives as
-    # $1 and "$@" already includes it.
-    args.add(ctx.file._checker)
-    args.add("--lock", ctx.file.pubspec_lock)
+    args.add(checker)
+    args.add("--lock", pubspec_lock)
     args.add("--package-dir", ctx.label.package)
     args.add("--out", marker)
-    args.add_all("--declared", ctx.files.path_deps)
+    args.add_all("--declared", path_deps)
 
     # Bazel 9 has no native py_binary and rules_python is not worth a dependency
     # for one check script, so invoke the interpreter directly.
     ctx.actions.run_shell(
         command = 'exec python3 "$@"',
         arguments = [args],
-        inputs = [ctx.file.pubspec_lock, ctx.file._checker] + ctx.files.path_deps,
+        inputs = [pubspec_lock, checker] + path_deps,
         outputs = [marker],
         mnemonic = "PubPathDepsCheck",
         progress_message = "Checking path: dependencies %{label}",
     )
+    return marker
 
+def _pub_path_deps_check_impl(ctx):
+    marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+    pub_path_deps_check_action(ctx, marker, ctx.file.pubspec_lock, ctx.files.path_deps, ctx.file._checker)
     return [DefaultInfo(files = depset([marker]))]
 
 pub_path_deps_check = rule(
     implementation = _pub_path_deps_check_impl,
     doc = """Fails the build if a `path:` dependency is not declared in path_deps.
 
-Hosted packages are pinned by sha256 in pubspec.lock, so their content shows up
-in the action key. Path dependencies are not, so an undeclared one yields a
-silently stale artifact -- and a shared remote cache spreads it. Depend on this
-target from CI, or wire it into a test suite, before enabling a shared cache.""",
+The `flutter_core` and `flutter_package` macros run this validation automatically.
+Use this target to check a `pubspec.lock` that is not owned by either macro.""",
     attrs = {
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
         "path_deps": attr.label_list(allow_files = True),
