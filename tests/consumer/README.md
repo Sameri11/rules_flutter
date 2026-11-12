@@ -1,7 +1,9 @@
 # Consumer API test
 
 A separate Bazel module that reaches these rules the way a real consumer does,
-combining API coverage with focused behavior checks.
+combining API coverage with focused behavior checks. `flutter_package` and
+`flutter_core` validate declared path dependencies on every build; core builds
+also validate the committed registrant. `--run_validations=false` opts out.
 
 ```sh
 cd tests/consumer

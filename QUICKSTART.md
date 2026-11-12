@@ -558,7 +558,9 @@ configurations.
 
 Keep each app's `pubspec.yaml`, `pubspec.lock`, and `flutter_core` in the same
 Bazel package. Declare every local path dependency's source files in
-`path_deps`; Bazel does not infer or hash undeclared path contents. The example
+`path_deps`; Bazel does not infer or hash undeclared path contents. Both
+`flutter_core` and `flutter_package` check declarations during every build;
+`--run_validations=false` opts out. The example
 [`examples/local_plugin`](examples/local_plugin/) places its host app under
 `packages/host_app` and its plugin under `packages/greeter`. Create one core in
 the app package and point the Android helper at that package-local target.
