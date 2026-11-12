@@ -9,7 +9,7 @@ load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":modes.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check", "pub_plugins_check")
+load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -176,11 +176,19 @@ def _flutter_core_impl(ctx):
     mode_free_assets = ctx.files.mode_free_assets
     if len(mode_free_assets) != 1:
         fail("{}: expected one mode-free asset tree, got {}".format(ctx.label, len(mode_free_assets)))
+    validation = pub_path_deps_check_action(
+        ctx,
+        ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
+        ctx.file.pubspec_lock,
+        ctx.files.path_deps,
+        ctx.file._checker,
+    )
     return [
         DefaultInfo(files = depset(aot_files + [assets[0]])),
         OutputGroupInfo(
             flutter_assets = depset([assets[0]]),
             flutter_aot = depset(aot_files),
+            _validation = depset([validation]),
         ),
         FlutterArtifactInfo(
             mode = mode,
@@ -215,6 +223,8 @@ _flutter_core = rule(
         "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
         "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
         "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
+        "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
+        "_checker": attr.label(default = "//flutter/private:check_path_deps.py", allow_single_file = True),
         "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
     },
     toolchains = [_TARGET_TOOLCHAIN],
@@ -254,7 +264,7 @@ def flutter_core(
       assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies.
+      path_deps: sources of `path:` dependencies; checked against `pubspec.lock` by build validation.
       dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: one label override for all platforms, a dict keyed by platform name, or None to use each descriptor's default.
       dart_plugin_registrant: an optional plugin registrant Dart file to compile.
@@ -417,13 +427,7 @@ def flutter_core(
     native.filegroup(name = name + "_assets", srcs = select(assets_select))
     native.filegroup(name = name + "_bundle", srcs = select(bundle_select))
 
-    guards = [":path_deps_check"]
-    pub_path_deps_check(
-        name = "path_deps_check",
-        path_deps = path_deps,
-        pubspec_lock = "pubspec.lock",
-        **kwargs
-    )
+    guards = []
     if dart_plugin_registrant:
         registrant_label = _workspace_label(dart_plugin_registrant)
         pub_plugins_check(
@@ -440,11 +444,12 @@ def flutter_core(
             **_internal_kwargs(kwargs)
         )
         guards.append(":dart_registrant_check")
-    build_test(
-        name = name + "_guards_test",
-        targets = guards,
-        **kwargs
-    )
+    if guards:
+        build_test(
+            name = name + "_guards_test",
+            targets = guards,
+            **kwargs
+        )
 
     release_aot["//conditions:default"] = []
     _flutter_core(
@@ -454,6 +459,7 @@ def flutter_core(
         mode_free_assets = select(mode_free_assets_select),
         pubspec = ":pubspec",
         package_config = package_config,
+        pubspec_lock = "pubspec.lock",
         pub_srcs = [pub_lib],
         srcs = srcs,
         path_deps = path_deps,

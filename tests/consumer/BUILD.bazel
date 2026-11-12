@@ -83,6 +83,11 @@ flutter_pubspec(
 
 flutter_package(
     name = "package",
+    path_deps = [
+        ":dev_only_probe_srcs",
+        ":production_probe_srcs",
+        ":shared_probe_srcs",
+    ],
     pub = "@pub",
     pubspec = ":fixture_pubspec",
 )
@@ -128,6 +133,14 @@ pub_path_deps_check(
         ":shared_probe_srcs",
     ],
     pubspec_lock = "pubspec.lock",
+)
+
+build_test(
+    name = "path_deps_validation_test",
+    targets = [
+        ":app_core",
+        ":package",
+    ],
 )
 
 build_test(
