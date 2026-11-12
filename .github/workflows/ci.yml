@@ -169,6 +169,13 @@ jobs:
           bazel build --nobuild -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //:analysis_only 2>&1 | tee ../../bazel_consumer_analysis_only.log
           bazel build --nobuild --build_tests_only -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //... 2>&1 | tee ../../bazel_consumer_api.log
 
+      - name: Consumer host wildcard analysis
+        working-directory: tests/consumer
+        run: |
+          set -o pipefail
+          bazel build --nobuild -c fastbuild --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_host_debug.log
+          bazel build --nobuild -c opt --@rules_flutter_core//flutter:mode=release --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" //... 2>&1 | tee ../../bazel_consumer_host_release.log
+
       - name: Consumer Android toolchain inventory
         working-directory: tests/consumer
         run: python3 ../../tools/ci/android_toolchain_probe.py --scenario inventory
@@ -220,7 +227,7 @@ jobs:
         working-directory: tests/consumer
         run: |
           set -euo pipefail
-          bazel build -c fastbuild --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //mixed_platform:fake_debug_app //mixed_platform:android_app_mixed_debug //mixed_platform:android_app
+          bazel build -c fastbuild --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //mixed_platform:fake_app //mixed_platform:fake_debug_app //mixed_platform:android_app_mixed_debug //mixed_platform:android_app
       # Composed app: the APK check fails the build on a planted mismatch.
       - name: Consumer composed app release APK check
         working-directory: tests/consumer

@@ -1814,11 +1814,22 @@ Use this target to check a `pubspec.lock` that is not owned by either macro.""",
     },
 )
 
-def _pub_plugins_check_impl(ctx):
-    marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+def pub_plugins_check_action(ctx, marker, committed, expected, updater_target):
+    """Check committed plugin metadata and expose a marker when it matches.
+
+    Args:
+      ctx: Action context for the owning target.
+      marker: Output file touched when the metadata matches.
+      committed: Checked-in plugin metadata.
+      expected: Generated plugin metadata.
+      updater_target: Optional target that regenerates committed metadata.
+
+    Returns:
+      The marker output file.
+    """
     updater = ""
-    if ctx.attr.updater:
-        updater_label = ctx.attr.updater.label
+    if updater_target:
+        updater_label = updater_target.label
         updater = (
             "//{}:{}".format(updater_label.package, updater_label.name) if updater_label.repo_name == ctx.label.repo_name else str(updater_label)
         )
@@ -1841,17 +1852,21 @@ fi
 touch "$marker"
 """,
         arguments = [
-            ctx.file.expected.path,
-            ctx.file.committed.path,
+            expected.path,
+            committed.path,
             marker.path,
             updater,
         ],
-        inputs = [ctx.file.expected, ctx.file.committed],
+        inputs = [expected, committed],
         outputs = [marker],
         mnemonic = "PubFileCheck",
         progress_message = "Checking generated pub file %{label}",
     )
+    return marker
 
+def _pub_plugins_check_impl(ctx):
+    marker = ctx.actions.declare_file(ctx.label.name + ".checked")
+    pub_plugins_check_action(ctx, marker, ctx.file.committed, ctx.file.expected, ctx.attr.updater)
     return [DefaultInfo(files = depset([marker]))]
 
 pub_plugins_check = rule(

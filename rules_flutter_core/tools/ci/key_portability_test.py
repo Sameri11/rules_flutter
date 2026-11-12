@@ -918,16 +918,16 @@ class Checker:
                 self.fail("N", "pub_lock.bzl must write dart_plugin_registrant.dart with render_dart_registrant")
         rules = self.tree("defs", "N")
         if rules is not None:
-            check = _function(rules, "_pub_plugins_check_impl")
+            check = _function(rules, "pub_plugins_check_action")
             if check is None:
-                self.fail("N", "rules.bzl must define _pub_plugins_check_impl")
+                self.fail("N", "rules.bzl must define pub_plugins_check_action")
             else:
                 action = _action_call(check, "run_shell")
                 if action is None:
-                    self.fail("N", "_pub_plugins_check_impl must create its check with ctx.actions.run_shell")
+                    self.fail("N", "pub_plugins_check_action must create its check with ctx.actions.run_shell")
                 else:
                     for name in ("expected", "committed"):
-                        if not _contains_attr(_keyword(action, "inputs"), ["ctx", "file", name]):
+                        if not _contains_name(_keyword(action, "inputs"), name):
                             self.fail("N", "the generated-file check must declare {} as an input".format(name))
                     if _keyword(action, "execution_requirements") is not None:
                         self.fail("N", "the generated-file check must not set execution_requirements")

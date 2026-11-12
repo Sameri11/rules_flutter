@@ -5,11 +5,10 @@ supplies its target slices and artifact toolchains.
 """
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":modes.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check")
+load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check_action")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -183,12 +182,21 @@ def _flutter_core_impl(ctx):
         ctx.files.path_deps,
         ctx.file._checker,
     )
+    validation_files = [validation]
+    if ctx.file.registrant != None:
+        validation_files.append(pub_plugins_check_action(
+            ctx,
+            ctx.actions.declare_file(ctx.label.name + ".registrant.checked"),
+            ctx.file.registrant,
+            ctx.file.expected_registrant,
+            ctx.attr.registrant_updater,
+        ))
     return [
         DefaultInfo(files = depset(aot_files + [assets[0]])),
         OutputGroupInfo(
             flutter_assets = depset([assets[0]]),
             flutter_aot = depset(aot_files),
-            _validation = depset([validation]),
+            _validation = depset(validation_files),
         ),
         FlutterArtifactInfo(
             mode = mode,
@@ -224,6 +232,9 @@ _flutter_core = rule(
         "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
         "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
+        "registrant": attr.label(allow_single_file = [".dart"]),
+        "expected_registrant": attr.label(allow_single_file = [".dart"]),
+        "registrant_updater": attr.label(),
         "_checker": attr.label(default = "//flutter/private:check_path_deps.py", allow_single_file = True),
         "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
     },
@@ -253,10 +264,10 @@ def flutter_core(
     """Declares an app's Flutter artifacts and host-test inputs.
 
     Standard-layout packages derive Dart sources from `lib/` and assets from
-    `assets/`. The fixed `pubspec.yaml`, package/test targets, and guards are
-    declared with the artifacts so the package has one core. App AOT selects
-    its kernel from the configured Target OS; host tests and asset views need
-    no app Target OS.
+    `assets/`. The fixed pubspec, package/test targets, and embedded validations
+    are declared with the artifacts so the package has one core. App AOT
+    selects its kernel from the configured Target OS; host tests and asset views
+    need no app Target OS.
 
     Args:
       name: the artifact's target name. `pubspec` is reserved.
@@ -427,28 +438,14 @@ def flutter_core(
     native.filegroup(name = name + "_assets", srcs = select(assets_select))
     native.filegroup(name = name + "_bundle", srcs = select(bundle_select))
 
-    guards = []
+    registrant_label = None
     if dart_plugin_registrant:
         registrant_label = _workspace_label(dart_plugin_registrant)
-        pub_plugins_check(
-            name = "dart_registrant_check",
-            committed = registrant_label,
-            expected = pub + "//:dart_plugin_registrant.dart",
-            updater = ":dart_registrant_update",
-            **kwargs
-        )
         _write_source_file(
             name = "dart_registrant_update",
             source = pub + "//:dart_plugin_registrant.dart",
             destination = registrant_label,
             **_internal_kwargs(kwargs)
-        )
-        guards.append(":dart_registrant_check")
-    if guards:
-        build_test(
-            name = name + "_guards_test",
-            targets = guards,
-            **kwargs
         )
 
     release_aot["//conditions:default"] = []
@@ -464,6 +461,9 @@ def flutter_core(
         srcs = srcs,
         path_deps = path_deps,
         debug_registrant = debug_registrant,
+        registrant = registrant_label,
+        expected_registrant = pub + "//:dart_plugin_registrant.dart" if registrant_label else None,
+        registrant_updater = ":dart_registrant_update" if registrant_label else None,
         **kwargs
     )
 
