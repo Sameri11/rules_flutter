@@ -83,15 +83,19 @@ def main():
         for name, raw, rooted in missing:
             lines.append("  {} (path: {})".format(name, raw))
             lines.append("      expected declared files under: {}/".format(rooted))
+        hint_path = missing[0][2]
+        if hint_path.startswith("external/"):
+            _, _, hint_path = hint_path.partition("/")
+            _, _, hint_path = hint_path.partition("/")
         lines += [
             "",
             "Add a filegroup in the dependency's package and declare it:",
             "",
-            "  # {}/BUILD.bazel".format(missing[0][2]),
+            "  # {}/BUILD.bazel".format(hint_path),
             '  filegroup(name = "srcs", srcs = glob(["lib/**/*.dart"]))',
             "",
             "  # this package",
-            '  path_deps = ["//{}:srcs"]'.format(missing[0][2]),
+            '  path_deps = ["//{}:srcs"]'.format(hint_path),
             "",
         ]
         sys.stderr.write("\n".join(lines))
