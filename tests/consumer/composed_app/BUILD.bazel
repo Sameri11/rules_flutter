@@ -31,7 +31,7 @@ flutter_core(
     srcs = glob(["lib/**/*.dart"]),
     assets = ["assets/composed-marker.txt"],
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
-    # Sources of the path plugin, declared so pub_path_deps_check accepts it.
+    # These sources are required because the dependency is a local path package.
     path_deps = [
         "//:cmake_plugin_srcs",
         "//:composed_plugin_srcs",
@@ -180,6 +180,7 @@ cc_library(
     name = "composed_jni",
     srcs = ["native/composed_jni.cc"],
     tags = ["manual"],
+    target_compatible_with = ["@platforms//os:android"],
     deps = [":marker_dependency_shared"],
     alwayslink = True,
 )
@@ -316,6 +317,7 @@ direct_native(
     engine = ":direct_engine",
     libapp = ":direct_libapp",
     tags = ["manual"],
+    target_compatible_with = ["@platforms//os:android"],
 )
 
 cc_library(

@@ -26,9 +26,7 @@ flutter_plugin_deps_guards(
 
 exports_files(["build_config_probe.py"])
 
-# The sources of the path plugin composed_app depends on. pub_path_deps_check
-# requires every `path:` dependency's files to be declared, and a package cannot
-# glob another package's directory.
+# Sources for composed_app's path dependencies; Bazel cannot glob another package's directory.
 filegroup(
     name = "composed_plugin_srcs",
     srcs = glob(["fixtures/composed_plugin/**"]),
@@ -68,6 +66,7 @@ filegroup(
 filegroup(
     name = "dev_only_probe_srcs",
     srcs = glob(["fixtures/dev_only_probe/**"]),
+    visibility = ["//pub_workspace/member:__pkg__"],
 )
 
 # `//standard_layout` exercises `flutter_core` defaults for standard-layout
@@ -83,6 +82,11 @@ flutter_pubspec(
 
 flutter_package(
     name = "package",
+    path_deps = [
+        ":dev_only_probe_srcs",
+        ":production_probe_srcs",
+        ":shared_probe_srcs",
+    ],
     pub = "@pub",
     pubspec = ":fixture_pubspec",
 )
@@ -91,8 +95,6 @@ flutter_test(
     name = "package_test",
     src = "test/package_test.dart",
     app = ":package",
-    # Manual: CI's --build_tests_only skips it. Analysed via :analysis_only.
-    tags = ["manual"],
 )
 
 # The macro, with every named parameter supplied -- it is the public entry point
@@ -131,8 +133,12 @@ pub_path_deps_check(
 )
 
 build_test(
-    name = "dart_registrant_guards_test",
-    targets = [":app_core_guards_test"],
+    name = "path_deps_validation_test",
+    targets = [
+        ":app_core",
+        ":package",
+        "//pub_workspace/member:package",
+    ],
 )
 
 # Recipe contributions stay a platform-neutral declaration. The composed

@@ -44,7 +44,11 @@ pub.lock(
     name = "mixed_pub",
     lock = "//mixed_platform:pubspec.lock",
 )
-use_repo(pub, "composed_pub", "hand_wired_pub", "mixed_pub", "pub", "standard_layout_pub")
+pub.lock(
+    name = "workspace_pub",
+    lock = "//pub_workspace:pubspec.lock",
+)
+use_repo(pub, "composed_pub", "hand_wired_pub", "mixed_pub", "pub", "standard_layout_pub", "workspace_pub")
 
 include("//android:config.MODULE.bazel")
 

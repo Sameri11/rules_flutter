@@ -5,11 +5,10 @@ supplies its target slices and artifact toolchains.
 """
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":modes.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
-load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check", "pub_plugins_check")
+load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package_targets", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check_action")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -176,11 +175,28 @@ def _flutter_core_impl(ctx):
     mode_free_assets = ctx.files.mode_free_assets
     if len(mode_free_assets) != 1:
         fail("{}: expected one mode-free asset tree, got {}".format(ctx.label, len(mode_free_assets)))
+    validation = pub_path_deps_check_action(
+        ctx,
+        ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
+        ctx.file.pubspec_lock,
+        ctx.files.path_deps,
+        ctx.file._checker,
+    )
+    validation_files = [validation]
+    if ctx.file.registrant != None:
+        validation_files.append(pub_plugins_check_action(
+            ctx,
+            ctx.actions.declare_file(ctx.label.name + ".registrant.checked"),
+            ctx.file.registrant,
+            ctx.file.expected_registrant,
+            ctx.attr.registrant_updater,
+        ))
     return [
         DefaultInfo(files = depset(aot_files + [assets[0]])),
         OutputGroupInfo(
             flutter_assets = depset([assets[0]]),
             flutter_aot = depset(aot_files),
+            _validation = depset(validation_files),
         ),
         FlutterArtifactInfo(
             mode = mode,
@@ -215,6 +231,11 @@ _flutter_core = rule(
         "srcs": attr.label_list(allow_files = [".dart"], doc = "Dart sources for change detection in a flutter_debug_core's kernel."),
         "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
         "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
+        "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
+        "registrant": attr.label(allow_single_file = [".dart"]),
+        "expected_registrant": attr.label(allow_single_file = [".dart"]),
+        "registrant_updater": attr.label(),
+        "_checker": attr.label(default = "//flutter/private:check_path_deps.py", allow_single_file = True),
         "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
     },
     toolchains = [_TARGET_TOOLCHAIN],
@@ -243,10 +264,10 @@ def flutter_core(
     """Declares an app's Flutter artifacts and host-test inputs.
 
     Standard-layout packages derive Dart sources from `lib/` and assets from
-    `assets/`. The fixed `pubspec.yaml`, package/test targets, and guards are
-    declared with the artifacts so the package has one core. App AOT selects
-    its kernel from the configured Target OS; host tests and asset views need
-    no app Target OS.
+    `assets/`. The fixed pubspec, package/test targets, and embedded validations
+    are declared with the artifacts so the package has one core. App AOT
+    selects its kernel from the configured Target OS; host tests and asset views
+    need no app Target OS.
 
     Args:
       name: the artifact's target name. `pubspec` is reserved.
@@ -254,7 +275,8 @@ def flutter_core(
       assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies.
+      path_deps: sources of `path:` dependencies; checked against this package's
+        `pubspec.lock` during build validation.
       dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: one label override for all platforms, a dict keyed by platform name, or None to use each descriptor's default.
       dart_plugin_registrant: an optional plugin registrant Dart file to compile.
@@ -365,6 +387,8 @@ def flutter_core(
         )
         platform_asset_actions[platform.name] = ":" + asset_action
 
+    registrant_label = _workspace_label(dart_plugin_registrant) if dart_plugin_registrant else None
+
     # The host test reads this bundle and package, built for flutter_tester.
     flutter_test_assets(
         name = name + "_test_assets",
@@ -376,13 +400,18 @@ def flutter_core(
         tags = ["manual"],
     )
 
-    flutter_package(
+    flutter_package_targets(
         name = name + "_test_package",
         pub = pub,
         pubspec = ":pubspec",
         srcs = srcs,
         path_deps = path_deps,
         assets = ":" + name + "_test_assets",
+        registrant_check = (
+            registrant_label,
+            pub + "//:dart_plugin_registrant.dart",
+            ":dart_registrant_update",
+        ) if registrant_label else None,
         tags = ["manual"],
     )
 
@@ -417,34 +446,13 @@ def flutter_core(
     native.filegroup(name = name + "_assets", srcs = select(assets_select))
     native.filegroup(name = name + "_bundle", srcs = select(bundle_select))
 
-    guards = [":path_deps_check"]
-    pub_path_deps_check(
-        name = "path_deps_check",
-        path_deps = path_deps,
-        pubspec_lock = "pubspec.lock",
-        **kwargs
-    )
     if dart_plugin_registrant:
-        registrant_label = _workspace_label(dart_plugin_registrant)
-        pub_plugins_check(
-            name = "dart_registrant_check",
-            committed = registrant_label,
-            expected = pub + "//:dart_plugin_registrant.dart",
-            updater = ":dart_registrant_update",
-            **kwargs
-        )
         _write_source_file(
             name = "dart_registrant_update",
             source = pub + "//:dart_plugin_registrant.dart",
             destination = registrant_label,
             **_internal_kwargs(kwargs)
         )
-        guards.append(":dart_registrant_check")
-    build_test(
-        name = name + "_guards_test",
-        targets = guards,
-        **kwargs
-    )
 
     release_aot["//conditions:default"] = []
     _flutter_core(
@@ -454,10 +462,14 @@ def flutter_core(
         mode_free_assets = select(mode_free_assets_select),
         pubspec = ":pubspec",
         package_config = package_config,
+        pubspec_lock = "pubspec.lock",
         pub_srcs = [pub_lib],
         srcs = srcs,
         path_deps = path_deps,
         debug_registrant = debug_registrant,
+        registrant = registrant_label,
+        expected_registrant = pub + "//:dart_plugin_registrant.dart" if registrant_label else None,
+        registrant_updater = ":dart_registrant_update" if registrant_label else None,
         **kwargs
     )
 

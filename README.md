@@ -39,8 +39,12 @@ Other versions may work but are unverified.
 A local Flutter SDK, Android SDK, and Android NDK 28+ are required and are not
 hermetic. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set
 `ANDROID_HOME` and `ANDROID_NDK_HOME`. Commit `pubspec.lock`; Git pub sources are
-rejected, path dependencies need `path_deps`, and Dart compilation is not
-incremental. Bazel emits a debug-key-signed APK and an unsigned APK; release
+rejected, and path dependency sources must be listed in `path_deps`.
+`flutter_package` validates path dependencies against the `pub` hub's lock;
+`flutter_core` uses its package's `pubspec.lock`. Both validations run on every
+build. Core also checks the committed registrant on its artifact and generated
+test-package targets. `--run_validations=false` opts out.
+Dart compilation is not incremental. Bazel emits a debug-key-signed APK and an unsigned APK; release
 signing occurs outside Bazel. Native assets require consumer-written Package
 Recipes. The Consumer Module owns its Maven installation. Android is the only
 implemented app backend; host test and asset views do not require an app Target
