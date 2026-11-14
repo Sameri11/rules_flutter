@@ -409,7 +409,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "866ZtLRJDde4pZ+zSU5/feYI+XpBbAf5cMWuXTRuRCA=",
+        "bzlTransitiveDigest": "Utm7g/CaPR1xnWbVvy3mgXqZOaVUQqhP9JQ4e8Mzdtk=",
         "usagesDigest": "gihfLsx8YMM+v3GPdKHQB+XDY0mBmcT3vsEGUwsp5YE=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
