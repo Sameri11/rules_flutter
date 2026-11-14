@@ -39,11 +39,12 @@ Other versions may work but are unverified.
 A local Flutter SDK, Android SDK, and Android NDK 28+ are required and are not
 hermetic. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set
 `ANDROID_HOME` and `ANDROID_NDK_HOME`. Commit `pubspec.lock`; Git pub sources are
-rejected, and path dependency sources must be listed in `path_deps`.
-`flutter_package` validates path dependencies against the `pub` hub's lock;
-`flutter_core` uses its package's `pubspec.lock`. Both validations run on every
-build. Core also checks the committed registrant on its artifact and generated
-test-package targets. `--run_validations=false` opts out.
+rejected. Declare path dependency sources in `path_deps`.
+`flutter_package` and `flutter_core` validate path dependencies against the
+`pub` hub's lock; workspace members are checked against their reachable path
+dependency closure. Both validations run on every build. Core checks the
+committed registrant on its artifact and generated test-package targets.
+`--run_validations=false` opts out.
 Dart compilation is not incremental. Bazel emits a debug-key-signed APK and an unsigned APK; release
 signing occurs outside Bazel. Native assets require consumer-written Package
 Recipes. The Consumer Module owns its Maven installation. Android is the only
@@ -119,6 +120,20 @@ It is debug-only and `manual` unless `tags` overrides that. Build it with
 
 
 One measured warm four-command sequence took 1.500 seconds with the former suffixed labels and 16.165 seconds with one label under successive ABI configurations. These timings are scoped to one machine/workflow, not a general speed promise. Expensive Flutter/native actions remained reusable, while Android packaging reran. Disk/remote-cache switching speed was not measured; shared materialized paths do not inherently collide in action caches.
+
+## Pub workspaces
+
+Pub workspaces use one root `pubspec.yaml`, `pubspec.lock`, and `pub` hub.
+List each member with a literal path in the root `workspace:` field; glob
+entries are rejected because Bazel cannot reliably track new directory matches.
+Members use `resolution: workspace`. Put each member's Dart sources in
+consumer-declared `path_deps` on its dependents.
+
+`flutter_core` and `flutter_package` use the hub lock for path-dependency
+validation. For Android plugins, declare one `plugins.project(pub = "@pub")`
+for that hub. `flutter_android_app` selects the plugin subset for its core's
+workspace member. Separate `pub` hubs are needed when workspaces require
+different plugin/Maven overrides.
 
 ## Compatibility with flutter_tools
 

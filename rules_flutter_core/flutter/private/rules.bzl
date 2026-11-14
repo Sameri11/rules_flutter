@@ -28,6 +28,7 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
+load(":pub_workspace.bzl", "PubWorkspaceInfo")
 load(":pubspec.bzl", "FlutterPubspecInfo")
 
 FlutterTargetSliceInfo = provider(
@@ -917,7 +918,9 @@ def _dart_test_deps_impl(ctx):
     scalars = ctx.actions.args()
     scalars.add(ctx.attr.hub)
     scalars.add(ctx.attr.lock_name)
-    scalars.add_joined(ctx.attr.packages, join_with = " ")
+
+    # The shell script consumes a name argument even when there are no direct packages.
+    scalars.add_joined(ctx.attr.packages, join_with = " ", omit_if_empty = False)
     scalars.add(dill)
     scalars.add("org-dartlang-root:///" + _execroot_path(entry))
 
@@ -1155,7 +1158,7 @@ dart_aot_snapshot = rule(
 def _pub_hub_labels(pub, who):
     """The hub labels a Dart rule takes from `pub = "@<hub>"`.
 
-    Returns `(package_config, project_package_config, lib, all, lock, lock_dir)`.
+    Returns `(package_config, project_package_config, lib, all, lock, lock_dir, workspace)`.
     """
     if not pub or not pub.startswith("@") or "//" in pub or ":" in pub:
         fail((
@@ -1169,6 +1172,7 @@ def _pub_hub_labels(pub, who):
         pub + "//:all",
         pub + "//:pubspec.lock",
         pub + "//:lock_project_dir",
+        pub + "//:workspace",
     )
 
 def _lib_tier(ctx, pubspec):
@@ -1286,6 +1290,9 @@ def _flutter_package_impl(ctx):
         fail("{}: assets must be one flutter_assets directory, got {} files".format(ctx.label, len(assets)))
     pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
     deps_lib = _lib_tier(ctx, pubspec)
+    workspace = ctx.attr.workspace[PubWorkspaceInfo]
+    selected = workspace.members.get(ctx.label.package, workspace.root)
+    expected = selected.path_deps
     validation = pub_path_deps_check_action(
         ctx,
         ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
@@ -1293,6 +1300,7 @@ def _flutter_package_impl(ctx):
         ctx.files.path_deps,
         ctx.file._checker,
         ctx.file.lock_project_dir,
+        expected,
     )
     validations = [validation]
     if ctx.file.registrant:
@@ -1362,6 +1370,7 @@ _flutter_package = rule(
         "registrant": attr.label(allow_single_file = [".dart"]),
         "expected_registrant": attr.label(allow_single_file = [".dart"]),
         "registrant_updater": attr.label(),
+        "workspace": attr.label(mandatory = True, providers = [PubWorkspaceInfo]),
         "_lib_entry": attr.label(
             default = "//flutter/private:lib_entry.py",
             allow_single_file = True,
@@ -1406,7 +1415,7 @@ def flutter_package_targets(name, pub, pubspec, srcs = None, path_deps = [], ass
       registrant_check: optional (committed, expected, updater) labels.
       **kwargs: attributes passed to the declared package target.
     """
-    package_config, _, pub_lib, _, pubspec_lock, lock_project_dir = _pub_hub_labels(pub, "flutter_package " + name)
+    package_config, _, pub_lib, _, pubspec_lock, lock_project_dir, workspace = _pub_hub_labels(pub, "flutter_package " + name)
     if srcs == None:
         srcs = native.glob(["lib/**/*.dart"])
 
@@ -1424,6 +1433,7 @@ def flutter_package_targets(name, pub, pubspec, srcs = None, path_deps = [], ass
         registrant = registrant_check[0] if registrant_check else None,
         expected_registrant = registrant_check[1] if registrant_check else None,
         registrant_updater = registrant_check[2] if registrant_check else None,
+        workspace = workspace,
         **kwargs
     )
 
@@ -1797,7 +1807,7 @@ AssetBundle and writeBundle with TargetPlatform.tester, as `flutter test` builds
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lock_project_dir = None):
+def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lock_project_dir = None, expected_path_deps = None):
     """Declares a validation action for a package's path dependencies.
 
     Args:
@@ -1807,6 +1817,7 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
       path_deps: declared source files for path dependencies.
       checker: the path dependency checker script.
       lock_project_dir: directory containing the pub hub lock, when different from this package.
+      expected_path_deps: optional JSON list of path dependencies reachable from this package.
 
     Returns:
       The validation marker output.
@@ -1815,11 +1826,13 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
     args.add(checker)
     args.add("--lock", pubspec_lock)
     package_dir = paths.join(ctx.label.workspace_root, ctx.label.package)
+    args.add("--self-dir", package_dir)
     if lock_project_dir:
         args.add("--package-dir-file", lock_project_dir)
     else:
         args.add("--package-dir", package_dir)
-    args.add("--self-dir", package_dir)
+    if expected_path_deps:
+        args.add("--expected-path-deps", expected_path_deps)
     args.add("--out", marker)
     args.add_all("--declared", path_deps)
 
@@ -1829,7 +1842,7 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
     ctx.actions.run_shell(
         command = 'exec python3 "$@"',
         arguments = [args],
-        inputs = [pubspec_lock, checker] + ([lock_project_dir] if lock_project_dir else []) + path_deps,
+        inputs = [pubspec_lock, checker] + ([lock_project_dir] if lock_project_dir else []) + ([expected_path_deps] if expected_path_deps else []) + path_deps,
         outputs = [marker],
         mnemonic = "PubPathDepsCheck",
         progress_message = "Checking path: dependencies %{label}",

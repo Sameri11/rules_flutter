@@ -69,6 +69,7 @@ exports_files(
         "device_test.bzl",
         "flutter_test.bzl",
         "pub_lock.bzl",
+        "pub_workspace.bzl",
         "repo.bzl",
         "rules.bzl",
         "test_kernel_driver.bzl",

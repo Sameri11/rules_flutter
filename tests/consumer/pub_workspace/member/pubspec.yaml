@@ -1,4 +1,5 @@
 name: workspace_member
+version: 0.0.1
 publish_to: none
 resolution: workspace
 
@@ -8,3 +9,9 @@ environment:
 dependencies:
   dev_only_probe:
     path: ../../fixtures/dev_only_probe
+  workspace_member_b:
+    path: ../member_b
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

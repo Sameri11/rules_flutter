@@ -7,6 +7,7 @@ supplies its target slices and artifact toolchains.
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":modes.bzl", "aot_target_compatible_with")
+load(":pub_workspace.bzl", "PubWorkspaceInfo", "pub_workspace_file")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package_targets", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check_action")
 
@@ -67,6 +68,7 @@ FlutterCoreInfo = provider(
         "registrant_path": "str: the registrant's path within its package, as a package: URI suffix.",
         "lib": "str: the app's lib/ prefix in the execroot; an entrypoint under it compiles as package:, under its own name.",
         "mode_free_assets": "File: the mode-free neutral asset tree for the selected platform configuration.",
+        "workspace_path": "str: workspace member path, or empty for root semantics.",
     },
 )
 
@@ -175,12 +177,18 @@ def _flutter_core_impl(ctx):
     mode_free_assets = ctx.files.mode_free_assets
     if len(mode_free_assets) != 1:
         fail("{}: expected one mode-free asset tree, got {}".format(ctx.label, len(mode_free_assets)))
+    workspace = ctx.attr.workspace[PubWorkspaceInfo]
+    selected = workspace.members.get(ctx.label.package, workspace.root)
+    workspace_path = ctx.label.package if ctx.label.package in workspace.members else ""
+    expected_path_deps = selected.path_deps
     validation = pub_path_deps_check_action(
         ctx,
         ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
         ctx.file.pubspec_lock,
         ctx.files.path_deps,
         ctx.file._checker,
+        ctx.file.lock_project_dir,
+        expected_path_deps,
     )
     validation_files = [validation]
     if ctx.file.registrant != None:
@@ -188,7 +196,7 @@ def _flutter_core_impl(ctx):
             ctx,
             ctx.actions.declare_file(ctx.label.name + ".registrant.checked"),
             ctx.file.registrant,
-            ctx.file.expected_registrant,
+            selected.debug,
             ctx.attr.registrant_updater,
         ))
     return [
@@ -214,6 +222,7 @@ def _flutter_core_impl(ctx):
             registrant_path = library_path(ctx, ctx.file.debug_registrant, "dart_plugin_registrant") if ctx.file.debug_registrant else "",
             lib = lib_root(ctx.label),
             mode_free_assets = mode_free_assets[0],
+            workspace_path = workspace_path,
         ),
         ctx.attr.pubspec[FlutterPubspecInfo],
     ]
@@ -232,8 +241,9 @@ _flutter_core = rule(
         "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
         "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
+        "lock_project_dir": attr.label(allow_single_file = True, mandatory = True),
+        "workspace": attr.label(mandatory = True, providers = [PubWorkspaceInfo]),
         "registrant": attr.label(allow_single_file = [".dart"]),
-        "expected_registrant": attr.label(allow_single_file = [".dart"]),
         "registrant_updater": attr.label(),
         "_checker": attr.label(default = "//flutter/private:check_path_deps.py", allow_single_file = True),
         "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
@@ -247,7 +257,7 @@ def _pub_labels(pub, who):
             "{}: `pub` must be the repository of a `pub.lock` hub, e.g. \"@pub\" " +
             "(from `pub = use_extension(\"@rules_flutter_core//flutter:extensions.bzl\", \"pub\")`), got {}."
         ).format(who, repr(pub)))
-    return (pub + "//:package_config.json", pub + "//:project_package_config.json", pub + "//:lib", pub + "//:all")
+    return (pub + "//:package_config.json", pub + "//:project_package_config.json", pub + "//:lib", pub + "//:all", pub + "//:workspace")
 
 def flutter_core(
         name,
@@ -275,8 +285,8 @@ def flutter_core(
       assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies; checked against this package's
-        `pubspec.lock` during build validation.
+      path_deps: sources of `path:` dependencies; checked against the pub hub's
+        lock and project directory during build validation.
       dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: one label override for all platforms, a dict keyed by platform name, or None to use each descriptor's default.
       dart_plugin_registrant: an optional plugin registrant Dart file to compile.
@@ -295,14 +305,28 @@ def flutter_core(
         target_platforms.extend(platform.target_platforms)
     if not target_platforms:
         fail("flutter_core: at least one platform with target platforms is required.")
-    package_config, project_package_config, pub_lib, pub_all = _pub_labels(pub, "flutter_core " + name)
+    package_config, project_package_config, pub_lib, pub_all, workspace = _pub_labels(pub, "flutter_core " + name)
 
+    hub_debug_registrant = name + "_hub_debug_registrant"
+    hub_release_registrant = name + "_hub_release_registrant"
+    pub_workspace_file(
+        name = hub_debug_registrant,
+        workspace = workspace,
+        file = "debug",
+    )
+    pub_workspace_file(
+        name = hub_release_registrant,
+        workspace = workspace,
+        file = "release",
+    )
+    hub_debug_registrant = ":" + hub_debug_registrant
+    hub_release_registrant = ":" + hub_release_registrant
     aot_registrant = None
     debug_registrant = None
     if dart_plugin_registrant:
         debug_registrant = _workspace_label(dart_plugin_registrant)
         aot_registrant = select({
-            Label("//flutter:mode_release"): pub + "//:dart_plugin_registrant_release.dart",
+            Label("//flutter:mode_release"): hub_release_registrant,
             "//conditions:default": debug_registrant,
         })
 
@@ -409,7 +433,7 @@ def flutter_core(
         assets = ":" + name + "_test_assets",
         registrant_check = (
             registrant_label,
-            pub + "//:dart_plugin_registrant.dart",
+            hub_debug_registrant,
             ":dart_registrant_update",
         ) if registrant_label else None,
         tags = ["manual"],
@@ -449,7 +473,7 @@ def flutter_core(
     if dart_plugin_registrant:
         _write_source_file(
             name = "dart_registrant_update",
-            source = pub + "//:dart_plugin_registrant.dart",
+            source = hub_debug_registrant,
             destination = registrant_label,
             **_internal_kwargs(kwargs)
         )
@@ -462,14 +486,15 @@ def flutter_core(
         mode_free_assets = select(mode_free_assets_select),
         pubspec = ":pubspec",
         package_config = package_config,
-        pubspec_lock = "pubspec.lock",
+        pubspec_lock = pub + "//:pubspec.lock",
+        lock_project_dir = pub + "//:lock_project_dir",
         pub_srcs = [pub_lib],
         srcs = srcs,
         path_deps = path_deps,
         debug_registrant = debug_registrant,
         registrant = registrant_label,
-        expected_registrant = pub + "//:dart_plugin_registrant.dart" if registrant_label else None,
         registrant_updater = ":dart_registrant_update" if registrant_label else None,
+        workspace = workspace,
         **kwargs
     )
 

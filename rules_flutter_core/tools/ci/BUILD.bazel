@@ -19,6 +19,7 @@ genrule(
         "//flutter/private:debug_core.bzl",
         "//flutter/private:dart_registrant.bzl",
         "//flutter/private:pub_lock.bzl",
+        "//flutter/private:pub_workspace.bzl",
     ],
     outs = ["key_portability_check.checked"],
     cmd = """set -euo pipefail

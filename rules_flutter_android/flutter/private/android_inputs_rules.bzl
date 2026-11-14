@@ -11,12 +11,15 @@ fails with a clear diagnostic.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+load("@rules_android//providers:providers.bzl", "AndroidCcLinkParamsInfo", "AndroidIdeInfo", "AndroidIdlInfo", "AndroidLibraryAarInfo", "AndroidLibraryResourceClassJarProvider", "AndroidLintRulesInfo", "AndroidNativeLibsInfo", "BaselineProfileProvider", "DataBindingV2Info", "StarlarkAndroidResourcesInfo")
 load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo")
+load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo", "FlutterCoreInfo")
 load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_java//java/common:java_info.bzl", "JavaInfo")
+load("@rules_java//java/common:proguard_spec_info.bzl", "ProguardSpecInfo")
 load("//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
 load(":android.bzl", "flutter_android_assets")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
@@ -36,6 +39,79 @@ FlutterSplitNativeInfo = provider(
         "abi": "str: the split's ABI, or None where the configuration is not an Android split.",
         "mode": "str: the core's mode, release or debug; None without an ABI.",
         "libraries": "list[File]: each library the split packages, under its basename.",
+    },
+)
+
+WorkspacePluginTargetsInfo = provider(
+    doc = "Root and workspace-member Android plugin targets.",
+    fields = ["members", "root"],
+)
+
+# Providers consumed from Android library deps/exports. Keep dex info out:
+# the Android dex aspect supplies it independently.
+_ANDROID_PLUGIN_PROVIDERS = [
+    AndroidCcLinkParamsInfo,
+    AndroidIdlInfo,
+    AndroidIdeInfo,
+    AndroidLibraryAarInfo,
+    AndroidLibraryResourceClassJarProvider,
+    AndroidLintRulesInfo,
+    AndroidNativeLibsInfo,
+    BaselineProfileProvider,
+    CcInfo,
+    DataBindingV2Info,
+    DefaultInfo,
+    InstrumentedFilesInfo,
+    OutputGroupInfo,
+    ProguardSpecInfo,
+    StarlarkAndroidResourcesInfo,
+]
+
+def _workspace_plugin_targets_impl(ctx):
+    members = {}
+    for i, path in enumerate(ctx.attr.member_paths):
+        members[path] = struct(
+            registrant = ctx.attr.member_registrants[i],
+            native_files = ctx.attr.member_native_files[i],
+        )
+    return [WorkspacePluginTargetsInfo(
+        members = members,
+        root = struct(
+            registrant = ctx.attr.root_registrant,
+            native_files = ctx.attr.root_native_files,
+        ),
+    )]
+
+workspace_plugin_targets = rule(
+    implementation = _workspace_plugin_targets_impl,
+    attrs = {
+        "member_paths": attr.string_list(),
+        "member_registrants": attr.label_list(),
+        "member_native_files": attr.label_list(),
+        "root_registrant": attr.label(mandatory = True),
+        "root_native_files": attr.label(mandatory = True),
+        "exports": attr.label_list(),
+    },
+)
+
+def _select_workspace_plugins_impl(ctx):
+    info = ctx.attr.core[FlutterCoreInfo]
+    workspace = ctx.attr.workspace[WorkspacePluginTargetsInfo]
+    selected = workspace.members.get(info.workspace_path, workspace.root)
+    registrant = selected.registrant
+    providers = [registrant[JavaInfo]]
+    for provider in _ANDROID_PLUGIN_PROVIDERS:
+        if provider in registrant:
+            providers.append(registrant[provider])
+    providers.append(selected.native_files[FlutterNativeFilesByAbiInfo])
+    return providers
+
+select_workspace_plugins = rule(
+    implementation = _select_workspace_plugins_impl,
+    attrs = {
+        "core": attr.label(mandatory = True, providers = [FlutterCoreInfo]),
+        "workspace": attr.label(mandatory = True, providers = [WorkspacePluginTargetsInfo]),
+        "exports": attr.label_list(),
     },
 )
 
@@ -213,6 +289,19 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
             repr(plugins),
         ))
 
+    plugin_registrant = plugins + "//:generated_plugin_registrant" if plugins else None
+    plugin_native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None
+    if plugins:
+        select_workspace_plugins(
+            name = name + "_plugin_subset",
+            core = core,
+            workspace = plugins + "//:workspace_plugin_targets",
+            tags = tags + ["manual"] if "manual" not in tags else tags,
+            exports = [plugins + "//:workspace_plugin_targets"],
+        )
+        plugin_registrant = ":" + name + "_plugin_subset"
+        plugin_native_files = ":" + name + "_plugin_subset"
+
     # The caller's tags reach the helpers too, so a tag such as no-remote-cache
     # applies to the whole target set.
     helper_tags = tags if "manual" in tags else tags + ["manual"]
@@ -265,7 +354,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
     if plugins:
         android_library(
             name = name + "_registrant",
-            exports = [plugins + "//:generated_plugin_registrant"],
+            exports = [plugin_registrant],
             tags = helper_tags,
         )
     else:
@@ -282,7 +371,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
     _split_native(
         name = name + "_native",
         core = core,
-        native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None,
+        native_files = plugin_native_files,
         tags = helper_tags,
         # Split-native inputs exist only in Android split configurations.
         target_compatible_with = [Label("@platforms//os:android")],
