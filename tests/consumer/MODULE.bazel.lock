@@ -408,7 +408,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "ookO9nSEvbJqeBy/tdtGBn7TVQtv0GXBN6yGHHqsAC4=",
+        "bzlTransitiveDigest": "6o2d8GC3BT5gZse0OUSWlajF7sFboyO+WefZeJ4qUls=",
         "usagesDigest": "AFQI5PN97mnks2yWgIX361TV8306rJ4VPuWmhG1yFNA=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
@@ -429,13 +429,14 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "ookO9nSEvbJqeBy/tdtGBn7TVQtv0GXBN6yGHHqsAC4=",
-        "usagesDigest": "MIZKH8xcfb1pscqq81jQhHF4ylGO08PRxzsEQhM4UcY=",
+        "bzlTransitiveDigest": "6o2d8GC3BT5gZse0OUSWlajF7sFboyO+WefZeJ4qUls=",
+        "usagesDigest": "azRIDUvMFX9Z1j81/ld8UBmV4msWXT/9wgXL8dg0SGA=",
         "recordedInputs": [
           "REPO_MAPPING:,composed_pub sameri11_rules_flutter_core++pub+composed_pub",
           "REPO_MAPPING:,flutter_maven rules_jvm_external++maven+flutter_maven",
           "REPO_MAPPING:,namespace_plugin_metadata +namespace_plugin_metadata+namespace_plugin_metadata",
           "REPO_MAPPING:,plugin_maven rules_jvm_external++maven+plugin_maven",
+          "REPO_MAPPING:,workspace_pub sameri11_rules_flutter_core++pub+workspace_pub",
           "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android rules_android+",
           "REPO_MAPPING:sameri11_rules_flutter_android+,rules_android_ndk rules_android_ndk+",
@@ -530,6 +531,31 @@
                 "recipe_package": "{\"bzl\":\"@@//composed_app:recipe_package.bzl\",\"macro\":\"recipe_package_recipe\",\"root\":true}",
                 "cmake_plugin": "{\"bzl\":\"@@//composed_app:recipe_package.bzl\",\"macro\":\"cmake_override_recipe\",\"root\":true}"
               },
+              "mode_debug": "'@@sameri11_rules_flutter_core+//flutter:mode_debug'",
+              "mode_release": "'@@sameri11_rules_flutter_core+//flutter:mode_release'",
+              "ndk_source_properties": "'@@sameri11_rules_flutter_android++android_ndk+androidndk_cmake//:ndk_source_properties'"
+            }
+          },
+          "workspace_plugins": {
+            "repoRuleId": "@@sameri11_rules_flutter_android+//flutter/private:plugins.bzl%flutter_plugins",
+            "attributes": {
+              "abis": [
+                "arm64-v8a"
+              ],
+              "embedding_debug": "@@sameri11_rules_flutter_android+//flutter:embedding_jar_debug",
+              "embedding_release": "@@sameri11_rules_flutter_android+//flutter:embedding_jar_release",
+              "metadata": "@@sameri11_rules_flutter_core++pub+workspace_pub//:plugins_metadata.json",
+              "package_config": "@@sameri11_rules_flutter_core++pub+workspace_pub//:package_config.json",
+              "workspace_members": "@@sameri11_rules_flutter_core++pub+workspace_pub//:workspace_members.json",
+              "coursier_options": [],
+              "extra_artifacts": [],
+              "maven_resolver": "coursier",
+              "maven_lock_file": "",
+              "maven_repo": "'@@rules_jvm_external++maven+flutter_maven'",
+              "overrides": {},
+              "consumer_rules": {},
+              "build_config_fields": {},
+              "recipes": {},
               "mode_debug": "'@@sameri11_rules_flutter_core+//flutter:mode_debug'",
               "mode_release": "'@@sameri11_rules_flutter_core+//flutter:mode_release'",
               "ndk_source_properties": "'@@sameri11_rules_flutter_android++android_ndk+androidndk_cmake//:ndk_source_properties'"
@@ -657,7 +683,7 @@
     },
     "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "Xf7YMrV8gsb6tKXdqbyD+ljgVnBfFz+GxdZt83P14p0=",
+        "bzlTransitiveDigest": "AbBpvookEjm8gB7viThPGbryLIAmuKksykQ+HJUGflA=",
         "usagesDigest": "3YgLOQ5KctGblzmwvkmzbmE3OR8fATY6yGn0owwy7n8=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
