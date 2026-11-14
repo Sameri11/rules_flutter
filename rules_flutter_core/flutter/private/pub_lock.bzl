@@ -457,7 +457,6 @@ def _pub_hub_impl(rctx):
     member_list = ", ".join([repr(path) for path in member_paths])
     member_debug = ", ".join(['":dart_plugin_registrant_{}.dart"'.format(suffix) for suffix in member_suffixes])
     member_release = ", ".join(['":dart_plugin_registrant_release_{}.dart"'.format(suffix) for suffix in member_suffixes])
-    member_metadata = ", ".join(['":plugins_metadata_{}.json"'.format(suffix) for suffix in member_suffixes])
     member_path_deps = ", ".join(['":path_deps_{}.json"'.format(suffix) for suffix in member_suffixes])
     rctx.file("BUILD.bazel", """load("{composition_bzl}", "dart_test_deps", "pub_workspace")
 load("{hook_packages_bzl}", "flutter_hook_packages")
@@ -468,11 +467,9 @@ pub_workspace(
     member_paths = [{member_paths}],
     member_debug = [{member_debug}],
     member_release = [{member_release}],
-    member_metadata = [{member_metadata}],
     member_path_deps = [{member_path_deps}],
     root_debug = ":dart_plugin_registrant.dart",
     root_release = ":dart_plugin_registrant_release.dart",
-    root_metadata = ":plugins_metadata.json",
     root_path_deps = ":path_deps_root.json",
 )
 
@@ -515,7 +512,6 @@ dart_test_deps(
         member_paths = member_list,
         member_debug = member_debug,
         member_release = member_release,
-        member_metadata = member_metadata,
         member_path_deps = member_path_deps,
         composition_bzl = rctx.attr.composition_bzl,
         hook_packages_bzl = rctx.attr.hook_packages_bzl,

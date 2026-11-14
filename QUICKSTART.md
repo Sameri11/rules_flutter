@@ -573,8 +573,8 @@ configurations.
 
 ## Monorepo and path dependencies
 
-Keep each app's `pubspec.yaml`, `flutter_core`, and the lockfile hub in the same
-Bazel package. Outside a pub workspace, keep `pubspec.lock` there as well.
+Keep each app's `pubspec.yaml` and `flutter_core` in the same Bazel package;
+outside a pub workspace, keep its `pubspec.lock` there too.
 Declare every local path dependency's source files in `path_deps`; Bazel does
 not infer or hash undeclared path contents. Both `flutter_core` and
 `flutter_package` check declarations against the `pub` hub's lock. Both run on
