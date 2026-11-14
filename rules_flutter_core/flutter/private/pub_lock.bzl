@@ -443,21 +443,44 @@ def _pub_hub_impl(rctx):
             pubspec = rctx.path(Label("@flutter_sdk//:{}/pubspec.yaml".format(sdk_package_root(name))))
             for uri in _test_deps_libraries(rctx, name, pubspec.dirname.get_child("lib"), sdk = True):
                 libraries[uri] = True
+    root_path_deps = [
+        {"name": package["name"], "path": package["path"]}
+        for package in lock["path"]
+    ]
+    rctx.file("path_deps_root.json", json.encode_indent(root_path_deps, indent = "  ") + "\n")
 
     package_dirs = {
         name: "/".join(entries[name]["dir"])
         for name in sorted(reached.keys())
     }
     package_dirs_src = ", ".join(["{}: {}".format(repr(name), repr(path)) for name, path in package_dirs.items()])
-
     generated_files = workspace_plugin_files + workspace_path_dep_files
     generated_files_src = ",\n    ".join(['"{}"'.format(name) for name in generated_files])
     if generated_files_src:
         generated_files_src += ","
-
-    rctx.file("BUILD.bazel", """load("{composition_bzl}", "dart_test_deps")
+    member_paths = ["/".join(_segments(lock_label.package) + _segments(path)) for _, path in workspace_members]
+    member_suffixes = [_plugin_target_suffix(path) for path in member_paths]
+    member_list = ", ".join([repr(path) for path in member_paths])
+    member_debug = ", ".join(['":dart_plugin_registrant_{}.dart"'.format(suffix) for suffix in member_suffixes])
+    member_release = ", ".join(['":dart_plugin_registrant_release_{}.dart"'.format(suffix) for suffix in member_suffixes])
+    member_metadata = ", ".join(['":plugins_metadata_{}.json"'.format(suffix) for suffix in member_suffixes])
+    member_path_deps = ", ".join(['":path_deps_{}.json"'.format(suffix) for suffix in member_suffixes])
+    rctx.file("BUILD.bazel", """load("{composition_bzl}", "dart_test_deps", "pub_workspace")
 load("{hook_packages_bzl}", "flutter_hook_packages")
 package(default_visibility = ["//visibility:public"])
+
+pub_workspace(
+    name = "workspace",
+    member_paths = [{member_paths}],
+    member_debug = [{member_debug}],
+    member_release = [{member_release}],
+    member_metadata = [{member_metadata}],
+    member_path_deps = [{member_path_deps}],
+    root_debug = ":dart_plugin_registrant.dart",
+    root_release = ":dart_plugin_registrant_release.dart",
+    root_metadata = ":plugins_metadata.json",
+    root_path_deps = ":path_deps_root.json",
+)
 
 exports_files([
     "package_config.json",
@@ -469,6 +492,7 @@ exports_files([
     "dart_plugin_registrant_release.dart",
     {generated_files}
     "pubspec.lock",
+    "path_deps_root.json",
     "lock_project_dir",
 ])
 
@@ -495,6 +519,11 @@ dart_test_deps(
     pub_srcs = [":lib"],
 )
 """.format(
+        member_paths = member_list,
+        member_debug = member_debug,
+        member_release = member_release,
+        member_metadata = member_metadata,
+        member_path_deps = member_path_deps,
         composition_bzl = rctx.attr.composition_bzl,
         hook_packages_bzl = rctx.attr.hook_packages_bzl,
         package_dirs = package_dirs_src,

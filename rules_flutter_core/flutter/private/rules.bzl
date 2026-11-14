@@ -29,6 +29,7 @@ load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
 load(":pubspec.bzl", "FlutterPubspecInfo")
+load(":pub_workspace.bzl", "PubWorkspaceInfo")
 
 FlutterTargetSliceInfo = provider(
     doc = "Platform metadata resolved for a configured Flutter target slice.",
@@ -1158,7 +1159,7 @@ dart_aot_snapshot = rule(
 def _pub_hub_labels(pub, who):
     """The hub labels a Dart rule takes from `pub = "@<hub>"`.
 
-    Returns `(package_config, project_package_config, lib, all, lock, lock_dir)`.
+    Returns `(package_config, project_package_config, lib, all, lock, lock_dir, workspace)`.
     """
     if not pub or not pub.startswith("@") or "//" in pub or ":" in pub:
         fail((
@@ -1172,6 +1173,7 @@ def _pub_hub_labels(pub, who):
         pub + "//:all",
         pub + "//:pubspec.lock",
         pub + "//:lock_project_dir",
+        pub + "//:workspace",
     )
 
 def _lib_tier(ctx, pubspec):
@@ -1289,6 +1291,9 @@ def _flutter_package_impl(ctx):
         fail("{}: assets must be one flutter_assets directory, got {} files".format(ctx.label, len(assets)))
     pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
     deps_lib = _lib_tier(ctx, pubspec)
+    workspace = ctx.attr.workspace[PubWorkspaceInfo]
+    selected = workspace.members.get(ctx.label.package, workspace.root)
+    expected = selected.path_deps if selected.path_deps else None
     validation = pub_path_deps_check_action(
         ctx,
         ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
@@ -1296,6 +1301,7 @@ def _flutter_package_impl(ctx):
         ctx.files.path_deps,
         ctx.file._checker,
         ctx.file.lock_project_dir,
+        expected,
     )
     validations = [validation]
     if ctx.file.registrant:
@@ -1365,6 +1371,7 @@ _flutter_package = rule(
         "registrant": attr.label(allow_single_file = [".dart"]),
         "expected_registrant": attr.label(allow_single_file = [".dart"]),
         "registrant_updater": attr.label(),
+        "workspace": attr.label(mandatory = True, providers = [PubWorkspaceInfo]),
         "_lib_entry": attr.label(
             default = "//flutter/private:lib_entry.py",
             allow_single_file = True,
@@ -1409,7 +1416,7 @@ def flutter_package_targets(name, pub, pubspec, srcs = None, path_deps = [], ass
       registrant_check: optional (committed, expected, updater) labels.
       **kwargs: attributes passed to the declared package target.
     """
-    package_config, _, pub_lib, _, pubspec_lock, lock_project_dir = _pub_hub_labels(pub, "flutter_package " + name)
+    package_config, _, pub_lib, _, pubspec_lock, lock_project_dir, workspace = _pub_hub_labels(pub, "flutter_package " + name)
     if srcs == None:
         srcs = native.glob(["lib/**/*.dart"])
 
@@ -1427,6 +1434,7 @@ def flutter_package_targets(name, pub, pubspec, srcs = None, path_deps = [], ass
         registrant = registrant_check[0] if registrant_check else None,
         expected_registrant = registrant_check[1] if registrant_check else None,
         registrant_updater = registrant_check[2] if registrant_check else None,
+        workspace = workspace,
         **kwargs
     )
 

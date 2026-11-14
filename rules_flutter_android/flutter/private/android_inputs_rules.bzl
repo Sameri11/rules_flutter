@@ -22,6 +22,8 @@ load(":android.bzl", "flutter_android_assets")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":maven_identity.bzl", "check_flutter_maven_repository", "flutter_maven_repository")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
+load("@rules_flutter_core//flutter:composition.bzl", "FlutterCoreInfo")
+load("@rules_java//java:defs.bzl", "JavaInfo")
 
 visibility(["//flutter/...", "//tests/..."])
 
@@ -36,6 +38,51 @@ FlutterSplitNativeInfo = provider(
         "abi": "str: the split's ABI, or None where the configuration is not an Android split.",
         "mode": "str: the core's mode, release or debug; None without an ABI.",
         "libraries": "list[File]: each library the split packages, under its basename.",
+    },
+)
+
+WorkspacePluginTargetsInfo = provider(fields = ["members", "root"])
+
+def _workspace_plugin_targets_impl(ctx):
+    members = {}
+    for i, path in enumerate(ctx.attr.member_paths):
+        members[path] = struct(
+            registrant = ctx.attr.member_registrants[i],
+            native_files = ctx.attr.member_native_files[i],
+        )
+    return [WorkspacePluginTargetsInfo(
+        members = members,
+        root = struct(
+            registrant = ctx.attr.root_registrant,
+            native_files = ctx.attr.root_native_files,
+        ),
+    )]
+
+workspace_plugin_targets = rule(
+    implementation = _workspace_plugin_targets_impl,
+    attrs = {
+        "member_paths": attr.string_list(),
+        "member_registrants": attr.label_list(),
+        "member_native_files": attr.label_list(),
+        "root_registrant": attr.label(mandatory = True),
+        "root_native_files": attr.label(mandatory = True),
+    },
+)
+
+def _select_workspace_plugins_impl(ctx):
+    info = ctx.attr.core[FlutterCoreInfo]
+    workspace = ctx.attr.workspace[WorkspacePluginTargetsInfo]
+    selected = workspace.members.get(info.workspace_path, workspace.root)
+    return [
+        selected.registrant[JavaInfo],
+        selected.native_files[FlutterNativeFilesByAbiInfo],
+    ]
+
+select_workspace_plugins = rule(
+    implementation = _select_workspace_plugins_impl,
+    attrs = {
+        "core": attr.label(mandatory = True, providers = [FlutterCoreInfo]),
+        "workspace": attr.label(mandatory = True, providers = [WorkspacePluginTargetsInfo]),
     },
 )
 
@@ -186,8 +233,6 @@ platform. The ABI comes from that platform.""",
     toolchains = use_cc_toolchain(),
 )
 
-def _member_suffix(package_path):
-    return package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
 
 def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], visibility = None):
     """Declares a flutter_core artifact's Android inputs as the target `<name>`.
@@ -219,11 +264,14 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
     plugin_registrant = plugins + "//:generated_plugin_registrant" if plugins else None
     plugin_native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None
     if plugins:
-        core_package = native.package_relative_label(core).package
-        if core_package:
-            suffix = _member_suffix(core_package)
-            plugin_registrant = plugins + "//:generated_plugin_registrant_{}".format(suffix)
-            plugin_native_files = plugins + "//:flutter_native_files_by_abi_{}".format(suffix)
+        select_workspace_plugins(
+            name = name + "_plugin_subset",
+            core = core,
+            workspace = plugins + "//:workspace_plugin_targets",
+            tags = tags + ["manual"] if "manual" not in tags else tags,
+        )
+        plugin_registrant = ":" + name + "_plugin_subset"
+        plugin_native_files = ":" + name + "_plugin_subset"
 
     # The caller's tags reach the helpers too, so a tag such as no-remote-cache
     # applies to the whole target set.
