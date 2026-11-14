@@ -174,12 +174,12 @@ def _plugin_target_suffix(package_path):
 
 def _workspace_plugin_files(rctx, entries, workspace_members, project_package):
     roots = [
-        (member_name, _segments(project_package) + _segments(member_path), member_path)
+        (member_name, _segments(project_package) + _segments(member_path))
         for member_name, member_path in workspace_members
     ]
     files = []
     member_configs = []
-    for package_name, package_dir, member_path in roots:
+    for package_name, package_dir in roots:
         suffix = _plugin_target_suffix("/".join(package_dir))
         deps, debug_reached = _plugin_dependency_graph(entries, package_name, include_dev = True)
         _, release_reached = _plugin_dependency_graph(entries, package_name)
@@ -451,7 +451,7 @@ def _pub_hub_impl(rctx):
     }
     package_dirs_src = ", ".join(["{}: {}".format(repr(name), repr(path)) for name, path in package_dirs.items()])
     generated_files = workspace_plugin_files + workspace_path_dep_files
-    generated_files_src = "".join(['\n    "{}"'.format(name) for name in generated_files])
+    generated_files_src = "".join(['\n    "{}",'.format(name) for name in generated_files])
     member_paths = ["/".join(_segments(lock_label.package) + _segments(path)) for _, path in workspace_members]
     member_suffixes = [_plugin_target_suffix(path) for path in member_paths]
     member_list = ", ".join([repr(path) for path in member_paths])

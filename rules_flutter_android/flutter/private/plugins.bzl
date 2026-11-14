@@ -1647,7 +1647,6 @@ def _flutter_plugins_impl(ctx):
     used_overrides = []
     used_build_config_packages = []
     stale_overrides = []
-    registrant = _write_android_registrants(ctx, _registrant_plugins(plugins), roots)
     root_registrant = _write_android_registrants(ctx, _registrant_plugins(metadata.get("plugins", {}).get("android", [])), roots)
 
     # Pub dependencies include entries without native Android targets, such as

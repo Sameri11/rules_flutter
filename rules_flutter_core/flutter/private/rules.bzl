@@ -1308,6 +1308,7 @@ def _flutter_package_impl(ctx):
             ctx,
             ctx.actions.declare_file(ctx.label.name + ".registrant.checked"),
             ctx.file.registrant,
+            ctx.file.expected_registrant,
             ctx.attr.registrant_updater,
         ))
     return [
@@ -1367,6 +1368,7 @@ _flutter_package = rule(
             doc = "A flutter_assets directory, passed to tests as --flutter-assets-dir.",
         ),
         "registrant": attr.label(allow_single_file = [".dart"]),
+        "expected_registrant": attr.label(allow_single_file = [".dart"]),
         "registrant_updater": attr.label(),
         "workspace": attr.label(mandatory = True, providers = [PubWorkspaceInfo]),
         "_lib_entry": attr.label(
@@ -1429,6 +1431,7 @@ def flutter_package_targets(name, pub, pubspec, srcs = None, path_deps = [], ass
         path_deps = path_deps,
         assets = assets,
         registrant = registrant_check[0] if registrant_check else None,
+        expected_registrant = registrant_check[1] if registrant_check else None,
         registrant_updater = registrant_check[2] if registrant_check else None,
         workspace = workspace,
         **kwargs
