@@ -2088,6 +2088,7 @@ def _flutter_plugins_impl(ctx):
     member_native_files = [{native_files}],
     root_registrant = ":generated_plugin_registrant",
     root_native_files = ":flutter_native_files_by_abi",
+    exports = [":generated_plugin_registrant", {registrants}],
 )
 """.format(
         paths = ", ".join([repr(member_sets[suffix]["path"]) for suffix in member_suffixes]),

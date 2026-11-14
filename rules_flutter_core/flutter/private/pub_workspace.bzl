@@ -37,3 +37,16 @@ pub_workspace = rule(
         "root_path_deps": attr.label(allow_single_file = [".json"], mandatory = True),
     },
 )
+
+def _pub_workspace_file_impl(ctx):
+    workspace = ctx.attr.workspace[PubWorkspaceInfo]
+    selected = workspace.members.get(ctx.label.package, workspace.root)
+    return [DefaultInfo(files = depset([getattr(selected, ctx.attr.file)]))]
+
+pub_workspace_file = rule(
+    implementation = _pub_workspace_file_impl,
+    attrs = {
+        "workspace": attr.label(mandatory = True, providers = [PubWorkspaceInfo]),
+        "file": attr.string(mandatory = True, values = ["debug", "release", "metadata", "path_deps"]),
+    },
+)

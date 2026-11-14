@@ -9,7 +9,7 @@ load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":modes.bzl", "aot_target_compatible_with")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package_targets", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check_action")
-load(":pub_workspace.bzl", "PubWorkspaceInfo")
+load(":pub_workspace.bzl", "PubWorkspaceInfo", "pub_workspace_file")
 visibility(["//flutter/...", "//tests/..."])
 
 _TARGET_TOOLCHAIN_LABEL = "//flutter/private:flutter_target_toolchain_type"
@@ -260,20 +260,6 @@ def _pub_labels(pub, who):
         ).format(who, repr(pub)))
     return (pub + "//:package_config.json", pub + "//:project_package_config.json", pub + "//:lib", pub + "//:all", pub + "//:workspace")
 
-def _member_plugin_labels(pub, package_path):
-    suffix = package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
-    if package_path:
-        return (
-            pub + "//:dart_plugin_registrant_{}.dart".format(suffix),
-            pub + "//:dart_plugin_registrant_release_{}.dart".format(suffix),
-        )
-    return pub + "//:dart_plugin_registrant.dart", pub + "//:dart_plugin_registrant_release.dart"
-
-def _member_path_deps_label(pub, package_path):
-    if package_path:
-        suffix = package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
-        return pub + "//:path_deps_{}.json".format(suffix)
-    return None
 
 def flutter_core(
         name,
@@ -323,13 +309,24 @@ def flutter_core(
         fail("flutter_core: at least one platform with target platforms is required.")
     package_config, project_package_config, pub_lib, pub_all, workspace = _pub_labels(pub, "flutter_core " + name)
 
+    hub_debug_registrant = name + "_hub_debug_registrant"
+    hub_release_registrant = name + "_hub_release_registrant"
+    pub_workspace_file(
+        name = hub_debug_registrant,
+        workspace = workspace,
+        file = "debug",
+    )
+    pub_workspace_file(
+        name = hub_release_registrant,
+        workspace = workspace,
+        file = "release",
+    )
+    hub_debug_registrant = ":" + hub_debug_registrant
+    hub_release_registrant = ":" + hub_release_registrant
     aot_registrant = None
     debug_registrant = None
-    hub_debug_registrant = None
-    hub_release_registrant = None
     if dart_plugin_registrant:
         debug_registrant = _workspace_label(dart_plugin_registrant)
-        hub_debug_registrant, hub_release_registrant = _member_plugin_labels(pub, native.package_name())
         aot_registrant = select({
             Label("//flutter:mode_release"): hub_release_registrant,
             "//conditions:default": debug_registrant,

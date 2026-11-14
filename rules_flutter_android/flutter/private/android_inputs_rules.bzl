@@ -24,7 +24,6 @@ load(":maven_identity.bzl", "check_flutter_maven_repository", "flutter_maven_rep
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
 load("@rules_flutter_core//flutter:composition.bzl", "FlutterCoreInfo")
 load("@rules_java//java:defs.bzl", "JavaInfo")
-
 visibility(["//flutter/...", "//tests/..."])
 
 # The registrant of an app without plugins: an empty GeneratedPluginRegistrant.
@@ -66,6 +65,7 @@ workspace_plugin_targets = rule(
         "member_native_files": attr.label_list(),
         "root_registrant": attr.label(mandatory = True),
         "root_native_files": attr.label(mandatory = True),
+        "exports": attr.label_list(),
     },
 )
 
@@ -73,8 +73,9 @@ def _select_workspace_plugins_impl(ctx):
     info = ctx.attr.core[FlutterCoreInfo]
     workspace = ctx.attr.workspace[WorkspacePluginTargetsInfo]
     selected = workspace.members.get(info.workspace_path, workspace.root)
+    registrant = selected.registrant
     return [
-        selected.registrant[JavaInfo],
+        registrant[JavaInfo],
         selected.native_files[FlutterNativeFilesByAbiInfo],
     ]
 
@@ -83,6 +84,7 @@ select_workspace_plugins = rule(
     attrs = {
         "core": attr.label(mandatory = True, providers = [FlutterCoreInfo]),
         "workspace": attr.label(mandatory = True, providers = [WorkspacePluginTargetsInfo]),
+        "exports": attr.label_list(),
     },
 )
 
@@ -269,6 +271,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
             core = core,
             workspace = plugins + "//:workspace_plugin_targets",
             tags = tags + ["manual"] if "manual" not in tags else tags,
+            exports = [plugins + "//:workspace_plugin_targets"],
         )
         plugin_registrant = ":" + name + "_plugin_subset"
         plugin_native_files = ":" + name + "_plugin_subset"
