@@ -175,7 +175,7 @@ jobs:
           set -euo pipefail
           bazel build -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //pub_workspace/member:package
           bazel test -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //pub_workspace/member:package_test
-          bazel build --nobuild -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //pub_workspace/app:core //pub_workspace/app2:core
+          bazel build -c opt --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" --android_platforms=@rules_android//:arm64-v8a //pub_workspace/app:core //pub_workspace/app2:core
 
       - name: Consumer host wildcard analysis
         working-directory: tests/consumer

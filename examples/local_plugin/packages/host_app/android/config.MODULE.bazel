@@ -49,9 +49,7 @@ register_toolchains("@androidndk//:all")
 plugins = use_extension("@rules_flutter_android//flutter:extensions.bzl", "flutter_plugins_ext")
 plugins.project(
     abis = ["arm64-v8a"],
-    maven_repo = "@flutter_maven//:pin",
-    metadata = "@pub//:plugins_metadata.json",
-    package_config = "@pub//:package_config.json",
+    pub = "@pub",
 )
 use_repo(plugins, "flutter_plugins")
 

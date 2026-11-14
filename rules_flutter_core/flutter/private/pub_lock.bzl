@@ -172,14 +172,11 @@ def _plugins_metadata(entries, root_name, deps, reached, plugin_names = None):
 def _plugin_target_suffix(package_path):
     return package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
 
-def _workspace_plugin_files(rctx, entries, workspace_members, root_name, project_package):
-    roots = []
-    if project_package:
-        roots.append((root_name, _segments(project_package), None))
-    roots.extend([
+def _workspace_plugin_files(rctx, entries, workspace_members, project_package):
+    roots = [
         (member_name, _segments(project_package) + _segments(member_path), member_path)
         for member_name, member_path in workspace_members
-    ])
+    ]
     files = []
     member_configs = []
     for package_name, package_dir, member_path in roots:
@@ -189,19 +186,18 @@ def _workspace_plugin_files(rctx, entries, workspace_members, root_name, project
         metadata = _plugins_metadata(entries, package_name, deps, release_reached, plugin_names = debug_reached)
         metadata_name = "plugins_metadata_{}.json".format(suffix)
         rctx.file(metadata_name, json.encode_indent(metadata, indent = "  ") + "\n")
-        if member_path != None:
-            member_configs.append({
-                "name": package_name,
-                "path": "/".join(package_dir),
-                "suffix": suffix,
-                "packages": sorted(debug_reached.keys()),
-                "dev_packages": sorted([name for name in debug_reached if name not in release_reached]),
-                "metadata": metadata,
-            })
+        member_configs.append({
+            "name": package_name,
+            "path": "/".join(package_dir),
+            "suffix": suffix,
+            "packages": sorted(debug_reached.keys()),
+            "dev_packages": sorted([name for name in debug_reached if name not in release_reached]),
+            "metadata": metadata,
+        })
         debug_registrations = []
         release_registrations = []
         for name in sorted(entries.keys()):
-            if name == root_name:
+            if name == package_name:
                 continue
             registrations = pubspec_dart_plugins(entries[name]["pubspec"], name)
             if registrations and name in debug_reached:
@@ -220,7 +216,7 @@ def _workspace_path_deps_files(rctx, entries, lock_paths, workspace_members, pro
     path_names.update({name: path for name, path in workspace_members})
     files = []
     for member_name, member_path in workspace_members:
-        _, reached = _plugin_dependency_graph(entries, member_name)
+        _, reached = _plugin_dependency_graph(entries, member_name, include_dev = True)
         expected = [
             {"name": name, "path": path}
             for name, path in sorted(path_names.items())
@@ -403,7 +399,7 @@ def _pub_hub_impl(rctx):
                 release_registrations.append((name, registrations))
     rctx.file("dart_plugin_registrant.dart", render_dart_registrant(debug_registrations), executable = False)
     rctx.file("dart_plugin_registrant_release.dart", render_dart_registrant(release_registrations), executable = False)
-    workspace_plugin_files, workspace_member_configs = _workspace_plugin_files(rctx, entries, workspace_members, root_name, lock_label.package)
+    workspace_plugin_files, workspace_member_configs = _workspace_plugin_files(rctx, entries, workspace_members, lock_label.package)
     rctx.file("workspace_members.json", json.encode_indent(workspace_member_configs, indent = "  ") + "\n")
     workspace_path_dep_files = _workspace_path_deps_files(rctx, entries, lock["path"], workspace_members, lock_label.package)
 
@@ -455,9 +451,7 @@ def _pub_hub_impl(rctx):
     }
     package_dirs_src = ", ".join(["{}: {}".format(repr(name), repr(path)) for name, path in package_dirs.items()])
     generated_files = workspace_plugin_files + workspace_path_dep_files
-    generated_files_src = ",\n    ".join(['"{}"'.format(name) for name in generated_files])
-    if generated_files_src:
-        generated_files_src += ","
+    generated_files_src = "".join(['\n    "{}"'.format(name) for name in generated_files])
     member_paths = ["/".join(_segments(lock_label.package) + _segments(path)) for _, path in workspace_members]
     member_suffixes = [_plugin_target_suffix(path) for path in member_paths]
     member_list = ", ".join([repr(path) for path in member_paths])
@@ -489,8 +483,7 @@ exports_files([
     "plugins_metadata.json",
     "workspace_members.json",
     "dart_plugin_registrant.dart",
-    "dart_plugin_registrant_release.dart",
-    {generated_files}
+    "dart_plugin_registrant_release.dart",{generated_files}
     "pubspec.lock",
     "path_deps_root.json",
     "lock_project_dir",

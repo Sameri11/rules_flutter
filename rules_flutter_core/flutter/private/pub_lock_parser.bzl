@@ -386,7 +386,7 @@ def pubspec_workspace(pubspec_text):
             if not stripped.startswith("- "):
                 fail("pubspec.yaml: unsupported workspace entry {}".format(repr(stripped)))
             path = stripped[2:].split(" #")[0].strip().strip("\"'")
-            if not path or "*" in path:
+            if not path or any([glob_char in path for glob_char in ["*", "?", "[", "{"]]):
                 fail("pubspec.yaml: workspace entries must be literal paths (glob entries are unsupported), got {}".format(repr(path)))
             members.append(path)
     return members

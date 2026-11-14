@@ -573,12 +573,12 @@ configurations.
 
 ## Monorepo and path dependencies
 
-Keep each app's `pubspec.yaml`, `pubspec.lock`, and `flutter_core` in the same
-Bazel package. Declare every local path dependency's source files in
-`path_deps`; Bazel does not infer or hash undeclared path contents. `flutter_core`
-checks declarations against its package's `pubspec.lock`; `flutter_package`
-checks against the `pub` hub's lock. Both run on every build;
-`--run_validations=false` opts out. The example
+Keep each app's `pubspec.yaml`, `flutter_core`, and the lockfile hub in the same
+Bazel package. Outside a pub workspace, keep `pubspec.lock` there as well.
+Declare every local path dependency's source files in `path_deps`; Bazel does
+not infer or hash undeclared path contents. Both `flutter_core` and
+`flutter_package` check declarations against the `pub` hub's lock. Both run on
+every build; `--run_validations=false` opts out. The example
 [`examples/local_plugin`](examples/local_plugin/) places its host app under
 `packages/host_app` and its plugin under `packages/greeter`. Create one core in
 the app package and point the Android helper at that package-local target.

@@ -62,9 +62,7 @@ plugins.project(
         "x86_64",
         "armeabi-v7a",
     ],
-    maven_repo = "@flutter_maven//:pin",
-    metadata = "@pub//:plugins_metadata.json",
-    package_config = "@pub//:package_config.json",
+    pub = "@pub",
 )
 use_repo(plugins, "flutter_plugins")
 

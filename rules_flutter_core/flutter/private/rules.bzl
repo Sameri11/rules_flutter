@@ -920,8 +920,7 @@ def _dart_test_deps_impl(ctx):
     scalars.add(ctx.attr.lock_name)
 
     # The shell script consumes a name argument even when there are no direct packages.
-    package_names = ctx.attr.packages if ctx.attr.packages else ["__no_direct_packages__"]
-    scalars.add_joined(package_names, join_with = " ")
+    scalars.add_joined(ctx.attr.packages, join_with = " ", omit_if_empty = False)
     scalars.add(dill)
     scalars.add("org-dartlang-root:///" + _execroot_path(entry))
 
@@ -1293,7 +1292,7 @@ def _flutter_package_impl(ctx):
     deps_lib = _lib_tier(ctx, pubspec)
     workspace = ctx.attr.workspace[PubWorkspaceInfo]
     selected = workspace.members.get(ctx.label.package, workspace.root)
-    expected = selected.path_deps if selected.path_deps else None
+    expected = selected.path_deps
     validation = pub_path_deps_check_action(
         ctx,
         ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
@@ -1309,7 +1308,6 @@ def _flutter_package_impl(ctx):
             ctx,
             ctx.actions.declare_file(ctx.label.name + ".registrant.checked"),
             ctx.file.registrant,
-            ctx.file.expected_registrant,
             ctx.attr.registrant_updater,
         ))
     return [
@@ -1369,7 +1367,6 @@ _flutter_package = rule(
             doc = "A flutter_assets directory, passed to tests as --flutter-assets-dir.",
         ),
         "registrant": attr.label(allow_single_file = [".dart"]),
-        "expected_registrant": attr.label(allow_single_file = [".dart"]),
         "registrant_updater": attr.label(),
         "workspace": attr.label(mandatory = True, providers = [PubWorkspaceInfo]),
         "_lib_entry": attr.label(
@@ -1432,7 +1429,6 @@ def flutter_package_targets(name, pub, pubspec, srcs = None, path_deps = [], ass
         path_deps = path_deps,
         assets = assets,
         registrant = registrant_check[0] if registrant_check else None,
-        expected_registrant = registrant_check[1] if registrant_check else None,
         registrant_updater = registrant_check[2] if registrant_check else None,
         workspace = workspace,
         **kwargs
@@ -1827,6 +1823,7 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
     args.add(checker)
     args.add("--lock", pubspec_lock)
     package_dir = paths.join(ctx.label.workspace_root, ctx.label.package)
+    args.add("--self-dir", package_dir)
     if lock_project_dir:
         args.add("--package-dir-file", lock_project_dir)
     else:

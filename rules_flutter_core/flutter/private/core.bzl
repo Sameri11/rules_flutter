@@ -180,7 +180,7 @@ def _flutter_core_impl(ctx):
     workspace = ctx.attr.workspace[PubWorkspaceInfo]
     selected = workspace.members.get(ctx.label.package, workspace.root)
     workspace_path = ctx.label.package if ctx.label.package in workspace.members else ""
-    expected_path_deps = selected.path_deps if selected.path_deps else ctx.file.expected_path_deps
+    expected_path_deps = selected.path_deps
     validation = pub_path_deps_check_action(
         ctx,
         ctx.actions.declare_file(ctx.label.name + ".path_deps.checked"),
@@ -242,10 +242,8 @@ _flutter_core = rule(
         "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
         "lock_project_dir": attr.label(allow_single_file = True, mandatory = True),
-        "expected_path_deps": attr.label(allow_single_file = True),
         "workspace": attr.label(mandatory = True, providers = [PubWorkspaceInfo]),
         "registrant": attr.label(allow_single_file = [".dart"]),
-        "expected_registrant": attr.label(allow_single_file = [".dart"]),
         "registrant_updater": attr.label(),
         "_checker": attr.label(default = "//flutter/private:check_path_deps.py", allow_single_file = True),
         "_mode": attr.label(default = Label("//flutter:mode"), providers = [BuildSettingInfo]),
@@ -331,7 +329,6 @@ def flutter_core(
             Label("//flutter:mode_release"): hub_release_registrant,
             "//conditions:default": debug_registrant,
         })
-    expected_path_deps = None
 
     flutter_pubspec(name = "pubspec", src = "pubspec.yaml", visibility = kwargs.get("visibility"))
 
@@ -496,9 +493,7 @@ def flutter_core(
         path_deps = path_deps,
         debug_registrant = debug_registrant,
         registrant = registrant_label,
-        expected_registrant = hub_debug_registrant if registrant_label else None,
         registrant_updater = ":dart_registrant_update" if registrant_label else None,
-        expected_path_deps = expected_path_deps,
         workspace = workspace,
         **kwargs
     )
