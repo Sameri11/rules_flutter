@@ -2096,12 +2096,14 @@ def _flutter_plugins_impl(ctx):
         bool(dev_coordinates),
     )
     workspace_targets = _workspace_build_targets(ctx, member_sets, manifest, roots, annotation_jvm)
-    # Root aggregates follow the root lock, not the union used for plugin packages.
+
+    # Workspace plugin packages are shared, but root aggregates follow the root
+    # lock and the recipes explicitly configured for this project.
     root_dev = {
         p["name"]: p.get("dev_dependency", False)
         for p in metadata.get("plugins", {}).get("android", [])
     }
-    root_manifest = [p for p in manifest if p["name"] in root_dev]
+    root_manifest = [p for p in manifest if p["name"] in root_dev or p["name"] in recipes]
     member_suffixes = sorted(member_sets.keys())
     workspace_plugin_targets_src = """workspace_plugin_targets(
     name = "workspace_plugin_targets",

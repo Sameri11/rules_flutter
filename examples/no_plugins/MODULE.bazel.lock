@@ -409,7 +409,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%android_ndk": {
       "general": {
-        "bzlTransitiveDigest": "iSI5DI98ScN/Iajs4lCjproSqgeqrXgymJC6KIVsQTg=",
+        "bzlTransitiveDigest": "866ZtLRJDde4pZ+zSU5/feYI+XpBbAf5cMWuXTRuRCA=",
         "usagesDigest": "gihfLsx8YMM+v3GPdKHQB+XDY0mBmcT3vsEGUwsp5YE=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
@@ -547,7 +547,7 @@
     },
     "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "ZtUwDhHh15mzf2me0uFpqJ+5E+mvFgfkOI9U0rGSyds=",
+        "bzlTransitiveDigest": "gtE7iin00rmAo52bxrZOgk4g7lQkLYRdi5L/aCIlzyI=",
         "usagesDigest": "qgOPHTIJehHE7C5edcqknU9pqU6zUuSV2IGyzjt0tf8=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
