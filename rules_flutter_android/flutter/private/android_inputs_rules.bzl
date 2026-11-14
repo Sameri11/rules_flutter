@@ -11,12 +11,15 @@ fails with a clear diagnostic.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+load("@rules_android//providers:providers.bzl", "AndroidCcLinkParamsInfo", "AndroidIdeInfo", "AndroidIdlInfo", "AndroidLibraryAarInfo", "AndroidLibraryResourceClassJarProvider", "AndroidLintRulesInfo", "AndroidNativeLibsInfo", "BaselineProfileProvider", "DataBindingV2Info", "StarlarkAndroidResourcesInfo")
 load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo", "FlutterCoreInfo")
-load("@rules_java//java:defs.bzl", "JavaInfo", "java_import")
+load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_java//java/common:java_info.bzl", "JavaInfo")
+load("@rules_java//java/common:proguard_spec_info.bzl", "ProguardSpecInfo")
 load("//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
 load(":android.bzl", "flutter_android_assets")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
@@ -43,6 +46,26 @@ WorkspacePluginTargetsInfo = provider(
     doc = "Root and workspace-member Android plugin targets.",
     fields = ["members", "root"],
 )
+
+# Providers consumed from Android library deps/exports. Keep dex info out:
+# the Android dex aspect supplies it independently.
+_ANDROID_PLUGIN_PROVIDERS = [
+    AndroidCcLinkParamsInfo,
+    AndroidIdlInfo,
+    AndroidIdeInfo,
+    AndroidLibraryAarInfo,
+    AndroidLibraryResourceClassJarProvider,
+    AndroidLintRulesInfo,
+    AndroidNativeLibsInfo,
+    BaselineProfileProvider,
+    CcInfo,
+    DataBindingV2Info,
+    DefaultInfo,
+    InstrumentedFilesInfo,
+    OutputGroupInfo,
+    ProguardSpecInfo,
+    StarlarkAndroidResourcesInfo,
+]
 
 def _workspace_plugin_targets_impl(ctx):
     members = {}
@@ -76,10 +99,12 @@ def _select_workspace_plugins_impl(ctx):
     workspace = ctx.attr.workspace[WorkspacePluginTargetsInfo]
     selected = workspace.members.get(info.workspace_path, workspace.root)
     registrant = selected.registrant
-    return [
-        registrant[JavaInfo],
-        selected.native_files[FlutterNativeFilesByAbiInfo],
-    ]
+    providers = [registrant[JavaInfo]]
+    for provider in _ANDROID_PLUGIN_PROVIDERS:
+        if provider in registrant:
+            providers.append(registrant[provider])
+    providers.append(selected.native_files[FlutterNativeFilesByAbiInfo])
+    return providers
 
 select_workspace_plugins = rule(
     implementation = _select_workspace_plugins_impl,

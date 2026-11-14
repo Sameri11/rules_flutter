@@ -184,8 +184,6 @@ def _workspace_plugin_files(rctx, entries, workspace_members, project_package):
         deps, debug_reached = _plugin_dependency_graph(entries, package_name, include_dev = True)
         _, release_reached = _plugin_dependency_graph(entries, package_name)
         metadata = _plugins_metadata(entries, package_name, deps, release_reached, plugin_names = debug_reached)
-        metadata_name = "plugins_metadata_{}.json".format(suffix)
-        rctx.file(metadata_name, json.encode_indent(metadata, indent = "  ") + "\n")
         member_configs.append({
             "name": package_name,
             "path": "/".join(package_dir),
@@ -208,7 +206,7 @@ def _workspace_plugin_files(rctx, entries, workspace_members, project_package):
         release_name = "dart_plugin_registrant_release_{}.dart".format(suffix)
         rctx.file(debug_name, render_dart_registrant(debug_registrations), executable = False)
         rctx.file(release_name, render_dart_registrant(release_registrations), executable = False)
-        files.extend([metadata_name, debug_name, release_name])
+        files.extend([debug_name, release_name])
     return files, member_configs
 
 def _workspace_path_deps_files(rctx, entries, lock_paths, workspace_members, project_package):

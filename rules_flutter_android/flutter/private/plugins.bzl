@@ -2083,7 +2083,6 @@ def _flutter_plugins_impl(ctx):
     # android_library and can only export Java/Kotlin targets, while a recipe for
     # a non-plugin package -- sqlite3 -- has no such target to export and
     # contributes only a .so.
-    dev = {p["name"]: p.get("dev_dependency", False) for p in plugins}
 
     # Preserve canonical Android manifest merge order; sort the Java edge below
     # so duplicate Java resources keep stable classpath precedence.
