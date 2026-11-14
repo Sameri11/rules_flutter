@@ -186,6 +186,9 @@ platform. The ABI comes from that platform.""",
     toolchains = use_cc_toolchain(),
 )
 
+def _member_suffix(package_path):
+    return package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
+
 def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], visibility = None):
     """Declares a flutter_core artifact's Android inputs as the target `<name>`.
 
@@ -212,6 +215,15 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
             name,
             repr(plugins),
         ))
+
+    plugin_registrant = plugins + "//:generated_plugin_registrant" if plugins else None
+    plugin_native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None
+    if plugins:
+        core_package = native.package_relative_label(core).package
+        if core_package:
+            suffix = _member_suffix(core_package)
+            plugin_registrant = plugins + "//:generated_plugin_registrant_{}".format(suffix)
+            plugin_native_files = plugins + "//:flutter_native_files_by_abi_{}".format(suffix)
 
     # The caller's tags reach the helpers too, so a tag such as no-remote-cache
     # applies to the whole target set.
@@ -265,7 +277,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
     if plugins:
         android_library(
             name = name + "_registrant",
-            exports = [plugins + "//:generated_plugin_registrant"],
+            exports = [plugin_registrant],
             tags = helper_tags,
         )
     else:
@@ -282,7 +294,7 @@ def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], vi
     _split_native(
         name = name + "_native",
         core = core,
-        native_files = plugins + "//:flutter_native_files_by_abi" if plugins else None,
+        native_files = plugin_native_files,
         tags = helper_tags,
         # Split-native inputs exist only in Android split configurations.
         target_compatible_with = [Label("@platforms//os:android")],

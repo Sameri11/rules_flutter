@@ -1301,7 +1301,7 @@ def _recipe_contributions(ctx, manifest, dev):
         if p["strategy"].startswith("recipe:")
     ], dev, ctx)
 
-def _native_files_target(ctx, manifest, abi, dev):
+def _native_files_target(ctx, manifest, abi, dev, target = None):
     """Return this ABI's file-level aggregate of native libraries."""
     generated = [
         (p["name"], "//{n}:{n}_native_files_{a}".format(n = p["name"], a = abi))
@@ -1309,18 +1309,18 @@ def _native_files_target(ctx, manifest, abi, dev):
         if p["strategy"] == "source+cmake"
     ]
     return _NATIVE_FILES_TEMPLATE.format(
-        target = _NATIVE_FILES_TARGET.format(abi),
+        target = target or _NATIVE_FILES_TARGET.format(abi),
         abi = abi,
         deps = _recipe_contributions(ctx, manifest, dev),
         generated = _mode_list(generated, dev, ctx),
     )
 
-def _native_files_by_abi_target(ctx):
+def _native_files_by_abi_target(ctx, target = "flutter_native_files_by_abi", prefix = "native_files_"):
     """Return the aggregate of every ABI this project declares, keyed by ABI."""
     return _NATIVE_FILES_BY_ABI_TEMPLATE.format(
         abis = repr(ctx.attr.abis),
-        libs = repr({":" + _NATIVE_FILES_TARGET.format(abi): abi for abi in ctx.attr.abis}),
-    )
+        libs = repr({":" + prefix + abi: abi for abi in ctx.attr.abis}),
+    ).replace('name = "flutter_native_files_by_abi"', 'name = "{}"'.format(target))
 
 def _package_roots(ctx):
     """Every pub package in the resolution, name -> real directory.
@@ -1370,6 +1370,59 @@ def _package_roots(ctx):
         base = output_base if segments and segments[0] == "external" else ctx.workspace_root
         roots[name] = str(base.get_child(*segments))
     return roots
+
+def _workspace_build_targets(ctx, member_sets, manifest, roots, annotation_jvm):
+    targets = []
+    for suffix, member in sorted(member_sets.items()):
+        metadata_plugins = member["metadata"].get("plugins", {}).get("android", [])
+        packages = {name: True for name in member["packages"]}
+        dev = {name: True for name in member["dev_packages"]}
+        member_manifest = [p for p in manifest if p["name"] in packages]
+        plugin_exports = _mode_list([
+            (p["name"], "//{n}:{n}".format(n = p["name"]))
+            for p in member_manifest
+            if p["is_plugin"]
+        ], dev, ctx)
+        targets.append("""android_library(
+    name = "plugins_{suffix}",
+    exports = {exports},
+)
+
+""".format(suffix = suffix, exports = plugin_exports))
+
+        registrant = _write_android_registrants(ctx, _registrant_plugins(metadata_plugins), roots)
+        targets.append("""flutter_plugin_registrant(
+    name = "generated_plugin_registrant_src_{suffix}",
+    plugins = {plugins},
+    dev_plugins = {dev_plugins},
+)
+
+android_library(
+    name = "generated_plugin_registrant_{suffix}",
+    srcs = [":generated_plugin_registrant_src_{suffix}"],
+    deps = [":plugins_{suffix}", ":flutter_embedding"] + {annotation_jvm},
+)
+
+""".format(
+            suffix = suffix,
+            plugins = repr(registrant["plugins"]),
+            dev_plugins = repr(registrant["dev_plugins"]),
+            annotation_jvm = annotation_jvm,
+        ))
+        for abi in ctx.attr.abis:
+            targets.append(_native_files_target(
+                ctx,
+                member_manifest,
+                abi,
+                dev,
+                target = "native_files_{}_{}".format(suffix, abi),
+            ))
+        targets.append(_native_files_by_abi_target(
+            ctx,
+            target = "flutter_native_files_by_abi_{}".format(suffix),
+            prefix = "native_files_{}_".format(suffix),
+        ))
+    return "".join(targets)
 
 def _write_android_registrants(ctx, plugins, roots):
     entries = {"plugins": [], "dev_plugins": []}
@@ -1479,9 +1532,58 @@ def _plugin_maven_inputs(ctx, name, package_root, overrides):
     gated = [reason for reason in reasons if reason in _GATED_REASONS]
     return build_gradle, coordinates, reasons, gated, raw_unresolved, contributed
 
+def _workspace_plugin_sets(member_records):
+    member_sets = {}
+    union = {}
+    for member in member_records:
+        suffix = member["suffix"]
+        plugins = member["metadata"].get("plugins", {}).get("android", [])
+        member_sets[suffix] = {
+            "metadata": member["metadata"],
+            "packages": member.get("packages", []),
+            "dev_packages": member.get("dev_packages", []),
+        }
+        for plugin in plugins:
+            name = plugin["name"]
+            if name not in union:
+                union[name] = dict(plugin)
+            else:
+                merged = union[name]
+                merged["direct"] = merged.get("direct", False) or plugin.get("direct", False)
+                merged["dev_dependency"] = merged.get("dev_dependency", True) and plugin.get("dev_dependency", True)
+                merged["dependencies"] = sorted({
+                    dependency: True
+                    for dependency in merged.get("dependencies", []) + plugin.get("dependencies", [])
+                }.keys())
+    return member_sets, [union[name] for name in sorted(union.keys())]
+
+def _registrant_plugins(plugins):
+    return [
+        android_plugin(
+            plugin["name"],
+            plugin.get("implements", ""),
+            {
+                "default_package": plugin.get("default_package"),
+                "package": plugin.get("package"),
+                "pluginClass": plugin.get("plugin_class"),
+            },
+            plugin.get("direct", False),
+            plugin.get("dev_dependency", False),
+        )
+        for plugin in plugins
+    ]
+
 def _flutter_plugins_impl(ctx):
     metadata = json.decode(ctx.read(ctx.attr.metadata))
-    plugins = metadata.get("plugins", {}).get("android", [])
+    member_sets = {}
+    if ctx.attr.workspace_members:
+        member_records = json.decode(ctx.read(ctx.attr.workspace_members))
+        if member_records:
+            member_sets, plugins = _workspace_plugin_sets(member_records)
+        else:
+            plugins = metadata.get("plugins", {}).get("android", [])
+    else:
+        plugins = metadata.get("plugins", {}).get("android", [])
     manifest = []
     all_coordinates = []
 
@@ -1528,21 +1630,7 @@ def _flutter_plugins_impl(ctx):
     used_overrides = []
     used_build_config_packages = []
     stale_overrides = []
-    registrant_plugins = [
-        android_plugin(
-            p["name"],
-            p.get("implements", ""),
-            {
-                "default_package": p.get("default_package"),
-                "package": p.get("package"),
-                "pluginClass": p.get("plugin_class"),
-            },
-            p.get("direct", False),
-            p.get("dev_dependency", False),
-        )
-        for p in plugins
-    ]
-    registrant = _write_android_registrants(ctx, registrant_plugins, roots)
+    registrant = _write_android_registrants(ctx, _registrant_plugins(plugins), roots)
 
     # Pub dependencies include entries without native Android targets, such as
     # Dart-only and default-package declarations. Recipes in the resolution
@@ -1984,6 +2072,13 @@ def _flutter_plugins_impl(ctx):
     # so duplicate Java resources keep stable classpath precedence.
     embedding_deps = flutter_embedding_deps(maven_repo = ctx.attr.maven_repo)
     sorted_embedding_deps = sorted(embedding_deps)
+    annotation_jvm = _mode_selected_dependencies(
+        ctx,
+        [ctx.attr.maven_repo + ANNOTATION_JVM],
+        [ctx.attr.maven_repo + "_debug" + ANNOTATION_JVM],
+        bool(dev_coordinates),
+    )
+    workspace_targets = _workspace_build_targets(ctx, member_sets, manifest, roots, annotation_jvm)
 
     ctx.file(
         "BUILD.bazel",
@@ -2025,18 +2120,11 @@ def _flutter_plugins_impl(ctx):
             plugins = repr(registrant["plugins"]),
             dev_plugins = repr(registrant["dev_plugins"]),
         ) +
-        _REGISTRANT_LIB_TEMPLATE.format(
-            annotation_jvm = _mode_selected_dependencies(
-                ctx,
-                [ctx.attr.maven_repo + ANNOTATION_JVM],
-                [ctx.attr.maven_repo + "_debug" + ANNOTATION_JVM],
-                bool(dev_coordinates),
-            ),
-        ) +
+        _REGISTRANT_LIB_TEMPLATE.format(annotation_jvm = annotation_jvm) +
         "".join([
             _native_files_target(ctx, manifest, abi, dev)
             for abi in ctx.attr.abis
-        ]) + _native_files_by_abi_target(ctx),
+        ]) + _native_files_by_abi_target(ctx) + workspace_targets,
     )
     _write_maven_aliases(
         ctx,
@@ -2053,6 +2141,10 @@ flutter_plugins = repository_rule(
             doc = "The pub hub's plugins_metadata.json.",
             allow_single_file = True,
             mandatory = True,
+        ),
+        "workspace_members": attr.label(
+            doc = "The core pub hub's workspace_members.json, embedding per-member plugin metadata.",
+            allow_single_file = True,
         ),
         "embedding_debug": attr.label(
             allow_single_file = True,
@@ -2123,17 +2215,20 @@ _project = tag_class(
 Each hub is its own repository. A `package` or `build_config_field` tag names the
 hub it applies to in its `project` attribute.""",
         ),
-        "metadata": attr.label(
-            doc = """The pub hub's plugin metadata, `@<hub>//:plugins_metadata.json`.
-
-<hub> is the `name` of the project's `pub.lock`.""",
+        "pub": attr.label(
+            doc = """The core pub hub (for example `@workspace_pub`). The implementation
+derives the metadata, package config, and workspace member files from this
+repository label. The explicit `@workspace_pub//:workspace_members.json` file
+label also works.""",
             allow_single_file = True,
-            mandatory = True,
+        ),
+        "metadata": attr.label(
+            doc = "The pub hub's plugin metadata, `@<hub>//:plugins_metadata.json`.",
+            allow_single_file = True,
         ),
         "package_config": attr.label(
             doc = "The same hub's package config, `@<hub>//:package_config.json`.",
             allow_single_file = True,
-            mandatory = True,
         ),
         "coursier_options": attr.string_list(
             doc = """Extra flags for the coursier CLI, when `maven_resolver = "coursier"`.
@@ -2357,6 +2452,25 @@ def _flutter_plugins_ext_impl(ctx):
                 fail("plugins.project(name = \"{}\") is declared twice".format(project.name))
             declared[project.name] = True
             check_abis(project.abis, "plugins.project")
+            if project.pub != None:
+                if project.metadata != None or project.package_config != None:
+                    fail("plugins.project {}: `pub` replaces `metadata` and `package_config`; do not set both forms.".format(project.name))
+
+                # Resolve sibling hub files by repository, so `pub = "@hub"` works.
+                # buildifier: disable=canonical-repository
+                metadata = Label("@@" + project.pub.repo_name + "//:plugins_metadata.json")
+
+                # buildifier: disable=canonical-repository
+                package_config = Label("@@" + project.pub.repo_name + "//:package_config.json")
+
+                # buildifier: disable=canonical-repository
+                workspace_members = Label("@@" + project.pub.repo_name + "//:workspace_members.json")
+            else:
+                if project.metadata == None or project.package_config == None:
+                    fail("plugins.project {}: set `pub`, or set both `metadata` and `package_config`.".format(project.name))
+                metadata = project.metadata
+                package_config = project.package_config
+                workspace_members = None
 
             # Generated repositories need the caller-resolved canonical label.
             # buildifier: disable=canonical-repository
@@ -2367,8 +2481,9 @@ def _flutter_plugins_ext_impl(ctx):
                 abis = project.abis,
                 embedding_debug = Label("//flutter:embedding_jar_debug"),
                 embedding_release = Label("//flutter:embedding_jar_release"),
-                metadata = project.metadata,
-                package_config = project.package_config,
+                metadata = metadata,
+                package_config = package_config,
+                workspace_members = workspace_members,
                 coursier_options = project.coursier_options,
                 extra_artifacts = project.extra_artifacts,
                 maven_resolver = project.maven_resolver,

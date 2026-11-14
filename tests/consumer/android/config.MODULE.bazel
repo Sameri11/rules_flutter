@@ -215,3 +215,11 @@ plugins.project(
     package_config = "@composed_pub//:package_config.json",
 )
 use_repo(plugins, "composed_override_plugins", "composed_plugins", "flutter_plugins")
+
+plugins.project(
+    name = "workspace_plugins",
+    abis = ["arm64-v8a"],
+    maven_repo = "@flutter_maven//:pin",
+    pub = "@workspace_pub",
+)
+use_repo(plugins, "workspace_plugins")

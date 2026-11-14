@@ -181,6 +181,8 @@ def _flutter_core_impl(ctx):
         ctx.file.pubspec_lock,
         ctx.files.path_deps,
         ctx.file._checker,
+        ctx.file.lock_project_dir,
+        ctx.file.expected_path_deps,
     )
     validation_files = [validation]
     if ctx.file.registrant != None:
@@ -232,6 +234,8 @@ _flutter_core = rule(
         "path_deps": attr.label_list(allow_files = True, doc = "Sources of path dependencies, as the kernels take them."),
         "debug_registrant": attr.label(allow_single_file = [".dart"], doc = "The debug registrant, as dart_jit_kernel takes it."),
         "pubspec_lock": attr.label(allow_single_file = True, mandatory = True),
+        "lock_project_dir": attr.label(allow_single_file = True, mandatory = True),
+        "expected_path_deps": attr.label(allow_single_file = True),
         "registrant": attr.label(allow_single_file = [".dart"]),
         "expected_registrant": attr.label(allow_single_file = [".dart"]),
         "registrant_updater": attr.label(),
@@ -248,6 +252,21 @@ def _pub_labels(pub, who):
             "(from `pub = use_extension(\"@rules_flutter_core//flutter:extensions.bzl\", \"pub\")`), got {}."
         ).format(who, repr(pub)))
     return (pub + "//:package_config.json", pub + "//:project_package_config.json", pub + "//:lib", pub + "//:all")
+
+def _member_plugin_labels(pub, package_path):
+    suffix = package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
+    if package_path:
+        return (
+            pub + "//:dart_plugin_registrant_{}.dart".format(suffix),
+            pub + "//:dart_plugin_registrant_release_{}.dart".format(suffix),
+        )
+    return pub + "//:dart_plugin_registrant.dart", pub + "//:dart_plugin_registrant_release.dart"
+
+def _member_path_deps_label(pub, package_path):
+    if package_path:
+        suffix = package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
+        return pub + "//:path_deps_{}.json".format(suffix)
+    return None
 
 def flutter_core(
         name,
@@ -275,8 +294,8 @@ def flutter_core(
       assets: asset files the bundle packages; defaults to an optional `assets/**` glob.
       entrypoint: the app's entrypoint under lib/.
       srcs: Dart sources for change detection; defaults to `glob(["lib/**/*.dart"])`.
-      path_deps: sources of `path:` dependencies; checked against this package's
-        `pubspec.lock` during build validation.
+      path_deps: sources of `path:` dependencies; checked against the pub hub's
+        lock and project directory during build validation.
       dart_defines: values forwarded to frontend_server as `-D<name>=<value>` options.
       native_build_env: one label override for all platforms, a dict keyed by platform name, or None to use each descriptor's default.
       dart_plugin_registrant: an optional plugin registrant Dart file to compile.
@@ -299,12 +318,16 @@ def flutter_core(
 
     aot_registrant = None
     debug_registrant = None
+    hub_debug_registrant = None
+    hub_release_registrant = None
     if dart_plugin_registrant:
         debug_registrant = _workspace_label(dart_plugin_registrant)
+        hub_debug_registrant, hub_release_registrant = _member_plugin_labels(pub, native.package_name())
         aot_registrant = select({
-            Label("//flutter:mode_release"): pub + "//:dart_plugin_registrant_release.dart",
+            Label("//flutter:mode_release"): hub_release_registrant,
             "//conditions:default": debug_registrant,
         })
+    expected_path_deps = _member_path_deps_label(pub, native.package_name())
 
     flutter_pubspec(name = "pubspec", src = "pubspec.yaml", visibility = kwargs.get("visibility"))
 
@@ -409,7 +432,7 @@ def flutter_core(
         assets = ":" + name + "_test_assets",
         registrant_check = (
             registrant_label,
-            pub + "//:dart_plugin_registrant.dart",
+            hub_debug_registrant,
             ":dart_registrant_update",
         ) if registrant_label else None,
         tags = ["manual"],
@@ -449,7 +472,7 @@ def flutter_core(
     if dart_plugin_registrant:
         _write_source_file(
             name = "dart_registrant_update",
-            source = pub + "//:dart_plugin_registrant.dart",
+            source = hub_debug_registrant,
             destination = registrant_label,
             **_internal_kwargs(kwargs)
         )
@@ -462,14 +485,16 @@ def flutter_core(
         mode_free_assets = select(mode_free_assets_select),
         pubspec = ":pubspec",
         package_config = package_config,
-        pubspec_lock = "pubspec.lock",
+        pubspec_lock = pub + "//:pubspec.lock",
+        lock_project_dir = pub + "//:lock_project_dir",
         pub_srcs = [pub_lib],
         srcs = srcs,
         path_deps = path_deps,
         debug_registrant = debug_registrant,
         registrant = registrant_label,
-        expected_registrant = pub + "//:dart_plugin_registrant.dart" if registrant_label else None,
+        expected_registrant = hub_debug_registrant if registrant_label else None,
         registrant_updater = ":dart_registrant_update" if registrant_label else None,
+        expected_path_deps = expected_path_deps,
         **kwargs
     )
 

@@ -10,6 +10,7 @@ actually declared via `path_deps`, and fails if any is uncovered.
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -45,11 +46,13 @@ def main():
                         help="Lockfile directory, execroot-relative.")
     parser.add_argument("--declared", nargs="*", default=[],
                         help="Files declared via path_deps, execroot-relative.")
-    parser.add_argument("--out", required=True)
     parser.add_argument("--package-dir-file",
                         help="File containing the lockfile directory, execroot-relative.")
     parser.add_argument("--self-dir", default="",
                         help="Package being checked, excluded from path dependencies.")
+    parser.add_argument("--expected-path-deps",
+                        help="JSON list of path dependencies in this package's reachable closure.")
+    parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
     package_dir = args.package_dir
@@ -59,6 +62,9 @@ def main():
     self_dir = os.path.normpath(args.self_dir) if args.self_dir else ""
     with open(args.lock) as handle:
         deps = list(path_dependencies(handle.read()))
+    if args.expected_path_deps:
+        with open(args.expected_path_deps) as handle:
+            deps = [(item["name"], item["path"]) for item in json.load(handle)]
 
     missing = []
     for name, raw in deps:

@@ -1,0 +1,19 @@
+name: workspace_app
+version: 0.0.1
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  workspace_member:
+    path: ../member
+
+  workspace_member_b:
+    path: ../member_b
+  dev_only_probe:
+    path: ../../fixtures/dev_only_probe

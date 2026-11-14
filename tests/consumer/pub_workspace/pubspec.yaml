@@ -6,3 +6,6 @@ environment:
 
 workspace:
   - member
+  - member_b
+  - app
+  - app2

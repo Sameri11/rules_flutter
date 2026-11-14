@@ -31,7 +31,7 @@ Bazel cannot verify a content hash for them.
 """
 
 load(":dart_registrant.bzl", "render_dart_registrant")
-load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "pubspec_version", "resolve_lock")
+load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "pubspec_version", "pubspec_workspace", "resolve_lock")
 load(":sdk_packages.bzl", "sdk_package_root")
 
 visibility(["//flutter"])
@@ -115,8 +115,10 @@ def _test_deps_libraries(rctx, name, lib, sdk):
         uris.append("package:{}/{}".format(name, f.basename))
     return uris
 
-def _plugin_dependency_graph(entries, root_name):
+def _plugin_dependency_graph(entries, root_name, include_dev = False):
     deps = {name: pubspec_dependencies(entries[name]["pubspec"]) for name in entries}
+    if include_dev:
+        deps[root_name] = sorted(deps[root_name] + pubspec_dependencies(entries[root_name]["pubspec"], "dev_dependencies"))
     reached = {root_name: True}
     frontier = [root_name]
     for _ in range(len(entries)):
@@ -131,15 +133,12 @@ def _plugin_dependency_graph(entries, root_name):
             break
     return deps, reached
 
-def _plugins_metadata(entries, root_name, deps, reached):
+def _plugins_metadata(entries, root_name, deps, reached, plugin_names = None):
     platform_plugins = {}
-
-    # Keep app-facing default_package entries in metadata, but never expose them
-    # as target dependencies: only implementation packages have generated targets.
     implementing_plugins = {}
     implements_by_plugin = {}
     for name in sorted(entries.keys()):
-        if name == root_name:
+        if name == root_name or (plugin_names != None and name not in plugin_names):
             continue
         implements, platforms = pubspec_flutter_plugins(entries[name]["pubspec"])
         implements_by_plugin[name] = implements
@@ -169,6 +168,68 @@ def _plugins_metadata(entries, root_name, deps, reached):
             })
         plugins[platform] = plugin_list
     return {"plugins": plugins}
+
+def _plugin_target_suffix(package_path):
+    return package_path.replace("_", "__").replace("/", "_s_").replace("-", "_h_")
+
+def _workspace_plugin_files(rctx, entries, workspace_members, root_name, project_package):
+    roots = []
+    if project_package:
+        roots.append((root_name, _segments(project_package), None))
+    roots.extend([
+        (member_name, _segments(project_package) + _segments(member_path), member_path)
+        for member_name, member_path in workspace_members
+    ])
+    files = []
+    member_configs = []
+    for package_name, package_dir, member_path in roots:
+        suffix = _plugin_target_suffix("/".join(package_dir))
+        deps, debug_reached = _plugin_dependency_graph(entries, package_name, include_dev = True)
+        _, release_reached = _plugin_dependency_graph(entries, package_name)
+        metadata = _plugins_metadata(entries, package_name, deps, release_reached, plugin_names = debug_reached)
+        metadata_name = "plugins_metadata_{}.json".format(suffix)
+        rctx.file(metadata_name, json.encode_indent(metadata, indent = "  ") + "\n")
+        if member_path != None:
+            member_configs.append({
+                "name": package_name,
+                "path": "/".join(package_dir),
+                "suffix": suffix,
+                "packages": sorted(debug_reached.keys()),
+                "dev_packages": sorted([name for name in debug_reached if name not in release_reached]),
+                "metadata": metadata,
+            })
+        debug_registrations = []
+        release_registrations = []
+        for name in sorted(entries.keys()):
+            if name == root_name:
+                continue
+            registrations = pubspec_dart_plugins(entries[name]["pubspec"], name)
+            if registrations and name in debug_reached:
+                debug_registrations.append((name, registrations))
+            if registrations and name in release_reached:
+                release_registrations.append((name, registrations))
+        debug_name = "dart_plugin_registrant_{}.dart".format(suffix)
+        release_name = "dart_plugin_registrant_release_{}.dart".format(suffix)
+        rctx.file(debug_name, render_dart_registrant(debug_registrations), executable = False)
+        rctx.file(release_name, render_dart_registrant(release_registrations), executable = False)
+        files.extend([metadata_name, debug_name, release_name])
+    return files, member_configs
+
+def _workspace_path_deps_files(rctx, entries, lock_paths, workspace_members, project_package):
+    path_names = {package["name"]: package["path"] for package in lock_paths}
+    path_names.update({name: path for name, path in workspace_members})
+    files = []
+    for member_name, member_path in workspace_members:
+        _, reached = _plugin_dependency_graph(entries, member_name)
+        expected = [
+            {"name": name, "path": path}
+            for name, path in sorted(path_names.items())
+            if name != member_name and name in reached
+        ]
+        filename = "path_deps_{}.json".format(_plugin_target_suffix("/".join(_segments(project_package) + _segments(member_path))))
+        rctx.file(filename, json.encode_indent(expected, indent = "  ") + "\n")
+        files.append(filename)
+    return files
 
 def _pub_hub_impl(rctx):
     lock_label = rctx.attr.lock
@@ -256,12 +317,37 @@ def _pub_hub_impl(rctx):
         }
 
     root_pubspec = rctx.read(rctx.attr.pubspec)
+    workspace_members = []
+    for member_path in pubspec_workspace(root_pubspec):
+        member_dir = project_dir.get_child(*_segments(member_path))
+        member_pubspec = member_dir.get_child("pubspec.yaml")
+        if not member_pubspec.exists:
+            fail("pub hub {}: workspace member {} has no pubspec.yaml".format(rctx.attr.name, member_path))
+        rctx.watch(member_pubspec)
+        text = rctx.read(member_pubspec)
+        name = _root_package_name(text)
+        if name in entries:
+            fail("pub hub {}: workspace member {} duplicates package name {}".format(rctx.attr.name, member_path, name))
+        entry_dir = project + _segments(member_path)
+        entries[name] = {
+            "dir": entry_dir,
+            "root": member_dir,
+            "language": language_version(text),
+            "pubspec": text,
+        }
+        workspace_members.append((name, member_path))
+
     root_name = _root_package_name(root_pubspec)
     entries[root_name] = {"dir": project, "root": project_dir, "language": language_version(root_pubspec), "pubspec": root_pubspec}
 
-    expected = len(lock["hosted"]) + len(lock["sdk"]) + len(lock["path"])
+    expected = len(lock["hosted"]) + len(lock["sdk"]) + len(lock["path"]) + len(workspace_members)
     if len(entries) != expected + 1:
-        fail("pub hub {}: {} package configs built for {} lock entries plus the root".format(rctx.attr.name, len(entries), expected))
+        fail("pub hub {}: {} package configs built for {} lock entries, {} workspace members, and the root".format(
+            rctx.attr.name,
+            len(entries),
+            expected - len(workspace_members),
+            len(workspace_members),
+        ))
 
     for filename, base in [
         ("package_config.json", hub_base),
@@ -317,6 +403,9 @@ def _pub_hub_impl(rctx):
                 release_registrations.append((name, registrations))
     rctx.file("dart_plugin_registrant.dart", render_dart_registrant(debug_registrations), executable = False)
     rctx.file("dart_plugin_registrant_release.dart", render_dart_registrant(release_registrations), executable = False)
+    workspace_plugin_files, workspace_member_configs = _workspace_plugin_files(rctx, entries, workspace_members, root_name, lock_label.package)
+    rctx.file("workspace_members.json", json.encode_indent(workspace_member_configs, indent = "  ") + "\n")
+    workspace_path_dep_files = _workspace_path_deps_files(rctx, entries, lock["path"], workspace_members, lock_label.package)
 
     hosted_names = sorted(rctx.attr.hosted.values())
     repo_of = {name: label.repo_name for label, name in rctx.attr.hosted.items()}
@@ -361,6 +450,11 @@ def _pub_hub_impl(rctx):
     }
     package_dirs_src = ", ".join(["{}: {}".format(repr(name), repr(path)) for name, path in package_dirs.items()])
 
+    generated_files = workspace_plugin_files + workspace_path_dep_files
+    generated_files_src = ",\n    ".join(['"{}"'.format(name) for name in generated_files])
+    if generated_files_src:
+        generated_files_src += ","
+
     rctx.file("BUILD.bazel", """load("{composition_bzl}", "dart_test_deps")
 load("{hook_packages_bzl}", "flutter_hook_packages")
 package(default_visibility = ["//visibility:public"])
@@ -370,8 +464,10 @@ exports_files([
     "project_package_config.json",
     "package_graph.json",
     "plugins_metadata.json",
+    "workspace_members.json",
     "dart_plugin_registrant.dart",
     "dart_plugin_registrant_release.dart",
+    {generated_files}
     "pubspec.lock",
     "lock_project_dir",
 ])
@@ -402,6 +498,7 @@ dart_test_deps(
         composition_bzl = rctx.attr.composition_bzl,
         hook_packages_bzl = rctx.attr.hook_packages_bzl,
         package_dirs = package_dirs_src,
+        generated_files = generated_files_src,
         hub = rctx.attr.name,
         lock_name = rctx.attr.lock_name,
         lib = ", ".join(lib_srcs),

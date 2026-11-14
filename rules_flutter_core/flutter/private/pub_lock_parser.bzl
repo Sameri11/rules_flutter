@@ -354,6 +354,43 @@ def pubspec_dependencies(pubspec_text, section = "dependencies"):
             names.append(stripped.split(":")[0].strip().strip("\"'"))
     return sorted(names)
 
+def pubspec_workspace(pubspec_text):
+    """Returns literal paths in a top-level `workspace:` list.
+
+    Args:
+        pubspec_text: Contents of the root pubspec.yaml.
+
+    Returns:
+        The workspace member paths in declaration order.
+    """
+    members = []
+    inside = False
+    child_indent = -1
+    for raw in pubspec_text.split("\n"):
+        line = raw.rstrip()
+        stripped = line.lstrip(" ")
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(stripped)
+        if indent == 0:
+            inside = False
+            if stripped == "workspace:":
+                inside = True
+                child_indent = -1
+            continue
+        if not inside:
+            continue
+        if child_indent == -1:
+            child_indent = indent
+        if indent == child_indent:
+            if not stripped.startswith("- "):
+                fail("pubspec.yaml: unsupported workspace entry {}".format(repr(stripped)))
+            path = stripped[2:].split(" #")[0].strip().strip("\"'")
+            if not path or "*" in path:
+                fail("pubspec.yaml: workspace entries must be literal paths (glob entries are unsupported), got {}".format(repr(path)))
+            members.append(path)
+    return members
+
 def _yaml_scalar(value):
     value = value.split(" #")[0].strip()
     if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:

@@ -1,0 +1,29 @@
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID", "flutter_android_app")
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_core(
+    name = "core",
+    srcs = ["lib/main.dart"],
+    path_deps = [
+        "//:dev_only_probe_srcs",
+        "//pub_workspace/member:srcs",
+        "//pub_workspace/member_b:srcs",
+    ],
+    native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    platforms = [FLUTTER_ANDROID],
+    pub = "@workspace_pub",
+    dart_plugin_registrant = "lib/dart_plugin_registrant.dart",
+)
+
+
+flutter_android_app(
+    name = "apk",
+    core = ":core",
+    manifest = "AndroidManifest.xml",
+    manifest_values = {"applicationId": "com.example.workspace_app"},
+    plugins = "@workspace_plugins",
+    resource_files = [],
+    tags = ["manual"],
+)

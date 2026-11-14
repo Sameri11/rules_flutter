@@ -917,7 +917,10 @@ def _dart_test_deps_impl(ctx):
     scalars = ctx.actions.args()
     scalars.add(ctx.attr.hub)
     scalars.add(ctx.attr.lock_name)
-    scalars.add_joined(ctx.attr.packages, join_with = " ")
+
+    # The shell script consumes a name argument even when there are no direct packages.
+    package_names = ctx.attr.packages if ctx.attr.packages else ["__no_direct_packages__"]
+    scalars.add_joined(package_names, join_with = " ")
     scalars.add(dill)
     scalars.add("org-dartlang-root:///" + _execroot_path(entry))
 
@@ -1797,7 +1800,7 @@ AssetBundle and writeBundle with TargetPlatform.tester, as `flutter test` builds
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
 
-def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lock_project_dir = None):
+def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lock_project_dir = None, expected_path_deps = None):
     """Declares a validation action for a package's path dependencies.
 
     Args:
@@ -1807,6 +1810,7 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
       path_deps: declared source files for path dependencies.
       checker: the path dependency checker script.
       lock_project_dir: directory containing the pub hub lock, when different from this package.
+      expected_path_deps: optional JSON list of path dependencies reachable from this package.
 
     Returns:
       The validation marker output.
@@ -1819,7 +1823,8 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
         args.add("--package-dir-file", lock_project_dir)
     else:
         args.add("--package-dir", package_dir)
-    args.add("--self-dir", package_dir)
+    if expected_path_deps:
+        args.add("--expected-path-deps", expected_path_deps)
     args.add("--out", marker)
     args.add_all("--declared", path_deps)
 
@@ -1829,7 +1834,7 @@ def pub_path_deps_check_action(ctx, marker, pubspec_lock, path_deps, checker, lo
     ctx.actions.run_shell(
         command = 'exec python3 "$@"',
         arguments = [args],
-        inputs = [pubspec_lock, checker] + ([lock_project_dir] if lock_project_dir else []) + path_deps,
+        inputs = [pubspec_lock, checker] + ([lock_project_dir] if lock_project_dir else []) + ([expected_path_deps] if expected_path_deps else []) + path_deps,
         outputs = [marker],
         mnemonic = "PubPathDepsCheck",
         progress_message = "Checking path: dependencies %{label}",
