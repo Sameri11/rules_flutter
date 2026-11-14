@@ -1,9 +1,9 @@
 """Public building blocks for hand-wired Flutter targets."""
 
 load("//flutter/private:core.bzl", _FlutterArtifactInfo = "FlutterArtifactInfo", _FlutterCoreInfo = "FlutterCoreInfo")
-load("//flutter/private:pub_workspace.bzl", _PubWorkspaceInfo = "PubWorkspaceInfo", _pub_workspace = "pub_workspace")
 load("//flutter/private:debug_core.bzl", _flutter_debug_core = "flutter_debug_core")
 load("//flutter/private:integration_test.bzl", _FlutterIntegrationTestInfo = "FlutterIntegrationTestInfo")
+load("//flutter/private:pub_workspace.bzl", _PubWorkspaceInfo = "PubWorkspaceInfo", _pub_workspace = "pub_workspace")
 load("//flutter/private:pubspec.bzl", _FlutterPubspecInfo = "FlutterPubspecInfo", _flutter_pubspec = "flutter_pubspec")
 load("//flutter/private:rules.bzl", _FlutterNativeBuildEnvInfo = "FlutterNativeBuildEnvInfo", _dart_test_deps = "dart_test_deps", _flutter_assets = "flutter_assets", _flutter_target_slices = "flutter_target_slices", _pub_path_deps_check = "pub_path_deps_check", _pub_plugins_check = "pub_plugins_check")
 

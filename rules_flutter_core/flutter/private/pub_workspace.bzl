@@ -2,7 +2,10 @@
 
 visibility(["//flutter"])
 
-PubWorkspaceInfo = provider(fields = ["members", "root"])
+PubWorkspaceInfo = provider(
+    doc = "Selected pub files for a workspace root and its members.",
+    fields = ["members", "root"],
+)
 
 def _pub_workspace_impl(ctx):
     members = {}

@@ -7,9 +7,10 @@ supplies its target slices and artifact toolchains.
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":modes.bzl", "aot_target_compatible_with")
+load(":pub_workspace.bzl", "PubWorkspaceInfo", "pub_workspace_file")
 load(":pubspec.bzl", "FlutterPubspecInfo", "flutter_pubspec")
 load(":rules.bzl", "FlutterAotSnapshotInfo", "dart_aot_kernel", "dart_aot_snapshot", "dart_jit_kernel", "flutter_assets", "flutter_package_targets", "flutter_test_assets", "lib_root", "library_path", "pub_path_deps_check_action", "pub_plugins_check_action")
-load(":pub_workspace.bzl", "PubWorkspaceInfo", "pub_workspace_file")
+
 visibility(["//flutter/...", "//tests/..."])
 
 _TARGET_TOOLCHAIN_LABEL = "//flutter/private:flutter_target_toolchain_type"
@@ -259,7 +260,6 @@ def _pub_labels(pub, who):
             "(from `pub = use_extension(\"@rules_flutter_core//flutter:extensions.bzl\", \"pub\")`), got {}."
         ).format(who, repr(pub)))
     return (pub + "//:package_config.json", pub + "//:project_package_config.json", pub + "//:lib", pub + "//:all", pub + "//:workspace")
-
 
 def flutter_core(
         name,

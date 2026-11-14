@@ -28,8 +28,8 @@ tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(":hook_packages.bzl", "FlutterHookPackagesInfo", "staged_hook_packages")
-load(":pubspec.bzl", "FlutterPubspecInfo")
 load(":pub_workspace.bzl", "PubWorkspaceInfo")
+load(":pubspec.bzl", "FlutterPubspecInfo")
 
 FlutterTargetSliceInfo = provider(
     doc = "Platform metadata resolved for a configured Flutter target slice.",

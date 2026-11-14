@@ -15,15 +15,14 @@ load("@rules_android//rules:rules.bzl", "android_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo")
-load("@rules_java//java:defs.bzl", "java_import")
+load("@rules_flutter_core//flutter:composition.bzl", "FlutterArtifactInfo", "FlutterCoreInfo")
+load("@rules_java//java:defs.bzl", "JavaInfo", "java_import")
 load("//flutter:abis.bzl", "ABIS", "ABI_PLATFORM_ATTRS", "abi_from_platform")
 load(":android.bzl", "flutter_android_assets")
 load(":embedding.bzl", "ANNOTATION_JVM", "flutter_embedding_deps")
 load(":maven_identity.bzl", "check_flutter_maven_repository", "flutter_maven_repository")
 load(":native_files.bzl", "FlutterNativeFilesByAbiInfo")
-load("@rules_flutter_core//flutter:composition.bzl", "FlutterCoreInfo")
-load("@rules_java//java:defs.bzl", "JavaInfo")
+
 visibility(["//flutter/...", "//tests/..."])
 
 # The registrant of an app without plugins: an empty GeneratedPluginRegistrant.
@@ -40,7 +39,10 @@ FlutterSplitNativeInfo = provider(
     },
 )
 
-WorkspacePluginTargetsInfo = provider(fields = ["members", "root"])
+WorkspacePluginTargetsInfo = provider(
+    doc = "Root and workspace-member Android plugin targets.",
+    fields = ["members", "root"],
+)
 
 def _workspace_plugin_targets_impl(ctx):
     members = {}
@@ -234,7 +236,6 @@ platform. The ABI comes from that platform.""",
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),
 )
-
 
 def flutter_android_inputs(name, core, plugins, maven_repo = None, tags = [], visibility = None):
     """Declares a flutter_core artifact's Android inputs as the target `<name>`.

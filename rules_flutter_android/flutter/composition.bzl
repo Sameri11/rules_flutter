@@ -2,8 +2,7 @@
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("//flutter/private:android.bzl", _flutter_android_manifest = "flutter_android_manifest", _flutter_assets_dir = "flutter_assets_dir")
-load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs")
-load("//flutter/private:android_inputs_rules.bzl", _select_workspace_plugins = "select_workspace_plugins", _workspace_plugin_targets = "workspace_plugin_targets")
+load("//flutter/private:android_inputs_rules.bzl", _flutter_android_inputs = "flutter_android_inputs", _select_workspace_plugins = "select_workspace_plugins", _workspace_plugin_targets = "workspace_plugin_targets")
 load("//flutter/private:apk_check.bzl", _flutter_apk_check = "flutter_apk_check")
 load("//flutter/private:embedding.bzl", _FLUTTER_EMBEDDING_ARTIFACTS = "FLUTTER_EMBEDDING_ARTIFACTS", _flutter_embedding_deps = "flutter_embedding_deps")
 load("//flutter/private:maven_identity.bzl", _FlutterMavenRepositoryInfo = "FlutterMavenRepositoryInfo", _flutter_maven_repository = "flutter_maven_repository")
