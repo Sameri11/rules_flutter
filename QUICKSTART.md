@@ -481,11 +481,23 @@ plugins = use_extension(
 plugins.project(
     name = "flutter_plugins",
     abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
+    pub = "@pub",
+    maven_repo = "@flutter_maven//:pin",
+)
+use_repo(plugins, "flutter_plugins")
+```
+
+The concise `pub` form selects the hub automatically. For lower-level wiring,
+keep both labels from the same hub instead:
+
+```python
+plugins.project(
+    name = "flutter_plugins",
+    abis = ["arm64-v8a", "x86_64", "armeabi-v7a"],
     metadata = "@pub//:plugins_metadata.json",
     package_config = "@pub//:package_config.json",
     maven_repo = "@flutter_maven//:pin",
 )
-use_repo(plugins, "flutter_plugins")
 ```
 
 Dev-only plugins are included in debug and excluded from release. If a dev-only
@@ -592,6 +604,36 @@ filegroup(
 )
 ```
 
+
+### Pub workspaces
+
+For a Dart pub workspace, put one `pubspec.lock` beside the root
+`pubspec.yaml`, and enumerate members with literal paths:
+
+```yaml
+name: workspace_root
+workspace:
+  - packages/shared
+  - apps/mobile
+```
+
+Each member's `pubspec.yaml` uses `resolution: workspace`. Do not use globs:
+the hub rejects them with a request to list literal member paths. Declare the
+root lock once in `MODULE.bazel` and share its hub across packages:
+
+```python
+pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
+pub.lock(name = "pub", lock = "//:pubspec.lock")
+use_repo(pub, "pub")
+```
+
+Use `pub = "@pub"` on each `flutter_package` or `flutter_core`. Declare member
+sources as `path_deps` on every package that imports them; workspace membership
+does not implicitly add source files to Bazel actions. Workspace app cores
+select their own Dart registrant and Android plugin subset. Configure one
+Android project for the hub with `plugins.project(pub = "@pub")`, as above.
+The hand-wired `metadata` plus `package_config` form remains available when
+lower-level explicit labels are needed.
 
 ### Testing a path package
 
