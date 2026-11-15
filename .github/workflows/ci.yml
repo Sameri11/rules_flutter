@@ -496,9 +496,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Shares the pub_plugins example row's remote cache (write, not keyed
-      # to env.BAZEL_CACHE_MODE: this job only ever runs on workflow_dispatch,
-      # which that expression always evaluates to '' for).
       - uses: ./.github/actions/flutter-bazel
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
