@@ -103,7 +103,6 @@ flutter_test(
 
 # The macro, with every named parameter supplied -- it is the public entry point
 # most consumers use, and its signature is the thing most likely to drift.
-
 flutter_core(
     name = "app_core",
     srcs = ["lib/main.dart"],

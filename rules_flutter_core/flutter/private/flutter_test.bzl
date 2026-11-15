@@ -240,7 +240,7 @@ _flutter_test_bootstrap = rule(
         ),
         "package": attr.label(
             mandatory = True,
-            doc = "The test's package metadata, from a flutter_package or flutter_core.",
+            doc = "The flutter_package the test belongs to, or the flutter_core an integration test compiles against.",
         ),
         "test_label": attr.string(
             mandatory = True,
@@ -675,6 +675,7 @@ def flutter_test_device(
         srcs = srcs,
         prunable_srcs = prunable_srcs,
         goldens = None,
+        device = True,
         data = data,
         dart_defines = dart_defines,
         materialize = [],

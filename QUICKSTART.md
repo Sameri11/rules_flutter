@@ -688,8 +688,9 @@ or the first `FLUTTER_ANDROID` target platform when that flag is unset.
 Hand-wired selects follow the requesting target's platform configuration and
 default to the first descriptor.
 
-Breaking changes: `platforms` is required on `flutter_core`,
-`flutter_debug_core`, and `flutter_integration_test`.
+Breaking changes: `flutter_test` and `flutter_test_suite` take `package`
+instead of `app`; pass `:<name>_test_package`. `platforms` is required on
+`flutter_core`, `flutter_debug_core`, and `flutter_integration_test`.
 `flutter_assets(target_slices = ...)` and Android wrapper
 `flutter_assets(target_platforms = ...)` replace the old ABI-oriented
 `flutter_assets(abis = ...)` API. `FlutterArtifactInfo.abi`, `.libapp`, and

@@ -421,7 +421,8 @@ def flutter_core(
         package_config = project_package_config,
         pub_srcs = [pub_all],
         path_deps = path_deps,
-        **_internal_kwargs(kwargs)
+        visibility = kwargs.get("visibility"),
+        tags = _internal_tags(kwargs),
     )
 
     flutter_package_targets(
@@ -436,7 +437,8 @@ def flutter_core(
             hub_debug_registrant,
             ":dart_registrant_update",
         ) if registrant_label else None,
-        **_internal_kwargs(kwargs)
+        visibility = kwargs.get("visibility"),
+        tags = _internal_tags(kwargs),
     )
 
     platform_assets = {}
