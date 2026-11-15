@@ -11,6 +11,11 @@ on:
         required: false
         default: false
         type: boolean
+      run-device-tests:
+        description: Run the pub_plugins integration test on an emulator
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 
@@ -363,11 +368,12 @@ jobs:
           flutter-sha256: ${{ matrix.os == 'macos-15' && env.FLUTTER_SHA256_DARWIN_ARM64 || env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
           bazelisk-sha256: ${{ matrix.os == 'macos-15' && env.BAZELISK_SHA256_DARWIN_ARM64 || env.BAZELISK_SHA256_LINUX_AMD64 }}
-          # Both demo_app modes share the module's remote cache.
-          cache-mode: ${{ matrix.example.directory == 'examples/demo_app' && env.BAZEL_CACHE_MODE || '' }}
-          cache-host: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_HOST || '' }}
-          cache-project-id: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
-          cache-token: ${{ matrix.example.directory == 'examples/demo_app' && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
+          # demo_app and pub_plugins share the module's remote cache (write
+          # on pull_request).
+          cache-mode: ${{ (matrix.example.directory == 'examples/demo_app' || matrix.example.name == 'pub_plugins') && env.BAZEL_CACHE_MODE || '' }}
+          cache-host: ${{ (matrix.example.directory == 'examples/demo_app' || matrix.example.name == 'pub_plugins') && secrets.BAZEL_CACHE_HOST || '' }}
+          cache-project-id: ${{ (matrix.example.directory == 'examples/demo_app' || matrix.example.name == 'pub_plugins') && secrets.BAZEL_CACHE_PROJECT_ID || '' }}
+          cache-token: ${{ (matrix.example.directory == 'examples/demo_app' || matrix.example.name == 'pub_plugins') && secrets.BAZEL_CACHE_TOKEN_RW || '' }}
 
       - name: APK inventory rejects an unlisted app
         if: matrix.os == 'ubuntu-latest' && matrix.example.name == 'demo_app'
@@ -402,7 +408,7 @@ jobs:
         working-directory: ${{ matrix.example.directory }}
         run: |
           set -euo pipefail
-          common=(-c fastbuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --@rules_flutter_core//flutter:mode=debug)
+          common=(-c fastbuild --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --@rules_flutter_core//flutter:mode=debug --remote_download_outputs=all)
           if [[ "${{ matrix.example.name }}" == no_plugins ]]; then
             tests=(//android/app:no_plugins_smoke //android/app:no_plugins_prebuilt //android/app:no_plugins_suffix //android/app:no_plugins_flutter_activity)
             checks=(//android/app:no_plugins_smoke_check_test //android/app:no_plugins_prebuilt_check_test //android/app:no_plugins_suffix_check_test //android/app:no_plugins_flutter_activity_check_test)
@@ -477,6 +483,56 @@ jobs:
           python3 tools/ci/cache_stats.py \
             bazel_example_test_${{ matrix.example.name }}.log \
             bazel_example_hash_${{ matrix.example.name }}.log
+
+  # Manual-only: builds and runs the pub_plugins smoke integration test on a
+  # KVM-accelerated emulator. Never runs on push or pull_request, so ordinary
+  # CI never needs a device.
+  pub_plugins_device_test:
+    name: pub_plugins integration test — emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'workflow_dispatch' && inputs.run-device-tests
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-sha256: ${{ env.BAZELISK_SHA256_LINUX_AMD64 }}
+          cache-mode: write
+          cache-host: ${{ secrets.BAZEL_CACHE_HOST }}
+          cache-project-id: ${{ secrets.BAZEL_CACHE_PROJECT_ID }}
+          cache-token: ${{ secrets.BAZEL_CACHE_TOKEN_RW }}
+
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # No boot snapshot (a prior run traced a screenshot-readback flake to
+      # stale snapshot state) and animations disabled. One retry covers that
+      # known flake; logcat is captured only on the final failure, since the
+      # emulator is torn down right after this step.
+      - name: Run the smoke integration test on an emulator
+        uses: ReactiveCircus/android-emulator-runner@c9c93e6ba9c4194322e114c40970d5983d9a07cc # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: BAZEL_LOCKFILE_MODE=${{ env.BAZEL_LOCKFILE_MODE }} bash tools/ci/run_pub_plugins_device_test.sh
+
+      - name: Upload device logcat
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pub-plugins-device-logcat
+          path: pub_plugins_device_logcat.txt
+          if-no-files-found: ignore
 
   # Focused conformance lane also checks helper-edit invalidation with caches disabled.
   conformance:
