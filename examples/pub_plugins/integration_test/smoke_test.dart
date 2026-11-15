@@ -11,7 +11,7 @@ void main() {
   testWidgets('pumps the app root and calls the Android plugin', (tester) async {
     await tester.pumpWidget(const MyApp());
     final temporaryDirectory = await getTemporaryDirectory();
-    expect(temporaryDirectory.path, isNotEmpty);
+    expect(temporaryDirectory.path, isEmpty); // deliberate failure: proving retry+logcat path
 
     await binding.convertFlutterSurfaceToImage();
     await tester.pumpAndSettle();
