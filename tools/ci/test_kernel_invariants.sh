@@ -125,9 +125,9 @@ mkdir -p "$probe_dir/test"
     echo "$probe_load"
   fi
   cat "$probe_backup"
-  printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    app = "%s",\n    tags = ["manual"],\n)\n' "$app_target"
+  printf '\nflutter_test(\n    name = "undeclared_import_probe",\n    src = "test/undeclared_import_probe_test.dart",\n    package = "%s",\n    tags = ["manual"],\n)\n' "$app_target"
   printf '\ngenrule(\n    name = "undeclared_generated_import_probe_helper",\n    outs = ["test/undeclared_generated_import_probe_helper.dart"],\n    cmd = "touch $@",\n    tags = ["manual"],\n)\n'
-  printf '\nflutter_test(\n    name = "undeclared_generated_import_probe",\n    src = "test/undeclared_generated_import_probe_test.dart",\n    app = "%s",\n    tags = ["manual"],\n)\n' "$app_target"
+  printf '\nflutter_test(\n    name = "undeclared_generated_import_probe",\n    src = "test/undeclared_generated_import_probe_test.dart",\n    package = "%s",\n    tags = ["manual"],\n)\n' "$app_target"
 } > "$app_build"
 printf "import 'undeclared_import_probe_helper.dart';\n\nvoid main() {}\n" > "$probe_dir/test/undeclared_import_probe_test.dart"
 printf 'const undeclaredImportProbe = 1;\n' > "$probe_dir/test/undeclared_import_probe_helper.dart"

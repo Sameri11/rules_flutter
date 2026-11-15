@@ -60,7 +60,7 @@ FIXTURES = [
             "test/flutter_test_config.dart",
             "test/" + fixture + "_test.dart",
         ],
-        app = ":pkg",
+        package = ":pkg",
         tags = ["manual"],
     )
     for fixture in FIXTURES
@@ -95,7 +95,7 @@ parse_error_test(
 flutter_test_suite(
     name = "scope_tests",
     srcs = glob(["test/scope/**/*_test.dart"]),
-    app = ":pkg",
+    package = ":pkg",
 )
 
 # Device-flavor parity. C1 to C13 run through the device driver on flutter_tester

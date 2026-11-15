@@ -20,7 +20,7 @@ flutter_package(
 
 flutter_test_suite(
     name = "tests",
-    app = ":greeter_test_package",
+    package = ":greeter_test_package",
 )
 
 # Declare path-dependency sources explicitly: pubspec.lock does not hash them.

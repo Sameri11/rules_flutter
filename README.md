@@ -87,6 +87,11 @@ The embedding is owned by the Android ruleset; use
 `@rules_flutter_android//flutter:embedding_jar` for its mode-selected jar and
 `flutter_embedding_deps(maven_repo)` for its explicit AndroidX classpath.
 
+`flutter_test` and `flutter_test_suite` take a `package` target that provides
+`FlutterPackageInfo`. The generated `<name>_test_package` from `flutter_core` is
+public and is the target host tests pass to `package`; integration and debug
+rules continue to take their platform-configured core through `app`.
+
 Breaking changes: `platforms` is required on `flutter_core`,
 `flutter_debug_core`, and `flutter_integration_test`.
 `flutter_assets(target_slices = ...)` and Android wrapper

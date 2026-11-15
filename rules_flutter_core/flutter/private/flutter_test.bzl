@@ -180,12 +180,12 @@ def _find_config(test_path, pkg_dir, known):
 
 def _flutter_test_bootstrap_impl(ctx):
     test = ctx.file.src
-    if FlutterPackageInfo in ctx.attr.app:
-        pubspec = ctx.attr.app[FlutterPackageInfo].pubspec.src
-    elif FlutterPubspecInfo in ctx.attr.app:
-        pubspec = ctx.attr.app[FlutterPubspecInfo].src
+    if FlutterPackageInfo in ctx.attr.package:
+        pubspec = ctx.attr.package[FlutterPackageInfo].pubspec.src
+    elif FlutterPubspecInfo in ctx.attr.package:
+        pubspec = ctx.attr.package[FlutterPubspecInfo].src
     else:
-        fail("{}: app must provide FlutterPackageInfo or FlutterPubspecInfo".format(ctx.label))
+        fail("{}: package must provide FlutterPackageInfo or FlutterPubspecInfo".format(ctx.label))
     pkg_dir = _parent(pubspec.short_path)
     known = {f.short_path: f for f in ctx.files.srcs}
     config = _find_config(test.short_path, pkg_dir, known)
@@ -238,9 +238,9 @@ _flutter_test_bootstrap = rule(
             allow_files = [".dart"],
             doc = "The test's sources. Searched for flutter_test_config.dart.",
         ),
-        "app": attr.label(
+        "package": attr.label(
             mandatory = True,
-            doc = "The flutter_package or flutter_core the test belongs to.",
+            doc = "The flutter_package the test belongs to.",
         ),
         "test_label": attr.string(
             mandatory = True,
@@ -320,7 +320,7 @@ def _materialize_script(pkg_dir, dirs, mode):
 def _launcher(ctx, update):
     """Writes the launcher script and returns it with its runfiles."""
     toolchain = ctx.toolchains["//flutter/private:flutter_toolchain_type"].flutter
-    package = ctx.attr.app[FlutterPackageInfo]
+    package = ctx.attr.package[FlutterPackageInfo]
     pubspec = package.pubspec
     pkg_dir = _parent(_runfile(ctx, pubspec.src))
 
@@ -414,7 +414,7 @@ _LAUNCHER_ATTRS = {
         mandatory = True,
         doc = "The debug kernel from dart_test_kernel.",
     ),
-    "app": attr.label(
+    "package": attr.label(
         mandatory = True,
         providers = [FlutterPackageInfo],
         doc = "The flutter_package the test belongs to: the package name, the working directory and the assets.",
@@ -496,7 +496,7 @@ def _dedupe(labels):
         seen[label] = True
     return list(seen.keys())
 
-def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
+def _flutter_test(name, package, src, srcs, prunable_srcs, goldens, **kwargs):
     """The shared body of flutter_test and flutter_test_suite.
 
     `srcs` are kept in the runfiles; `prunable_srcs` are the kernel's inputs that it may leave
@@ -526,7 +526,7 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
     all_srcs = srcs if src in srcs or src in prunable_srcs else [src] + srcs
     _flutter_test_bootstrap(
         name = bootstrap,
-        app = app,
+        package = package,
         src = src,
         srcs = _dedupe(all_srcs + prunable_srcs),
         test_label = "//{}:{}".format(native.package_name(), name),
@@ -537,7 +537,7 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
     )
     dart_test_kernel(
         name = name + "_kernel",
-        app = app,
+        package = package,
         srcs = all_srcs + (_DEVICE_DRIVER_SRCS if device else _DRIVER_SRCS) + [":" + name + "_metadata"],
         prunable_srcs = prunable_srcs,
         entrypoint = ":" + bootstrap,
@@ -546,7 +546,7 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
     )
     launcher = dict(
         dill = ":" + name + "_kernel",
-        app = app,
+        package = package,
         src = src,
         srcs = srcs,
         prunable_srcs = prunable_srcs,
@@ -572,7 +572,7 @@ def _flutter_test(name, app, src, srcs, prunable_srcs, goldens, **kwargs):
 
 def flutter_test(
         name,
-        app,
+        package,
         src,
         srcs = [],
         data = [],
@@ -585,12 +585,12 @@ def flutter_test(
         **kwargs):
     """Runs one Dart test file in-process on flutter_tester.
 
-    The package's inputs come from `app`, a flutter_package target: its pubspec,
+    The package's inputs come from `package`, a flutter_package target: its pubspec,
     libraries, dependencies and assets. The test's own inputs are `src` and `srcs`.
 
         flutter_test(
             name = "widget_test",
-            app = ":app",
+            package = ":app",
             src = "test/widget_test.dart",
             goldens = glob(["test/goldens/**"], allow_empty = True),
         )
@@ -617,7 +617,7 @@ def flutter_test(
 
     Args:
       name: the launcher's name. Also prefixes the bootstrap and kernel targets.
-      app: the flutter_package target of the package the test belongs to.
+      package: the flutter_package target of the package the test belongs to.
       src: the test file, relative to the package.
       srcs: the test's other sources, including any flutter_test_config.dart.
         A test importing a file not listed here fails to compile.
@@ -634,7 +634,7 @@ def flutter_test(
     """
     _flutter_test(
         name = name,
-        app = app,
+        package = package,
         src = src,
         srcs = srcs,
         prunable_srcs = [],
@@ -670,12 +670,11 @@ def flutter_test_device(
     """
     _flutter_test(
         name = name,
-        app = app,
+        package = app,
         src = src,
         srcs = srcs,
         prunable_srcs = prunable_srcs,
         goldens = None,
-        device = True,
         data = data,
         dart_defines = dart_defines,
         materialize = [],
@@ -687,7 +686,7 @@ def flutter_test_device(
 
 def flutter_test_suite(
         name,
-        app,
+        package,
         srcs = None,
         tests = [],
         **kwargs):
@@ -695,7 +694,7 @@ def flutter_test_suite(
 
         flutter_test_suite(
             name = "tests",
-            app = ":app",
+            package = ":app",
         )
 
     `srcs` defaults to `test/**/*_test.dart`. A test is named after its file without
@@ -707,7 +706,7 @@ def flutter_test_suite(
     imports, so an edit to a helper re-runs the tests that import it, and an edit to a
     test file re-runs only that test. A `flutter_test_config.dart` applies to the tests
     below it, nearest first, as in `flutter test`. The suite must be declared next to
-    `pubspec.yaml`, in the app's package; a hand-written `flutter_test` works elsewhere.
+    `pubspec.yaml`, in the package of the test package; a hand-written `flutter_test` works elsewhere.
 
     A test whose directory has a `goldens/` directory gets its files and a
     `<name>_update_goldens` target, and so does every other test in that directory.
@@ -723,7 +722,7 @@ def flutter_test_suite(
 
     Args:
       name: the test_suite's name.
-      app: the flutter_package target of the package.
+      package: the flutter_package target of the package.
       srcs: the test files, relative to the package. Defaults to `test/**/*_test.dart`.
       tests: more labels for the test_suite, such as hand-written flutter_test targets.
       **kwargs: forwarded to every flutter_test.
@@ -731,8 +730,8 @@ def flutter_test_suite(
     if "goldens" in kwargs:
         fail("flutter_test_suite {}: goldens are found beside each test; remove the argument".format(name))
     pkg = native.package_name()
-    if native.package_relative_label(app).package != pkg:
-        fail("flutter_test_suite {}: declare it next to pubspec.yaml, in the package of {}; a hand-written flutter_test works elsewhere".format(name, app))
+    if native.package_relative_label(package).package != pkg:
+        fail("flutter_test_suite {}: declare it next to pubspec.yaml, in the package of {}; a hand-written flutter_test works elsewhere".format(name, package))
     if srcs == None:
         srcs = native.glob(["test/**/*_test.dart"], allow_empty = True)
     if not srcs:
@@ -747,7 +746,7 @@ def flutter_test_suite(
         goldens = native.glob([_join(_parent(f), "goldens/**")], allow_empty = True)
         _flutter_test(
             name = f[:-len(".dart")],
-            app = app,
+            package = package,
             src = f,
             srcs = [],
             prunable_srcs = prunable,

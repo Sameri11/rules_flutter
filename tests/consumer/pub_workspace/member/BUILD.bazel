@@ -25,5 +25,5 @@ flutter_package(
 flutter_test(
     name = "package_test",
     src = "test/member_test.dart",
-    app = ":package",
+    package = ":package",
 )

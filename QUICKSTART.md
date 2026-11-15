@@ -654,7 +654,7 @@ flutter_package(
     pub = "@pub_greeter",
     pubspec = ":pubspec",
 )
-flutter_test_suite(name = "tests", app = ":greeter_test_package")
+flutter_test_suite(name = "tests", package = ":greeter_test_package")
 ```
 
 Keep the production package on the application hub; only the test package uses
@@ -743,9 +743,11 @@ materialized paths do not inherently imply action-cache collision.
 
 `flutter_test` declares a host test target and `flutter_test_suite` groups host
 tests. These use host-platform assets and do not require Android packaging or a
-device. A `flutter_core` exposes package/test outputs for the package; keep tests
-in that same Bazel package and declare their imports through the generated pub
-hub. See `examples/no_plugins/BUILD.bazel` for the host test suite shape and
+device. A `flutter_core` exposes `<name>_test_package`, a public generated target
+for host tests to pass to `package`. Set `visibility` on `flutter_core` if you
+declare host tests in another Bazel package. Declare imports through the
+generated pub hub.
+See `examples/no_plugins/BUILD.bazel` for the host test suite shape and
 `examples/local_plugin` for package-scoped layouts.
 
 For a suite that discovers all tests under `test/`, use the package test output:
@@ -756,7 +758,7 @@ load("@rules_flutter_core//flutter:defs.bzl", "flutter_test_suite")
 flutter_test_suite(
     name = "tests",
     srcs = glob(["test/**/*_test.dart"]),
-    app = ":core_test_package",
+    package = ":core_test_package",
 )
 ```
 

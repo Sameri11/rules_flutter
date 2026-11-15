@@ -421,7 +421,7 @@ def flutter_core(
         package_config = project_package_config,
         pub_srcs = [pub_all],
         path_deps = path_deps,
-        tags = ["manual"],
+        **_internal_kwargs(kwargs)
     )
 
     flutter_package_targets(
@@ -436,7 +436,7 @@ def flutter_core(
             hub_debug_registrant,
             ":dart_registrant_update",
         ) if registrant_label else None,
-        tags = ["manual"],
+        **_internal_kwargs(kwargs)
     )
 
     platform_assets = {}
