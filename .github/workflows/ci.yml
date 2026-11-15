@@ -522,18 +522,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -uo pipefail
+            set -u
             cd examples/pub_plugins
-            common=(-c fastbuild --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }})
             status=1
             for attempt in 1 2; do
-              if bazel test "${common[@]}" --test_output=all //android/app:pub_plugins_smoke_integration_test; then
+              if bazel test -c fastbuild --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} --test_output=all //android/app:pub_plugins_smoke_integration_test; then
                 status=0
                 break
               fi
               echo "attempt $attempt failed" >&2
             done
-            if [[ "$status" -ne 0 ]]; then
+            if [ "$status" -ne 0 ]; then
               adb logcat -d > "$GITHUB_WORKSPACE/pub_plugins_device_logcat.txt" || true
             fi
             exit "$status"
