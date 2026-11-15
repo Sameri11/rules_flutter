@@ -240,7 +240,7 @@ _flutter_test_bootstrap = rule(
         ),
         "package": attr.label(
             mandatory = True,
-            doc = "The flutter_package the test belongs to.",
+            doc = "The test's package metadata, from a flutter_package or flutter_core.",
         ),
         "test_label": attr.string(
             mandatory = True,
