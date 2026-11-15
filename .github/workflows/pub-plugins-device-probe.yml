@@ -42,21 +42,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -u
-            cd examples/pub_plugins
-            status=1
-            for attempt in 1 2; do
-              if bazel test -c fastbuild --@rules_flutter_core//flutter:mode=debug --lockfile_mode=error --test_output=all //android/app:pub_plugins_smoke_integration_test; then
-                status=0
-                break
-              fi
-              echo "attempt $attempt failed" >&2
-            done
-            if [ "$status" -ne 0 ]; then
-              adb logcat -d > "$GITHUB_WORKSPACE/pub_plugins_device_logcat.txt" || true
-            fi
-            exit "$status"
+          script: BAZEL_LOCKFILE_MODE=error bash tools/ci/run_pub_plugins_device_test.sh
 
       - name: Upload device logcat
         if: failure()
