@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Builds and runs the pub_plugins smoke integration test against whatever
-# device is reachable through adb. One retry covers the known cold-emulator
-# screenshot-readback flake (see IT-07 evidence); logcat is captured only on
-# the final failure, before the caller tears the emulator down.
+# device is reachable through adb. One retry covers a known cold-emulator
+# screenshot-readback flake; logcat is captured only on the final failure,
+# before the caller tears the emulator down.
 set -u
-cd "$(dirname "$0")/../../examples/pub_plugins"
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
+cd "$repo_root/examples/pub_plugins" || exit 1
 
 status=1
 for attempt in 1 2; do
@@ -18,6 +19,6 @@ for attempt in 1 2; do
 done
 
 if [ "$status" -ne 0 ]; then
-  adb logcat -d > "$GITHUB_WORKSPACE/pub_plugins_device_logcat.txt" || true
+  adb logcat -d > "${GITHUB_WORKSPACE:-$repo_root}/pub_plugins_device_logcat.txt" || true
 fi
 exit "$status"

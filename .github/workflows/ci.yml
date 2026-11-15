@@ -509,9 +509,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # No boot snapshot (IT-07 traced a screenshot-readback flake to stale
-      # snapshot state) and animations disabled. One retry covers that known
-      # flake; logcat is captured only on the final failure, since the
+      # No boot snapshot (a prior run traced a screenshot-readback flake to
+      # stale snapshot state) and animations disabled. One retry covers that
+      # known flake; logcat is captured only on the final failure, since the
       # emulator is torn down right after this step.
       - name: Run the smoke integration test on an emulator
         uses: ReactiveCircus/android-emulator-runner@c9c93e6ba9c4194322e114c40970d5983d9a07cc # v2.38.0
