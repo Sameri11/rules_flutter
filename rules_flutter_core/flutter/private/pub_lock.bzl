@@ -1,10 +1,11 @@
-"""pubspec.lock -> Bazel repositories: hosted packages, SDK packages, package configs.
+"""pubspec.lock -> Bazel repositories: hosted and git packages, SDK packages, and package configs.
 
 The `pub` module extension reads a consumer's `pubspec.lock` and creates
 
   * one repository per hosted package, downloaded through Bazel's downloader from
     `<server>/api/archives/<name>-<version>.tar.gz` and pinned to the sha256 the
-    lock already records; and
+    lock already records;
+  * one repository per git package, fetched with host git at the lock's resolved-ref;
   * one hub repository per lock. Its files, all free of absolute paths:
       - `package_config.json`, rootUris relative to the hub directory. Kernel
         actions run in the execroot and load it as
@@ -15,8 +16,8 @@ The `pub` module extension reads a consumer's `pubspec.lock` and creates
       - `package_graph.json`, the other file `flutter build bundle` reads there.
       - `plugins_metadata.json`, platform-specific plugin lists consumed by the corresponding plugin-project rules.
       - `dart_plugin_registrant.dart`, the Dart registrant over the same plugins.
-      - filegroups `:lib` (every hosted package's packageUri tree and pubspec) and
-        `:all` (every hosted package file, for the bundle), and `:test_deps` (the debug
+      - filegroups `:lib` (every hosted and git package's packageUri tree and pubspec) and
+        `:all` (every hosted and git package file, for the bundle), and `:test_deps` (the debug
         kernel of the direct packages; see dart_test_deps).
 
 Nothing under ~/.pub-cache appears in any of it, and no rule reads
@@ -26,14 +27,61 @@ symlinks inside `@flutter_sdk` (repo.bzl), and the project and its path packages
 are workspace directories. `flutter pub get` remains how a user updates
 `pubspec.lock`; Bazel does not resolve versions.
 
-`git` sources are refused (pub_lock_parser.bzl): the lock pins them by commit, and
-Bazel cannot verify a content hash for them.
+Git packages use their locked resolved-ref as a commit pin and do not initialize
+submodules. The generated package repositories are named `<hub>-<package>`.
 """
 
 load(":dart_registrant.bzl", "render_dart_registrant")
-load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "pubspec_version", "pubspec_workspace", "resolve_lock")
+load(":pub_lock_parser.bzl", "git_package_path_segments", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "pubspec_version", "pubspec_workspace", "resolve_lock")
 load(":sdk_packages.bzl", "sdk_package_root")
 
+def _pub_git_impl(rctx):
+    """Fetch one locked git commit and expose only its package root."""
+    commands = [
+        ["git", "init", "_git"],
+        ["git", "-C", "_git", "remote", "add", "origin", rctx.attr.url],
+        ["git", "-C", "_git", "fetch", "--depth=1", "origin", rctx.attr.commit],
+        ["git", "-C", "_git", "checkout", "--detach", "FETCH_HEAD"],
+    ]
+    for command in commands:
+        result = rctx.execute(command)
+        if result.return_code:
+            fail("pub git package {}: fetching {} at resolved-ref {} failed: {}".format(
+                rctx.attr.package,
+                rctx.attr.url,
+                rctx.attr.commit,
+                result.stderr.strip(),
+            ))
+
+    package_segments = git_package_path_segments(rctx.attr.package, rctx.attr.path)
+    package_root = rctx.path("_git/" + "/".join(package_segments))
+    pubspec = package_root.get_child("pubspec.yaml")
+    if not pubspec.exists:
+        fail("pub git package {}: path {} has no pubspec.yaml".format(rctx.attr.package, rctx.attr.path))
+
+    result = rctx.execute(["cp", "-R", str(package_root) + "/.", "."])
+    if result.return_code:
+        fail("pub git package {}: copying package path {} failed: {}".format(
+            rctx.attr.package,
+            rctx.attr.path,
+            result.stderr.strip(),
+        ))
+    rctx.delete(".git")
+    rctx.delete("_git")
+    rctx.file("BUILD.bazel", rctx.attr.build_file_content)
+    return rctx.repo_metadata(reproducible = True)
+
+_pub_git = repository_rule(
+    implementation = _pub_git_impl,
+    doc = "A git package checked out at the commit recorded in pubspec.lock.",
+    attrs = {
+        "url": attr.string(mandatory = True),
+        "commit": attr.string(mandatory = True),
+        "path": attr.string(mandatory = True),
+        "package": attr.string(mandatory = True),
+        "build_file_content": attr.string(mandatory = True),
+    },
+)
 visibility(["//flutter"])
 
 # `lib` is the packageUri tree plus metadata: what a compile reads. `all` adds
@@ -310,6 +358,20 @@ def _pub_hub_impl(rctx):
             "pubspec": text,
         }
 
+    git_repo_labels = {name: label for label, name in rctx.attr.git.items()}
+    for package in lock["git"]:
+        name = package["name"]
+        repo_label = git_repo_labels[name]
+        repo_pubspec = rctx.path(repo_label)
+        if not repo_pubspec.exists:
+            fail("pub hub {}: git package {} path {} has no pubspec.yaml".format(rctx.attr.lock_name, name, package["path"]))
+        text = rctx.read(repo_pubspec)
+        entries[name] = {
+            "dir": ["external", repo_label.repo_name],
+            "root": repo_pubspec.dirname,
+            "language": language_version(text),
+            "pubspec": text,
+        }
     root_pubspec = rctx.read(rctx.attr.pubspec)
     workspace_members = []
     for member_path in pubspec_workspace(root_pubspec):
@@ -334,7 +396,7 @@ def _pub_hub_impl(rctx):
     root_name = _root_package_name(root_pubspec)
     entries[root_name] = {"dir": project, "root": project_dir, "language": language_version(root_pubspec), "pubspec": root_pubspec}
 
-    expected = len(lock["hosted"]) + len(lock["sdk"]) + len(lock["path"]) + len(workspace_members)
+    expected = len(lock["hosted"]) + len(lock["git"]) + len(lock["sdk"]) + len(lock["path"]) + len(workspace_members)
     if len(entries) != expected + 1:
         fail("pub hub {}: {} package configs built for {} lock entries, {} workspace members, and the root".format(
             rctx.attr.name,
@@ -401,33 +463,33 @@ def _pub_hub_impl(rctx):
     rctx.file("workspace_members.json", json.encode_indent(workspace_member_configs, indent = "  ") + "\n")
     workspace_path_dep_files = _workspace_path_deps_files(rctx, entries, lock["path"], workspace_members, lock_label.package)
 
-    hosted_names = sorted(rctx.attr.hosted.values())
-    repo_of = {name: label.repo_name for label, name in rctx.attr.hosted.items()}
+    package_repos = dict(rctx.attr.hosted)
+    package_repos.update(rctx.attr.git)
+    package_names = sorted(package_repos.values())
+    repo_of = {name: label.repo_name for label, name in package_repos.items()}
 
     # buildifier: disable=canonical-repository
-    # `package_config.json` keeps `:lib` non-empty for an app with no hosted
-    # dependency: a target with `allow_files` must produce a file.
-    lib_srcs = ['"@@{}//:lib"'.format(repo_of[n]) for n in hosted_names] + ['"package_config.json"']
+    lib_srcs = ['"@@{}//:lib"'.format(repo_of[n]) for n in package_names] + ['"package_config.json"']
 
     # buildifier: disable=canonical-repository
-    all_srcs = ['"@@{}//:all"'.format(repo_of[n]) for n in hosted_names] + ['"package_graph.json"']
+    all_srcs = ['"@@{}//:all"'.format(repo_of[n]) for n in package_names] + ['"package_graph.json"']
 
     # The test deps kernel's entrypoint: the `package:` libraries of every direct main
     # and dev package, minus test_deps_exclude. Path packages stay out: they compile
     # per test, with the app's own sources.
-    known = {p["name"]: True for p in lock["hosted"] + lock["sdk"] + lock["path"]}
+    known = {p["name"]: True for p in lock["hosted"] + lock["git"] + lock["sdk"] + lock["path"]}
     for name in rctx.attr.test_deps_exclude:
         if name not in known:
             fail("pub.lock hub {}: test_deps_exclude names {}, which pubspec.lock does not contain".format(rctx.attr.lock_name, repr(name)))
     excluded = {name: True for name in rctx.attr.test_deps_exclude}
-    hosted_label = {name: label for label, name in rctx.attr.hosted.items()}
+    package_label = {name: label for label, name in package_repos.items()}
     libraries = {}
     direct = []
-    for package in lock["hosted"]:
+    for package in lock["hosted"] + lock["git"]:
         name = package["name"]
         if package["direct"] and name not in excluded:
             direct.append(name)
-            lib = rctx.path(hosted_label[name]).dirname.get_child("lib")
+            lib = rctx.path(package_label[name]).dirname.get_child("lib")
             for uri in _test_deps_libraries(rctx, name, lib, sdk = False):
                 libraries[uri] = True
     for package in lock["sdk"]:
@@ -536,6 +598,7 @@ pub_hub = repository_rule(
         "lock": attr.label(allow_single_file = True, mandatory = True),
         "pubspec": attr.label(allow_single_file = True, mandatory = True),
         "hosted": attr.label_keyed_string_dict(allow_files = True),
+        "git": attr.label_keyed_string_dict(allow_files = True),
         "sdk": attr.string_list(),
         "test_deps_exclude": attr.string_list(
             doc = "Packages left out of the test deps kernel. A test that imports one compiles it itself; see dart_test_deps.",
@@ -550,8 +613,8 @@ def _pub_impl(mctx):
     hubs = {}
     for module in mctx.modules:
         for lock in module.tags.lock:
-            # Hosted repositories are `<hub>-<package>`; pub names cannot contain `-`,
-            # so a hub named `app_web` cannot collide with hub `app`'s package `web`.
+            # Package repositories use `<hub>-<package>` for hosted and git sources.
+            # Pub package names cannot contain `-`, so hub names stay unambiguous.
             if "-" in lock.name:
                 fail("pub.lock: hub name {} must not contain `-`".format(lock.name))
             if lock.name in hubs:
@@ -561,6 +624,18 @@ def _pub_impl(mctx):
             resolved = resolve_lock(mctx.read(lock.lock))
 
             hosted = {}
+            git = {}
+            for package in resolved["git"]:
+                repo = "{}-{}".format(lock.name, package["name"])
+                _pub_git(
+                    name = repo,
+                    url = package["url"],
+                    commit = package["commit"],
+                    path = package["path"],
+                    package = package["name"],
+                    build_file_content = _PACKAGE_BUILD,
+                )
+                git["@{}//:pubspec.yaml".format(repo)] = package["name"]
             for package in resolved["hosted"]:
                 repo = "{}-{}".format(lock.name, package["name"])
                 _pub_archive(
@@ -580,6 +655,7 @@ def _pub_impl(mctx):
                 lock = lock.lock,
                 pubspec = lock.lock.same_package_label(lock.lock.name.rpartition("/")[0] + "/pubspec.yaml" if "/" in lock.lock.name else "pubspec.yaml"),
                 hosted = hosted,
+                git = git,
                 sdk = [package["name"] for package in resolved["sdk"]],
                 test_deps_exclude = lock.test_deps_exclude,
                 lock_name = lock.name,

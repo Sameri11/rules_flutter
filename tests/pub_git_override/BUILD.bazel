@@ -1,0 +1,9 @@
+exports_files([
+    "pubspec.yaml",
+    "pubspec.lock",
+])
+
+filegroup(
+    name = "override_lib",
+    srcs = ["@pub-openfoodfacts_flutter_lints//:lib"],
+)

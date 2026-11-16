@@ -48,7 +48,27 @@ pub.lock(
     name = "workspace_pub",
     lock = "//pub_workspace:pubspec.lock",
 )
-use_repo(pub, "composed_pub", "hand_wired_pub", "mixed_pub", "pub", "standard_layout_pub", "workspace_pub")
+pub.lock(
+    name = "smooth_git_pub",
+    lock = "//smooth_git/packages/smooth_app:pubspec.lock",
+)
+pub.lock(
+    name = "git_fixture_pub",
+    lock = "//git_fixture:pubspec.lock",
+)
+pub.lock(
+    name = "git_missing_pubspec",
+    lock = "//git_fixture:missing_pubspec.lock",
+)
+pub.lock(
+    name = "git_missing_ref",
+    lock = "//git_fixture:missing_ref.lock",
+)
+pub.lock(
+    name = "git_rewrite",
+    lock = "//git_fixture:rewrite.lock",
+)
+use_repo(pub, "composed_pub", "git_fixture_pub", "git_fixture_pub-foo", "git_missing_pubspec", "git_missing_ref", "git_missing_ref-absent_ref", "git_rewrite", "git_rewrite-rewritten", "hand_wired_pub", "mixed_pub", "pub", "smooth_git_pub", "smooth_git_pub-openfoodfacts_flutter_lints", "standard_layout_pub", "workspace_pub")
 
 include("//android:config.MODULE.bazel")
 
