@@ -688,25 +688,6 @@ or the first `FLUTTER_ANDROID` target platform when that flag is unset.
 Hand-wired selects follow the requesting target's platform configuration and
 default to the first descriptor.
 
-Breaking changes: `flutter_test` and `flutter_test_suite` take `package`
-instead of `app`; pass `:<name>_test_package`. `platforms` is required on
-`flutter_core`, `flutter_debug_core`, and `flutter_integration_test`.
-`flutter_assets(target_slices = ...)` and Android wrapper
-`flutter_assets(target_platforms = ...)` replace the old ABI-oriented
-`flutter_assets(abis = ...)` API. `FlutterArtifactInfo.abi`, `.libapp`, and
-`.engine_libs` become `.target_slice`, `.aot`, and `.aot_kind`.
-`flutter_libapp` is renamed to `flutter_aot`; the `flutter_engine` output group
-and public `engine_jar_label` are removed. Android engine libraries now come
-from `@rules_flutter_android//flutter:engine_libs` or explicit
-`engine_libs_<abi>_<mode>` overrides. Core's `flutter/abis.bzl` is removed:
-load Android's `@rules_flutter_android//flutter:abis.bzl` for `ABIS` and core's
-`@rules_flutter_core//flutter:modes.bzl` for `MODES`. A platform descriptor may
-provide `native_build_env`, which `flutter_core` can override per platform.
-AOT and asset actions miss caches once after upgrading.
-Hand-wired Android `assets_dir` changes from `core_bundle_action` to the
-selected output directory, `<core>_<platform>_bundle_action` (for example,
-`core_android_bundle_action`).
-
 The Android composition module provides `flutter_plugin_registrant`,
 `flutter_build_config`, and the mode-selected `embedding_jar`; use
 `flutter_embedding_deps(maven_repo)` for the embedding's explicit AndroidX
