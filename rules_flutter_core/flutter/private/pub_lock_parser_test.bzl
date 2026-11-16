@@ -220,7 +220,7 @@ def pub_lock_parser_test_suite(name):
         ("empty_git_url", _GIT.replace('url: "https://github.com/example/dep.git"', 'url: ""'), "unsupported local URL"),
         ("missing_git_description", _GIT.replace("    description:\n      path: \".\"\n      ref: main\n      resolved-ref: 0123456789abcdef0123456789abcdef01234567\n      url: \"https://github.com/example/dep.git\"\n", ""), "no description map"),
         ("git_windows_drive_url_slash", _GIT.replace("https://github.com/example/dep.git", "C:/repo"), "unsupported local URL"),
-        ("git_windows_drive_url_backslash", _GIT.replace("https://github.com/example/dep.git", "C:\\repo"), "unsupported local URL"),
+        ("git_windows_drive_url_backslash", _GIT.replace("https://github.com/example/dep.git", "C:\\\\repo"), "unsupported local URL"),
         ("missing_sha256", _lock(_hosted("http").replace('      sha256: "{}"\n'.format(_SHA), "")), "refusing to fetch an unpinned archive"),
         ("short_sha256", _lock(_hosted("http", sha = "abc")), "no usable sha256"),
         ("uppercase_sha256", _lock(_hosted("http", sha = "A" * 64)), "no usable sha256"),
