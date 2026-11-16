@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env bash
+set -euo pipefail
+
+python3 - "$1" "$2" <<'PY'
 import json
 import pathlib
 import sys
@@ -15,3 +18,4 @@ if root != replacement_pubspec.parent:
     raise SystemExit(
         f"package_config points at {root}, not replacement {replacement_pubspec.parent}"
     )
+PY

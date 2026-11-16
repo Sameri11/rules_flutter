@@ -4,7 +4,7 @@ module(
 )
 
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
-bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "rules_shell", version = "0.6.1")
 
 local_path_override(
     module_name = "sameri11_rules_flutter_core",
