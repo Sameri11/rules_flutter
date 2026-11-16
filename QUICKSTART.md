@@ -60,6 +60,10 @@ normal URL rewrite configuration, for example:
 git config --global url."ssh://git.example.com/".insteadOf "https://github.com/"
 ```
 
+The generated repository is named `<hub>-<package>`. Replace a package with
+`override_repo(pub, **{"pub-package": "local_package"})`; the replacement must
+provide the same package files expected by the hub:
+
 The replacement repository needs an empty `REPO.bazel`, a root `pubspec.yaml`,
 and a `BUILD.bazel` that exports `pubspec.yaml` and defines `lib` and `all`
 filegroups. For example:
@@ -71,9 +75,7 @@ filegroup(name = "lib", srcs = glob(["lib/**"]) + ["pubspec.yaml"])
 filegroup(name = "all", srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel"]))
 ```
 
-Configure Git mirrors with ordinary `url.<base>.insteadOf` settings, as shown
-above. See [Git pub dependencies](README.md#git-pub-dependencies) for full
-configuration details.
+
 
 An archive consumer owns its `.bazelrc`; the archive carries neither this
 repository's root module nor its shared Android fragment. Write the settings

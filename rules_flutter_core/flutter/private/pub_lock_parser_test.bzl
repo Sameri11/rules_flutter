@@ -72,6 +72,8 @@ def _classifies_each_source_impl(ctx):
 
     # A trailing slash on the server does not leak into the download URL.
     asserts.equals(env, "https://pub.example.org", resolved["hosted"][1]["url"])
+    asserts.equals(env, [{"name": "flutter", "version": "0.0.0", "direct": True}], resolved["sdk"])
+    asserts.equals(env, [{"name": "greeter", "version": "0.0.1", "path": "../greeter", "direct": True}], resolved["path"])
     asserts.equals(env, "ssh://git@example.org/dep.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "ssh://git@example.org/dep.git"))["git"][0]["url"])
     asserts.equals(env, "git@example.org:dep.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "git@example.org:dep.git"))["git"][0]["url"])
     asserts.equals(env, "host:org/repo.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "host:org/repo.git"))["git"][0]["url"])

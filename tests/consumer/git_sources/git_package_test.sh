@@ -4,10 +4,14 @@ set -euo pipefail
 has_lib=0
 for path in "$@"; do
   case "$path" in
-    */lib/*) has_lib=1 ;;
-  esac
-  case "$path" in
-    */.git/*|*/.git) echo "unexpected .git path: $path" >&2; exit 1 ;;
+    */lib/*)
+      has_lib=1
+      package_root="${path%%/lib/*}"
+      if [[ -e "$package_root/.git" || -e "$package_root/_git" ]]; then
+        echo "git metadata remains in fetched package: $package_root" >&2
+        exit 1
+      fi
+      ;;
   esac
 done
 if [[ "$has_lib" != 1 ]]; then

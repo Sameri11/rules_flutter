@@ -481,7 +481,8 @@ def _pub_hub_impl(rctx):
     package_names = sorted(package_repos.values())
     repo_of = {name: label.repo_name for label, name in package_repos.items()}
 
-    # package_config.json is kept beside these filegroups, so :lib must include it.
+    # package_config.json keeps :lib non-empty for an app with no hosted or git
+    # dependency: a target with allow_files must produce a file.
     # buildifier: disable=canonical-repository
     lib_srcs = ['"@@{}//:lib"'.format(repo_of[n]) for n in package_names] + ['"package_config.json"']
 
