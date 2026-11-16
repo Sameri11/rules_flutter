@@ -1,0 +1,28 @@
+exports_files([
+    "git_package_test.sh",
+    "override_test.py",
+    "pubspec.yaml",
+    "smooth_pubspec.lock",
+    "override_pubspec.lock",
+])
+
+sh_test(
+    name = "smooth_git_package_test",
+    srcs = ["git_package_test.sh"],
+    args = ["$(locations @smooth_git_pub-openfoodfacts_flutter_lints//:all)"],
+    data = ["@smooth_git_pub-openfoodfacts_flutter_lints//:all"],
+)
+
+py_test(
+    name = "git_override_package_config_test",
+    srcs = ["override_test.py"],
+    args = [
+        "$(location @git_override_pub//:package_config.json)",
+        "$(location @git_override_pub-openfoodfacts_flutter_lints//:pubspec.yaml)",
+    ],
+    data = [
+        "@git_override_pub-openfoodfacts_flutter_lints//:lib",
+        "@git_override_pub-openfoodfacts_flutter_lints//:pubspec.yaml",
+        "@git_override_pub//:package_config.json",
+    ],
+)

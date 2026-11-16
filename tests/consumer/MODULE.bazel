@@ -50,25 +50,26 @@ pub.lock(
 )
 pub.lock(
     name = "smooth_git_pub",
-    lock = "//smooth_git/packages/smooth_app:pubspec.lock",
+    lock = "//git_sources:smooth_pubspec.lock",
 )
 pub.lock(
-    name = "git_fixture_pub",
-    lock = "//git_fixture:pubspec.lock",
+    name = "git_override_pub",
+    lock = "//git_sources:override_pubspec.lock",
 )
-pub.lock(
-    name = "git_missing_pubspec",
-    lock = "//git_fixture:missing_pubspec.lock",
+
+local_repo = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "local_repository")
+
+local_repo(
+    name = "git_override_replacement",
+    path = "git_sources/replacement",
 )
-pub.lock(
-    name = "git_missing_ref",
-    lock = "//git_fixture:missing_ref.lock",
+
+override_repo(
+    pub,
+    **{"git_override_pub-openfoodfacts_flutter_lints": "git_override_replacement"}
 )
-pub.lock(
-    name = "git_rewrite",
-    lock = "//git_fixture:rewrite.lock",
-)
-use_repo(pub, "composed_pub", "git_fixture_pub", "git_fixture_pub-foo", "git_missing_pubspec", "git_missing_ref", "git_missing_ref-absent_ref", "git_rewrite", "git_rewrite-rewritten", "hand_wired_pub", "mixed_pub", "pub", "smooth_git_pub", "smooth_git_pub-openfoodfacts_flutter_lints", "standard_layout_pub", "workspace_pub")
+
+use_repo(pub, "composed_pub", "git_override_pub", "git_override_pub-openfoodfacts_flutter_lints", "hand_wired_pub", "mixed_pub", "pub", "smooth_git_pub", "smooth_git_pub-openfoodfacts_flutter_lints", "standard_layout_pub", "workspace_pub")
 
 include("//android:config.MODULE.bazel")
 

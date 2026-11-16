@@ -37,21 +37,34 @@ load(":sdk_packages.bzl", "sdk_package_root")
 
 def _pub_git_impl(rctx):
     """Fetch one locked git commit and expose only its package root."""
-    commands = [
-        ["git", "init", "_git"],
-        ["git", "-C", "_git", "remote", "add", "origin", rctx.attr.url],
-        ["git", "-C", "_git", "fetch", "--depth=1", "origin", rctx.attr.commit],
-        ["git", "-C", "_git", "checkout", "--detach", "FETCH_HEAD"],
-    ]
-    for command in commands:
-        result = rctx.execute(command)
-        if result.return_code:
-            fail("pub git package {}: fetching {} at resolved-ref {} failed: {}".format(
-                rctx.attr.package,
-                rctx.attr.url,
-                rctx.attr.commit,
-                result.stderr.strip(),
-            ))
+    rctx.execute(["git", "init", "_git"])
+    rctx.execute(["git", "-C", "_git", "remote", "add", "origin", rctx.attr.url])
+    fetch = rctx.execute(["git", "-C", "_git", "fetch", "--depth=1", "origin", rctx.attr.commit])
+    if fetch.return_code:
+        fetch = rctx.execute([
+            "git",
+            "-C",
+            "_git",
+            "fetch",
+            "origin",
+            "+refs/heads/*:refs/remotes/origin/*",
+            "+refs/tags/*:refs/tags/*",
+        ])
+    if fetch.return_code:
+        fail("pub git package {}: fetching {} at resolved-ref {} failed: {}".format(
+            rctx.attr.package,
+            rctx.attr.url,
+            rctx.attr.commit,
+            fetch.stderr.strip(),
+        ))
+    checkout = rctx.execute(["git", "-C", "_git", "checkout", "--detach", rctx.attr.commit])
+    if checkout.return_code:
+        fail("pub git package {}: fetching {} at resolved-ref {} failed: {}".format(
+            rctx.attr.package,
+            rctx.attr.url,
+            rctx.attr.commit,
+            checkout.stderr.strip(),
+        ))
 
     package_segments = git_package_path_segments(rctx.attr.package, rctx.attr.path)
     package_root = rctx.path("_git/" + "/".join(package_segments))
@@ -364,7 +377,7 @@ def _pub_hub_impl(rctx):
         repo_label = git_repo_labels[name]
         repo_pubspec = rctx.path(repo_label)
         if not repo_pubspec.exists:
-            fail("pub hub {}: git package {} path {} has no pubspec.yaml".format(rctx.attr.lock_name, name, package["path"]))
+            fail("pub hub {}: git package repository {} has no pubspec.yaml".format(rctx.attr.lock_name, repo_label))
         text = rctx.read(repo_pubspec)
         entries[name] = {
             "dir": ["external", repo_label.repo_name],
@@ -468,6 +481,7 @@ def _pub_hub_impl(rctx):
     package_names = sorted(package_repos.values())
     repo_of = {name: label.repo_name for label, name in package_repos.items()}
 
+    # package_config.json is kept beside these filegroups, so :lib must include it.
     # buildifier: disable=canonical-repository
     lib_srcs = ['"@@{}//:lib"'.format(repo_of[n]) for n in package_names] + ['"package_config.json"']
 

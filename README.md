@@ -150,9 +150,25 @@ override_repo(pub, **{"pub-openfoodfacts_flutter_lints": "local_lints"})
 use_repo(pub, "pub", "pub-openfoodfacts_flutter_lints")
 ```
 
-The replacement repository must contain an empty `REPO.bazel` marker. To use a
-Git mirror instead of replacing the repository, configure Git's normal URL
-rewrite in the user's Git configuration, for example:
+The replacement repository must contain an empty `REPO.bazel`, a root
+`pubspec.yaml`, and a `BUILD.bazel` exporting `pubspec.yaml` and defining
+`lib` and `all` filegroups. For example:
+
+```python
+# third_party/lints/BUILD.bazel
+package(default_visibility = ["//visibility:public"])
+exports_files(["pubspec.yaml"])
+filegroup(name = "lib", srcs = glob(["lib/**"]) + ["pubspec.yaml"])
+filegroup(
+    name = "all",
+    srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel"]),
+)
+```
+
+The `lib` group provides the package source tree; `all` provides its complete
+source tree. To use a Git mirror instead of replacing the repository,
+configure Git's normal URL rewrite in the user's Git configuration, for
+example:
 
 ```sh
 git config --global url."ssh://git.example.com/".insteadOf "https://github.com/"

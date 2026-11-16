@@ -1,7 +1,0 @@
-exports_files([
-    "pubspec.yaml",
-    "pubspec.lock",
-    "missing_pubspec.lock",
-    "missing_ref.lock",
-    "rewrite.lock",
-])

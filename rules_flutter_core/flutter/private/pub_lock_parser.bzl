@@ -173,6 +173,10 @@ def git_package_path_segments(name, path):
 def resolve_lock(text):
     """Classifies lock entries; git entries use pub's resolved commit pin.
 
+    `direct` distinguishes packages selected by the root pubspec from transitive
+    entries; it affects only the test dependency kernel. This parser does not
+    access the network.
+
     Args:
       text: contents of a pubspec.lock.
 
@@ -218,7 +222,9 @@ def resolve_lock(text):
             url = description.get("url", "")
             commit = description.get("resolved-ref", "")
             package_path = description.get("path", ".")
-            scp_like = ":" in url and "@" in url.split(":")[0]
+            colon = url.find(":")
+            slash = url.find("/")
+            scp_like = colon > 1 and (slash < 0 or colon < slash)
             if not url or url.startswith("file:") or ("://" not in url and not scp_like):
                 fail("pubspec.lock: git package {} has unsupported local URL {}".format(name, repr(url)))
             _check_version(name, version)
