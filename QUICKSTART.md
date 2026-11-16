@@ -47,8 +47,33 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/<your-28-or-newer-version>"
 
 The examples use Bzlmod and the checked-in `pubspec.lock`. Run `flutter pub get`
 when changing dependencies, then commit the updated lock and generated plugin
-state. Hosted packages are pinned by lockfile checksums; Git pub sources are
-unsupported. Declare path dependency sources in `path_deps`.
+state. Hosted packages are pinned by lockfile checksums; Git packages are
+pinned by `resolved-ref`. Declare path dependency sources in `path_deps`.
+
+Git dependencies are fetched at the lock's `resolved-ref` with the host `git`
+binary. Remote HTTPS, SSH, `git://`, and scp-like URLs are accepted; `file://`
+and local paths are not. A relative lock `path` can select a package in a
+monorepo. Git packages do not initialize submodules. For mirroring, use Git's
+normal URL rewrite configuration, for example:
+
+```sh
+git config --global url."ssh://git.example.com/".insteadOf "https://github.com/"
+```
+
+The generated repository is named `<hub>-<package>`. Replace a package with
+`override_repo(pub, **{"pub-package": "local_package"})`; the replacement
+repository needs an empty `REPO.bazel`, a root `pubspec.yaml`, and a
+`BUILD.bazel` that exports `pubspec.yaml` and defines `lib` and `all` filegroups.
+For example:
+
+```python
+package(default_visibility = ["//visibility:public"])
+exports_files(["pubspec.yaml"])
+filegroup(name = "lib", srcs = glob(["lib/**"]) + ["pubspec.yaml"])
+filegroup(name = "all", srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel"]))
+```
+
+See [Git pub dependencies](README.md#git-pub-dependencies) for the full configuration.
 
 An archive consumer owns its `.bazelrc`; the archive carries neither this
 repository's root module nor its shared Android fragment. Write the settings

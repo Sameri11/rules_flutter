@@ -1,14 +1,13 @@
 """Tests for pub_lock_parser.bzl.
 
-The parser is what stands between a `pubspec.lock` and a download, so what it
-refuses matters as much as what it reads: an unpinned hosted package, a git
-source, and a lock it does not understand must each fail loudly instead of
-producing a repository that fetches something unverified.
+The parser stands between a `pubspec.lock` and a download. It refuses an
+unpinned hosted package, an invalid git commit or root path, and unknown lock
+shapes instead of producing a repository that fetches unverified content.
 """
 
 load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
 load(":dart_registrant.bzl", "render_dart_registrant")
-load(":pub_lock_parser.bzl", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "resolve_lock")
+load(":pub_lock_parser.bzl", "git_package_path_segments", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "resolve_lock")
 
 visibility(["//flutter"])
 
@@ -54,6 +53,16 @@ _MIXED = _lock(
     _SDK_FLUTTER,
     _PATH_GREETER,
 )
+_GIT = _lock("""  dep:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: main
+      resolved-ref: 0123456789abcdef0123456789abcdef01234567
+      url: "https://github.com/example/dep.git"
+    source: git
+    version: "1.0.0"
+""")
 
 def _classifies_each_source_impl(ctx):
     env = unittest.begin(ctx)
@@ -65,13 +74,24 @@ def _classifies_each_source_impl(ctx):
     asserts.equals(env, "https://pub.example.org", resolved["hosted"][1]["url"])
     asserts.equals(env, [{"name": "flutter", "version": "0.0.0", "direct": True}], resolved["sdk"])
     asserts.equals(env, [{"name": "greeter", "version": "0.0.1", "path": "../greeter", "direct": True}], resolved["path"])
+    asserts.equals(env, "ssh://git@example.org/dep.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "ssh://git@example.org/dep.git"))["git"][0]["url"])
+    asserts.equals(env, "git@example.org:dep.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "git@example.org:dep.git"))["git"][0]["url"])
+    asserts.equals(env, "host:org/repo.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "host:org/repo.git"))["git"][0]["url"])
+    asserts.equals(env, "github-work:org/repo.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "github-work:org/repo.git"))["git"][0]["url"])
+    asserts.equals(env, [{"name": "dep", "version": "1.0.0", "url": "https://github.com/example/dep.git", "commit": "0123456789abcdef0123456789abcdef01234567", "path": ".", "direct": True}], resolve_lock(_GIT)["git"])
+    asserts.equals(env, "git://git.example.org/dep.git", resolve_lock(_GIT.replace("https://github.com/example/dep.git", "git://git.example.org/dep.git"))["git"][0]["url"])
+    asserts.equals(env, [], git_package_path_segments("dep", ""))
+    asserts.equals(env, [], git_package_path_segments("dep", "."))
+
+    # Root path normalization removes a trailing slash without changing the package root.
+    asserts.equals(env, ["packages", "foo"], git_package_path_segments("dep", "packages/foo/"))
     return unittest.end(env)
 
 _classifies_each_source_test = unittest.make(_classifies_each_source_impl)
 
 def _empty_lock_impl(ctx):
     env = unittest.begin(ctx)
-    asserts.equals(env, {"hosted": [], "sdk": [], "path": []}, resolve_lock("packages: {}\nsdks:\n  dart: \">=3.0.0 <4.0.0\"\n"))
+    asserts.equals(env, {"hosted": [], "git": [], "sdk": [], "path": []}, resolve_lock("packages: {}\nsdks:\n  dart: \">=3.0.0 <4.0.0\"\n"))
     return unittest.end(env)
 
 _empty_lock_test = unittest.make(_empty_lock_impl)
@@ -198,20 +218,11 @@ def pub_lock_parser_test_suite(name):
     )
     tests = [name + "_reads"]
     for case, lock, message in [
-        (
-            "git_source",
-            _lock("""  dep:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: main
-      resolved-ref: 0123456789abcdef0123456789abcdef01234567
-      url: "https://github.com/example/dep.git"
-    source: git
-    version: "1.0.0"
-"""),
-            "git sources are not supported",
-        ),
+        ("file_url", _GIT.replace("https://github.com/example/dep.git", "file:///tmp/dep"), "unsupported local URL"),
+        ("empty_git_url", _GIT.replace('url: "https://github.com/example/dep.git"', 'url: ""'), "unsupported local URL"),
+        ("missing_git_description", _GIT.replace("    description:\n      path: \".\"\n      ref: main\n      resolved-ref: 0123456789abcdef0123456789abcdef01234567\n      url: \"https://github.com/example/dep.git\"\n", ""), "no description map"),
+        ("git_windows_drive_url_slash", _GIT.replace("https://github.com/example/dep.git", "C:/repo"), "unsupported local URL"),
+        ("git_windows_drive_url_backslash", _GIT.replace("https://github.com/example/dep.git", "C:\\\\repo"), "unsupported local URL"),
         ("missing_sha256", _lock(_hosted("http").replace('      sha256: "{}"\n'.format(_SHA), "")), "refusing to fetch an unpinned archive"),
         ("short_sha256", _lock(_hosted("http", sha = "abc")), "no usable sha256"),
         ("uppercase_sha256", _lock(_hosted("http", sha = "A" * 64)), "no usable sha256"),
@@ -220,6 +231,17 @@ def pub_lock_parser_test_suite(name):
         ("unusable_version", _lock(_hosted("http", version = "1.0/../x")), "unusable version"),
         ("unknown_source", _lock(_SDK_FLUTTER.replace("source: sdk", "source: mirror")), "unknown source"),
         ("non_flutter_sdk", _lock(_SDK_FLUTTER.replace("description: flutter", "description: fuchsia")), "only flutter is modelled"),
+        ("git_parent_path", _GIT.replace('path: "."', 'path: "../foo"'), "unsafe path"),
+        ("git_absolute_path", _GIT.replace('path: "."', 'path: "/foo"'), "unsafe path"),
+        ("git_windows_absolute_path", _GIT.replace('path: "."', 'path: "C:/foo"'), "unsafe path"),
+        ("git_local_path", _GIT.replace("https://github.com/example/dep.git", "../dep"), "unsupported local URL"),
+        ("git_nested_parent_path", _GIT.replace('path: "."', 'path: "packages/../foo"'), "unsafe path"),
+        ("git_backslash_path", _GIT.replace('path: "."', 'path: "packages\\\\foo"'), "unsafe path"),
+        ("git_bad_resolved_ref", _GIT.replace("0123456789abcdef0123456789abcdef01234567", "bad"), "unusable resolved-ref"),
+        ("git_uppercase_ref", _GIT.replace("0123456789abcdef0123456789abcdef01234567", "A" + "123456789abcdef0123456789abcdef0123456"), "unusable resolved-ref"),
+        ("git_39_character_ref", _GIT.replace("0123456789abcdef0123456789abcdef01234567", "0123456789abcdef0123456789abcdef0123456"), "unusable resolved-ref"),
+        ("git_local_path_with_at", _GIT.replace("https://github.com/example/dep.git", "./a@b:c"), "unsupported local URL"),
+        ("git_local_absolute_path_with_at", _GIT.replace("https://github.com/example/dep.git", "/srv/u@x:repo"), "unsupported local URL"),
         ("absolute_path_package", _lock(_PATH_GREETER.replace("relative: true", "relative: false")), "must be a relative path dependency"),
         ("package_name_with_path_characters", _lock(_hosted("../evil")), "is not a valid package name"),
         ("duplicate_package", _lock(_hosted("http"), _hosted("http")), "duplicate package"),

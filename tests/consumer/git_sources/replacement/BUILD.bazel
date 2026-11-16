@@ -1,0 +1,21 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["pubspec.yaml"])
+
+filegroup(
+    name = "lib",
+    srcs = glob(["lib/**"]) + ["pubspec.yaml"],
+)
+
+filegroup(
+    name = "all",
+    srcs = glob(
+        ["**"],
+        exclude = [
+            "BUILD.bazel",
+            "REPO.bazel",
+            "MODULE.bazel",
+            "WORKSPACE",
+        ],
+    ),
+)

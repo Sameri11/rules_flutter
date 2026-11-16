@@ -149,24 +149,43 @@ def _check_version(name, version):
     if version == "" or not _all_in(version, _VERSION_CHARS):
         fail("pubspec.lock: package {} has an unusable version {}".format(name, repr(version)))
 
-def resolve_lock(text):
-    """Classifies lock entries; fails closed on anything not modelled.
+def git_package_path_segments(name, path):
+    """Returns normalized path segments, rejecting paths outside the checkout.
 
-    Returns `{"hosted": [...], "sdk": [...], "path": [...]}`,
-    each list sorted by package name. `direct` is true for `direct main` and
-    `direct dev` entries, the packages a test kernel imports. Hosted entries carry the lock's
-    sha256 and server URL; nothing here reaches the network. A `git` source
-    fails: the lock pins one by commit, not by a content hash Bazel's downloader
-    can verify, so it is not modelled yet.
+    Args:
+      name: pub package name for diagnostic messages.
+      path: relative package path recorded in the lock.
+
+    Returns:
+      Normalized path segments rooted at the Git checkout.
+    """
+    if path.startswith("/") or "\\" in path or (len(path) > 1 and path[1] == ":"):
+        fail("pubspec.lock: git package {} has unsafe path {}".format(name, repr(path)))
+    segments = []
+    for segment in path.split("/"):
+        if segment in ["", "."]:
+            continue
+        if segment == "..":
+            fail("pubspec.lock: git package {} has unsafe path {}".format(name, repr(path)))
+        segments.append(segment)
+    return segments
+
+def resolve_lock(text):
+    """Classifies lock entries; git entries use pub's resolved commit pin.
+
+    `direct` distinguishes packages selected by the root pubspec from transitive
+    entries; it affects only the test dependency kernel. This parser does not
+    access the network.
 
     Args:
       text: contents of a pubspec.lock.
 
     Returns:
-      The classified entries.
+      Hosted, git, SDK, and path dependency records, each sorted by package name.
     """
     parsed = parse_pubspec_lock(text)
     hosted = []
+    git = []
     sdk = []
     path = []
     for name in sorted(parsed["packages"].keys()):
@@ -198,17 +217,25 @@ def resolve_lock(text):
                 fail("pubspec.lock: path package {} must be a relative path dependency".format(name))
             path.append({"name": name, "version": version, "path": description.get("path", ""), "direct": direct})
         elif source == "git":
-            fail(
-                ("pubspec.lock: package {} comes from git ({}); git sources are not supported: " +
-                 "the lock records a commit, not a content hash, so the fetch could not be pinned. " +
-                 "Depend on a hosted or path package instead.").format(
-                    name,
-                    repr(description.get("url", "") if type(description) == "dict" else description),
-                ),
-            )
+            if type(description) != "dict":
+                fail("pubspec.lock: git package {} has no description map".format(name))
+            url = description.get("url", "")
+            commit = description.get("resolved-ref", "")
+            package_path = description.get("path", ".")
+            colon = url.find(":")
+            slash = url.find("/")
+            scp_like = colon > 1 and (slash < 0 or colon < slash)
+            if not url or url.startswith("file:") or ("://" not in url and not scp_like):
+                fail("pubspec.lock: git package {} has unsupported local URL {}".format(name, repr(url)))
+            _check_version(name, version)
+            if len(commit) != 40 or not _all_in(commit, _LOWER_HEX):
+                fail("pubspec.lock: git package {} has unusable resolved-ref {}".format(name, repr(commit)))
+            segments = git_package_path_segments(name, package_path)
+            package_path = "/".join(segments) if segments else "."
+            git.append({"name": name, "version": version, "url": url, "commit": commit, "path": package_path, "direct": direct})
         else:
             fail("pubspec.lock: package {} has unknown source {}".format(name, repr(source)))
-    return {"hosted": hosted, "sdk": sdk, "path": path}
+    return {"hosted": hosted, "git": git, "sdk": sdk, "path": path}
 
 # ---- pubspec.yaml ---------------------------------------------------------------
 

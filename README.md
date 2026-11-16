@@ -38,8 +38,9 @@ Other versions may work but are unverified.
 
 A local Flutter SDK, Android SDK, and Android NDK 28+ are required and are not
 hermetic. Set `FLUTTER_ROOT` or put `flutter` on `PATH`, and set
-`ANDROID_HOME` and `ANDROID_NDK_HOME`. Commit `pubspec.lock`; Git pub sources are
-rejected. Declare path dependency sources in `path_deps`.
+`ANDROID_HOME` and `ANDROID_NDK_HOME`. Commit `pubspec.lock`; hosted packages
+are pinned by sha256 and Git packages by the lock's `resolved-ref`. Declare
+path dependency sources in `path_deps`.
 `flutter_package` and `flutter_core` validate path dependencies against the
 `pub` hub's lock; workspace members are checked against their reachable path
 dependency closure. Both validations run on every build. Core checks the
@@ -122,6 +123,59 @@ validation. For Android plugins, declare one `plugins.project(pub = "@pub")`
 for that hub. `flutter_android_app` selects the plugin subset for its core's
 workspace member. Separate `pub` hubs are needed when workspaces require
 different plugin/Maven overrides.
+
+## Git pub dependencies
+
+Git dependencies are fetched at the lockfile's `resolved-ref`; the commit id
+verifies its tree. Any remote URL supported by Git is accepted, including
+HTTPS, SSH, `git://`, and scp-like forms.
+`file://` and local paths are rejected. Git packages do not initialize
+submodules. A lock's relative `path` selects the package root inside a
+monorepo; absolute paths and `..` segments are rejected, and that root must
+contain `pubspec.yaml`.
+
+The generated package repository name is `<hub>-<package>`. For example, the
+package `openfoodfacts_flutter_lints` in the `pub` hub is
+`@pub-openfoodfacts_flutter_lints`. Git fetching runs the host `git` binary and
+is not held in Bazel's HTTP download cache.
+
+To replace a package repository, use Bzlmod's `override_repo`:
+
+```python
+pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
+pub.lock(name = "pub", lock = "//:pubspec.lock")
+local_repo = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "local_repository")
+local_repo(name = "local_lints", path = "third_party/lints")
+override_repo(pub, **{"pub-openfoodfacts_flutter_lints": "local_lints"})
+use_repo(pub, "pub", "pub-openfoodfacts_flutter_lints")
+```
+
+The replacement repository must contain an empty `REPO.bazel`, a root
+`pubspec.yaml`, and a `BUILD.bazel` exporting `pubspec.yaml` and defining
+`lib` and `all` filegroups. For example:
+
+```python
+# third_party/lints/BUILD.bazel
+package(default_visibility = ["//visibility:public"])
+exports_files(["pubspec.yaml"])
+filegroup(name = "lib", srcs = glob(["lib/**"]) + ["pubspec.yaml"])
+filegroup(
+    name = "all",
+    srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel"]),
+)
+```
+
+The `lib` group provides the package source tree; `all` provides its complete
+source tree. To use a Git mirror instead of replacing the repository,
+configure Git's normal URL rewrite in the user's Git configuration, for
+example:
+
+```sh
+git config --global url."ssh://git.example.com/".insteadOf "https://github.com/"
+```
+
+Git applies that rewrite to the lock's original URL during fetch; the rules do
+not read or manage Git credentials or configuration.
 
 ## Compatibility with flutter_tools
 
@@ -289,7 +343,7 @@ Select the ABI set using `--android_platforms`; keep the APK label unchanged. Bu
 
 ## Scope and constraints
 
-The SDK, Android NDK and Android SDK are local, non-hermetic inputs. The Consumer Module owns Maven dependency resolution. `pubspec.lock` must be committed; hosted packages are pinned by sha256, Git sources are unsupported, and path dependencies must be declared. The Android plugin hub generates Java registrants for each mode; debug includes dev-only plugins and release excludes them. The checked-in debug Dart registrant is at `lib/dart_plugin_registrant.dart`; the hub generates release registration during the build. Core checks the committed debug registrant against pub metadata.
+The SDK, Android NDK and Android SDK are local, non-hermetic inputs. The Consumer Module owns Maven dependency resolution. `pubspec.lock` must be committed; hosted packages are pinned by sha256, Git packages by their resolved commit, and path dependencies must be declared. The Android plugin hub generates Java registrants for each mode; debug includes dev-only plugins and release excludes them. The checked-in debug Dart registrant is at `lib/dart_plugin_registrant.dart`; the hub generates release registration during the build. Core checks the committed debug registrant against pub metadata.
 
 Bazel emits debug-key-signed and unsigned APKs; sign release APKs outside Bazel. `ndk-build` and prebuilt-JNI plugins are unsupported by automatic generation. See the detailed quickstart for Package Recipes and plugin configuration.
 
