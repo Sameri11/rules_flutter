@@ -25,5 +25,5 @@ flutter_integration_test(
 
 flutter_test_suite(
     name = "tests",
-    app = "//:app_test_package",
+    package = "//:app_test_package",
 )

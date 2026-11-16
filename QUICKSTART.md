@@ -654,7 +654,7 @@ flutter_package(
     pub = "@pub_greeter",
     pubspec = ":pubspec",
 )
-flutter_test_suite(name = "tests", app = ":greeter_test_package")
+flutter_test_suite(name = "tests", package = ":greeter_test_package")
 ```
 
 Keep the production package on the application hub; only the test package uses
@@ -687,24 +687,6 @@ Android app assets resolve the core under the first `--android_platforms` value,
 or the first `FLUTTER_ANDROID` target platform when that flag is unset.
 Hand-wired selects follow the requesting target's platform configuration and
 default to the first descriptor.
-
-Breaking changes: `platforms` is required on `flutter_core`,
-`flutter_debug_core`, and `flutter_integration_test`.
-`flutter_assets(target_slices = ...)` and Android wrapper
-`flutter_assets(target_platforms = ...)` replace the old ABI-oriented
-`flutter_assets(abis = ...)` API. `FlutterArtifactInfo.abi`, `.libapp`, and
-`.engine_libs` become `.target_slice`, `.aot`, and `.aot_kind`.
-`flutter_libapp` is renamed to `flutter_aot`; the `flutter_engine` output group
-and public `engine_jar_label` are removed. Android engine libraries now come
-from `@rules_flutter_android//flutter:engine_libs` or explicit
-`engine_libs_<abi>_<mode>` overrides. Core's `flutter/abis.bzl` is removed:
-load Android's `@rules_flutter_android//flutter:abis.bzl` for `ABIS` and core's
-`@rules_flutter_core//flutter:modes.bzl` for `MODES`. A platform descriptor may
-provide `native_build_env`, which `flutter_core` can override per platform.
-AOT and asset actions miss caches once after upgrading.
-Hand-wired Android `assets_dir` changes from `core_bundle_action` to the
-selected output directory, `<core>_<platform>_bundle_action` (for example,
-`core_android_bundle_action`).
 
 The Android composition module provides `flutter_plugin_registrant`,
 `flutter_build_config`, and the mode-selected `embedding_jar`; use
@@ -743,9 +725,11 @@ materialized paths do not inherently imply action-cache collision.
 
 `flutter_test` declares a host test target and `flutter_test_suite` groups host
 tests. These use host-platform assets and do not require Android packaging or a
-device. A `flutter_core` exposes package/test outputs for the package; keep tests
-in that same Bazel package and declare their imports through the generated pub
-hub. See `examples/no_plugins/BUILD.bazel` for the host test suite shape and
+device. A `flutter_core` exposes `<name>_test_package`, a public generated target
+for host tests to pass to `package`. Set `visibility` on `flutter_core` if you
+declare host tests in another Bazel package. Declare imports through the
+generated pub hub.
+See `examples/no_plugins/BUILD.bazel` for the host test suite shape and
 `examples/local_plugin` for package-scoped layouts.
 
 For a suite that discovers all tests under `test/`, use the package test output:
@@ -756,7 +740,7 @@ load("@rules_flutter_core//flutter:defs.bzl", "flutter_test_suite")
 flutter_test_suite(
     name = "tests",
     srcs = glob(["test/**/*_test.dart"]),
-    app = ":core_test_package",
+    package = ":core_test_package",
 )
 ```
 

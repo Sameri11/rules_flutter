@@ -754,7 +754,7 @@ def _test_kernel_driver_action(ctx, dill, pkg, entrypoint, dart_defines, driver,
 
 def _dart_test_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
-    package = ctx.attr.app[FlutterPackageInfo]
+    package = ctx.attr.package[FlutterPackageInfo]
     pkg = struct(
         package_name = package.pubspec.package_name,
         package_config = package.package_config,
@@ -819,7 +819,7 @@ dart_test_kernel = rule(
     implementation = _dart_test_kernel_impl,
     doc = """The debug kernel of one flutter_test.
 
-Compiles the test's debug kernel over the package inputs its `app` provides, through the
+Compiles the test's debug kernel over the package inputs its `package` provides, through the
 test-kernel driver as a persistent worker when the Flutter version has a pin. Set
 `//flutter:test_kernel_compiler=frontend_server` to use frontend_server instead, as
 dart_jit_kernel does; a Flutter version without a pin uses frontend_server too.
@@ -830,14 +830,14 @@ It imports the package's deps_lib, or test_deps alone when it has dart_defines:
 the lib tier is compiled without the test's constants, so such a test compiles its
 package's libraries itself.""",
     attrs = {
-        "app": attr.label(
+        "package": attr.label(
             mandatory = True,
             providers = [FlutterPackageInfo],
             doc = "The flutter_package the test belongs to.",
         ),
         "srcs": attr.label_list(
             allow_files = [".dart"],
-            doc = "The test's own sources: the test file, flutter_test_config.dart and the driver. The package's sources come from `app`.",
+            doc = "The test's own sources: the test file, flutter_test_config.dart and the driver. The package's sources come from `package`.",
         ),
         "entrypoint": attr.label(
             allow_single_file = [".dart"],

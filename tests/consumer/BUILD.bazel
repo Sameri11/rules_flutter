@@ -98,7 +98,7 @@ flutter_package(
 flutter_test(
     name = "package_test",
     src = "test/package_test.dart",
-    app = ":package",
+    package = ":package",
 )
 
 # The macro, with every named parameter supplied -- it is the public entry point
@@ -115,6 +115,8 @@ flutter_core(
     ],
     platforms = [FLUTTER_ANDROID],
     pub = "@pub",
+    tags = ["core-test-probe"],
+    visibility = ["//visibility:public"],
 )
 
 flutter_assets(

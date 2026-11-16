@@ -1,0 +1,10 @@
+load("@rules_flutter_core//flutter:defs.bzl", "flutter_test")
+
+package(default_visibility = ["//visibility:public"])
+
+flutter_test(
+    name = "core_package_test",
+    src = "core_package_test.dart",
+    package = "//:app_core_test_package",
+    tags = ["core-test-probe"],
+)

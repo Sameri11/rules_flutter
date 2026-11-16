@@ -61,5 +61,5 @@ flutter_integration_test(
 # tester platform: no Android build environment is needed.
 flutter_test_suite(
     name = "tests",
-    app = ":core_test_package",
+    package = ":core_test_package",
 )
