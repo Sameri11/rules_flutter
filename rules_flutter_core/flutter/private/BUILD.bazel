@@ -32,12 +32,16 @@ exports_files(
     [
         "check_bundle_pubspec.py",
         "check_path_deps.py",
+        "dart_import_roots.py",
         "lib_entry.py",
         "merge_native_assets.py",
         "read_pubspec.py",
         "tester_assets.dart",
     ],
-    visibility = ["//flutter:__subpackages__"],
+    visibility = [
+        "//flutter:__subpackages__",
+        "//tools/ci:__pkg__",
+    ],
 )
 
 # The test-asset builder, compiled once per SDK from the flutter_tools closure in

@@ -481,7 +481,7 @@ keys are unchanged.""",
 # Shared with flutter_debug_core, which has the same sandbox.
 TEST_IMPORT_HINT = "hint: declare test-local imports in `srcs`"
 
-def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, what):
+def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, what, embed_source_text = False, append_import_dill = False):
     """Declares the debug kernel action of dart_jit_kernel, dart_test_kernel and flutter_debug_core.
 
     `pkg` is a struct of the package's inputs: package_name, package_config,
@@ -497,6 +497,8 @@ def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, 
       dart_defines: a dict of compile-time defines.
       hint: text appended to failure messages, or "".
       mnemonic: the action mnemonic.
+      embed_source_text: retain source text in split packages.
+      append_import_dill: append the imported kernel after split app components.
       what: the description shown in progress output.
     """
     toolchain = _flutter_toolchain(ctx)
@@ -518,14 +520,11 @@ def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, 
     if pkg.import_dill:
         args.add("--import-dill", pkg.import_dill)
 
-        # frontend_server writes every library of an --import-dill compile with an
-        # empty line table (filterExternal sets includeSources: false), so a stack
-        # frame in the test's own libraries loses its line and column. One dill per
-        # package keeps the line tables; the pieces are joined below. Source text is
-        # left out, so a comment that changes neither line count nor offsets leaves
-        # the bytes unchanged.
+        # Split output keeps the real entrypoint's main component first. App kernels
+        # retain source text; test kernels retain their existing compact output.
         args.add("--split-output-by-packages")
-        args.add("--no-embed-source-text")
+        if not embed_source_text:
+            args.add("--no-embed-source-text")
 
     # Two virtual roots, so that generated and source files resolve the same
     # way: sources from the execroot, generated files from bin_dir. The package
@@ -545,6 +544,7 @@ def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, 
     scalars.add(path)
     scalars.add(pkg.registrant_path)
     scalars.add(dill)
+    scalars.add(pkg.import_dill.path if pkg.import_dill else "")
 
     # With --split-output-by-packages (import_dill set), frontend_server writes one dill
     # per package beside its output; the pieces are joined into $DILL with the main
@@ -563,6 +563,8 @@ def jit_kernel_action(ctx, dill, pkg, entrypoint, dart_defines, hint, mnemonic, 
 else
     cat "$WORK/kernel.dill" > "$DILL"
 fi"""
+        if append_import_dill:
+            collect += '\ncat "$IMPORT_DILL" >> "$DILL"'
         run = 'WORK="$(mktemp -d)"\ntrap \'rm -rf "$WORK"\' EXIT\n"$@" --output-dill "$WORK/kernel.dill" "$ENTRY" ' + fail_exit + collect
     else:
         run = '"$@" --output-dill "$DILL" "$ENTRY" ' + fail_exit
@@ -574,6 +576,7 @@ SCHEME="$1"; shift
 ENTRYPOINT="$1"; shift
 REGISTRANT="$1"; shift
 DILL="$1"; shift
+IMPORT_DILL="$1"; shift
 
 if [ "$SCHEME" = package ]; then
     ENTRY="package:$PKG/$ENTRYPOINT"
@@ -617,28 +620,72 @@ fi
 
 def _dart_jit_kernel_impl(ctx):
     dill = ctx.actions.declare_file(ctx.label.name + ".dill")
+    roots = ctx.actions.declare_file(ctx.label.name + "_external_roots.dart")
+    dependency_dill = ctx.actions.declare_file(ctx.label.name + "_dependencies.dill")
     pubspec = ctx.attr.pubspec[FlutterPubspecInfo]
     registrant = ctx.file.dart_plugin_registrant
+    local_sources = ctx.files.srcs + ctx.files.path_deps + [ctx.file.entrypoint]
+    if registrant:
+        local_sources.append(registrant)
+
+    scanner_args = ctx.actions.args()
+    scanner_args.add(ctx.file.package_config)
+    scanner_args.add(roots)
+    scanner_args.add_all(local_sources)
+    scanner_tool = ctx.actions.args()
+    scanner_tool.add(ctx.file._root_scanner)
+    ctx.actions.run_shell(
+        command = 'exec python3 "$@"',
+        arguments = [scanner_tool, scanner_args],
+        inputs = [ctx.file._root_scanner, ctx.file.package_config] + local_sources,
+        outputs = [roots],
+        mnemonic = "DartImportRoots",
+        progress_message = "Scanning app Dart imports %{label}",
+    )
+
+    package = struct(
+        package_name = pubspec.package_name,
+        package_config = ctx.file.package_config,
+        pub_srcs = ctx.files.pub_srcs,
+        path_deps = [],
+        srcs = [],
+        registrant = registrant,
+        registrant_path = library_path(ctx, registrant, "dart_plugin_registrant") if registrant else "",
+        lib = lib_root(ctx.label),
+        import_dill = None,
+    )
+    jit_kernel_action(
+        ctx,
+        dill = dependency_dill,
+        pkg = package,
+        entrypoint = roots,
+        dart_defines = ctx.attr.dart_defines,
+        hint = "",
+        mnemonic = "DartJitDependencyKernel",
+        what = "Dart dependency JIT kernel",
+    )
 
     jit_kernel_action(
         ctx,
         dill = dill,
         pkg = struct(
-            package_name = pubspec.package_name,
-            package_config = ctx.file.package_config,
-            pub_srcs = ctx.files.pub_srcs,
+            package_name = package.package_name,
+            package_config = package.package_config,
+            pub_srcs = package.pub_srcs,
             path_deps = ctx.files.path_deps,
             srcs = ctx.files.srcs,
             registrant = registrant,
-            registrant_path = library_path(ctx, registrant, "dart_plugin_registrant") if registrant else "",
-            lib = lib_root(ctx.label),
-            import_dill = None,
+            registrant_path = package.registrant_path,
+            lib = package.lib,
+            import_dill = dependency_dill,
         ),
         entrypoint = ctx.file.entrypoint,
         dart_defines = ctx.attr.dart_defines,
         hint = "",
         mnemonic = "DartJitKernel",
         what = "Dart JIT kernel",
+        embed_source_text = True,
+        append_import_dill = True,
     )
     return [DefaultInfo(files = depset([dill]))]
 
@@ -1091,6 +1138,10 @@ Every rootUri is relative to the hub, so the compile reads it through
 Only const-evaluated reads see them; see dart_aot_kernel.dart_defines. They are in
 the action key, so changing a value recompiles the kernel; an empty dict adds no
 flags, so existing keys are unchanged.""",
+        ),
+        "_root_scanner": attr.label(
+            default = "//flutter/private:dart_import_roots.py",
+            allow_single_file = True,
         ),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],

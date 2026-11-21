@@ -38,9 +38,8 @@ def _flutter_debug_kernel_impl(ctx):
     (app,) = ctx.attr.app
     core = app[FlutterCoreInfo]
 
-    # The app's inputs, read from its provider. The action is the one
-    # dart_jit_kernel runs, so the test kernel and the app's debug kernel differ
-    # only in entrypoint and defines.
+    # Alternate entrypoints, including integration-test app kernels, stay
+    # whole-program because their sources and defines vary by target.
     jit_kernel_action(
         ctx,
         dill = dill,

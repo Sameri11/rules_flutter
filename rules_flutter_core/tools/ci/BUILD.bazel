@@ -12,6 +12,7 @@ genrule(
         "key_portability_test.py",
         "//flutter/private:repo.bzl",
         "//flutter/private:rules.bzl",
+        "//flutter/private:dart_import_roots.py",
         "//flutter/private:flutter_test.bzl",
         "//flutter/private:device_test.bzl",
         "//flutter/private:test_kernel_driver.bzl",

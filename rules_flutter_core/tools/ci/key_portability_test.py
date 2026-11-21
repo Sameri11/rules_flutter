@@ -27,6 +27,7 @@ FILES = {
     "native_build_env": "flutter/native_build_env.bzl",
     "native_strip": "flutter/private/native_strip.bzl",
     "android_integration_test": "flutter/private/integration_test_runner.bzl",
+    "root_scanner": "flutter/private/dart_import_roots.py",
     "composition": "flutter/composition.bzl",
 }
 
@@ -375,6 +376,23 @@ class Checker:
                 self.fail("C", "dart_jit_kernel must not keep direct attribute {}".format(target))
         if not _rule_uses_toolchain(tree, "dart_jit_kernel"):
             self.fail("C", "dart_jit_kernel must declare the Flutter toolchain type")
+        scanner = self.sources.get("root_scanner", "")
+        if not re.search(r"import\|export", scanner) or re.search(r"part", scanner):
+            self.fail("C", "the import-root scanner must scan import/export directives only")
+        if jit is not None:
+            scan_action = _action_call(jit, "run_shell")
+            if scan_action is None:
+                self.fail("C", "dart_jit_kernel must declare a root-scan action")
+            else:
+                scan_inputs = _keyword(scan_action, "inputs")
+                if not _contains_attr(scan_inputs, ["ctx", "file", "_root_scanner"]):
+                    self.fail("C", "the root scanner must be a declared action input")
+                if not _contains_name(scan_inputs, "local_sources"):
+                    self.fail("C", "the root-scan action must declare app and local sources")
+            if not _contains_string(jit, "DartJitDependencyKernel"):
+                self.fail("C", "dart_jit_kernel must compile a separate dependency kernel")
+            if not _contains_string(jit, "DartJitKernel"):
+                self.fail("C", "dart_jit_kernel must retain its app-kernel action")
 
     def check_d(self):
         tree = self.tree("defs", "D")
@@ -1270,6 +1288,7 @@ def _file_contract(name):
         "pub_workspace": "O",
         "android_integration_test": "T",
         "composition": "U",
+        "root_scanner": "C",
     }[name]
 
 
