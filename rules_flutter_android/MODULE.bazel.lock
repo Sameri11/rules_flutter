@@ -321,7 +321,7 @@
     },
     "//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "NS16aBoAM0iS/Shs6RMFCdcqpACVoFEsiT3VA385x2U=",
+        "bzlTransitiveDigest": "zBcUWTcpO5TyJoTGm7uz0wbCLtTYIArIIgLpmJ9Tky8=",
         "usagesDigest": "9owEpU8N8w2F4asd++mkiTNLiSzbTw8JI0PGfMv4MyM=",
         "recordedInputs": [
           "REPO_MAPPING:,parity_maven rules_jvm_external++maven+parity_maven",
@@ -687,13 +687,13 @@
     "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
       "general": {
         "bzlTransitiveDigest": "gWAiOpMTK++R2Q86lailqhG80Xu+JcNdxYVcA1NfwHA=",
-        "usagesDigest": "yrcrs3q9AyVzH00WG98mD1OpGXB4f6VMs6fbGNdHd28=",
+        "usagesDigest": "Q1N9QqsruApdUoPigtQCsK7PYEbdr8RJ2W/SVXBN9fM=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "flutter_sdk": {
             "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_sdk",
             "attributes": {
-              "version": "3.47.3"
+              "version": "3.50.1"
             }
           },
           "flutter_tools_packages": {
