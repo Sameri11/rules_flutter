@@ -112,4 +112,5 @@ flutter_android_integration_test_logic_test(
     name = "integration_test_runner_logic_test",
     kernel = ":integration_test_runner_logic_test_kernel",
 )
+
 registrant_test_suite(name = "registrant_test")

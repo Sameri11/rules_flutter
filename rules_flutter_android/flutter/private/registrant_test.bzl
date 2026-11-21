@@ -24,6 +24,7 @@ _orders_ready_nodes_alphabetically_test = unittest.make(_orders_ready_nodes_alph
 
 def _breaks_cycles_by_smallest_in_degree_then_name_impl(ctx):
     env = unittest.begin(ctx)
+
     # `a` has more dependents than `c`, but the same incoming degree. Flutter
     # chooses `a` by name, not by total graph degree.
     asserts.equals(env, ["a", "d", "e", "f", "g", "b", "c"], _ordered_names([

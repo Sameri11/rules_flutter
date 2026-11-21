@@ -92,7 +92,16 @@ def _dependency_order(plugins):
     return result
 
 def resolve_android_plugins(plugins, release):
-    """Resolve Android implementations and omit dev-only entries for release."""
+    """Resolve Android implementations in registration order.
+
+    Args:
+        plugins: Discovered Android plugin records, including dependencies.
+        release: Exclude development-only plugins when true.
+
+    Returns:
+        The selected implementation records in dependency order.
+    """
+
     # Flutter first orders the complete discovered graph, then resolves platform
     # implementations and orders that selected graph once more.
     discovered_order = _dependency_order(plugins)
@@ -138,7 +147,6 @@ def resolve_android_plugins(plugins, release):
         fail("Plugin {}:android has multiple possible implementations: {}. Add one of them to pubspec.yaml.".format(implemented, ", ".join([p["name"] for p in found])))
     selected = {p["name"]: p for p in chosen}
     return [selected[name] for name in _dependency_order(chosen)]
-
 
 def supports_embedding_v2(main_class_text):
     return _V2_MARKER in main_class_text

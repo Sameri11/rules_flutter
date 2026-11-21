@@ -321,7 +321,7 @@
     },
     "//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "zBcUWTcpO5TyJoTGm7uz0wbCLtTYIArIIgLpmJ9Tky8=",
+        "bzlTransitiveDigest": "/yxtQnWwaf9d5IlAj12Gq/wkCxh4kcSJj9hcWG5YhfE=",
         "usagesDigest": "9owEpU8N8w2F4asd++mkiTNLiSzbTw8JI0PGfMv4MyM=",
         "recordedInputs": [
           "REPO_MAPPING:,parity_maven rules_jvm_external++maven+parity_maven",

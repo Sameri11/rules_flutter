@@ -425,7 +425,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter:extensions.bzl%flutter_plugins_ext": {
       "general": {
-        "bzlTransitiveDigest": "zBcUWTcpO5TyJoTGm7uz0wbCLtTYIArIIgLpmJ9Tky8=",
+        "bzlTransitiveDigest": "/yxtQnWwaf9d5IlAj12Gq/wkCxh4kcSJj9hcWG5YhfE=",
         "usagesDigest": "RqVa86t+EWrrGg+0ZGJnQnjPe2QKakZHbi5XlHpeEh8=",
         "recordedInputs": [
           "REPO_MAPPING:,dynamic_namespace_metadata +dynamic_namespace_metadata+dynamic_namespace_metadata",
