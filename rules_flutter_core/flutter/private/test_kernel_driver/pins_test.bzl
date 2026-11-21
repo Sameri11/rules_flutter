@@ -21,7 +21,7 @@ def _pins_are_complete_test(ctx):
 
 pins_are_complete_test = unittest.make(_pins_are_complete_test)
 
-_SELECT_PINS = {"3.9.0": "nine", "3.47.3": "forty-seven"}
+_SELECT_PINS = {"3.9.0": "nine", "3.50.1": "fifty"}
 
 def _select_parser_pin_test(ctx):
     env = unittest.begin(ctx)
@@ -30,13 +30,13 @@ def _select_parser_pin_test(ctx):
     asserts.equals(env, "nine", pin)
     asserts.equals(env, None, warning)
 
-    # As strings "3.9.0" sorts after "3.47.3"; the newest must be chosen numerically.
-    newest, pin, warning = select_parser_pin("3.50.0", _SELECT_PINS)
-    asserts.equals(env, "3.47.3", newest)
-    asserts.equals(env, "forty-seven", pin)
+    # As strings "3.9.0" sorts after "3.50.1"; the newest must be chosen numerically.
+    newest, pin, warning = select_parser_pin("3.51.0", _SELECT_PINS)
+    asserts.equals(env, "3.50.1", newest)
+    asserts.equals(env, "fifty", pin)
     asserts.equals(
         env,
-        "test_metadata_parser: Flutter 3.50.0 has no parser pin; parsing with the pin for 3.47.3.",
+        "test_metadata_parser: Flutter 3.51.0 has no parser pin; parsing with the pin for 3.50.1.",
         warning,
     )
     return unittest.end(env)

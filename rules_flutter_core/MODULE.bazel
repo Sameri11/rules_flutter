@@ -9,7 +9,7 @@ flutter = use_extension("//flutter:extensions.bzl", "flutter")
 # Pin for developing this repository as the root module. A dev dependency, so
 # consumers ignore it and their MODULE.bazel.lock does not change when it does.
 flutter_dev = use_extension("//flutter:extensions.bzl", "flutter", dev_dependency = True)
-flutter_dev.sdk(version = "3.47.3")
+flutter_dev.sdk(version = "3.50.1")
 
 # The test-kernel driver's source closure, at the pins of the SDK it is built with.
 test_kernel_driver_src = use_repo_rule("//flutter/private:test_kernel_driver.bzl", "test_kernel_driver_src")
