@@ -1,5 +1,6 @@
 load("@rules_java//java:defs.bzl", "java_binary", "java_test")
 load(":integration_test_runner.bzl", "flutter_android_integration_test_kernel", "flutter_android_integration_test_logic_test")
+load(":registrant_test.bzl", "registrant_test_suite")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -111,3 +112,5 @@ flutter_android_integration_test_logic_test(
     name = "integration_test_runner_logic_test",
     kernel = ":integration_test_runner_logic_test_kernel",
 )
+
+registrant_test_suite(name = "registrant_test")

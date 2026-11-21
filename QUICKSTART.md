@@ -730,6 +730,10 @@ plugin code is included only in debug. Consumers using Kotlin Multiplatform
 Maven artifacts must name the platform artifact (such as an `-jvm` artifact)
 because `rules_jvm_external` does not resolve Gradle module metadata.
 
+Hand-wired registrants default to alphabetical order. Set `order` to list
+plugin names in registration order; unlisted plugins follow alphabetically.
+Set `release_order` only when release needs a different order.
+
 ## ABI configuration and switching
 
 Use one APK label for each existing app/mode variant. Select ABIs with ordinary
