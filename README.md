@@ -33,6 +33,11 @@ Other versions may work but are unverified.
   read statically require `plugins.package(artifacts = ...)`.
 - CI builds and hash-checks examples per host; this does not establish
   cross-machine reproducibility.
+- CI uses Flutter 3.50.1 (Dart 3.14.0). Host tests on unpinned SDKs compile
+  through `frontend_server` and use the newest pinned metadata parser, with a warning.
+- Generated Android registrants initialize plugin dependencies before their
+  dependents, with alphabetical tie-breaking. This can change registration
+  order on older Flutter SDKs too.
 
 ### Before you install
 

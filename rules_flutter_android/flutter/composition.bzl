@@ -30,15 +30,15 @@ _MODE = Label("@rules_flutter_core//flutter:mode")
 def _registrant_impl(ctx):
     mode = ctx.attr._mode[BuildSettingInfo].value
     entries = ctx.attr.plugins + (ctx.attr.dev_plugins if mode == "debug" else [])
-    order_names = ctx.attr.order if mode == "debug" else ctx.attr.release_order
+    order_names = ctx.attr.order if mode == "debug" else (ctx.attr.release_order or ctx.attr.order)
     order = {name: index for index, name in enumerate(order_names)}
-    entries = sorted(entries, key = lambda entry: order.get(entry.split("|", 1)[0], len(order)) if order_names else entry.split("|", 1)[0])
     parsed = []
     for entry in entries:
         parts = entry.split("|", 1)
         if len(parts) != 2:
             fail("{}: plugin entries must be name|qualified.class, got {}".format(ctx.label, entry))
         parsed.append((parts[0], parts[1]))
+    parsed = sorted(parsed, key = lambda entry: (order.get(entry[0], len(order_names)), entry[0]))
     output = ctx.actions.declare_file(ctx.label.name + "/GeneratedPluginRegistrant.java")
     ctx.actions.write(output, render_android_registrant(parsed))
     return [DefaultInfo(files = depset([output]))]
@@ -49,8 +49,8 @@ flutter_plugin_registrant = rule(
     attrs = {
         "plugins": attr.string_list(doc = "Plugin entries in name|fully.qualified.Class format."),
         "dev_plugins": attr.string_list(doc = "Development plugin entries in name|fully.qualified.Class format; included only in debug mode."),
-        "release_order": attr.string_list(doc = "Dependency-first release plugin order."),
-        "order": attr.string_list(doc = "Optional dependency-first plugin name order for generated registrants."),
+        "order": attr.string_list(doc = "Preferred plugin name order; unlisted names follow alphabetically."),
+        "release_order": attr.string_list(doc = "Override for release mode. Defaults to order."),
         "_mode": attr.label(default = _MODE, providers = [BuildSettingInfo]),
     },
 )
