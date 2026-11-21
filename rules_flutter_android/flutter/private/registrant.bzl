@@ -33,7 +33,7 @@ _FOOTER = """  }
 """
 _V2_MARKER = "io.flutter.embedding.engine.plugins.FlutterPlugin"
 
-def android_plugin(name, implements, android, direct, dev):
+def android_plugin(name, implements, android, direct, dev, dependencies = []):
     if android == None:
         return None
     default_package = android.get("default_package")
@@ -46,18 +46,58 @@ def android_plugin(name, implements, android, direct, dev):
         "plugin_class": android.get("pluginClass"),
         "direct": direct,
         "dev": dev,
+        "dependencies": dependencies,
     }
 
+def _dependency_order(plugins):
+    """Dependency-first topological order with Flutter's stable cycle handling."""
+    plugin_map = {p["name"]: p for p in plugins}
+    if len(plugin_map) <= 1:
+        return [p["name"] for p in plugins]
+
+    in_degree = {}
+    dependents = {name: [] for name in plugin_map}
+    for plugin in plugin_map.values():
+        name = plugin["name"]
+        direct_deps = {
+            dependency: True
+            for dependency in plugin.get("dependencies", [])
+            if dependency != name and dependency in plugin_map
+        }
+        in_degree[name] = len(direct_deps)
+        for dependency in direct_deps:
+            dependents[dependency].append(name)
+
+    available = sorted([name for name in in_degree if in_degree[name] == 0])
+    placed = {}
+    result = []
+    for _ in range(len(plugin_map)):
+        if not available:
+            unplaced = sorted(
+                [name for name in plugin_map if name not in placed],
+                key = lambda name: (in_degree[name], name),
+            )
+            available.append(unplaced[0])
+
+        current = available.pop(0)
+        if current not in placed:
+            placed[current] = True
+            result.append(current)
+            newly_available = []
+            for dependent in dependents[current]:
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0 and dependent not in placed:
+                    newly_available.append(dependent)
+            available = sorted(available + newly_available)
+    return result
+
 def resolve_android_plugins(plugins, release):
-    """Resolve Android implementations and omit dev-only entries for release.
-
-    Args:
-      plugins: normalized Android plugin metadata.
-      release: whether to exclude plugins reachable only through dev dependencies.
-
-    Returns:
-      The selected implementations, sorted by plugin name.
-    """
+    """Resolve Android implementations and omit dev-only entries for release."""
+    # Flutter first orders the complete discovered graph, then resolves platform
+    # implementations and orders that selected graph once more.
+    discovered_order = _dependency_order(plugins)
+    discovered = {p["name"]: p for p in plugins}
+    plugins = [discovered[name] for name in discovered_order]
     if release:
         plugins = [p for p in plugins if not p["dev"]]
     by_name = {p["name"]: p for p in plugins}
@@ -96,7 +136,9 @@ def resolve_android_plugins(plugins, release):
             chosen.append(default)
             continue
         fail("Plugin {}:android has multiple possible implementations: {}. Add one of them to pubspec.yaml.".format(implemented, ", ".join([p["name"] for p in found])))
-    return sorted(chosen, key = lambda p: p["name"])
+    selected = {p["name"]: p for p in chosen}
+    return [selected[name] for name in _dependency_order(chosen)]
+
 
 def supports_embedding_v2(main_class_text):
     return _V2_MARKER in main_class_text

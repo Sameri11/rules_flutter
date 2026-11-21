@@ -272,6 +272,8 @@ flutter_plugin_registrant(
     name = "generated_plugin_registrant_src",
     plugins = {plugins},
     dev_plugins = {dev_plugins},
+    order = {order},
+    release_order = {release_order},
 )
 """
 
@@ -1396,6 +1398,8 @@ def _workspace_build_targets(ctx, member_sets, manifest, roots, annotation_jvm):
     name = "generated_plugin_registrant_src_{suffix}",
     plugins = {plugins},
     dev_plugins = {dev_plugins},
+    order = {order},
+    release_order = {release_order},
 )
 
 android_library(
@@ -1408,6 +1412,8 @@ android_library(
             suffix = suffix,
             plugins = repr(registrant["plugins"]),
             dev_plugins = repr(registrant["dev_plugins"]),
+            order = repr(registrant["order"]),
+            release_order = repr(registrant["release_order"]),
             annotation_jvm = annotation_jvm,
         ))
         for abi in ctx.attr.abis:
@@ -1426,10 +1432,16 @@ android_library(
     return "".join(targets)
 
 def _write_android_registrants(ctx, plugins, roots):
-    entries = {"plugins": [], "dev_plugins": []}
+    entries = {"plugins": [], "dev_plugins": [], "order": [], "release_order": []}
+    entries["release_order"] = [
+        plugin["name"]
+        for plugin in resolve_android_plugins(plugins, release = True)
+        if plugin["plugin_class"] != None and plugin["package"] != None
+    ]
     for plugin in resolve_android_plugins(plugins, release = False):
         if plugin["plugin_class"] == None or plugin["package"] == None:
             continue
+        entries["order"].append(plugin["name"])
         name = plugin["name"]
         root = ctx.path(roots[name])
         main_class = None
@@ -1571,6 +1583,7 @@ def _registrant_plugins(plugins):
             },
             plugin.get("direct", False),
             plugin.get("dev_dependency", False),
+            plugin.get("dependencies", []),
         )
         for plugin in plugins
     ]
@@ -2158,6 +2171,8 @@ def _flutter_plugins_impl(ctx):
         _REGISTRANT_SRC_TEMPLATE.format(
             plugins = repr(root_registrant["plugins"]),
             dev_plugins = repr(root_registrant["dev_plugins"]),
+            order = repr(root_registrant["order"]),
+            release_order = repr(root_registrant["release_order"]),
         ) +
         _REGISTRANT_LIB_TEMPLATE.format(annotation_jvm = annotation_jvm) +
         "".join([
