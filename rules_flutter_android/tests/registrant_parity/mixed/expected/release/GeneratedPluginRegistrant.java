@@ -16,11 +16,6 @@ public final class GeneratedPluginRegistrant {
   private static final String TAG = "GeneratedPluginRegistrant";
   public static void registerWith(@NonNull FlutterEngine flutterEngine) {
     try {
-      flutterEngine.getPlugins().add(new com.example.parity.alpha.AlphaKotlinPlugin());
-    } catch (Exception e) {
-      Log.e(TAG, "Error registering plugin alpha_kotlin, com.example.parity.alpha.AlphaKotlinPlugin", e);
-    }
-    try {
       flutterEngine.getPlugins().add(new com.example.parity.gamma.SharedGammaPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin shared_gamma, com.example.parity.gamma.SharedGammaPlugin", e);
@@ -29,6 +24,11 @@ public final class GeneratedPluginRegistrant {
       flutterEngine.getPlugins().add(new com.example.parity.eta.TransitiveEtaPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin transitive_eta, com.example.parity.eta.TransitiveEtaPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.example.parity.alpha.AlphaKotlinPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin alpha_kotlin, com.example.parity.alpha.AlphaKotlinPlugin", e);
     }
     try {
       flutterEngine.getPlugins().add(new com.example.parity.zeta.ZetaJavaPlugin());

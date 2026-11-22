@@ -25,10 +25,10 @@ concurrency:
 
 env:
   # Matches the SDK used to record the example APK hashes.
-  FLUTTER_VERSION: 3.47.3
+  FLUTTER_VERSION: 3.50.1
   # Verify each downloaded SDK archive before unpacking it.
-  FLUTTER_SHA256_DARWIN_ARM64: 66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583
-  FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+  FLUTTER_SHA256_DARWIN_ARM64: 872883d49965e0cc1d8e477d2d87f2f45930d13f94b34889e53783586f04c715
+  FLUTTER_SHA256_LINUX_X64: 4ad17fc8462fbcef2ba19ff4a78c0a16b7147fde1add8578e267ea62cdb92678
   BAZELISK_VERSION: v1.29.0
   # Bazelisk release assets are mutable; verify their bytes before execution.
   BAZELISK_SHA256_LINUX_AMD64: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992

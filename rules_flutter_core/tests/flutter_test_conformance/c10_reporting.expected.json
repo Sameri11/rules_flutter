@@ -1,6 +1,6 @@
 {
   "fixture": "c10_reporting",
-  "flutter": "3.47.3",
+  "flutter": "3.50.1",
   "runs": [
     {
       "name": "default",

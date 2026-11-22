@@ -13,7 +13,7 @@ python3 tests/flutter_test_conformance/rebaseline.py --check  # oracles against 
 python3 tests/flutter_test_conformance/rebaseline.py          # rewrite after an intended change
 ```
 
-`rebaseline.py` refuses to run unless the Flutter SDK matches `MODULE.bazel` (Flutter 3.47.3).
+`rebaseline.py` refuses to run unless the Flutter SDK matches `MODULE.bazel` (Flutter 3.50.1).
 ## Cases
 | Id | Fixture | Exit | Outcomes (CLI and driver agree) |
 |---|---|---|---|

@@ -194,13 +194,13 @@
     "//flutter:extensions.bzl%flutter": {
       "general": {
         "bzlTransitiveDigest": "gWAiOpMTK++R2Q86lailqhG80Xu+JcNdxYVcA1NfwHA=",
-        "usagesDigest": "3eQ7CSujwGo7HWistYKJNKsA65Je6fZw/a3upweGNLo=",
+        "usagesDigest": "8+OLF2hdlU6ia76Bf8cQ2D/3W6QjYLQJBsMBxK0BGFg=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "flutter_sdk": {
             "repoRuleId": "@@//flutter/private:repo.bzl%flutter_sdk",
             "attributes": {
-              "version": "3.47.3"
+              "version": "3.50.1"
             }
           },
           "flutter_tools_packages": {

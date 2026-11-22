@@ -42,7 +42,7 @@ use_repo(
 # Pin for developing this repository as the root module. A dev dependency, so
 # consumers ignore it, as they ignore core's own pin.
 flutter_dev = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter", dev_dependency = True)
-flutter_dev.sdk(version = "3.47.3")
+flutter_dev.sdk(version = "3.50.1")
 
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "platforms", version = "1.0.0")

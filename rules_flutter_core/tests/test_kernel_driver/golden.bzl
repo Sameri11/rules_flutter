@@ -20,6 +20,12 @@ GOLDEN = {
         # Linux x64 archive.
         "883d97292177020d42bed41ffcc3755319bb499872239715dde5e0ae3a723f67": "00bf919f0605ff98862cf1486cbce06ccc744f29277e7013bbd394085b9751b6",
     },
+    "3.50.1": {
+        # Linux x64 archive.
+        "759b896591c197dd3f661fa0d6cfceb6416c31cd062849c18c716fd60b741895": "99a67e825b1c6bd3bb32f99c0aaf5c4bf0adf84b8b315f754a16954479729977",
+        # macOS arm64 archive.
+        "89e127de48f8b6729ac9e3240a6723851218b5d21999ba841a8dcc22ea3f841a": "af3ea8a18cbcc62cac81c63bd70a62604132e6d1636d64322b19aba06264639d",
+    },
 }
 
 def golden_entries():

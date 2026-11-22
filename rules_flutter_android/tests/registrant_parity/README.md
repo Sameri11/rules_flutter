@@ -1,9 +1,11 @@
 # Registrant parity goldens
-Byte-for-byte `GeneratedPluginRegistrant.java` goldens from Flutter 3.47.3, to check the Starlark generator against flutter_tools.
+Byte-for-byte `GeneratedPluginRegistrant.java` goldens from Flutter 3.50.1, to check the Starlark generator against flutter_tools.
 
 - `expected/debug/`: dev-only plugins included. Captured with `flutter build apk --config-only --debug`, which is the regeneration `pub get` runs (it only does so when the app depends on the flutter SDK; these apps do not).
 - `expected/release/`: dev-only plugins removed (`flutter build apk --config-only --release`).
 - `app/pubspec.lock`: from `flutter pub get --offline`; path-only.
+
+Generated Android app registrants use dependency-first ordering: alphabetically select among available plugins, and break cycles by smallest remaining in-degree then name. Flutter's graph is ordered before filtering and platform resolution, then the selected Android implementations are ordered again. Hand-written `flutter_plugin_registrant` calls retain alphabetical order unless they supply `order` (and optionally `release_order`).
 
 Recapture (uses `$FLUTTER` or `flutter` on PATH):
 
