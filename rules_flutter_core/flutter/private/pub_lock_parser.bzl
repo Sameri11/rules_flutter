@@ -237,8 +237,6 @@ def resolve_lock(text):
             fail("pubspec.lock: package {} has unknown source {}".format(name, repr(source)))
     return {"hosted": hosted, "git": git, "sdk": sdk, "path": path}
 
-# ---- pubspec.yaml ---------------------------------------------------------------
-
 def pubspec_sdk_constraint(text):
     """`environment.sdk` as written, or "" when absent.
 

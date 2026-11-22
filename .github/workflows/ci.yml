@@ -87,6 +87,15 @@ jobs:
           python3 tools/ci/cache_stats.py --selftest
           python3 tools/ci/committed_lock_guard.py --selftest
           python3 tools/ci/matrix_gate.py --selftest
+          python3 tools/ci/starlark_comment_ratchet.py --selftest
+
+      - name: Starlark comment ratchet
+        env:
+          COMMENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'refs/heads/main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$COMMENT_BASE"
+          python3 tools/ci/starlark_comment_ratchet.py --base FETCH_HEAD
 
       - name: Committed lock portability guard
         run: |
