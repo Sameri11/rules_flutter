@@ -109,12 +109,6 @@ flutter_target_slices = flutter_target_slices_rule(_platform_slice_transition)
 
 visibility(["//flutter"])
 
-# The bundle action runs `flutter build bundle`, and the flutter tool is still a
-# host input: it is found through the SDK symlinks, not declared, so a remote
-# worker would not have it. The action is otherwise sandboxed and cacheable. It
-# takes no mode and compiles only the stub's closure for record-use (no app lib/), so its
-# key is the same in every build mode and a `lib/` edit never reruns it. Deliberately
-# absent: `local`, which would disable remote caching outright.
 _ASSETS_EXEC = {"no-remote-exec": "1"}
 
 def _repository_path(ctx, file, attribute):

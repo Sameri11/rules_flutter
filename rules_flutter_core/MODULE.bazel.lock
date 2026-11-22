@@ -193,7 +193,7 @@
   "moduleExtensions": {
     "//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "gWAiOpMTK++R2Q86lailqhG80Xu+JcNdxYVcA1NfwHA=",
+        "bzlTransitiveDigest": "9Hx5kGEKC/sgTc5J67Ug57gIj4TMJb+/igr0dTczbpk=",
         "usagesDigest": "8+OLF2hdlU6ia76Bf8cQ2D/3W6QjYLQJBsMBxK0BGFg=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
