@@ -589,7 +589,7 @@
     },
     "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
       "general": {
-        "bzlTransitiveDigest": "gWAiOpMTK++R2Q86lailqhG80Xu+JcNdxYVcA1NfwHA=",
+        "bzlTransitiveDigest": "9Hx5kGEKC/sgTc5J67Ug57gIj4TMJb+/igr0dTczbpk=",
         "usagesDigest": "kHslM0oylMDAOZw2D9RrqwjPEykhS0WwLJY+fpNlW+g=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
