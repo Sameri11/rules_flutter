@@ -40,7 +40,7 @@ def main(build_path, flutter_version):
     text = path.read_text()
     text = text.replace(
         'load("@rules_flutter//flutter:defs.bzl", "flutter_app", "flutter_test")',
-        'load("@rules_flutter//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test")',
+        'load("@rules_flutter//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test", "flutter_test_suite_grouped")',
     )
     text = text.replace(
         "flutter_app(\n",
@@ -72,6 +72,24 @@ def main(build_path, flutter_version):
         break
     else:
         raise SystemExit("no flutter_tests test_suite in %s" % path)
+
+    text += """
+
+flutter_test_suite_grouped(
+    name = "flutter_tests_directory",
+    package = ":app",
+    srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
+    policy = "directory",
+)
+
+flutter_test_suite_grouped(
+    name = "flutter_tests_g4",
+    package = ":app",
+    srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
+    policy = "count",
+    group_size = 4,
+)
+"""
     text += """
 
 flutter_test(

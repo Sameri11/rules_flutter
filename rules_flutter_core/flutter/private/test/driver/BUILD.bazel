@@ -12,6 +12,7 @@ exports_files(
         "device_bootstrap.dart.tmpl",
         "device_decoder.dart",
         "frame.dart",
+        "grouped_bootstrap.dart.tmpl",
         "guard.dart",
         "host.dart",
         "junit.dart",

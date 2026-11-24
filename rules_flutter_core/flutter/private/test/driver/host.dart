@@ -14,6 +14,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:async/async.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:test_api/backend.dart';
 import 'package:test_api/hooks.dart' show TestFailure;
@@ -136,6 +137,193 @@ void hostMain({
       },
     ),
   );
+}
+
+/// One source file's test suite inside a grouped host target.
+final class HostSuite {
+  const HostSuite({
+    required this.path,
+    required this.label,
+    required this.goldensDeclared,
+    required this.metadataJson,
+    required this.testMain,
+  });
+
+  final String path;
+  final String label;
+  final bool goldensDeclared;
+  final String metadataJson;
+  final Future<void> Function() testMain;
+}
+/// Tracks real timers created by one file and stops them at the process boundary.
+final class _SuiteTimers {
+  final _timers = <Timer>[];
+
+  T run<T>(T Function() body) {
+    final zone = Zone.current.fork(
+      specification: ZoneSpecification(
+        createTimer: (self, parent, zone, duration, callback) {
+          final timer = parent.createTimer(zone, duration, callback);
+          _timers.add(timer);
+          return timer;
+        },
+        createPeriodicTimer: (self, parent, zone, duration, callback) {
+          final timer = parent.createPeriodicTimer(zone, duration, callback);
+          _timers.add(timer);
+          return timer;
+        },
+      ),
+    );
+    return zone.run(body);
+  }
+
+  int cancelActive() {
+    var count = 0;
+    for (final timer in _timers) {
+      if (!timer.isActive) continue;
+      timer.cancel();
+      count++;
+    }
+    return count;
+  }
+}
+
+
+/// Runs [suites] sequentially in one flutter_tester process, retaining a
+/// RemoteListener and metadata boundary for each source file.
+Future<void> hostGroupMain({
+  required String packageRoot,
+  required List<HostSuite> suites,
+}) async {
+  final env = Platform.environment;
+  final runfiles = env['TEST_SRCDIR'] ?? env['RUNFILES_DIR'];
+  if (runfiles == null) {
+    throw StateError('TEST_SRCDIR or RUNFILES_DIR must be set');
+  }
+  final prematureExit = env['TEST_PREMATURE_EXIT_FILE'];
+  if (prematureExit != null) File(prematureExit).writeAsStringSync('');
+
+  final only = env['TESTBRIDGE_TEST_ONLY'];
+  final filter = only == null || only.isEmpty ? null : RegExp(only);
+  Shard? shard;
+  final total = env['TEST_TOTAL_SHARDS'];
+  if (total != null) {
+    final count = int.parse(total);
+    final index = int.parse(env['TEST_SHARD_INDEX'] ?? '0');
+    if (index < 0 || index >= count) {
+      throw StateError('TEST_SHARD_INDEX $index is outside 0..${count - 1}');
+    }
+    shard = Shard(index, count);
+    final status = env['TEST_SHARD_STATUS_FILE'];
+    if (status != null) File(status).writeAsStringSync('');
+  }
+
+  final sink = _HostSink(packageRoot);
+  final xmlPath = env['XML_OUTPUT_FILE'];
+  final reports = <String>[];
+  final os = _operatingSystem();
+  var finishing = false;
+  ProcessSignal.sigterm.watch().listen((_) {
+    if (finishing) return;
+    finishing = true;
+    final running = sink.running ?? 'suite';
+    final interrupted = CaseResult(
+      running,
+      Outcome.error,
+      'interrupted by SIGTERM during $running',
+    );
+    _writeGroupedReport(xmlPath, [
+      ...reports,
+      junitReport(running, [...sink.results, interrupted], packageRoot),
+    ]);
+    _exitAfterFlush(143);
+  });
+
+  var failed = false;
+  for (final suite in suites) {
+    final previousComparator = goldenFileComparator;
+    final previousAutoUpdate = autoUpdateGoldenFiles;
+    final previousTargetPlatform = debugDefaultTargetPlatformOverride;
+    final previousHttpOverrides = HttpOverrides.current;
+    final updateSource = env['FLUTTER_TEST_UPDATE_GOLDENS'];
+    final lateErrors = <CaseResult>[];
+    final timers = _SuiteTimers();
+    final watch = Stopwatch()..start();
+    late List<CaseResult> cases;
+    try {
+      goldenFileComparator = _HostComparator(
+        Uri.file(updateSource ?? '$runfiles/${suite.path}'),
+        env['TEST_UNDECLARED_OUTPUTS_DIR'],
+        suite.label,
+        goldensDeclared: suite.goldensDeclared,
+        workspace: updateSource == null ? null : env['BUILD_WORKSPACE_DIRECTORY'],
+      );
+      autoUpdateGoldenFiles = updateSource != null;
+      final channel = timers.run(
+        () => RemoteListener.start(
+          () => () => guarded(suite.testMain, lateErrors),
+        ),
+      );
+      await timers.run(
+        () => runCore(
+          channel,
+          CoreOptions(
+            platform: <String, Object>{
+              'runtime': Runtime.vm.serialize(),
+              'compiler': Runtime.vm.defaultCompiler.serialize(),
+              'os': os,
+              'inGoogle': false,
+            },
+            platformVariables: <String>['vm', os],
+            suitePath: suite.path,
+            sink: sink,
+            nameFilter: filter,
+            shard: shard,
+            metadata: jsonDecode(suite.metadataJson) as Map<String, Object?>,
+          ),
+          onComplete: (completed) {
+            cases = [...completed, ...lateErrors];
+            for (final late in lateErrors) {
+              sink.caseDone(late);
+            }
+          },
+        ),
+      );
+    } finally {
+      watch.stop();
+      final canceledTimers = timers.cancelActive();
+      if (canceledTimers != 0) {
+        stdout.writeln(
+          'grouped test: canceled $canceledTimers pending timer(s) for ${suite.path}',
+        );
+      }
+      debugDefaultTargetPlatformOverride = previousTargetPlatform;
+      HttpOverrides.global = previousHttpOverrides;
+      goldenFileComparator = previousComparator;
+      autoUpdateGoldenFiles = previousAutoUpdate;
+    }
+    failed |= cases.any(
+      (c) => c.outcome == Outcome.fail || c.outcome == Outcome.error,
+    );
+    reports.add(
+      junitReport(suite.path, cases, packageRoot, duration: watch.elapsed),
+    );
+  }
+  finishing = true;
+  _writeGroupedReport(xmlPath, reports);
+  _exitAfterFlush(failed ? 1 : 0);
+}
+
+void _writeGroupedReport(String? path, List<String> reports) {
+  if (path == null) return;
+  final suites = reports
+      .map((report) => report.substring(report.indexOf('?>') + 2))
+      .join();
+  final temp = File('$path.tmp')
+    ..writeAsStringSync(
+      '<?xml version="1.0" encoding="UTF-8"?><testsuites>$suites</testsuites>',
+    );
+  temp.renameSync(path);
 }
 
 /// Writes the JUnit report to [path] through a temporary file, so that a

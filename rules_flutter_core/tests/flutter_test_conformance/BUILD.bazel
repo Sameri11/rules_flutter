@@ -6,7 +6,7 @@
 # manual and run only through their checking wrapper.
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test", "flutter_test_suite")
+load("//flutter:defs.bzl", "flutter_package", "flutter_pubspec", "flutter_test", "flutter_test_group", "flutter_test_suite", "flutter_test_suite_grouped")
 load("//flutter/private:device_test.bzl", "flutter_test_device")
 load("//flutter/private:test_metadata.bzl", "parse_error_test")
 
@@ -97,6 +97,58 @@ flutter_test_suite(
     srcs = glob(["test/scope/**/*_test.dart"]),
     package = ":pkg",
 )
+flutter_test_suite_grouped(
+    name = "grouped_fixture",
+    package = ":pkg",
+    srcs = glob(["test/grouped/**/*_test.dart"]),
+    policy = "count",
+    group_size = 4,
+    env = {"GROUPED_EXPECT_STATE": "1"},
+    shard_count = 2,
+    tags = ["manual"],
+)
+# Group the full fixture set to check library metadata and driver boundaries.
+# The process-control cases run through grouped launchers but stay in their own
+# targets so their external signal and process-exit oracles remain meaningful.
+_GROUPED_FIXTURES = [fixture for fixture in FIXTURES if fixture not in ["c17_sigterm", "c18_exit_mid_suite"]]
+
+flutter_test_suite_grouped(
+    name = "grouped_conformance",
+    package = ":pkg",
+    srcs = ["test/" + fixture + "_test.dart" for fixture in _GROUPED_FIXTURES],
+    policy = "count",
+    group_size = 4,
+    tags = ["manual"],
+)
+
+[
+    flutter_test_group(
+        name = fixture + "_grouped_launcher",
+        package = ":pkg",
+        tests = ["test/" + fixture + "_test.dart"],
+        srcs = glob(["test/**/*.dart"], allow_empty = True),
+        tags = ["manual"],
+    )
+    for fixture in ["c17_sigterm", "c18_exit_mid_suite"]
+]
+
+[
+    sh_test(
+        name = fixture + "_grouped_conformance",
+        srcs = ["conformance.sh"],
+        args = [
+            "$(rlocationpath :{}_grouped_launcher)".format(fixture),
+            "$(rlocationpath {}.expected.json)".format(fixture),
+            "$(rlocationpath check.py)",
+        ],
+        data = [
+            ":{}_grouped_launcher".format(fixture),
+            "{}.expected.json".format(fixture),
+            "check.py",
+        ],
+    )
+    for fixture in ["c17_sigterm", "c18_exit_mid_suite"]
+]
 
 # Device-flavor parity. C1 to C13 run through the device driver on flutter_tester
 # and must give the host's JUnit cases and outcomes for every run (21 in all).

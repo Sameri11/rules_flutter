@@ -276,6 +276,77 @@ _flutter_test_bootstrap = rule(
     },
 )
 
+def _flutter_test_group_bootstrap_impl(ctx):
+    if FlutterPackageInfo in ctx.attr.package:
+        pubspec = ctx.attr.package[FlutterPackageInfo].pubspec.src
+    elif FlutterPubspecInfo in ctx.attr.package:
+        pubspec = ctx.attr.package[FlutterPubspecInfo].src
+    else:
+        fail("{}: package must provide FlutterPackageInfo or FlutterPubspecInfo".format(ctx.label))
+
+    known = {f.short_path: f for f in ctx.files.srcs}
+    imports = []
+    suites = []
+    for i in range(len(ctx.files.tests)):
+        test = ctx.files.tests[i]
+        metadata = ctx.files.metadata[i]
+        config = _find_config(test.short_path, _parent(pubspec.short_path), known)
+        test_alias = "test{}".format(i)
+        metadata_alias = "metadata{}".format(i)
+        imports.append("import '{}' as {};".format("org-dartlang-root:///" + _execroot_path(test), test_alias))
+        imports.append("import '{}' as {};".format("org-dartlang-root:///" + _execroot_path(metadata), metadata_alias))
+        test_main = "await Future({}.main);".format(test_alias)
+        if config:
+            config_alias = "config{}".format(i)
+            imports.append("import '{}' as {};".format("org-dartlang-root:///" + _execroot_path(known[config]), config_alias))
+            test_main = "await {}.testExecutable(() => Future({}.main));".format(config_alias, test_alias)
+        suites.append("""      driver.HostSuite(
+        path: '{}',
+        label: '{}',
+        goldensDeclared: {},
+        metadataJson: {}.testMetadataJson,
+        testMain: () async {{ {} }},
+      ),""".format(
+            _runfile(ctx, test),
+            ctx.attr.test_label,
+            "true" if test.short_path in ctx.attr.goldens_declared_tests else "false",
+            metadata_alias,
+            test_main,
+        ))
+
+    out = ctx.actions.declare_file(ctx.label.name + ".dart")
+    ctx.actions.expand_template(
+        template = ctx.file._template,
+        output = out,
+        substitutions = {
+            "{{DRIVER_URI}}": "org-dartlang-root:///" + _execroot_path(ctx.file._driver),
+            "{{IMPORTS}}": "\n".join(imports),
+            "{{PACKAGE_ROOT}}": _parent(_execroot_path(pubspec)),
+            "{{SUITES}}": "\n".join(suites),
+        },
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+_flutter_test_group_bootstrap = rule(
+    implementation = _flutter_test_group_bootstrap_impl,
+    attrs = {
+        "package": attr.label(mandatory = True),
+        "tests": attr.label_list(allow_files = [".dart"], mandatory = True),
+        "srcs": attr.label_list(allow_files = [".dart"]),
+        "metadata": attr.label_list(allow_files = [".dart"], mandatory = True),
+        "test_label": attr.string(mandatory = True),
+        "goldens_declared_tests": attr.string_list(),
+        "_template": attr.label(
+            allow_single_file = True,
+            default = "//flutter/private/test/driver:grouped_bootstrap.dart.tmpl",
+        ),
+        "_driver": attr.label(
+            allow_single_file = True,
+            default = "//flutter/private/test/driver:host.dart",
+        ),
+    },
+)
+
 def _materialize_script(pkg_dir, dirs, mode):
     """Shell that makes each materialized dir a real directory, and cd's to a mirror of the package.
 
@@ -755,6 +826,151 @@ def flutter_test_suite(
             **kwargs
         )
         generated.append(":" + f[:-len(".dart")])
+    native.test_suite(
+        name = name,
+        tests = generated + tests,
+        **{k: kwargs[k] for k in ["tags", "visibility", "testonly"] if k in kwargs}
+    )
+
+def flutter_test_group(
+        name,
+        package,
+        tests,
+        srcs,
+        data = [],
+        dart_defines = {},
+        goldens = None,
+        materialize = [],
+        materialize_mode = "copy",
+        env = {},
+        env_inherit = [],
+        **kwargs):
+    """Runs several host test files in one process, preserving each file's suite metadata."""
+    if not tests:
+        fail("flutter_test_group {}: tests is empty".format(name))
+    metadata = []
+    for i, src in enumerate(tests):
+        label = "{}_metadata_{}".format(name, i)
+        parse_metadata(name = label, src = src, tags = ["manual"])
+        metadata.append(":" + label)
+
+    known_srcs = _dedupe(list(srcs) + list(tests))
+    goldens_by_test = []
+    group_goldens = []
+    for src in tests:
+        files = native.glob([_join(_parent(src), "goldens/**")], allow_empty = True)
+        if files:
+            goldens_by_test.append(src)
+            group_goldens += files
+
+    bootstrap = name + "_bootstrap"
+    _flutter_test_group_bootstrap(
+        name = bootstrap,
+        package = package,
+        tests = tests,
+        srcs = known_srcs,
+        metadata = metadata,
+        test_label = "//{}:{}".format(native.package_name(), name),
+        goldens_declared_tests = goldens_by_test,
+        tags = ["manual"],
+    )
+    all_srcs = known_srcs
+    kernel = name + "_kernel"
+    dart_test_kernel(
+        name = kernel,
+        package = package,
+        srcs = all_srcs + _DRIVER_SRCS + metadata,
+        entrypoint = ":" + bootstrap,
+        dart_defines = dart_defines,
+        tags = ["manual"],
+    )
+    launcher = dict(
+        dill = ":" + kernel,
+        package = package,
+        src = tests[0],
+        srcs = [f for f in all_srcs if f != tests[0]],
+        prunable_srcs = [],
+        data = data,
+        goldens = group_goldens if goldens == None else goldens,
+        materialize = _materialize_dirs(materialize),
+        materialize_mode = materialize_mode,
+        env = env,
+        env_inherit = env_inherit,
+        dart_defines = dart_defines,
+    )
+    _tester_test(name = name, **dict(launcher, **kwargs))
+
+def _test_groups(srcs, policy, group_size, file_times):
+    if group_size < 1:
+        fail("group_size must be at least one")
+    if policy == "directory":
+        groups = {}
+        for src in sorted(srcs):
+            directory = _parent(src)
+            if directory not in groups:
+                groups[directory] = []
+            groups[directory].append(src)
+        return [groups[key] for key in sorted(groups)]
+    if policy == "count":
+        return [srcs[i:i + group_size] for i in range(0, len(srcs), group_size)]
+    if policy != "time":
+        fail("policy must be 'count', 'directory' or 'time'")
+    missing = [src for src in srcs if src not in file_times]
+    if missing:
+        fail("time policy needs a per-file duration for every test; missing {}".format(", ".join(missing)))
+    group_count = (len(srcs) + group_size - 1) // group_size
+    groups = [[] for _ in range(group_count)]
+    totals = [0.0 for _ in range(group_count)]
+    for src in sorted(srcs, key = lambda f: (-file_times[f], f)):
+        candidates = [i for i in range(group_count) if len(groups[i]) < group_size]
+        target = min(candidates, key = lambda i: (totals[i], i))
+        groups[target].append(src)
+        totals[target] += file_times[src]
+    return [sorted(group) for group in groups if group]
+
+def flutter_test_suite_grouped(
+        name,
+        package,
+        srcs = None,
+        tests = [],
+        policy = "count",
+        group_size = 4,
+        file_times = {},
+        ungrouped = [],
+        **kwargs):
+    """Creates grouped test targets using fixed-count, directory or time balancing."""
+    pkg = native.package_name()
+    if native.package_relative_label(package).package != pkg:
+        fail("flutter_test_suite_grouped {}: declare it next to pubspec.yaml in the test package".format(name))
+    if srcs == None:
+        srcs = native.glob(["test/**/*_test.dart"], allow_empty = True)
+    srcs = sorted(srcs)
+    if not srcs:
+        fail("flutter_test_suite_grouped {}: srcs is empty".format(name))
+    for f in srcs:
+        if not f.endswith(".dart") or f.startswith("/") or ":" in f or ".." in f.split("/"):
+            fail("flutter_test_suite_grouped {}: {} is not a Dart file under the package".format(name, f))
+    for f in ungrouped:
+        if f not in srcs:
+            fail("flutter_test_suite_grouped {}: ungrouped file {} is not in srcs".format(name, f))
+    grouped_srcs = [f for f in srcs if f not in ungrouped]
+    groups = _test_groups(grouped_srcs, policy, group_size, file_times)
+    groups += [[f] for f in ungrouped]
+    all_srcs = _dedupe(sorted(native.glob(
+        ["test/**/*.dart", "flutter_test_config.dart"],
+        allow_empty = True,
+    )) + srcs)
+    generated = []
+    for i, group in enumerate(groups):
+        target = "{}_group_{}".format(name, i)
+        flutter_test_group(
+            name = target,
+            package = package,
+            tests = group,
+            srcs = all_srcs,
+            **kwargs
+        )
+        generated.append(":" + target)
     native.test_suite(
         name = name,
         tests = generated + tests,

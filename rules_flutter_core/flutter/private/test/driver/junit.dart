@@ -11,8 +11,14 @@ String displayPath(String text, String packageRoot) => text
     .replaceAll('org-dartlang-root:///$packageRoot/', '')
     .replaceAll('org-dartlang-root:///', '');
 
-/// The JUnit report of [cases], for suite [suite].
-String junitReport(String suite, List<CaseResult> cases, String packageRoot) {
+/// The JUnit report of [cases], for suite [suite], optionally including its run
+/// duration.
+String junitReport(
+  String suite,
+  List<CaseResult> cases,
+  String packageRoot, {
+  Duration? duration,
+}) {
   var failures = 0;
   var errors = 0;
   var skipped = 0;
@@ -54,9 +60,11 @@ String junitReport(String suite, List<CaseResult> cases, String packageRoot) {
         );
     }
   }
+  final time =
+      duration == null ? '' : ' time="${(duration.inMicroseconds / 1000000).toStringAsFixed(3)}"';
   return '<?xml version="1.0" encoding="UTF-8"?>'
       '<testsuite name="${_xml(suite)}" tests="${cases.length}" '
-      'failures="$failures" errors="$errors" skipped="$skipped">'
+      'failures="$failures" errors="$errors" skipped="$skipped"$time>'
       '$body</testsuite>';
 }
 
