@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure warm and wide-lib Bazel test runs for one fetched app copy."""
+"""Measure cold, test-edit and wide-lib Bazel test runs for a fetched app copy."""
 
 import argparse
 import atexit
@@ -179,7 +179,7 @@ def main():
         shutil.copytree(testlogs, out / "testlogs", dirs_exist_ok=True)
     kernel_artifacts(app, base, suite, out)
     (out / "records.json").write_text(json.dumps(records, indent=2, sort_keys=True) + "\n")
-    (out / "commands.txt").write_text("bazel test --keep_going --disk_cache= --remote_cache= <all suite targets>\\n")
+    (out / "commands.txt").write_text("bazel test --keep_going --nocache_test_results --disk_cache= --remote_cache= <suite targets>\n")
     subprocess.run([sys.executable, str(Path(__file__).with_name("analyze_runner_share.py")),
                     "--out", str(out), "--app", args.app], check=True)
 

@@ -219,7 +219,13 @@ def main():
                 wave_projections[key][str(group)] = wave_projection(
                     runs, group, fixed, passing_only)
     mnemonics = sorted({name for row in runs.values() for name in row["mnemonic_wall_s"]})
-    result = {"app": args.app, "runs": runs, "runner_floor": floor_result,
+    host = json.loads((root / "host.json").read_text())
+    records = json.loads((root / "records.json").read_text())
+    artifact_path = root / "kernel-artifacts.json"
+    kernel_artifacts = json.loads(artifact_path.read_text()) if artifact_path.exists() else {}
+    scenarios = {row["run"]: row["wall_s"] for row in records
+                 if row["run"] in ("cold", "test-edit")}
+    result = {"app": args.app, "mode": host.get("mode"), "runs": runs, "runner_floor": floor_result,
               "synthetic_defines": synthetic_result,
               "wall_median_s": median_wall,
               "critical_path_median_s": statistics.median(row["wall_critical_path_s"] for row in runs.values()
@@ -242,6 +248,7 @@ def main():
               "runner_spawn_passing": timing_stats(pass_times, fixed or 0.0),
               "runner_spawn_failing": timing_stats(fail_times, fixed or 0.0),
               "runner_spawn_all": timing_stats(all_times, fixed or 0.0),
+              "scenario_wall_s": scenarios, "kernel_artifacts": kernel_artifacts,
               "fixed_process_s": fixed, "grouping_projection": projections,
               "wave_aware_grouping_projection": wave_projections}
     (root / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")

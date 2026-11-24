@@ -27,13 +27,18 @@ def outcomes(root, known_sources):
             if source is None:
                 continue
             for case in suite.findall("testcase"):
-                outcome = "pass"
-                if case.find("failure") is not None or case.find("error") is not None:
-                    outcome = "fail"
-                elif case.find("skipped") is not None:
-                    outcome = "skip"
+                failure = case.find("failure")
+                error = case.find("error")
+                skipped = case.find("skipped")
+                status = "fail" if failure is not None or error is not None else (
+                    "skip" if skipped is not None else "pass")
+                detail_node = failure if failure is not None else error
+                detail = ""
+                if detail_node is not None:
+                    detail = (detail_node.attrib.get("message", "") + " " +
+                              "".join(detail_node.itertext())).strip()[:1000]
                 key = (source, case.attrib.get("classname", ""), case.attrib.get("name", ""))
-                found[key] = outcome
+                found[key] = {"status": status, "detail": detail}
     return found
 
 
@@ -52,15 +57,18 @@ def main():
     def compare(grouped):
         keys = sorted(set(per_file) | set(grouped))
         return [{"source": key[0], "classname": key[1], "test": key[2],
-                 "per_file": per_file.get(key, "missing"), "grouped": grouped.get(key, "missing")}
-                for key in keys if per_file.get(key) != grouped.get(key)]
+                 "per_file": per_file.get(key, {"status": "missing"}),
+                 "grouped": grouped.get(key, {"status": "missing"})}
+                for key in keys
+                if per_file.get(key, {}).get("status") != grouped.get(key, {}).get("status")]
 
     report = {"app": args.app, "test_cases": len(per_file),
               "directory_differences": compare(directory), "count4_differences": compare(count4)}
     for policy in ("directory", "count4"):
         entries = report[policy + "_differences"]
         report[policy + "_grouped_only_failures"] = [entry for entry in entries
-                                                      if entry["per_file"] == "pass" and entry["grouped"] == "fail"]
+                                                      if entry["per_file"]["status"] == "pass"
+                                                      and entry["grouped"]["status"] == "fail"]
     (args.out / "parity.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(report, indent=2, sort_keys=True))
 
