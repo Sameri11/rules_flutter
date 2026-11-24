@@ -258,8 +258,8 @@ def fetch_upstream(app, dest):
     _git(["apply", "--whitespace=nowarn", str(patch)], cwd=dest)
     if (dest / ".gitmodules").is_file():
         if app == "serverbox":
-            _git(["submodule", "update", "--init", "--depth", "1", "--quiet",
-                  "packages/dartssh2", "packages/xterm", "packages/fl_lib"], cwd=dest)
+            _git(["-c", 'submodule."third_party/ish-arm64".update=none',
+                  "submodule", "update", "--init", "--depth", "1", "--quiet"], cwd=dest)
         else:
             _git(["submodule", "update", "--init", "--recursive", "--depth", "1", "--quiet"], cwd=dest)
     for patch in sorted((APPS_DIR / app).glob("submodule-*.patch")):
