@@ -845,7 +845,22 @@ def flutter_test_group(
         env = {},
         env_inherit = [],
         **kwargs):
-    """Runs several host test files in one process, preserving each file's suite metadata."""
+    """Runs several host test files in one process, preserving each file's suite metadata.
+
+    Args:
+      name: Target name for the combined test runner.
+      package: Flutter package that owns the test sources.
+      tests: Test entrypoints included in this group.
+      srcs: Sources and configuration files available to the generated runner.
+      data: Runtime data files.
+      dart_defines: Compile-time Dart definitions.
+      goldens: Optional explicit golden files.
+      materialize: Directories to materialize for the test.
+      materialize_mode: Materialization strategy.
+      env: Test environment variables.
+      env_inherit: Environment variables inherited from the host.
+      **kwargs: Additional attributes passed to the underlying test rule.
+    """
     if not tests:
         fail("flutter_test_group {}: tests is empty".format(name))
     metadata = []
@@ -918,15 +933,20 @@ def _test_groups(srcs, policy, group_size, file_times):
     missing = [src for src in srcs if src not in file_times]
     if missing:
         fail("time policy needs a per-file duration for every test; missing {}".format(", ".join(missing)))
-    group_count = (len(srcs) + group_size - 1) // group_size
-    groups = [[] for _ in range(group_count)]
+
+    # Keep long-running files in their own targets, then balance the short tail.
+    slow = [src for src in srcs if file_times[src] >= 10.0]
+    remaining = [src for src in srcs if file_times[src] < 10.0]
+    group_count = (len(remaining) + group_size - 1) // group_size
+    groups = [[src] for src in sorted(slow)]
+    balanced = [[] for _ in range(group_count)]
     totals = [0.0 for _ in range(group_count)]
-    for src in sorted(srcs, key = lambda f: (-file_times[f], f)):
-        candidates = [i for i in range(group_count) if len(groups[i]) < group_size]
+    for src in sorted(remaining, key = lambda f: (-file_times[f], f)):
+        candidates = [i for i in range(group_count) if len(balanced[i]) < group_size]
         target = min(candidates, key = lambda i: (totals[i], i))
-        groups[target].append(src)
+        balanced[target].append(src)
         totals[target] += file_times[src]
-    return [sorted(group) for group in groups if group]
+    return groups + [sorted(group) for group in balanced if group]
 
 def flutter_test_suite_grouped(
         name,
@@ -938,7 +958,19 @@ def flutter_test_suite_grouped(
         file_times = {},
         ungrouped = [],
         **kwargs):
-    """Creates grouped test targets using fixed-count, directory or time balancing."""
+    """Creates grouped test targets using fixed-count, directory or time balancing.
+
+    Args:
+      name: Test-suite target name.
+      package: Flutter package that owns the test sources.
+      srcs: Test entrypoints to group; defaults to all package test files.
+      tests: Additional Bazel tests included in the suite.
+      policy: Grouping strategy: "count", "directory" or "time".
+      group_size: Maximum files per generated test group.
+      file_times: Per-file durations required by the "time" policy.
+      ungrouped: Files emitted as independent singleton groups.
+      **kwargs: Common test attributes forwarded to each generated target.
+    """
     pkg = native.package_name()
     if native.package_relative_label(package).package != pkg:
         fail("flutter_test_suite_grouped {}: declare it next to pubspec.yaml in the test package".format(name))

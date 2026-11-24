@@ -97,39 +97,50 @@ flutter_test_suite(
     srcs = glob(["test/scope/**/*_test.dart"]),
     package = ":pkg",
 )
+
 flutter_test_suite_grouped(
     name = "grouped_fixture",
-    package = ":pkg",
     srcs = glob(["test/grouped/**/*_test.dart"]),
-    policy = "count",
-    group_size = 4,
     env = {"GROUPED_EXPECT_STATE": "1"},
+    group_size = 4,
+    package = ":pkg",
+    policy = "count",
     shard_count = 2,
     tags = ["manual"],
 )
+
 # Group the full fixture set to check library metadata and driver boundaries.
 # The process-control cases run through grouped launchers but stay in their own
 # targets so their external signal and process-exit oracles remain meaningful.
-_GROUPED_FIXTURES = [fixture for fixture in FIXTURES if fixture not in ["c17_sigterm", "c18_exit_mid_suite"]]
+_GROUPED_FIXTURES = [fixture for fixture in FIXTURES if fixture not in [
+    "c17_sigterm",
+    "c18_exit_mid_suite",
+]]
 
 flutter_test_suite_grouped(
     name = "grouped_conformance",
-    package = ":pkg",
     srcs = ["test/" + fixture + "_test.dart" for fixture in _GROUPED_FIXTURES],
-    policy = "count",
     group_size = 4,
+    package = ":pkg",
+    policy = "count",
     tags = ["manual"],
 )
 
 [
     flutter_test_group(
         name = fixture + "_grouped_launcher",
+        srcs = glob(
+            ["test/**/*.dart"],
+            allow_empty = True,
+        ),
         package = ":pkg",
-        tests = ["test/" + fixture + "_test.dart"],
-        srcs = glob(["test/**/*.dart"], allow_empty = True),
         tags = ["manual"],
+        tests = ["test/" + fixture + "_test.dart"],
     )
-    for fixture in ["c17_sigterm", "c18_exit_mid_suite"]
+    for fixture in [
+        "c17_sigterm",
+        "c18_exit_mid_suite",
+    ]
 ]
 
 [
@@ -147,7 +158,10 @@ flutter_test_suite_grouped(
             "check.py",
         ],
     )
-    for fixture in ["c17_sigterm", "c18_exit_mid_suite"]
+    for fixture in [
+        "c17_sigterm",
+        "c18_exit_mid_suite",
+    ]
 ]
 
 # Device-flavor parity. C1 to C13 run through the device driver on flutter_tester
