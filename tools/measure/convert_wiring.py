@@ -35,7 +35,7 @@ def calls(text, macro):
         yield start, pos, text[start:pos]
 
 
-def main(build_path):
+def main(build_path, flutter_version):
     path = Path(build_path)
     text = path.read_text()
     text = text.replace(
@@ -100,11 +100,13 @@ flutter_test(
         'module_name = "sameri11_rules_flutter_core",\n    path = "../../rules_flutter_core",',
     )
     module_text = module_text.replace('include("//android:config.MODULE.bazel")', '')
-    module_text = module_text.replace('flutter.sdk(version = "3.47.3")', 'flutter.sdk(version = "3.50.1")')
-    module.write_text(module_text)
+    module_text = module_text.replace(
+        'flutter.sdk(version = "3.47.3")',
+        'flutter.sdk(version = "%s")' % flutter_version,
+    )
     (path.parent / ".bazelversion").write_text("9.2.0\n")
     print("converted %d per-file flutter_test declarations in %s" % (found, path))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2])
