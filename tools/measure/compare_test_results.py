@@ -53,6 +53,7 @@ def main():
     per_file = outcomes(args.out / "per-file", sources)
     directory = outcomes(args.out / "directory", sources)
     count4 = outcomes(args.out / "count4", sources)
+    time4 = outcomes(args.out / "time4", sources)
 
     def compare(grouped):
         keys = sorted(set(per_file) | set(grouped))
@@ -63,8 +64,9 @@ def main():
                 if per_file.get(key, {}).get("status") != grouped.get(key, {}).get("status")]
 
     report = {"app": args.app, "test_cases": len(per_file),
-              "directory_differences": compare(directory), "count4_differences": compare(count4)}
-    for policy in ("directory", "count4"):
+              "directory_differences": compare(directory), "count4_differences": compare(count4),
+              "time4_differences": compare(time4)}
+    for policy in ("directory", "count4", "time4"):
         entries = report[policy + "_differences"]
         report[policy + "_grouped_only_failures"] = [entry for entry in entries
                                                       if entry["per_file"]["status"] == "pass"

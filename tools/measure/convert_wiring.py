@@ -2,6 +2,7 @@
 """Port generated per-file app tests to the current flutter_test API."""
 
 from pathlib import Path
+import json
 import re
 import sys
 
@@ -73,6 +74,12 @@ def main(build_path, flutter_version):
     else:
         raise SystemExit("no flutter_tests test_suite in %s" % path)
 
+    times_path = Path(__file__).with_name("runner-share-times.json")
+    file_times = json.loads(times_path.read_text())["seconds"][path.parent.name]
+    time_map = "{\n" + "".join(
+        "        %r: %s,\n" % (source, repr(seconds))
+        for source, seconds in sorted(file_times.items())
+    ) + "    }"
     text += """
 
 flutter_test_suite_grouped(
@@ -90,6 +97,17 @@ flutter_test_suite_grouped(
     group_size = 4,
 )
 """
+    text += """
+
+flutter_test_suite_grouped(
+    name = "flutter_tests_time4",
+    package = ":app",
+    srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
+    policy = "time",
+    group_size = 4,
+    file_times = %s,
+)
+""" % time_map
     text += """
 
 flutter_test(

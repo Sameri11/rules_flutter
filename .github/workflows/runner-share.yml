@@ -63,6 +63,7 @@ jobs:
           python3 tools/measure/runner_share.py --app "$APP" --mode per-file --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP/per-file" --repeats 3
           python3 tools/measure/runner_share.py --app "$APP" --mode directory --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP/directory" --repeats 3
           python3 tools/measure/runner_share.py --app "$APP" --mode count4 --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP/count4" --repeats 3
+          python3 tools/measure/runner_share.py --app "$APP" --mode time4 --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP/time4" --repeats 3
           python3 tools/measure/compare_test_results.py --app "$APP" --out "$RUNNER_TEMP/out/$APP"
 
       - name: Upload measurement data

@@ -63,7 +63,7 @@ def main():
     parser.add_argument("--app-dir", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--mode", choices=["per-file", "directory", "count4"], default="per-file")
+    parser.add_argument("--mode", choices=["per-file", "directory", "count4", "time4"], default="per-file")
     args = parser.parse_args()
     app = args.app_dir.resolve()
     out = args.out.resolve()
@@ -76,6 +76,7 @@ def main():
     suite = {
         "directory": "//:flutter_tests_directory",
         "count4": "//:flutter_tests_g4",
+        "time4": "//:flutter_tests_time4",
         "per-file": "//:flutter_tests",
     }[args.mode]
     query = subprocess.run(
