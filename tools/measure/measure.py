@@ -258,8 +258,13 @@ def fetch_upstream(app, dest):
     _git(["apply", "--whitespace=nowarn", str(patch)], cwd=dest)
     if (dest / ".gitmodules").is_file():
         if app == "serverbox":
-            _git(["-c", 'submodule."third_party/ish-arm64".update=none',
-                  "submodule", "update", "--init", "--depth", "1", "--quiet"], cwd=dest)
+            paths = subprocess.run(
+                ["git", "config", "-f", ".gitmodules", "--get-regexp", r"\.path$"],
+                cwd=str(dest), capture_output=True, text=True, check=True,
+            ).stdout.splitlines()
+            paths = [line.split(maxsplit=1)[1] for line in paths
+                     if line.split(maxsplit=1)[1] != "third_party/ish-arm64"]
+            _git(["submodule", "update", "--init", "--depth", "1", "--quiet", "--", *paths], cwd=dest)
         else:
             _git(["submodule", "update", "--init", "--recursive", "--depth", "1", "--quiet"], cwd=dest)
     for patch in sorted((APPS_DIR / app).glob("submodule-*.patch")):
