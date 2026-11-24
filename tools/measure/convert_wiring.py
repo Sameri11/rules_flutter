@@ -89,6 +89,18 @@ flutter_test(
         "  test('empty', () {});\n"
         "}\n"
     )
+    android_build = path.parent / "android" / "app" / "BUILD.bazel"
+    if android_build.is_file():
+        if path.parent.name == "serverbox":
+            android_build.write_text(
+                'package(default_visibility = ["//visibility:public"])\n\n'
+                'filegroup(\n'
+                '    name = "host_test_data",\n'
+                '    srcs = glob(["src/main/AndroidManifest.xml", "src/main/res/xml/*.xml", "src/main/kotlin/**/*.kt"], allow_empty = True),\n'
+                ')\n'
+            )
+        else:
+            android_build.write_text('package(default_visibility = ["//visibility:public"])\n')
     module = path.parent / "MODULE.bazel"
     module_text = module.read_text()
     module_text = module_text.replace(
