@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import json
+import statistics
 import re
 import sys
 
@@ -76,6 +77,7 @@ def main(build_path, flutter_version):
 
     times_path = Path(__file__).with_name("runner-share-times.json")
     file_times = json.loads(times_path.read_text())["seconds"][path.parent.name]
+    file_times["test/measure_defines_test.dart"] = statistics.median(file_times.values())
     time_map = "{\n" + "".join(
         "        %r: %s,\n" % (source, repr(seconds))
         for source, seconds in sorted(file_times.items())
