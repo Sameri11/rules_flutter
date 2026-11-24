@@ -957,6 +957,7 @@ def flutter_test_suite_grouped(
         group_size = 4,
         file_times = {},
         ungrouped = [],
+        extra_srcs = [],
         **kwargs):
     """Creates grouped test targets using fixed-count, directory or time balancing.
 
@@ -969,6 +970,7 @@ def flutter_test_suite_grouped(
       group_size: Maximum files per generated test group.
       file_times: Per-file durations required by the "time" policy.
       ungrouped: Files emitted as independent singleton groups.
+      extra_srcs: Additional Dart sources available to every group.
       **kwargs: Common test attributes forwarded to each generated target.
     """
     pkg = native.package_name()
@@ -991,7 +993,7 @@ def flutter_test_suite_grouped(
     all_srcs = _dedupe(sorted(native.glob(
         ["test/**/*.dart", "flutter_test_config.dart"],
         allow_empty = True,
-    )) + srcs)
+    )) + srcs + extra_srcs)
     generated = []
     for i, group in enumerate(groups):
         target = "{}_group_{}".format(name, i)

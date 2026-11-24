@@ -51,13 +51,20 @@ def main(build_path, flutter_version):
     )
     text = text.replace('    abis = ["arm64-v8a"],\n', "", 1)
     found = 0
+    extra_srcs = []
     for start, end, call in calls(text, "flutter_test"):
         call, n = re.subn(r"(?m)^(\s*)app\s*=", r"\1package =", call, count=1)
+        srcs_match = re.search(r"(?m)^\s*srcs\s*=\s*([^\n]+)", call)
+        if srcs_match:
+            expression = srcs_match.group(1).rstrip(",").strip()
+            if expression not in extra_srcs:
+                extra_srcs.append(expression)
         if n:
             found += 1
             text = text[:start] + call + text[end:]
     if not found:
         raise SystemExit("no historical flutter_test(app=...) calls in %s" % path)
+    grouped_extra_srcs = " + ".join(extra_srcs) if extra_srcs else "[]"
     suite_calls = list(calls(text, "test_suite"))
     for start, end, call in suite_calls:
         if 'name = "flutter_tests"' not in call:
@@ -88,6 +95,7 @@ flutter_test_suite_grouped(
     name = "flutter_tests_directory",
     package = ":app",
     srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
+    extra_srcs = %s,
     policy = "directory",
 )
 
@@ -95,21 +103,23 @@ flutter_test_suite_grouped(
     name = "flutter_tests_g4",
     package = ":app",
     srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
+    extra_srcs = %s,
     policy = "count",
     group_size = 4,
 )
-"""
+""" % (grouped_extra_srcs, grouped_extra_srcs)
     text += """
 
 flutter_test_suite_grouped(
     name = "flutter_tests_time4",
     package = ":app",
     srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
+    extra_srcs = %s,
     policy = "time",
     group_size = 4,
     file_times = %s,
 )
-""" % time_map
+""" % (grouped_extra_srcs, time_map)
     text += """
 
 flutter_test(
