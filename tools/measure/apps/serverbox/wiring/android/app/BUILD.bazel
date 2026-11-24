@@ -1,0 +1,63 @@
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_flutter//flutter:defs.bzl", "flutter_android_binary", "flutter_embedding_library")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+ABIS = ["arm64-v8a"]
+
+flutter_embedding_library(name = "flutter_embedding")
+
+flutter_android_binary(
+    name = "server_box",
+    abis = ABIS,
+    app = "//:app",
+    manifest_values = {"applicationId": "tech.lolli.toolbox"},
+    resource_files = [],
+    deps = [":main_activity"],
+)
+
+android_library(
+    name = "generated_plugin_registrant",
+    srcs = ["src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"],
+    deps = [
+        ":flutter_embedding",
+        "@flutter_plugins//:all",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+    ],
+)
+
+genrule(
+    name = "app_build_config",
+    outs = ["BuildConfig.java"],
+    cmd = """
+cat > $@ <<'EOF'
+package tech.lolli.toolbox;
+
+public final class BuildConfig {
+    public static final String VERSION_NAME = "1.0.1617";
+}
+EOF
+""",
+)
+
+kt_android_library(
+    name = "main_activity",
+    srcs = glob(["src/main/kotlin/**/*.kt"]) + [":app_build_config"],
+    custom_package = "tech.lolli.toolbox",
+    manifest = "src/bazel/AndroidManifest.xml",
+    resource_files = glob(["src/main/res/**"]),
+    deps = [
+        ":flutter_embedding",
+        "@flutter_maven//:androidx_annotation_annotation_jvm",
+        "@flutter_maven//:androidx_core_core",
+        "@flutter_maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)
+
+# Host tests read these project files from their cwd. Glob from the root
+# package cannot see into this package, so it is exported from here.
+filegroup(
+    name = "host_test_data",
+    srcs = glob(["src/main/AndroidManifest.xml", "src/main/res/xml/*.xml", "src/main/kotlin/**/*.kt"], allow_empty = True),
+)
