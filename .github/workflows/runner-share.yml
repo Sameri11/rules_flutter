@@ -50,23 +50,30 @@ jobs:
           set -euo pipefail
           python3 tools/measure/measure.py fetch-apps --app "$APP" --dest "$GITHUB_WORKSPACE/_apps/$APP"
 
-      - name: Smoke one repeat
-        if: matrix.app == 'oinkoin'
-        shell: bash
-        env:
-          APP: ${{ matrix.app }}
-        run: |
-          set -euo pipefail
-          python3 tools/measure/runner_share.py --app "$APP" --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP" --repeats 1
-
       - name: Measure three repeats
-        if: matrix.app != 'oinkoin'
         shell: bash
         env:
           APP: ${{ matrix.app }}
         run: |
           set -euo pipefail
           python3 tools/measure/runner_share.py --app "$APP" --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP" --repeats 3
+
+      - name: Inspect oinkoin Material shader bundle
+        if: always() && matrix.app == 'oinkoin'
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          bundle="$GITHUB_WORKSPACE/_apps/$APP/bazel-bin/test_announcement_dialog_test_test_assets/flutter_assets"
+          report="$RUNNER_TEMP/out/$APP/test-assets-shader.txt"
+          mkdir -p "$(dirname "$report")"
+          if test -f "$bundle/shaders/ink_sparkle.frag"; then
+            echo "present: $bundle/shaders/ink_sparkle.frag" | tee "$report"
+          else
+            echo "missing: $bundle/shaders/ink_sparkle.frag" | tee "$report"
+          fi
+          find "$bundle" -maxdepth 3 -type f -print 2>/dev/null | sort | head -100 | tee -a "$report" || true
 
       - name: Upload measurement data
         if: always()
