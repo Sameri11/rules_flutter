@@ -4,6 +4,10 @@ on:
   push:
     branches: [prototype/bnt18-runner-share]
 
+env:
+  FLUTTER_VERSION: 3.47.3
+  FLUTTER_SHA256_LINUX_X64: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+
 permissions:
   contents: read
 
@@ -29,8 +33,8 @@ jobs:
 
       - uses: ./.github/actions/flutter-bazel
         with:
-          flutter-version: 3.47.3
-          flutter-sha256: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: v1.29.0
           bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
           cache-mode: ''
@@ -48,7 +52,7 @@ jobs:
           APP: ${{ matrix.app }}
         run: |
           set -euo pipefail
-          python3 tools/measure/measure.py fetch-apps --app "$APP" --dest "$GITHUB_WORKSPACE/_apps/$APP"
+          python3 tools/measure/measure.py fetch-apps --app "$APP" --dest "$GITHUB_WORKSPACE/_apps/$APP" --flutter-version "$FLUTTER_VERSION"
 
       - name: Measure three repeats
         shell: bash

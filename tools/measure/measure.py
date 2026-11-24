@@ -283,7 +283,7 @@ def fetch_upstream(app, dest):
         shutil.rmtree(target / ".git")
 
 
-def wire_app(app, dest):
+def wire_app(app, dest, flutter_version):
     source = APPS_DIR / app / "wiring"
     if not source.is_dir():
         fail("missing %s" % source)
@@ -295,7 +295,7 @@ def wire_app(app, dest):
         copied += 1
     build_file = dest / "BUILD.bazel"
     subprocess.run(
-        [sys.executable, str(HERE / "convert_wiring.py"), str(build_file)],
+        [sys.executable, str(HERE / "convert_wiring.py"), str(build_file), flutter_version],
         check=True,
     )
     return copied
@@ -306,18 +306,19 @@ def _flutter_pub_get(dest):
     subprocess.run(["flutter", "pub", "get"], cwd=str(dest), check=True)
 
 
-def fetch_app(app, dest, wire):
+def fetch_app(app, dest, wire, flutter_version):
     if dest.exists():
         fail("destination exists: %s" % dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     fetch_upstream(app, dest)
     if wire:
-        log("wired %d files into %s" % (wire_app(app, dest), dest))
+        log("wired %d files into %s" % (wire_app(app, dest, flutter_version), dest))
         _flutter_pub_get(dest / PUB_ROOT.get(app, "."))
 
 
 def cmd_fetch_apps(args):
-    fetch_app(args.app, Path(args.dest).resolve(), wire=not args.flutter_copy)
+    fetch_app(args.app, Path(args.dest).resolve(), wire=not args.flutter_copy,
+              flutter_version=args.flutter_version)
     return 0
 
 
@@ -325,7 +326,7 @@ def cmd_wire(args):
     dest = Path(args.dest).resolve()
     if not dest.is_dir():
         fail("no app root at %s" % dest)
-    print("wired %d files" % wire_app(args.app, dest))
+    print("wired %d files" % wire_app(args.app, dest, args.flutter_version))
     return 0
 
 
@@ -1335,11 +1336,13 @@ def build_parser():
     p.add_argument("--app", choices=APPS, required=True)
     p.add_argument("--dest", required=True)
     p.add_argument("--flutter-copy", action="store_true", help="skip wiring (the flutter mode uses this)")
+    p.add_argument("--flutter-version", required=True)
     p.set_defaults(func=cmd_fetch_apps)
 
     p = sub.add_parser("wire", help="copy an app's wiring over its root")
     p.add_argument("--app", choices=APPS, required=True)
     p.add_argument("--dest", required=True)
+    p.add_argument("--flutter-version", required=True)
     p.set_defaults(func=cmd_wire)
 
     p = sub.add_parser("run", help="run the measurement matrix")
