@@ -4,6 +4,9 @@ module(
 )
 
 bazel_dep(name = "sameri11_rules_flutter", version = "0.1.0", repo_name = "rules_flutter")
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
 local_path_override(
     module_name = "sameri11_rules_flutter",
     path = "../..",
