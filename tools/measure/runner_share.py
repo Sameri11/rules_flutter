@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import time
+import sys
 
 
 def run(command, cwd, log_path):
