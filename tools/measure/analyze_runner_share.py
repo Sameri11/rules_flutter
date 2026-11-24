@@ -174,6 +174,7 @@ def main():
     parser.add_argument("--app", required=True)
     args = parser.parse_args()
     root = args.out
+    host = json.loads((root / "host.json").read_text())
     runs = {}
     for path in sorted(root.glob("wide-r*.profile.gz")):
         label = path.name.removesuffix(".profile.gz")
@@ -184,13 +185,12 @@ def main():
     synthetic_profile = root / "synthetic-defines.profile.gz"
     synthetic_result = summarize_run(synthetic_profile, root / "synthetic-defines.log",
                                      root / "synthetic-defines.xml", suite_only=False) if synthetic_profile.exists() else None
-    fixed = None
+    runner_samples = sorted(runner["wall_s"] for row in runs.values() for runner in row["runners"])
+    fixed = percentile(runner_samples, 0.05) if host.get("mode") == "per-file" else None
+    fixed_source = "P5 of wide TestRunner action durations; cold floor excluded" if fixed is not None else None
     if floor_result and floor_result["runners"]:
-        floor_runner = floor_result["runners"][0]["wall_s"]
-        floor_xml_s = floor_result["floor_test_xml_s"] or 0.0
-        fixed = max(0.0, floor_runner - floor_xml_s)
-        floor_result["fixed_floor_runner_s"] = floor_runner
-        floor_result["fixed_process_s"] = fixed
+        floor_result["fixed_floor_runner_s"] = floor_result["runners"][0]["wall_s"]
+        floor_result["fixed_process_s"] = None
     median_wall = statistics.median(row["wall_s"] for row in runs.values()
                                     if row["wall_s"] is not None) if runs else None
     suite_count = round(statistics.median(row["runner_count"] for row in runs.values())) if runs else 0
@@ -219,7 +219,6 @@ def main():
                 wave_projections[key][str(group)] = wave_projection(
                     runs, group, fixed, passing_only)
     mnemonics = sorted({name for row in runs.values() for name in row["mnemonic_wall_s"]})
-    host = json.loads((root / "host.json").read_text())
     records = json.loads((root / "records.json").read_text())
     artifact_path = root / "kernel-artifacts.json"
     kernel_artifacts = json.loads(artifact_path.read_text()) if artifact_path.exists() else {}
@@ -249,7 +248,8 @@ def main():
               "runner_spawn_failing": timing_stats(fail_times, fixed or 0.0),
               "runner_spawn_all": timing_stats(all_times, fixed or 0.0),
               "scenario_wall_s": scenarios, "kernel_artifacts": kernel_artifacts,
-              "fixed_process_s": fixed, "grouping_projection": projections,
+              "fixed_process_s": fixed, "fixed_process_source": fixed_source,
+              "grouping_projection": projections,
               "wave_aware_grouping_projection": wave_projections}
     (root / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))
