@@ -1,0 +1,77 @@
+name: Test runner share
+
+on:
+  push:
+    branches: [prototype/bnt18-runner-share]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Runner share — ${{ matrix.app }} — ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [oinkoin]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Free runner disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/share/swift
+          df -h /
+
+      - uses: ./.github/actions/flutter-bazel
+        with:
+          flutter-version: 3.50.1
+          flutter-sha256: 4ad17fc8462fbcef2ba19ff4a78c0a16b7147fde1add8578e267ea62cdb92678
+          bazelisk-version: v1.29.0
+          bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+          cache-mode: ''
+
+      - name: Install Android platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          sm="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$sm" --install "platforms;android-36" "build-tools;36.0.0" >/dev/null
+
+      - name: Fetch and wire app
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/measure.py fetch-apps --app "$APP" --dest "$GITHUB_WORKSPACE/_apps/$APP"
+
+      - name: Smoke one repeat
+        if: matrix.app == 'oinkoin'
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/runner_share.py --app "$APP" --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP" --repeats 1
+
+      - name: Measure three repeats
+        if: matrix.app != 'oinkoin'
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          python3 tools/measure/runner_share.py --app "$APP" --app-dir "$GITHUB_WORKSPACE/_apps/$APP" --out "$RUNNER_TEMP/out/$APP" --repeats 3
+
+      - name: Upload measurement data
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runner-share-${{ matrix.app }}
+          path: ${{ runner.temp }}/out/${{ matrix.app }}/**
+          if-no-files-found: warn

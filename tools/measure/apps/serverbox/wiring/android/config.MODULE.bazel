@@ -1,0 +1,49 @@
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.0")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk, "androidsdk")
+register_toolchains("@androidsdk//:all")
+
+android_ndk = use_extension("@rules_flutter//flutter:extensions.bzl", "android_ndk")
+use_repo(android_ndk, "androidndk", "androidndk_cmake")
+register_toolchains("@androidndk//:all")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+use_repo(maven, "flutter_maven")
+
+plugins = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter_plugins_ext")
+plugins.project(
+    abis = ["arm64-v8a"],
+    embedding = "//android/app:flutter_embedding",
+    extra_artifacts = [
+        # App-owned widget sources use kotlinx.coroutines directly.
+        "androidx.activity:activity:1.9.0",
+        "androidx.lifecycle:lifecycle-viewmodel:2.6.1",
+        "androidx.savedstate:savedstate:1.2.1",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3",
+    ],
+    maven_repo = "@flutter_maven//:pin",
+    metadata = "//:.flutter-plugins-dependencies",
+    package_config = "@pub//:package_config.json",
+)
+plugins.package(
+    name = "flutter_secure_storage",
+    artifacts = ["androidx.collection:collection-jvm:1.4.2"],
+)
+plugins.package(
+    name = "url_launcher_android",
+    bzl_file = "//bazel/flutter:serverbox_fixes.bzl",
+    macro = "url_launcher_android_recipe",
+)
+use_repo(plugins, "flutter_plugins")
+
+include("//:plugin_deps.MODULE.bazel")
