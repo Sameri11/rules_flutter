@@ -52,6 +52,7 @@ def main(build_path, flutter_version):
     text = text.replace('    abis = ["arm64-v8a"],\n', "", 1)
     found = 0
     extra_srcs = []
+    extra_data = []
     for start, end, call in calls(text, "flutter_test"):
         call, n = re.subn(r"(?m)^(\s*)app\s*=", r"\1package =", call, count=1)
         srcs_match = re.search(r"(?m)^\s*srcs\s*=\s*([^\n]+)", call)
@@ -59,12 +60,18 @@ def main(build_path, flutter_version):
             expression = srcs_match.group(1).rstrip(",").strip()
             if expression not in extra_srcs:
                 extra_srcs.append(expression)
+        data_match = re.search(r"(?m)^\s*data\s*=\s*([^\n]+)", call)
+        if data_match:
+            expression = data_match.group(1).rstrip(",").strip()
+            if expression not in extra_data:
+                extra_data.append(expression)
         if n:
             found += 1
             text = text[:start] + call + text[end:]
     if not found:
         raise SystemExit("no historical flutter_test(app=...) calls in %s" % path)
     grouped_extra_srcs = " + ".join(extra_srcs) if extra_srcs else "[]"
+    grouped_data = " + ".join(extra_data) if extra_data else "[]"
     suite_calls = list(calls(text, "test_suite"))
     for start, end, call in suite_calls:
         if 'name = "flutter_tests"' not in call:
@@ -96,6 +103,7 @@ flutter_test_suite_grouped(
     package = ":app",
     srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
     extra_srcs = %s,
+    data = %s,
     policy = "directory",
 )
 
@@ -104,10 +112,11 @@ flutter_test_suite_grouped(
     package = ":app",
     srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
     extra_srcs = %s,
+    data = %s,
     policy = "count",
     group_size = 4,
 )
-""" % (grouped_extra_srcs, grouped_extra_srcs)
+""" % (grouped_extra_srcs, grouped_data, grouped_extra_srcs, grouped_data)
     text += """
 
 flutter_test_suite_grouped(
@@ -115,11 +124,12 @@ flutter_test_suite_grouped(
     package = ":app",
     srcs = glob(["test/**/*_test.dart"], exclude = ["test/runner_floor_test.dart"]),
     extra_srcs = %s,
+    data = %s,
     policy = "time",
     group_size = 4,
     file_times = %s,
 )
-""" % (grouped_extra_srcs, time_map)
+""" % (grouped_extra_srcs, grouped_data, time_map)
     text += """
 
 flutter_test(
