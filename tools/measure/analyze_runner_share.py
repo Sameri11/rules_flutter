@@ -11,6 +11,7 @@ import math
 import xml.etree.ElementTree as ET
 
 
+import heapq
 def profile(path):
     with gzip.open(path, "rt", encoding="utf-8") as handle:
         doc = json.load(handle)
@@ -130,6 +131,42 @@ def projection(count, grouping, fixed_s, concurrency, median_wall):
     return {"targets": count, "groups": groups, "saved_wall_s": saved,
             "saved_wall_fraction": saved / median_wall if median_wall else None}
 
+def list_makespan(durations, slots):
+    available = [0.0] * slots
+    heapq.heapify(available)
+    for duration in durations:
+        earliest = heapq.heappop(available)
+        heapq.heappush(available, earliest + duration)
+    return max(available, default=0.0)
+
+
+def wave_projection(runs, grouping, fixed_s, passing_only):
+    per_run = []
+    for run in runs.values():
+        runners = sorted((runner for runner in run["runners"]
+                          if not passing_only or runner["status"] == "passed"),
+                         key=lambda runner: runner["label"])
+        body_times = [max(0.0, runner["wall_s"] - fixed_s) for runner in runners]
+        file_times = [fixed_s + body for body in body_times]
+        group_size = len(body_times) if grouping == "all" else grouping
+        grouped_times = [fixed_s + sum(body_times[index:index + group_size])
+                         for index in range(0, len(body_times), group_size)]
+        baseline = list_makespan(file_times, 4)
+        grouped = list_makespan(grouped_times, 4)
+        per_run.append({"per_file_makespan_s": baseline, "grouped_makespan_s": grouped,
+                        "saved_wall_s": baseline - grouped, "targets": len(body_times),
+                        "groups": len(grouped_times)})
+    return {"targets": per_run[0]["targets"] if per_run else 0,
+            "groups": per_run[0]["groups"] if per_run else 0,
+            "per_file_makespan_median_s": statistics.median(
+                row["per_file_makespan_s"] for row in per_run) if per_run else None,
+            "grouped_makespan_median_s": statistics.median(
+                row["grouped_makespan_s"] for row in per_run) if per_run else None,
+            "saved_wall_median_s": statistics.median(
+                row["saved_wall_s"] for row in per_run) if per_run else None,
+            "per_run": per_run,
+            "formula": "group body = sum(max(0, runner_wall - fixed_process)); add fixed_process once; list-schedule groups on 4 slots"}
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -168,6 +205,7 @@ def main():
                   if runner["status"] == "failed"]
     all_times = pass_times + fail_times
     projections = {"all_targets": {}, "passing_targets_only": {}}
+    wave_projections = {"all_targets": {}, "passing_targets_only": {}}
     if fixed is not None:
         for key, count, observed in (("all_targets", suite_count, concurrency),
                                      ("passing_targets_only", passing_count, passing_concurrency)):
@@ -176,7 +214,10 @@ def main():
                 projections[key][str(group)]["formula"] = (
                     "fixed_process_s * (runner_count - ceil(runner_count/g)) / observed_concurrency"
                 )
-    mnemonics = sorted({name for row in runs.values() for name in row["mnemonic_wall_s"]})
+        for key, passing_only in (("all_targets", False), ("passing_targets_only", True)):
+            for group in (4, 16, "all"):
+                wave_projections[key][str(group)] = wave_projection(
+                    runs, group, fixed, passing_only)
     result = {"app": args.app, "runs": runs, "runner_floor": floor_result,
               "synthetic_defines": synthetic_result,
               "wall_median_s": median_wall,
@@ -200,7 +241,8 @@ def main():
               "runner_spawn_passing": timing_stats(pass_times, fixed or 0.0),
               "runner_spawn_failing": timing_stats(fail_times, fixed or 0.0),
               "runner_spawn_all": timing_stats(all_times, fixed or 0.0),
-              "fixed_process_s": fixed, "grouping_projection": projections}
+              "fixed_process_s": fixed, "grouping_projection": projections,
+              "wave_aware_grouping_projection": wave_projections}
     (root / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))
 
