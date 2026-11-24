@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [serverbox]
+        app: [oinkoin, serverbox]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -29,8 +29,8 @@ jobs:
 
       - uses: ./.github/actions/flutter-bazel
         with:
-          flutter-version: 3.50.1
-          flutter-sha256: 4ad17fc8462fbcef2ba19ff4a78c0a16b7147fde1add8578e267ea62cdb92678
+          flutter-version: 3.47.3
+          flutter-sha256: 988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1
           bazelisk-version: v1.29.0
           bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
           cache-mode: ''
