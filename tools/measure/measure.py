@@ -256,7 +256,7 @@ def fetch_upstream(app, dest):
     if not patch.is_file():
         fail("missing %s" % patch)
     _git(["apply", "--whitespace=nowarn", str(patch)], cwd=dest)
-    if (dest / ".gitmodules").is_file():
+    if (dest / ".gitmodules").is_file() and app != "serverbox":
         _git(["submodule", "update", "--init", "--recursive", "--depth", "1", "--quiet"], cwd=dest)
     for patch in sorted((APPS_DIR / app).glob("submodule-*.patch")):
         # A submodule patch is named submodule-<name>.patch and applies to packages/<name>.
