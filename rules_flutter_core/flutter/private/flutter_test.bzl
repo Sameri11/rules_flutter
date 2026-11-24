@@ -905,7 +905,7 @@ def flutter_test_group(
         src = tests[0],
         srcs = [f for f in all_srcs if f != tests[0]],
         prunable_srcs = [],
-        data = data,
+        data = _dedupe(data),
         goldens = group_goldens if goldens == None else goldens,
         materialize = _materialize_dirs(materialize),
         materialize_mode = materialize_mode,
