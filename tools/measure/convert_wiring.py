@@ -104,6 +104,7 @@ flutter_test(
         'flutter.sdk(version = "3.47.3")',
         'flutter.sdk(version = "%s")' % flutter_version,
     )
+    module.write_text(module_text)
     (path.parent / ".bazelversion").write_text("9.2.0\n")
     print("converted %d per-file flutter_test declarations in %s" % (found, path))
 
