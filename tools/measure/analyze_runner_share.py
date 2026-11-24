@@ -218,6 +218,7 @@ def main():
             for group in (4, 16, "all"):
                 wave_projections[key][str(group)] = wave_projection(
                     runs, group, fixed, passing_only)
+    mnemonics = sorted({name for row in runs.values() for name in row["mnemonic_wall_s"]})
     result = {"app": args.app, "runs": runs, "runner_floor": floor_result,
               "synthetic_defines": synthetic_result,
               "wall_median_s": median_wall,
