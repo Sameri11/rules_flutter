@@ -81,6 +81,14 @@ flutter_test(
 )
 """
     path.write_text(text)
+    test_dir = path.parent / "test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    (test_dir / "runner_floor_test.dart").write_text(
+        "import 'package:flutter_test/flutter_test.dart';\n\n"
+        "void main() {\n"
+        "  test('empty', () {});\n"
+        "}\n"
+    )
     module = path.parent / "MODULE.bazel"
     module_text = module.read_text()
     module_text = module_text.replace(
