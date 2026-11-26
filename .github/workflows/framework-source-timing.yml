@@ -1,0 +1,50 @@
+name: Framework source fetch timing
+
+on:
+  push:
+    branches: [prototype/framework-source-fetch]
+
+permissions:
+  contents: read
+
+jobs:
+  timing:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            dart: linux-x64
+          - os: macos-latest
+            dart: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      COMMIT: ae9b586f34a8443573f82ef57c3bf914a908cbf7
+      ENGINE: 51379e6df48ea8ee7205623b90fe66491cad8df3
+      PINNED_SHA256: 33348aa8fac453bd49637faf76122c50e74c298794366cd20de0e9acd2de561a
+    steps:
+      - name: Archive tarball, three cold downloads
+        run: |
+          for i in 1 2 3; do
+            rm -f fw.tgz
+            curl -sSfL -o fw.tgz \
+              -w "tarball run=$i ttfb=%{time_starttransfer}s total=%{time_total}s bytes=%{size_download} speed=%{speed_download}B/s\n" \
+              "https://github.com/flutter/flutter/archive/${COMMIT}.tar.gz"
+            echo "tarball run=$i sha256=$(shasum -a 256 fw.tgz | cut -d' ' -f1) pinned=${PINNED_SHA256}"
+          done
+      - name: Git partial fetch and sparse checkout
+        run: |
+          TIMEFORMAT='%R'
+          git init -q src
+          cd src
+          git remote add origin https://github.com/flutter/flutter
+          git config core.sparseCheckout true
+          printf '/packages/\n/bin/\n/pubspec.lock\n/pubspec.yaml\n' > .git/info/sparse-checkout
+          t_fetch=$( { time git fetch -q --depth 1 --filter=blob:none origin "$COMMIT" >/dev/null; } 2>&1 )
+          t_checkout=$( { time git checkout -q FETCH_HEAD >/dev/null; } 2>&1 )
+          echo "git fetch=${t_fetch}s checkout=${t_checkout}s git_dir_kib=$(du -sk .git | cut -f1) tree_kib=$(du -sk packages bin pubspec.lock pubspec.yaml | awk '{s+=$1} END {print s}')"
+      - name: Storage control download
+        run: |
+          curl -sSfL -o dart.zip \
+            -w "storage ttfb=%{time_starttransfer}s total=%{time_total}s bytes=%{size_download} speed=%{speed_download}B/s\n" \
+            "https://storage.googleapis.com/flutter_infra_release/flutter/${ENGINE}/dart-sdk-${{ matrix.dart }}.zip"
