@@ -8,7 +8,7 @@ Platform-specific extensions load from their owning ruleset.
 """
 
 load("//flutter/private:pub_lock.bzl", _pub = "pub")
-load("//flutter/private:repo.bzl", _flutter = "flutter")
+load("//flutter/private:sdk_pins.bzl", _flutter = "flutter_sdk_extension")
 
 # These names are the public extension API consumed by MODULE.bazel.
 flutter = _flutter

@@ -41,7 +41,9 @@ bazel_dep(name = "rules_jvm_external", version = "7.1")
 bazel_dep(name = "rules_kotlin", version = "2.4.0")
 
 flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
-flutter.sdk(version = "3.47.3")
+flutter.host_sdk(version = "3.47.3")
+
+use_repo(flutter, "flutter_sdk", "flutter_tools_packages")
 
 pub = use_extension("@rules_flutter_core//flutter:extensions.bzl", "pub")
 pub.lock(

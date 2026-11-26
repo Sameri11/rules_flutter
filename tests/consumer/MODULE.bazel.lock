@@ -681,25 +681,6 @@
         }
       }
     },
-    "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
-      "general": {
-        "bzlTransitiveDigest": "9Hx5kGEKC/sgTc5J67Ug57gIj4TMJb+/igr0dTczbpk=",
-        "usagesDigest": "zE2eX5BJLUg1Wa4OM6Ev7+zc7WGOwfFMm+K+2/l8I/0=",
-        "recordedInputs": [],
-        "generatedRepoSpecs": {
-          "flutter_sdk": {
-            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_sdk",
-            "attributes": {
-              "version": "3.50.1"
-            }
-          },
-          "flutter_tools_packages": {
-            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_tools_packages",
-            "attributes": {}
-          }
-        }
-      }
-    },
     "@@sameri11_rules_flutter_core+//flutter/private:toolchain_repo.bzl%flutter_toolchains": {
       "general": {
         "bzlTransitiveDigest": "VYXSJyUy+fg49VC4uQo7cEm4X57ktEMcOns+dR2TG5Q=",
@@ -1042,6 +1023,113 @@
           "go1.25.0.windows-arm64.zip",
           "27bab004c72b3d7bd05a69b6ec0fc54a309b4b78cc569dd963d8b3ec28bfdb8c"
         ]
+      }
+    },
+    "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
+      "3.50.1": {
+        "dart_sdk_version": "3.14.0",
+        "engine_content_hash": "51379e6df48ea8ee7205623b90fe66491cad8df3",
+        "engine_revision": "4d35714800b9266b6693a58e1225ecd7e9e45ed7",
+        "framework_commit": "ae9b586f34a8443573f82ef57c3bf914a908cbf7",
+        "framework_commit_date": "2026-11-19T01:01:07Z",
+        "gradle_wrapper_version": "flutter_infra_release/gradle-wrapper/fd5c1f2c013565a3bea56ada6df9d2b8e96d56aa/gradle-wrapper.tgz",
+        "hosts": {
+          "linux-x64": {
+            "dart-sdk": {
+              "sha256": "62886210d58c796a161d8021b5d307272dfc37c13a11ba656c9af2d16b9e73f6",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/dart-sdk-linux-x64.zip"
+            },
+            "engine_stamp": {
+              "sha256": "0c17bd6f88e38eccb6cf0914b480bb0000bd0bb2205004e5eed2d4ca74f8c33f",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/engine_stamp.json"
+            },
+            "flutter_gpu": {
+              "sha256": "43eae9a8965a1854cab5d407cafbce2a386ff9600e207a0c3978dbf5ebe95fe6",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/flutter_gpu.zip"
+            },
+            "flutter_patched_sdk": {
+              "sha256": "6a323c81b94ef16fa6bc0d051768aa0b4e7c2f24356b58f491752623f4a063a0",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/flutter_patched_sdk.zip"
+            },
+            "flutter_patched_sdk_product": {
+              "sha256": "8af7e44890f905b8d4b4cac894f6f937ddab3b48aa40eee59c41f2fde941e6cd",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/flutter_patched_sdk_product.zip"
+            },
+            "font_subset": {
+              "sha256": "c799b8949f71040914258cd55115ed8ec55b186eb0ddfcb7b6d579b57a66660a",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/linux-x64/font-subset.zip"
+            },
+            "framework_source": {
+              "sha256": "33348aa8fac453bd49637faf76122c50e74c298794366cd20de0e9acd2de561a",
+              "url": "https://github.com/flutter/flutter/archive/ae9b586f34a8443573f82ef57c3bf914a908cbf7.tar.gz"
+            },
+            "gradle_wrapper": {
+              "sha256": "31e9428baf1a2b2f485f1110c5899f852649b33d46a2e9b07f9d17752d50190a",
+              "url": "https://storage.googleapis.com/flutter_infra_release/gradle-wrapper/fd5c1f2c013565a3bea56ada6df9d2b8e96d56aa/gradle-wrapper.tgz"
+            },
+            "host_artifacts": {
+              "sha256": "572f5ac049fb8adb21a442329eeaa866328971792f28c20302fa8a99bea583d8",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/linux-x64/artifacts.zip"
+            },
+            "material_fonts": {
+              "sha256": "e56fa8e9bb4589fde964be3de451f3e5b251e4a1eafb1dc98d94add034dd5a86",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/fonts/3012db47f3130e62f7cc0beabff968a33cbec8d8/fonts.zip"
+            },
+            "sky_engine": {
+              "sha256": "f6b0f1151d651ef6eb6c16d1e19aeb99f94ddfb4f119165506a464d650c41075",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/sky_engine.zip"
+            }
+          },
+          "macos-arm64": {
+            "dart-sdk": {
+              "sha256": "65e69eecaf330c307955b6138de0539c13726719be9ddc6af8b3babf95eb1a7f",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/dart-sdk-darwin-arm64.zip"
+            },
+            "engine_stamp": {
+              "sha256": "0c17bd6f88e38eccb6cf0914b480bb0000bd0bb2205004e5eed2d4ca74f8c33f",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/engine_stamp.json"
+            },
+            "flutter_gpu": {
+              "sha256": "43eae9a8965a1854cab5d407cafbce2a386ff9600e207a0c3978dbf5ebe95fe6",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/flutter_gpu.zip"
+            },
+            "flutter_patched_sdk": {
+              "sha256": "6a323c81b94ef16fa6bc0d051768aa0b4e7c2f24356b58f491752623f4a063a0",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/flutter_patched_sdk.zip"
+            },
+            "flutter_patched_sdk_product": {
+              "sha256": "8af7e44890f905b8d4b4cac894f6f937ddab3b48aa40eee59c41f2fde941e6cd",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/flutter_patched_sdk_product.zip"
+            },
+            "font_subset": {
+              "sha256": "f2e6e66757ac6aea2b08e41f03c22a18463e250ea6112c1335a3bcac634dffdf",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/darwin-arm64/font-subset.zip"
+            },
+            "framework_source": {
+              "sha256": "33348aa8fac453bd49637faf76122c50e74c298794366cd20de0e9acd2de561a",
+              "url": "https://github.com/flutter/flutter/archive/ae9b586f34a8443573f82ef57c3bf914a908cbf7.tar.gz"
+            },
+            "gradle_wrapper": {
+              "sha256": "31e9428baf1a2b2f485f1110c5899f852649b33d46a2e9b07f9d17752d50190a",
+              "url": "https://storage.googleapis.com/flutter_infra_release/gradle-wrapper/fd5c1f2c013565a3bea56ada6df9d2b8e96d56aa/gradle-wrapper.tgz"
+            },
+            "host_artifacts": {
+              "sha256": "0890ca45210e7b43ab430ed4529952119583bdfa8418507abb847699661f4676",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/darwin-arm64/artifacts.zip"
+            },
+            "material_fonts": {
+              "sha256": "e56fa8e9bb4589fde964be3de451f3e5b251e4a1eafb1dc98d94add034dd5a86",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/fonts/3012db47f3130e62f7cc0beabff968a33cbec8d8/fonts.zip"
+            },
+            "sky_engine": {
+              "sha256": "f6b0f1151d651ef6eb6c16d1e19aeb99f94ddfb4f119165506a464d650c41075",
+              "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/sky_engine.zip"
+            }
+          }
+        },
+        "material_fonts_version": "flutter_infra_release/flutter/fonts/3012db47f3130e62f7cc0beabff968a33cbec8d8/fonts.zip",
+        "schema": 1,
+        "version": "3.50.1"
       }
     }
   },
