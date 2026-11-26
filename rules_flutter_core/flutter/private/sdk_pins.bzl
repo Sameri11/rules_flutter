@@ -2,7 +2,6 @@
 
 load(":repo.bzl", "flutter_sdk", "flutter_tools_packages")
 load(":sdk_tree.bzl", "sdk_tree")
-load(":sdk_artifact.bzl", "sdk_artifact")
 
 _HOSTS = {
     "macos-arm64": {"release_os": "macos", "release_arch": "arm64", "engine_os": "darwin-arm64", "dart": "darwin-arm64"},
@@ -151,6 +150,7 @@ def _pin_version(ctx, version, overrides, existing):
 
     existing_hosts = existing.get("hosts", {}) if type(existing) == "dict" else {}
     hosts = {}
+    pending = []
     for host, host_spec in _HOSTS.items():
         pieces = {}
         old_pieces = existing_hosts.get(host, {})
@@ -191,9 +191,23 @@ def _pin_version(ctx, version, overrides, existing):
             if not sha and type(old_pin) == "dict" and old_pin.get("url") == url:
                 sha = old_pin.get("sha256", "")
             if not sha:
-                sha = _download(ctx, url, "pin_{}_{}.bin".format(host, name))
+                pending.append((
+                    host,
+                    name,
+                    ctx.download(
+                        url = url,
+                        output = "pin_{}_{}.bin".format(host, name),
+                        allow_fail = True,
+                        block = False,
+                    ),
+                ))
             pieces[name] = {"url": url, "sha256": sha}
         hosts[host] = pieces
+    for host, name, download in pending:
+        result = download.wait()
+        if not result.success:
+            fail("Could not resolve Flutter SDK metadata for {}: {}".format(name, result))
+        hosts[host][name]["sha256"] = result.sha256
     return {
         "schema": _SCHEMA,
         "version": version,
@@ -219,10 +233,6 @@ def _host_key(module_ctx):
         fail("Flutter SDK provisioning does not support host {} {}.".format(module_ctx.os.name, module_ctx.os.arch))
     return key
 
-
-def _piece_label(host, piece):
-    repo = "flutter_sdk_{}_{}".format(host, piece.replace("-", "_"))
-    return "@{}//:BUILD.bazel".format(repo)
 
 
 def _flutter_extension_impl(module_ctx):
@@ -250,66 +260,32 @@ def _flutter_extension_impl(module_ctx):
             "urls": tag.urls,
             "base_url": tag.base_url,
         }, pins if type(pins) == "dict" else {})
-    for host, pieces in pins["hosts"].items():
-        for piece, pin in pieces.items():
-            _, archive_type, strip_prefix = _PIECES[piece]
-            if piece == "framework_source":
-                strip_prefix = "flutter-" + pins["framework_commit"]
-            urls = tag.urls.get(piece, [pin["url"]])
-            base_url = tag.base_url.rstrip("/")
-            if base_url and not tag.urls.get(piece) and pin["url"].startswith(_STORAGE_ROOT):
-                urls = [base_url + pin["url"][len(_STORAGE_ROOT):]]
-            sdk_artifact(
-                name = "flutter_sdk_{}_{}".format(host, piece.replace("-", "_")),
-                urls = urls,
-                sha256 = tag.sha256.get(piece, pin["sha256"]),
-                archive_type = archive_type,
-                strip_prefix = strip_prefix,
-                file_name = "engine_stamp.json" if piece == "engine_stamp" else "artifact.json",
-            )
     host = _host_key(module_ctx)
-    repos = {piece: _piece_label(host, piece) for piece in pins["hosts"][host]}
-    ios_usb_versions = {}
-    if host == "macos-arm64":
-        ios_usb_versions = pins["ios_usb_versions"]
-    ios_usb_names = sorted(pins["ios_usb_versions"].keys())
-    ios_usb_repos = []
-    if host == "macos-arm64":
-        ios_usb_repos = [
-            _piece_label(host, "ios_usb_" + artifact)
-            for artifact in ios_usb_names
-        ]
-    cache_inputs = [
-        repos["framework_source"].replace("BUILD.bazel", "all"),
-        repos["dart-sdk"].replace("BUILD.bazel", "all"),
-        repos["flutter_patched_sdk"].replace("BUILD.bazel", "all"),
-        repos["flutter_patched_sdk_product"].replace("BUILD.bazel", "all"),
-        repos["sky_engine"].replace("BUILD.bazel", "all"),
-        repos["flutter_gpu"].replace("BUILD.bazel", "all"),
-        repos["host_artifacts"].replace("BUILD.bazel", "all"),
-        repos["font_subset"].replace("BUILD.bazel", "all"),
-        repos["material_fonts"].replace("BUILD.bazel", "all"),
-        repos["gradle_wrapper"].replace("BUILD.bazel", "all"),
-        "@flutter_sdk_{}_engine_stamp//:all".format(host),
-    ]
-    for label in ios_usb_repos:
-        cache_inputs.append(label.replace("BUILD.bazel", "all"))
+    selected = pins["hosts"][host]
+    urls = {}
+    sha256 = {}
+    archive_types = {}
+    strip_prefixes = {}
+    for piece, pin in selected.items():
+        _, archive_type, strip_prefix = _PIECES[piece]
+        if piece == "framework_source":
+            strip_prefix = "flutter-" + pins["framework_commit"]
+        piece_urls = tag.urls.get(piece, [pin["url"]])
+        base_url = tag.base_url.rstrip("/")
+        if base_url and not tag.urls.get(piece) and pin["url"].startswith(_STORAGE_ROOT):
+            piece_urls = [base_url + pin["url"][len(_STORAGE_ROOT):]]
+        urls[piece] = piece_urls
+        sha256[piece] = tag.sha256.get(piece, pin["sha256"])
+        archive_types[piece] = archive_type
+        strip_prefixes[piece] = strip_prefix
+    ios_usb_versions = pins["ios_usb_versions"] if host == "macos-arm64" else {}
     sdk_tree(
         name = "flutter_sdk",
-        framework_source = repos["framework_source"],
-        dart_sdk = repos["dart-sdk"],
-        patched_sdk = repos["flutter_patched_sdk"],
-        patched_sdk_product = repos["flutter_patched_sdk_product"],
-        sky_engine = repos["sky_engine"],
-        flutter_gpu = repos["flutter_gpu"],
-        host_artifacts = repos["host_artifacts"],
-        font_subset = repos["font_subset"],
-        material_fonts = repos["material_fonts"],
-        gradle_wrapper = repos["gradle_wrapper"],
-        engine_stamp = "@flutter_sdk_{}_engine_stamp//:engine_stamp.json".format(host),
-        ios_usb_artifacts = ios_usb_repos,
-        ios_usb_names = ios_usb_names,
-        tools_cache_inputs = cache_inputs,
+        urls = urls,
+        sha256 = sha256,
+        archive_types = archive_types,
+        strip_prefixes = strip_prefixes,
+        ios_usb_names = sorted(ios_usb_versions.keys()),
         engine_host_dir = "darwin-x64" if host.startswith("macos") else "linux-x64",
         engine_revision = pins["engine_revision"],
         engine_content_hash = pins["engine_content_hash"],

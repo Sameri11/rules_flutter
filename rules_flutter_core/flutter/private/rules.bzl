@@ -20,9 +20,9 @@ module extension (pub_lock.bzl) turns the app's `pubspec.lock` into a hub
 repository holding a package config whose rootUris are all relative, hosted
 packages as sha256-pinned repositories, and the Flutter SDK's own packages as
 `toolchain.sdk_packages`. No package is resolved through `~/.pub-cache`,
-`.dart_tool/` or the SDK by absolute path, so these actions are sandboxed and
-their keys and outputs do not depend on where the packages sit. The flutter
-tool the assets action runs is still a host input (see `_ASSETS_EXEC`).
+`.dart_tool/` or the SDK by absolute path. Their keys and outputs do not depend
+on where packages sit. The Flutter executable is a declared input from the
+provisioned tool tree.
 """
 
 load("@bazel_skylib//lib:paths.bzl", "paths")
@@ -109,7 +109,7 @@ flutter_target_slices = flutter_target_slices_rule(_platform_slice_transition)
 
 visibility(["//flutter"])
 
-_ASSETS_EXEC = {"no-remote-exec": "1"}
+
 
 def _repository_path(ctx, file, attribute):
     """A source file's path within the repository owning this rule."""
@@ -1464,7 +1464,7 @@ rm -rf "{dir}/native_assets"
         dir = _bundle_dir(out, slice_id, index),
     )
 
-def _stage_flutter_assets(ctx, toolchain, platform_env):
+def _stage_flutter_assets(ctx, toolchain, platform_env, use_staged_sdk = False):
     """Declares a flutter_assets bundle's inputs and stages them for flutter_tools.
 
     The application bundle and the tester bundle read the same files, so both stage
@@ -1510,7 +1510,11 @@ def _stage_flutter_assets(ctx, toolchain, platform_env):
         if component
     ])
 
-    flutter_root = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{launcher}")"
+    if use_staged_sdk:
+        flutter_root = """export FLUTTER_ROOT="$STAGE/sdk"
+""".format()
+    else:
+        flutter_root = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{launcher}")"
 export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
 """.format(launcher = toolchain.flutter.path)
 
@@ -1572,7 +1576,7 @@ def _flutter_assets_impl(ctx):
 
     toolchain = _flutter_toolchain(ctx)
     build_env = ctx.attr.native_build_env[FlutterNativeBuildEnvInfo] if ctx.attr.native_build_env else None
-    staged = _stage_flutter_assets(ctx, toolchain, build_env.exports if build_env else "")
+    staged = _stage_flutter_assets(ctx, toolchain, build_env.exports if build_env else "", use_staged_sdk = True)
     hook_packages = None
     for target in ctx.attr.pub_srcs:
         if FlutterHookPackagesInfo in target:
@@ -1665,7 +1669,6 @@ for stamp in "$SDK_ROOT"/bin/cache/*.stamp; do
     cp -L "$stamp" "$ROOT/bin/cache/$(basename "$stamp")"
 done
 cp -L "$SDK_ROOT/bin/cache/artifacts/engine/engine_stamp.json" "$ROOT/bin/cache/engine_stamp.json"
-export FLUTTER_ROOT="$ROOT"
 export FLUTTER_ALREADY_LOCKED=true
 export HOME="$STAGE/home"
 mkdir -p "$HOME"
@@ -1717,13 +1720,13 @@ python3 "$EXECROOT/{merger}" {merge_args}
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = staged.files + toolchain.piece_roots + toolchain.tools_packages.to_list() + toolchain.tools_cache_state.to_list() + [staged.manifest, toolchain.sdk_version, toolchain.dart, toolchain.tools_package_config, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot],
+            direct = staged.files + toolchain.piece_roots + toolchain.tools_packages.to_list() + toolchain.tools_cache_state.to_list() + [staged.manifest, toolchain.sdk_version, toolchain.dart, toolchain.tools_package_config, ctx.file._merger, ctx.file._bundle_guard, toolchain.tools_snapshot],
             transitive = [build_env.files] if build_env else [],
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",
         progress_message = "Bundling Flutter assets %{label}",
-        execution_requirements = _ASSETS_EXEC,
+
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -1826,7 +1829,7 @@ def _flutter_test_assets_impl(ctx):
         outputs = [out],
         mnemonic = "FlutterTestAssets",
         progress_message = "Bundling test assets %{label}",
-        execution_requirements = _ASSETS_EXEC,
+        execution_requirements = {"no-remote-exec": "1"},
     )
 
     return [DefaultInfo(files = depset([out]))]

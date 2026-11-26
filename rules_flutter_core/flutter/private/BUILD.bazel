@@ -87,7 +87,6 @@ exports_files(
         "repo.bzl",
         "rules.bzl",
         "flutter_tools_snapshot.bzl",
-        "sdk_artifact.bzl",
         "test_kernel_driver.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],

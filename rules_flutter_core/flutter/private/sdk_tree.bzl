@@ -3,24 +3,45 @@
 visibility(["//flutter"])
 
 
-def _repo_root(ctx, label):
-    return ctx.path(label).dirname
-
-
 def _sdk_tree_impl(ctx):
-    framework = _repo_root(ctx, ctx.attr.framework_source)
-    dart_archive = _repo_root(ctx, ctx.attr.dart_sdk)
-    dart = dart_archive.get_child("dart-sdk")
-    patched = _repo_root(ctx, ctx.attr.patched_sdk)
-    patched_product = _repo_root(ctx, ctx.attr.patched_sdk_product)
-    sky = _repo_root(ctx, ctx.attr.sky_engine)
-    gpu = _repo_root(ctx, ctx.attr.flutter_gpu)
-    host = _repo_root(ctx, ctx.attr.host_artifacts)
-    font_subset = _repo_root(ctx, ctx.attr.font_subset)
-    fonts = _repo_root(ctx, ctx.attr.material_fonts)
-    gradle = _repo_root(ctx, ctx.attr.gradle_wrapper)
-    engine_stamp = ctx.path(ctx.attr.engine_stamp)
+    downloads = {}
+    ctx.file("downloads/.keep", "")
+    ctx.file("pieces/.keep", "")
+    for piece, urls in ctx.attr.urls.items():
+        downloads[piece] = ctx.download(
+            url = urls,
+            output = "downloads/" + piece,
+            sha256 = ctx.attr.sha256[piece],
+            block = False,
+        )
+    for piece, download in downloads.items():
+        result = download.wait()
+        if not result.success:
+            fail("Could not download Flutter SDK piece {}: {}".format(piece, result))
+    for piece in downloads:
+        archive = "downloads/" + piece
+        if piece == "engine_stamp":
+            ctx.rename(archive, "pieces/engine_stamp.json")
+        else:
+            ctx.extract(
+                archive,
+                output = "pieces/" + piece,
+                type = ctx.attr.archive_types[piece],
+                strip_prefix = ctx.attr.strip_prefixes[piece],
+            )
 
+    framework = ctx.path("pieces/framework_source")
+    dart_archive = ctx.path("pieces/dart-sdk")
+    dart = dart_archive.get_child("dart-sdk")
+    patched = ctx.path("pieces/flutter_patched_sdk")
+    patched_product = ctx.path("pieces/flutter_patched_sdk_product")
+    sky = ctx.path("pieces/sky_engine")
+    gpu = ctx.path("pieces/flutter_gpu")
+    host = ctx.path("pieces/host_artifacts")
+    font_subset = ctx.path("pieces/font_subset")
+    fonts = ctx.path("pieces/material_fonts")
+    gradle = ctx.path("pieces/gradle_wrapper")
+    engine_stamp = ctx.path("pieces/engine_stamp.json")
     ctx.symlink(framework, "framework")
     ctx.symlink("framework/pubspec.yaml", "pubspec.yaml")
     ctx.symlink("framework/pubspec.lock", "pubspec.lock")
@@ -35,9 +56,9 @@ def _sdk_tree_impl(ctx):
     ctx.symlink(host, "bin/cache/artifacts/engine/{}".format(ctx.attr.engine_host_dir))
     ctx.symlink(fonts, "bin/cache/artifacts/material_fonts")
     ctx.symlink(gradle, "bin/cache/artifacts/gradle_wrapper")
-    for index, label in enumerate(ctx.attr.ios_usb_artifacts):
-        artifact = ctx.attr.ios_usb_names[index]
-        ctx.symlink(_repo_root(ctx, label), "bin/cache/artifacts/" + artifact)
+    for artifact in ctx.attr.ios_usb_names:
+        piece = "ios_usb_" + artifact
+        ctx.symlink(ctx.path("pieces/" + piece), "bin/cache/artifacts/" + artifact)
         ctx.file("bin/cache/{}.stamp".format(artifact), ctx.attr.ios_usb_versions[artifact])
 
     ctx.symlink(engine_stamp, "bin/cache/artifacts/engine/engine_stamp.json")
@@ -87,42 +108,41 @@ filegroup(name = \"dart_sdk_files\", srcs = glob([\"dart-sdk/**\"], allow_empty 
 filegroup(name = \"platform_product\", srcs = glob([\"flutter_patched_sdk_product/**\"]))
 filegroup(name = \"platform_debug\", srcs = glob([\"flutter_patched_sdk/**\"]))
 filegroup(name = \"sdk_packages\", srcs = glob(%s, allow_empty = True))
-filegroup(name = \"flutter_tools_cache_state\", srcs = [
-    \"bin/cache/engine.stamp\",
-    \"bin/cache/engine_stamp.stamp\",
-    \"bin/cache/flutter_sdk.stamp\",
-    \"bin/cache/font-subset.stamp\",
-    \"bin/cache/material_fonts.stamp\",
-    \"bin/cache/gradle_wrapper.stamp\",
-    \"bin/cache/engine.realm\",
-    \"bin/cache/flutter.version.json\",
+filegroup(name = "flutter_tools_cache_state", srcs = [
+    "bin/cache/engine.stamp",
+    "bin/cache/engine_stamp.stamp",
+    "bin/cache/flutter_sdk.stamp",
+    "bin/cache/font-subset.stamp",
+    "bin/cache/material_fonts.stamp",
+    "bin/cache/gradle_wrapper.stamp",
+    "bin/cache/engine.realm",
+    "bin/cache/flutter.version.json",
     "bin/cache/artifacts/engine/engine_stamp.json",
-] + %s + %s)
+] + glob(["pieces/**"], allow_empty = True) + %s)
 """ % (
         repr(globs),
-        repr([str(label) for label in ctx.attr.tools_cache_inputs]),
-        repr(["bin/cache/{}.stamp".format(name) for name in ctx.attr.ios_usb_versions]),
+        repr(["bin/cache/{}.stamp".format(name) for name in ctx.attr.ios_usb_names]),
     )
-    for name, label in [
-        ("framework_source_root", ctx.attr.framework_source),
-        ("dart_sdk_root", ctx.attr.dart_sdk),
-        ("patched_sdk_root", ctx.attr.patched_sdk),
-        ("patched_sdk_product_root", ctx.attr.patched_sdk_product),
-        ("sky_engine_root", ctx.attr.sky_engine),
-        ("flutter_gpu_root", ctx.attr.flutter_gpu),
-        ("host_artifacts_root", ctx.attr.host_artifacts),
-        ("font_subset_root", ctx.attr.font_subset),
-        ("material_fonts_root", ctx.attr.material_fonts),
-        ("gradle_wrapper_root", ctx.attr.gradle_wrapper),
+    for name in [
+        "framework_source_root",
+        "dart_sdk_root",
+        "patched_sdk_root",
+        "patched_sdk_product_root",
+        "sky_engine_root",
+        "flutter_gpu_root",
+        "host_artifacts_root",
+        "font_subset_root",
+        "material_fonts_root",
+        "gradle_wrapper_root",
     ]:
-        build += "filegroup(name = %s, srcs = [%s])\n" % (repr(name), repr(str(label)))
-    for index, name in enumerate(ctx.attr.ios_usb_names):
-        srcs = []
-        if index < len(ctx.attr.ios_usb_artifacts):
-            srcs = [str(ctx.attr.ios_usb_artifacts[index])]
-        build += "filegroup(name = %s, srcs = %s)\n" % (
+        build += "filegroup(name = %s, srcs = [\"flutter.version.json\"])\n" % repr(name)
+    for name in ctx.attr.ios_usb_names:
+        piece = "ios_usb_" + name
+        marker = "pieces/" + piece + "/.bazel_root"
+        ctx.file(marker, "")
+        build += "filegroup(name = %s, srcs = [%s])\n" % (
             repr("ios_usb_" + name.replace("-", "_") + "_root"),
-            repr(srcs),
+            repr(marker),
         )
     ctx.file("BUILD.bazel", build)
     ctx.symlink("bin/cache/dart-sdk/bin/dart", "dart")
@@ -140,21 +160,12 @@ filegroup(name = \"flutter_tools_cache_state\", srcs = [
 sdk_tree = repository_rule(
     implementation = _sdk_tree_impl,
     attrs = {
-        "framework_source": attr.label(mandatory = True, allow_single_file = True),
-        "dart_sdk": attr.label(mandatory = True, allow_single_file = True),
-        "patched_sdk": attr.label(mandatory = True, allow_single_file = True),
-        "patched_sdk_product": attr.label(mandatory = True, allow_single_file = True),
-        "sky_engine": attr.label(mandatory = True, allow_single_file = True),
-        "flutter_gpu": attr.label(mandatory = True, allow_single_file = True),
-        "host_artifacts": attr.label(mandatory = True, allow_single_file = True),
-        "font_subset": attr.label(mandatory = True, allow_single_file = True),
-        "material_fonts": attr.label(mandatory = True, allow_single_file = True),
-        "gradle_wrapper": attr.label(mandatory = True, allow_single_file = True),
-        "engine_stamp": attr.label(mandatory = True, allow_single_file = True),
-        "ios_usb_artifacts": attr.label_list(),
+        "urls": attr.string_list_dict(mandatory = True),
+        "sha256": attr.string_dict(mandatory = True),
+        "archive_types": attr.string_dict(mandatory = True),
+        "strip_prefixes": attr.string_dict(mandatory = True),
         "ios_usb_names": attr.string_list(),
         "ios_usb_versions": attr.string_dict(),
-        "tools_cache_inputs": attr.label_list(mandatory = True),
         "engine_host_dir": attr.string(mandatory = True),
         "engine_revision": attr.string(mandatory = True),
         "engine_content_hash": attr.string(mandatory = True),

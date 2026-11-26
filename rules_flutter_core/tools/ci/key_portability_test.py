@@ -411,13 +411,19 @@ class Checker:
                 expected = ["ctx", "file", name]
                 if not _contains_attr(inputs, expected):
                     self.fail("D", "FlutterAssets inputs must declare ctx.file.{}".format(name))
-            for name in ("sdk_version", "flutter"):
-                if not _contains_attr(inputs, ["toolchain", name]):
-                    self.fail("D", "FlutterAssets inputs must declare toolchain.{}".format(name))
+            if not _contains_attr(inputs, ["toolchain", "sdk_version"]):
+                self.fail("D", "FlutterAssets inputs must declare toolchain.sdk_version")
+            if _contains_attr(inputs, ["toolchain", "flutter"]):
+                self.fail("D", "FlutterAssets must use its staged SDK root, not the host launcher path")
             if not _contains_attr(inputs, ["build_env", "files"]):
                 self.fail("D", "FlutterAssets inputs must declare the native build environment's files (build_env.files)")
             if _keyword(action, "tools") is not None:
-                self.fail("D", "FlutterAssets must not declare tools: it runs the host flutter tool, an undeclared input (see _ASSETS_EXEC)")
+                self.fail("D", "FlutterAssets must invoke the declared SDK tool tree, not a separate tools set")
+            execution = _keyword(action, "execution_requirements")
+            if isinstance(execution, ast.Name):
+                execution = _named_value(tree, execution.id)
+            if "no-remote-exec" in (_string_dict(execution) or {}):
+                self.fail("D", "FlutterAssets must remain eligible for remote execution")
             for path in (
                 ["toolchain", "frontend_server"],
                 ["toolchain", "platform_product"],
@@ -430,28 +436,19 @@ class Checker:
             ):
                 if _contains_attr(function, path):
                     self.fail("D", "FlutterAssets must not reference {}: the bundle takes no kernel or entrypoint".format(".".join(path)))
-            execution = _keyword(action, "execution_requirements")
-            if _name(execution) != "_ASSETS_EXEC":
-                self.fail("D", "FlutterAssets action must use _ASSETS_EXEC")
-        if _string_dict(_named_value(tree, "_ASSETS_EXEC")) != {"no-remote-exec": "1"}:
-            self.fail("D", "_ASSETS_EXEC must require only no-remote-exec: the action is sandboxed and cacheable")
 
-        staged_command = _staged_command(tree)
-        flutter_root = _formatted_template(_named_value(staging, "flutter_root"))
-        if staged_command is None or flutter_root is None:
-            self.fail("D", "the staged shell environment must be a format template")
-        else:
-            required = (
-                (staged_command, 'export PATH="/usr/bin:/bin"', "fixed PATH"),
-                (staged_command, 'export FLUTTER_ALREADY_LOCKED="true"', "FLUTTER_ALREADY_LOCKED export"),
-                (staged_command, 'export HOME="$STAGE/home"', "stage-local HOME"),
-                (staged_command, "$EXECROOT/{bundle_guard}", "the pubspec guard invocation"),
-            )
-            for text, token, description in required:
-                if token not in text:
-                    self.fail("D", "FlutterAssets shell must contain {}".format(description))
-            if "realpath" not in flutter_root or "dirname" not in flutter_root:
-                self.fail("D", "FlutterAssets must derive FLUTTER_ROOT from the flutter launcher's realpath")
+
+        staged_calls = [
+            node
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call) and _call_path(node) == ["_stage_flutter_assets"]
+        ]
+        if not any(
+            isinstance(_keyword(call, "use_staged_sdk"), ast.Constant) and
+            _keyword(call, "use_staged_sdk").value is True
+            for call in staged_calls
+        ):
+            self.fail("D", "FlutterAssets must derive FLUTTER_ROOT from its staged SDK tree")
 
         tester = _function(tree, "_flutter_test_assets_impl")
         if tester is None:
@@ -461,6 +458,9 @@ class Checker:
                 self.fail("D", "the test assets bundle must not depend on ABIs")
             if any(isinstance(node, ast.Constant) and isinstance(node.value, str) and "ANDROID" in node.value for node in ast.walk(tester)):
                 self.fail("D", "the test assets bundle must not set an Android environment")
+            test_action = _action_call(tester, "run_shell")
+            if test_action is None or _string_dict(_keyword(test_action, "execution_requirements")) != {"no-remote-exec": "1"}:
+                self.fail("D", "FlutterTestAssets must retain no-remote-exec until its own portability gates pass")
 
         if _function(tree, "_kernel_blob_command") is not None:
             self.fail("D", "_kernel_blob_command must not exist: the overlay adds kernel_blob.bin, flutter_assets does not")
