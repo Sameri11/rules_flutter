@@ -2,7 +2,6 @@
 
 visibility(["//flutter"])
 
-
 def _sdk_tree_impl(ctx):
     downloads = {}
     ctx.file("downloads/.keep", "")
@@ -38,7 +37,6 @@ def _sdk_tree_impl(ctx):
     sky = ctx.path("pieces/sky_engine")
     gpu = ctx.path("pieces/flutter_gpu")
     host = ctx.path("pieces/host_artifacts")
-    font_subset = ctx.path("pieces/font_subset")
     fonts = ctx.path("pieces/material_fonts")
     gradle = ctx.path("pieces/gradle_wrapper")
     engine_stamp = ctx.path("pieces/engine_stamp.json")
@@ -47,7 +45,11 @@ def _sdk_tree_impl(ctx):
     ctx.symlink("framework/pubspec.lock", "pubspec.lock")
     ctx.symlink(dart, "bin/cache/dart-sdk")
     ctx.symlink("bin/cache/dart-sdk", "dart-sdk")
-    ctx.symlink("framework/bin/flutter", "bin/flutter")
+    ctx.file(
+        "bin/flutter",
+        "#!/bin/sh\nFLUTTER_ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\nexport FLUTTER_ROOT\nexec \"$FLUTTER_ROOT/framework/bin/flutter\" \"$@\"\n",
+        executable = True,
+    )
     ctx.symlink("framework/packages", "packages")
     ctx.symlink(patched.get_child("flutter_patched_sdk"), "bin/cache/artifacts/engine/common/flutter_patched_sdk")
     ctx.symlink(patched_product.get_child("flutter_patched_sdk_product"), "bin/cache/artifacts/engine/common/flutter_patched_sdk_product")
@@ -97,17 +99,20 @@ def _sdk_tree_impl(ctx):
     globs += [r + "/pubspec.yaml" for r in package_roots]
     globs += [r + "/LICENSE*" for r in package_roots]
     globs += [r + "/NOTICES*" for r in package_roots]
-    globs += ["packages/**/packages/**/lib/**"]
-    globs += ["packages/**/packages/**/pubspec.yaml"]
-    globs += ["packages/**/packages/**/LICENSE*"]
-    globs += ["packages/**/packages/**/NOTICES*"]
+    globs.extend([
+        "packages/**/packages/**/lib/**",
+        "packages/**/packages/**/pubspec.yaml",
+        "packages/**/packages/**/LICENSE*",
+        "packages/**/packages/**/NOTICES*",
+    ])
 
     build = """package(default_visibility = [\"//visibility:public\"])
 exports_files([\"pubspec.yaml\", \"pubspec.lock\", \"packages/flutter_tools/bin/flutter_tools.dart\", \"dart\", \"dart_sdk_revision\", \"dartaotruntime\", \"vm_platform_strong.dill\", \"flutter\", \"frontend_server.snapshot\", \"flutter.version.json\", \"engine_stamp.json\", \"vm_isolate_snapshot.bin\", \"isolate_snapshot.bin\", \"flutter_tester\", \"icudtl.dat\", \"impellerc\"])
-filegroup(name = \"dart_sdk_files\", srcs = glob([\"dart-sdk/**\"], allow_empty = True))
-filegroup(name = \"platform_product\", srcs = glob([\"flutter_patched_sdk_product/**\"]))
-filegroup(name = \"platform_debug\", srcs = glob([\"flutter_patched_sdk/**\"]))
-filegroup(name = \"sdk_packages\", srcs = glob(%s, allow_empty = True))
+filegroup(name = "dart_sdk_files", srcs = glob(["dart-sdk/**"], allow_empty = True))
+filegroup(name = "platform_product", srcs = glob(["flutter_patched_sdk_product/**"]))
+filegroup(name = "platform_debug", srcs = glob(["flutter_patched_sdk/**"]))
+filegroup(name = "sdk_packages", srcs = glob(%s, allow_empty = True))
+filegroup(name = "framework_tools_lib", srcs = glob(["packages/flutter_tools/lib/**"], allow_empty = True))
 filegroup(name = "flutter_tools_cache_state", srcs = [
     "bin/cache/engine.stamp",
     "bin/cache/engine_stamp.stamp",
@@ -155,7 +160,6 @@ filegroup(name = "flutter_tools_cache_state", srcs = [
     ctx.symlink("bin/flutter", "flutter")
     ctx.symlink("bin/cache/artifacts/engine/common/flutter_patched_sdk", "flutter_patched_sdk")
     ctx.symlink("bin/cache/artifacts/engine/common/flutter_patched_sdk_product", "flutter_patched_sdk_product")
-
 
 sdk_tree = repository_rule(
     implementation = _sdk_tree_impl,

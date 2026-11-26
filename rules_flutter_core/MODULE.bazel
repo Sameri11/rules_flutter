@@ -35,8 +35,8 @@ use_repo(flutter, "flutter_sdk")
 flutter_tools = use_extension("//flutter:extensions.bzl", "pub")
 flutter_tools.lock(
     name = "flutter_tools",
-    lock = "@flutter_sdk//:pubspec.lock",
     include_workspace_members = False,
+    lock = "@flutter_sdk//:pubspec.lock",
 )
 use_repo(flutter_tools, "flutter_tools")
 

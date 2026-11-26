@@ -3,29 +3,12 @@
 visibility(["//:__pkg__"])
 
 def _snapshot_path(ctx):
-    version_file = ctx.path(ctx.attr.version_file).realpath
-    sdk_root = version_file.dirname.dirname.dirname
     host_os = ctx.os.name.lower()
-    host_arch = {
-        "aarch64": "arm64",
-        "amd64": "x64",
-        "arm64": "arm64",
-        "riscv64": "riscv64",
-        "x86_64": "x64",
-    }.get(ctx.os.arch.lower())
-    if host_arch == None:
-        fail("Unsupported host architecture for a Flutter build: '{}'.".format(ctx.os.arch))
     if host_os.startswith("mac os"):
-        host = "darwin-x64"
-    elif host_os.startswith("linux"):
-        host = "linux-" + host_arch
-    elif host_os.startswith("windows"):
-        host = "windows-" + host_arch
-    else:
-        fail("Unsupported host OS for a Flutter build: '{}'.".format(ctx.os.name))
-
-    # Flutter currently stores Android gen_snapshot in the x64 engine directory on macOS.
-    return sdk_root.get_child("bin/cache/artifacts/engine").get_child(ctx.attr.engine_dir).get_child(host).get_child("gen_snapshot")
+        return ctx.path(ctx.attr.macos_artifact)
+    if host_os.startswith("linux"):
+        return ctx.path(ctx.attr.linux_artifact)
+    fail("Unsupported host OS for a Flutter build: '{}'.".format(ctx.os.name))
 
 def _gen_snapshot_impl(ctx):
     path = _snapshot_path(ctx)
@@ -48,13 +31,14 @@ flutter_aot_toolchain(
 )
 """)
     else:
-        fail("No cached Android gen_snapshot for {}. Run `flutter precache --android` to install the missing payload.".format(ctx.attr.engine_dir))
+        fail("No pinned Android gen_snapshot archive for {} on {}.".format(ctx.attr.engine_dir, ctx.os.name))
 
 flutter_gen_snapshot = repository_rule(
     implementation = _gen_snapshot_impl,
     attrs = {
         "engine_dir": attr.string(mandatory = True),
-        "version_file": attr.label(allow_single_file = True, default = Label("@flutter_sdk//:flutter.version.json")),
+        "macos_artifact": attr.label(mandatory = True, allow_single_file = True),
+        "linux_artifact": attr.label(mandatory = True, allow_single_file = True),
     },
     local = True,
 )

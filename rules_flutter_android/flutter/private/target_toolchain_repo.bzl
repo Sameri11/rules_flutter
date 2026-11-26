@@ -78,9 +78,13 @@ def _android_toolchains_extension_impl(_ctx):
     cpu_constraints = {}
     for abi, info in ABIS.items():
         suffix = abi.replace("-", "_")
+        engine_dir = info.engine_dir["release"]
+        piece = "android_gen_" + engine_dir.replace("-", "_")
         flutter_gen_snapshot(
             name = "flutter_gen_snapshot_" + suffix,
-            engine_dir = info.engine_dir["release"],
+            engine_dir = engine_dir,
+            macos_artifact = Label("@flutter_android_{}_macos_arm64//:gen_snapshot".format(piece)),
+            linux_artifact = Label("@flutter_android_{}_linux_x64//:gen_snapshot".format(piece)),
         )
         toolchain_targets[abi] = str(Label("//flutter:target_toolchain_" + suffix))
         aot_toolchain_targets[abi] = str(Label("@flutter_gen_snapshot_" + suffix + "//:aot_toolchain"))

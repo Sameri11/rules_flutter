@@ -1,12 +1,14 @@
 """Resolves and locks the per-host files in a Flutter SDK."""
 
 load(":repo.bzl", "flutter_sdk", "flutter_tools_packages")
+load(":sdk_android_piece.bzl", "sdk_android_piece")
 load(":sdk_tree.bzl", "sdk_tree")
 
 _HOSTS = {
-    "macos-arm64": {"release_os": "macos", "release_arch": "arm64", "engine_os": "darwin-arm64", "dart": "darwin-arm64"},
-    "linux-x64": {"release_os": "linux", "release_arch": "x64", "engine_os": "linux-x64", "dart": "linux-x64"},
+    "macos-arm64": {"release_os": "macos", "release_arch": "arm64", "engine_os": "darwin-arm64", "android_engine_os": "darwin-x64", "dart": "darwin-arm64"},
+    "linux-x64": {"release_os": "linux", "release_arch": "x64", "engine_os": "linux-x64", "android_engine_os": "linux-x64", "dart": "linux-x64"},
 }
+
 # Each spec is (filename, archive type, strip prefix). Shared artifacts have
 # the same URL on both hosts but are still recorded in each host's fact set.
 _PIECES = {
@@ -29,10 +31,32 @@ _PIECES = {
     "ios_usb_ios-deploy": ("", "zip", ""),
 }
 
+# Flutter 3.50.1's AndroidGenSnapshotArtifacts and
+# AndroidInternalBuildArtifacts use these engine archives. Keep them out of
+# the assembled SDK tree so builds that do not need Android artifacts stay lazy.
+_ANDROID_PIECES = {
+    "android_gen_android_arm_profile": ("android-arm-profile/{android_engine_os}.zip", "zip", ""),
+    "android_gen_android_arm_release": ("android-arm-release/{android_engine_os}.zip", "zip", ""),
+    "android_gen_android_arm64_profile": ("android-arm64-profile/{android_engine_os}.zip", "zip", ""),
+    "android_gen_android_arm64_release": ("android-arm64-release/{android_engine_os}.zip", "zip", ""),
+    "android_gen_android_x64_profile": ("android-x64-profile/{android_engine_os}.zip", "zip", ""),
+    "android_gen_android_x64_release": ("android-x64-release/{android_engine_os}.zip", "zip", ""),
+    "android_internal_android_x64": ("android-x64/artifacts.zip", "zip", ""),
+    "android_internal_android_arm": ("android-arm/artifacts.zip", "zip", ""),
+    "android_internal_android_arm_profile": ("android-arm-profile/artifacts.zip", "zip", ""),
+    "android_internal_android_arm_release": ("android-arm-release/artifacts.zip", "zip", ""),
+    "android_internal_android_arm64": ("android-arm64/artifacts.zip", "zip", ""),
+    "android_internal_android_arm64_profile": ("android-arm64-profile/artifacts.zip", "zip", ""),
+    "android_internal_android_arm64_release": ("android-arm64-release/artifacts.zip", "zip", ""),
+    "android_internal_android_x64_profile": ("android-x64-profile/artifacts.zip", "zip", ""),
+    "android_internal_android_x64_release": ("android-x64-release/artifacts.zip", "zip", ""),
+}
+_ALL_PINNED_PIECES = dict(_PIECES)
+_ALL_PINNED_PIECES.update(_ANDROID_PIECES)
+
 _STORAGE_ROOT = "https://storage.googleapis.com"
 _STORAGE = _STORAGE_ROOT + "/flutter_infra_release"
 _SCHEMA = 1
-
 
 def _valid_metadata(value, version):
     if type(value) != "dict" or value.get("schema") != _SCHEMA or value.get("version") != version:
@@ -48,7 +72,6 @@ def _valid_metadata(value, version):
             return False
     return True
 
-
 def _valid_pin(value, version):
     if not _valid_metadata(value, version):
         return False
@@ -57,7 +80,7 @@ def _valid_pin(value, version):
         return False
     for host in _HOSTS:
         pieces = hosts[host]
-        expected_pieces = [name for name in _PIECES if not name.startswith("ios_usb_") or host == "macos-arm64"]
+        expected_pieces = [name for name in _ALL_PINNED_PIECES if not name.startswith("ios_usb_") or host == "macos-arm64"]
         if type(pieces) != "dict" or sorted(pieces.keys()) != sorted(expected_pieces):
             return False
         for pin in pieces.values():
@@ -69,18 +92,15 @@ def _valid_pin(value, version):
                     return False
     return True
 
-
 def _download(ctx, url, output):
     result = ctx.download(url = url, output = output, allow_fail = True)
     if not result.success:
         fail("Could not resolve Flutter SDK metadata from {}: {}".format(url, result))
     return result.sha256
 
-
 def _read_download(ctx, url, output):
     _download(ctx, url, output)
     return ctx.read(output)
-
 
 def _release_commit(ctx, version, host):
     url = "{}/releases/releases_{}.json".format(_STORAGE, _HOSTS[host]["release_os"])
@@ -93,7 +113,6 @@ def _release_commit(ctx, version, host):
         ):
             return release
     fail("Flutter {} is not listed as a stable {} release.".format(version, host))
-
 
 def _pin_version(ctx, version, overrides, existing):
     if _valid_metadata(existing, version):
@@ -154,12 +173,12 @@ def _pin_version(ctx, version, overrides, existing):
     for host, host_spec in _HOSTS.items():
         pieces = {}
         old_pieces = existing_hosts.get(host, {})
-        for name, spec in _PIECES.items():
+        for name, spec in _ALL_PINNED_PIECES.items():
             if name.startswith("ios_usb_") and host != "macos-arm64":
                 continue
             filename, _, _ = spec
             if name == "framework_source":
-                url = filename.format(commit=commit)
+                url = filename.format(commit = commit)
             elif name == "engine_stamp":
                 url = "{}/flutter/{}/engine_stamp.json".format(_STORAGE, engine_hash)
             elif name.startswith("ios_usb_"):
@@ -178,7 +197,11 @@ def _pin_version(ctx, version, overrides, existing):
                 url = "{}/flutter/{}/{}".format(
                     _STORAGE,
                     engine_hash,
-                    filename.format(dart = host_spec["dart"], engine_os = host_spec["engine_os"]),
+                    filename.format(
+                        dart = host_spec["dart"],
+                        engine_os = host_spec["engine_os"],
+                        android_engine_os = host_spec["android_engine_os"],
+                    ),
                 )
             base_url = overrides.get("base_url", "").rstrip("/")
             if base_url and url.startswith(_STORAGE_ROOT):
@@ -222,7 +245,6 @@ def _pin_version(ctx, version, overrides, existing):
         "hosts": hosts,
     }
 
-
 def _host_key(module_ctx):
     os_name = module_ctx.os.name.lower()
     os_key = "macos" if os_name.startswith("mac") else "linux" if os_name.startswith("linux") else ""
@@ -232,8 +254,6 @@ def _host_key(module_ctx):
     if key not in _HOSTS:
         fail("Flutter SDK provisioning does not support host {} {}.".format(module_ctx.os.name, module_ctx.os.arch))
     return key
-
-
 
 def _flutter_extension_impl(module_ctx):
     sdk_tags = []
@@ -267,6 +287,8 @@ def _flutter_extension_impl(module_ctx):
     archive_types = {}
     strip_prefixes = {}
     for piece, pin in selected.items():
+        if piece not in _PIECES:
+            continue
         _, archive_type, strip_prefix = _PIECES[piece]
         if piece == "framework_source":
             strip_prefix = "flutter-" + pins["framework_commit"]
@@ -297,8 +319,21 @@ def _flutter_extension_impl(module_ctx):
         gradle_wrapper_version = pins["gradle_wrapper_version"],
         ios_usb_versions = ios_usb_versions,
     )
-    return module_ctx.extension_metadata(reproducible = True, facts = {tag.version: pins})
 
+    for android_host in _HOSTS:
+        for piece in _ANDROID_PIECES:
+            pin = pins["hosts"][android_host][piece]
+            base_url = tag.base_url.rstrip("/")
+            piece_urls = tag.urls.get(piece, [pin["url"]])
+            if base_url and not tag.urls.get(piece) and pin["url"].startswith(_STORAGE_ROOT):
+                piece_urls = [base_url + pin["url"][len(_STORAGE_ROOT):]]
+            sdk_android_piece(
+                name = "flutter_android_{}_{}".format(piece, android_host.replace("-", "_")),
+                urls = piece_urls,
+                sha256 = tag.sha256.get(piece, pin["sha256"]),
+            )
+
+    return module_ctx.extension_metadata(reproducible = True, facts = {tag.version: pins})
 
 _sdk_tag = tag_class(attrs = {
     "version": attr.string(mandatory = True),
@@ -312,4 +347,3 @@ flutter_sdk_extension = module_extension(
     implementation = _flutter_extension_impl,
     tag_classes = {"sdk": _sdk_tag, "host_sdk": _host_sdk_tag},
 )
-

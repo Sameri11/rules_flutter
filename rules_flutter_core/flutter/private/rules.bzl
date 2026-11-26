@@ -109,8 +109,6 @@ flutter_target_slices = flutter_target_slices_rule(_platform_slice_transition)
 
 visibility(["//flutter"])
 
-
-
 def _repository_path(ctx, file, attribute):
     """A source file's path within the repository owning this rule."""
     short_path = file.short_path
@@ -1726,7 +1724,6 @@ python3 "$EXECROOT/{merger}" {merge_args}
         outputs = [out],
         mnemonic = "FlutterAssets",
         progress_message = "Bundling Flutter assets %{label}",
-
     )
 
     return [DefaultInfo(files = depset([out]))]

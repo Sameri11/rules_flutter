@@ -44,5 +44,3 @@ flutter_tools_kernel = rule(
         "inputs": attr.label_list(allow_files = True),
     },
 )
-
-

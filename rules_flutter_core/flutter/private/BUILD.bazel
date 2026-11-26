@@ -45,17 +45,18 @@ flutter_tools_kernel(
     name = "flutter_tools_snapshot",
     dart = "@flutter_sdk//:dart",
     dartaotruntime = "@flutter_sdk//:dartaotruntime",
-    frontend_server = "@flutter_sdk//:frontend_server.snapshot",
-    vm_platform = "@flutter_sdk//:vm_platform_strong.dill",
     framework_tools = "@flutter_sdk//:packages/flutter_tools/bin/flutter_tools.dart",
-    package_config = "@flutter_tools//:package_config.json",
+    frontend_server = "@flutter_sdk//:frontend_server.snapshot",
     inputs = [
         "@flutter_sdk//:dart_sdk_files",
         "@flutter_sdk//:sdk_packages",
         "@flutter_tools//:lib",
     ],
+    package_config = "@flutter_tools//:package_config.json",
     visibility = ["//visibility:public"],
+    vm_platform = "@flutter_sdk//:vm_platform_strong.dill",
 )
+
 # The test-asset builder uses frontend_server directly, so no action compiles
 # flutter_tools or reads the pub cache. The dill carries no machine-specific paths.
 genrule(
@@ -64,6 +65,8 @@ genrule(
         "tester_assets.dart",
         "@flutter_tools//:package_config.json",
         "@flutter_tools//:lib",
+        "@flutter_sdk//:framework_tools_lib",
+        "@flutter_sdk//:sdk_packages",
         "@flutter_sdk//:vm_platform_strong.dill",
     ],
     outs = ["tester_assets.dill"],
