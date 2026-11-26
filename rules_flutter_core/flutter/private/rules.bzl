@@ -1605,20 +1605,95 @@ def _flutter_assets_impl(ctx):
     # Code assets belong in platform native libraries, not the asset tree.
     # Packaging recipes install them in native library directories; discard
     # flutter_tools' duplicate. NativeAssetsManifest.json stays beside the bundle for runtime lookup.
-    cmd = staged.command + """# flutter_tools takes the project directory as two levels above --target, so
-# the stub sits in its own directory. It is compiled only for record-use and
-# imports nothing.
+    ios_usb_links = "\n".join([
+        'ln -s "$EXECROOT/{}" "$ROOT/bin/cache/artifacts/{}"'.format(
+            toolchain.ios_usb_roots[name],
+            name,
+        )
+        for name in sorted(toolchain.ios_usb_roots)
+    ])
+    cmd = staged.command + """ROOT="$STAGE/sdk"
+SDK_ROOT="$EXECROOT/{sdk_root}"
+ENGINE_HOST=darwin-x64
+if [ "$(uname -s)" = "Linux" ]; then ENGINE_HOST=linux-x64; fi
+mkdir -p "$ROOT/bin/cache/artifacts/engine/common" "$ROOT/bin/cache/artifacts/engine/$ENGINE_HOST" "$ROOT/bin/cache/pkg"
+for item in "$EXECROOT/{framework_root}"/*; do
+    name="$(basename "$item")"
+    if [ "$name" != "bin" ] && [ "$name" != "packages" ]; then ln -s "$item" "$ROOT/$name"; fi
+done
+for item in "$EXECROOT/{framework_root}/bin"/*; do
+    name="$(basename "$item")"
+    if [ "$name" != "cache" ]; then ln -s "$item" "$ROOT/bin/$name"; fi
+done
+mkdir -p "$ROOT/packages"
+for item in "$EXECROOT/{framework_root}/packages"/*; do
+    name="$(basename "$item")"
+    if [ "$name" != "flutter_tools" ]; then ln -s "$item" "$ROOT/packages/$name"; fi
+done
+mkdir -p "$ROOT/packages/flutter_tools/.dart_tool"
+for item in "$EXECROOT/{framework_root}/packages/flutter_tools"/*; do
+    ln -s "$item" "$ROOT/packages/flutter_tools/$(basename "$item")"
+done
+python3 - "$EXECROOT/{package_config}" "$ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+source, target, execroot = sys.argv[1:]
+with open(source, encoding="utf-8") as stream:
+    config = json.load(stream)
+for package in config["packages"]:
+    package_path = os.path.normpath(os.path.join(os.path.dirname(source), package["rootUri"]))
+    if not os.path.isabs(package_path):
+        package_path = os.path.join(execroot, package_path)
+    package["rootUri"] = pathlib.Path(package_path).as_uri()
+with open(target, "w", encoding="utf-8") as stream:
+    json.dump(config, stream, separators=(",", ":"))
+PY
+ln -s "$EXECROOT/{dart_sdk_root}/dart-sdk" "$ROOT/bin/cache/dart-sdk"
+ln -s "$EXECROOT/{common_sdk_root}/flutter_patched_sdk" "$ROOT/bin/cache/artifacts/engine/common/flutter_patched_sdk"
+ln -s "$EXECROOT/{product_sdk_root}/flutter_patched_sdk_product" "$ROOT/bin/cache/artifacts/engine/common/flutter_patched_sdk_product"
+for item in "$EXECROOT/{host_engine_root}"/*; do ln -s "$item" "$ROOT/bin/cache/artifacts/engine/$ENGINE_HOST/$(basename "$item")"; done
+ln -s "$EXECROOT/{font_subset_root}" "$ROOT/bin/cache/artifacts/engine/$ENGINE_HOST/font-subset"
+ln -s "$EXECROOT/{sky_engine_root}/sky_engine" "$ROOT/bin/cache/pkg/sky_engine"
+ln -s "$EXECROOT/{flutter_gpu_root}" "$ROOT/bin/cache/pkg/flutter_gpu"
+ln -s "$EXECROOT/{material_fonts_root}" "$ROOT/bin/cache/artifacts/material_fonts"
+ln -s "$EXECROOT/{gradle_wrapper_root}" "$ROOT/bin/cache/artifacts/gradle_wrapper"
+{ios_usb_links}
+for stamp in "$SDK_ROOT"/bin/cache/*.stamp; do
+    cp -L "$stamp" "$ROOT/bin/cache/$(basename "$stamp")"
+done
+cp -L "$SDK_ROOT/bin/cache/artifacts/engine/engine_stamp.json" "$ROOT/bin/cache/engine_stamp.json"
+export FLUTTER_ROOT="$ROOT"
+export FLUTTER_ALREADY_LOCKED=true
+export HOME="$STAGE/home"
+mkdir -p "$HOME"
+# flutter_tools takes the project directory as two levels above --target.
 mkdir -p .flutter_bazel
 printf 'void main() {{}}\\n' > .flutter_bazel/stub.dart
 STUB=".flutter_bazel/stub.dart"
 mkdir -p "$STAGE/bundles"
 flutter_tool() {{
-    "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" --packages="$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{snapshot}" "$@"
+    "$EXECROOT/{dart}" --packages="$ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT/{snapshot}" "$@"
 }}
 {bundles}
-# Keep the shell alive so its EXIT trap removes STAGE after the merger.
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
+        sdk_root = toolchain.sdk_version.dirname,
+        framework_root = toolchain.framework_root,
+        dart_sdk_root = toolchain.dart_sdk_root,
+        common_sdk_root = toolchain.common_sdk_root,
+        product_sdk_root = toolchain.product_sdk_root,
+        host_engine_root = toolchain.host_engine_root,
+        font_subset_root = toolchain.font_subset_root,
+        sky_engine_root = toolchain.sky_engine_root,
+        flutter_gpu_root = toolchain.flutter_gpu_root,
+        material_fonts_root = toolchain.material_fonts_root,
+        gradle_wrapper_root = toolchain.gradle_wrapper_root,
+        ios_usb_links = ios_usb_links,
+        dart = toolchain.dart.path,
+        package_config = toolchain.tools_package_config.path,
         snapshot = toolchain.tools_snapshot.path,
         merger = ctx.file._merger.path,
         bundles = "\n".join([
@@ -1642,7 +1717,7 @@ python3 "$EXECROOT/{merger}" {merge_args}
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = staged.files + [staged.manifest, toolchain.sdk_version, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot],
+            direct = staged.files + toolchain.piece_roots + toolchain.tools_packages.to_list() + toolchain.tools_cache_state.to_list() + [staged.manifest, toolchain.sdk_version, toolchain.dart, toolchain.tools_package_config, ctx.file._merger, ctx.file._bundle_guard, toolchain.flutter, toolchain.tools_snapshot],
             transitive = [build_env.files] if build_env else [],
         ),
         outputs = [out],

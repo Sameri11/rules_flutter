@@ -18,6 +18,8 @@ package(default_visibility = ["//visibility:public"])
 # They are deliberately not wrapped in filegroups: a filegroup sharing a name
 # with the file it wraps produces a self-edge in the dependency graph.
 exports_files([
+    "pubspec.yaml",
+    "pubspec.lock",
     "dart_sdk_revision",
     "dart",
     "vm_platform_strong.dill",
@@ -31,6 +33,11 @@ exports_files([
     "icudtl.dat",
     "flutter.version.json",
 ])
+
+filegroup(
+    name = "dart_sdk_files",
+    srcs = glob(["dart-sdk/**"], allow_empty = True),
+)
 
 # Patched SDK containing platform_strong.dill. `--sdk-root` wants the directory,
 # so the whole tree is exposed as one filegroup.
@@ -220,6 +227,7 @@ def _flutter_sdk_impl(ctx):
             "Run `flutter precache` first.",
         )
 
+    ctx.symlink("{}/dart-sdk".format(cache), "dart-sdk")
     ctx.symlink(
         "{}/dart-sdk/bin/dartaotruntime".format(cache),
         "dartaotruntime",
@@ -288,6 +296,8 @@ def _flutter_sdk_impl(ctx):
     # it moves on framework-only commits that leave engine artifacts identical.
     # Not to be confused with a project's .metadata, which records the revision
     # the project was scaffolded with and is never updated by ordinary SDK use.
+    ctx.symlink("{}/pubspec.yaml".format(root), "pubspec.yaml")
+    ctx.symlink("{}/pubspec.lock".format(root), "pubspec.lock")
     ctx.symlink(version_file, "flutter.version.json")
 
     # Directory symlinks, so a package config can point at
@@ -304,7 +314,13 @@ def _flutter_sdk_impl(ctx):
             ["{}/lib/**".format(r) for r in sdk_package_roots] +
             ["{}/pubspec.yaml".format(r) for r in sdk_package_roots] +
             ["{}/LICENSE*".format(r) for r in sdk_package_roots] +
-            ["{}/NOTICES*".format(r) for r in sdk_package_roots],
+            ["{}/NOTICES*".format(r) for r in sdk_package_roots] +
+            [
+                "packages/**/packages/**/lib/**",
+                "packages/**/packages/**/pubspec.yaml",
+                "packages/**/packages/**/LICENSE*",
+                "packages/**/packages/**/NOTICES*",
+            ],
         ),
     ))
 
@@ -324,9 +340,13 @@ def _flutter_impl(ctx):
     for module in ctx.modules:
         if module.is_root:
             sdk_tags = module.tags.sdk
-            if len(sdk_tags) != 1:
-                fail("The root module must declare exactly one flutter.sdk(version = \"X.Y.Z\") tag.")
-            declared_version = sdk_tags[0].version
+            host_sdk_tags = module.tags.host_sdk
+            if sdk_tags and host_sdk_tags:
+                fail("Declare either flutter.sdk or flutter.host_sdk, not both.")
+            tags = sdk_tags or host_sdk_tags
+            if len(tags) != 1:
+                fail("The root module must declare exactly one flutter.sdk(version = \"X.Y.Z\") or flutter.host_sdk(version = \"X.Y.Z\") tag.")
+            declared_version = tags[0].version
             break
 
     flutter_sdk(
@@ -336,7 +356,13 @@ def _flutter_impl(ctx):
 
     flutter_tools_packages(name = "flutter_tools_packages")
 
-_flutter_sdk_tag = tag_class(
+_sdk_tag = tag_class(
+    attrs = {
+        "version": attr.string(mandatory = True),
+    },
+)
+
+_host_sdk_tag = tag_class(
     attrs = {
         "version": attr.string(mandatory = True),
     },
@@ -344,5 +370,5 @@ _flutter_sdk_tag = tag_class(
 
 flutter = module_extension(
     implementation = _flutter_impl,
-    tag_classes = {"sdk": _flutter_sdk_tag},
+    tag_classes = {"sdk": _sdk_tag, "host_sdk": _host_sdk_tag},
 )

@@ -22,6 +22,12 @@ _PIECES = {
     "gradle_wrapper": ("gradle-wrapper/{gradle}/gradle-wrapper.tgz", "tar.gz", ""),
     "engine_stamp": ("{engine}/{file}", "file", ""),
     "framework_source": ("https://github.com/flutter/flutter/archive/{commit}.tar.gz", "tar.gz", "flutter-{commit}"),
+    "ios_usb_libimobiledevice": ("", "zip", ""),
+    "ios_usb_libusbmuxd": ("", "zip", ""),
+    "ios_usb_libplist": ("", "zip", ""),
+    "ios_usb_openssl": ("", "zip", ""),
+    "ios_usb_libimobiledeviceglue": ("", "zip", ""),
+    "ios_usb_ios-deploy": ("", "zip", ""),
 }
 
 _STORAGE_ROOT = "https://storage.googleapis.com"
@@ -29,18 +35,31 @@ _STORAGE = _STORAGE_ROOT + "/flutter_infra_release"
 _SCHEMA = 1
 
 
-def _valid_pin(value, version):
+def _valid_metadata(value, version):
     if type(value) != "dict" or value.get("schema") != _SCHEMA or value.get("version") != version:
         return False
     for field in ("framework_commit", "framework_commit_date", "dart_sdk_version", "engine_revision", "engine_content_hash", "material_fonts_version", "gradle_wrapper_version"):
         if type(value.get(field)) != "string" or not value[field]:
             return False
+    usb_versions = value.get("ios_usb_versions")
+    if type(usb_versions) != "dict":
+        return False
+    for name, usb_version in usb_versions.items():
+        if type(name) != "string" or type(usb_version) != "string" or not usb_version:
+            return False
+    return True
+
+
+def _valid_pin(value, version):
+    if not _valid_metadata(value, version):
+        return False
     hosts = value.get("hosts")
     if type(hosts) != "dict" or sorted(hosts.keys()) != sorted(_HOSTS.keys()):
         return False
     for host in _HOSTS:
         pieces = hosts[host]
-        if type(pieces) != "dict" or sorted(pieces.keys()) != sorted(_PIECES.keys()):
+        expected_pieces = [name for name in _PIECES if not name.startswith("ios_usb_") or host == "macos-arm64"]
+        if type(pieces) != "dict" or sorted(pieces.keys()) != sorted(expected_pieces):
             return False
         for pin in pieces.values():
             sha = pin.get("sha256", "") if type(pin) == "dict" else ""
@@ -77,49 +96,80 @@ def _release_commit(ctx, version, host):
     fail("Flutter {} is not listed as a stable {} release.".format(version, host))
 
 
-def _pin_version(ctx, version, overrides):
-    releases = {host: _release_commit(ctx, version, host) for host in _HOSTS}
-    commit = releases["macos-arm64"]["hash"]
-    if releases["linux-x64"]["hash"] != commit:
-        fail("Flutter {} resolves to different framework commits across supported hosts.".format(version))
-    engine_revision = _read_download(
-        ctx,
-        "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/engine.version".format(commit),
-        "engine.version",
-    ).strip()
-    stamp_url = "{}/flutter/{}/engine_stamp.json".format(_STORAGE, engine_revision)
-    stamp = json.decode(_read_download(ctx, stamp_url, "engine_stamp.json"))
-    engine_hash = stamp.get("content_hash")
-    if not engine_hash:
-        fail("Flutter engine_stamp.json at {} has no content_hash.".format(stamp_url))
+def _pin_version(ctx, version, overrides, existing):
+    if _valid_metadata(existing, version):
+        commit = existing["framework_commit"]
+        framework_date = existing["framework_commit_date"]
+        dart_sdk_version = existing["dart_sdk_version"]
+        engine_revision = existing["engine_revision"]
+        engine_hash = existing["engine_content_hash"]
+        material = existing["material_fonts_version"]
+        gradle = existing["gradle_wrapper_version"]
+        usb_versions = dict(existing["ios_usb_versions"])
+    else:
+        releases = {host: _release_commit(ctx, version, host) for host in _HOSTS}
+        commit = releases["macos-arm64"]["hash"]
+        if releases["linux-x64"]["hash"] != commit:
+            fail("Flutter {} resolves to different framework commits across supported hosts.".format(version))
+        dart_sdk_version = releases["macos-arm64"]["dart_sdk_version"]
+        engine_revision = _read_download(
+            ctx,
+            "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/engine.version".format(commit),
+            "engine.version",
+        ).strip()
+        stamp_url = "{}/flutter/{}/engine_stamp.json".format(_STORAGE, engine_revision)
+        stamp = json.decode(_read_download(ctx, stamp_url, "engine_stamp.json"))
+        engine_hash = stamp.get("content_hash")
+        if not engine_hash:
+            fail("Flutter engine_stamp.json at {} has no content_hash.".format(stamp_url))
 
-    material = _read_download(
-        ctx,
-        "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/material_fonts.version".format(commit),
-        "material_fonts.version",
-    ).strip()
-    gradle = _read_download(
-        ctx,
-        "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/gradle_wrapper.version".format(commit),
-        "gradle_wrapper.version",
-    ).strip()
+        material = _read_download(
+            ctx,
+            "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/material_fonts.version".format(commit),
+            "material_fonts.version",
+        ).strip()
+        gradle = _read_download(
+            ctx,
+            "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/gradle_wrapper.version".format(commit),
+            "gradle_wrapper.version",
+        ).strip()
+        framework_info = json.decode(_read_download(
+            ctx,
+            "https://api.github.com/repos/flutter/flutter/commits/{}".format(commit),
+            "framework_commit.json",
+        ))
+        framework_date = framework_info["commit"]["author"]["date"]
+        usb_versions = {}
 
-    framework_info = json.decode(_read_download(
-        ctx,
-        "https://api.github.com/repos/flutter/flutter/commits/{}".format(commit),
-        "framework_commit.json",
-    ))
-    framework_date = framework_info["commit"]["author"]["date"]
+    for name in ("libimobiledevice", "libusbmuxd", "libplist", "openssl", "libimobiledeviceglue", "ios-deploy"):
+        if name not in usb_versions:
+            usb_versions[name] = _read_download(
+                ctx,
+                "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/{}.version".format(commit, name),
+                "{}.version".format(name),
+            ).strip()
 
+    existing_hosts = existing.get("hosts", {}) if type(existing) == "dict" else {}
     hosts = {}
     for host, host_spec in _HOSTS.items():
         pieces = {}
+        old_pieces = existing_hosts.get(host, {})
         for name, spec in _PIECES.items():
+            if name.startswith("ios_usb_") and host != "macos-arm64":
+                continue
             filename, _, _ = spec
             if name == "framework_source":
                 url = filename.format(commit=commit)
             elif name == "engine_stamp":
                 url = "{}/flutter/{}/engine_stamp.json".format(_STORAGE, engine_hash)
+            elif name.startswith("ios_usb_"):
+                artifact = name[len("ios_usb_"):]
+                url = "{}/flutter_infra_release/ios-usb-dependencies/arm64_x86_64/{}/{}/{}.zip".format(
+                    _STORAGE_ROOT,
+                    artifact,
+                    usb_versions[artifact],
+                    artifact,
+                )
             elif name == "material_fonts":
                 url = "{}/{}".format(_STORAGE_ROOT, material)
             elif name == "gradle_wrapper":
@@ -137,6 +187,9 @@ def _pin_version(ctx, version, overrides):
             if override_urls:
                 url = override_urls[0]
             sha = overrides.get("sha256", {}).get(name, "")
+            old_pin = old_pieces.get(name, {})
+            if not sha and type(old_pin) == "dict" and old_pin.get("url") == url:
+                sha = old_pin.get("sha256", "")
             if not sha:
                 sha = _download(ctx, url, "pin_{}_{}.bin".format(host, name))
             pieces[name] = {"url": url, "sha256": sha}
@@ -146,11 +199,12 @@ def _pin_version(ctx, version, overrides):
         "version": version,
         "framework_commit": commit,
         "framework_commit_date": framework_date,
-        "dart_sdk_version": releases["macos-arm64"]["dart_sdk_version"],
+        "dart_sdk_version": dart_sdk_version,
         "engine_revision": engine_revision,
         "engine_content_hash": engine_hash,
         "material_fonts_version": material,
         "gradle_wrapper_version": gradle,
+        "ios_usb_versions": usb_versions,
         "hosts": hosts,
     }
 
@@ -195,7 +249,7 @@ def _flutter_extension_impl(module_ctx):
             "sha256": tag.sha256,
             "urls": tag.urls,
             "base_url": tag.base_url,
-        })
+        }, pins if type(pins) == "dict" else {})
     for host, pieces in pins["hosts"].items():
         for piece, pin in pieces.items():
             _, archive_type, strip_prefix = _PIECES[piece]
@@ -214,7 +268,32 @@ def _flutter_extension_impl(module_ctx):
                 file_name = "engine_stamp.json" if piece == "engine_stamp" else "artifact.json",
             )
     host = _host_key(module_ctx)
-    repos = {piece: _piece_label(host, piece) for piece in _PIECES}
+    repos = {piece: _piece_label(host, piece) for piece in pins["hosts"][host]}
+    ios_usb_versions = {}
+    if host == "macos-arm64":
+        ios_usb_versions = pins["ios_usb_versions"]
+    ios_usb_names = sorted(pins["ios_usb_versions"].keys())
+    ios_usb_repos = []
+    if host == "macos-arm64":
+        ios_usb_repos = [
+            _piece_label(host, "ios_usb_" + artifact)
+            for artifact in ios_usb_names
+        ]
+    cache_inputs = [
+        repos["framework_source"].replace("BUILD.bazel", "all"),
+        repos["dart-sdk"].replace("BUILD.bazel", "all"),
+        repos["flutter_patched_sdk"].replace("BUILD.bazel", "all"),
+        repos["flutter_patched_sdk_product"].replace("BUILD.bazel", "all"),
+        repos["sky_engine"].replace("BUILD.bazel", "all"),
+        repos["flutter_gpu"].replace("BUILD.bazel", "all"),
+        repos["host_artifacts"].replace("BUILD.bazel", "all"),
+        repos["font_subset"].replace("BUILD.bazel", "all"),
+        repos["material_fonts"].replace("BUILD.bazel", "all"),
+        repos["gradle_wrapper"].replace("BUILD.bazel", "all"),
+        "@flutter_sdk_{}_engine_stamp//:all".format(host),
+    ]
+    for label in ios_usb_repos:
+        cache_inputs.append(label.replace("BUILD.bazel", "all"))
     sdk_tree(
         name = "flutter_sdk",
         framework_source = repos["framework_source"],
@@ -228,6 +307,9 @@ def _flutter_extension_impl(module_ctx):
         material_fonts = repos["material_fonts"],
         gradle_wrapper = repos["gradle_wrapper"],
         engine_stamp = "@flutter_sdk_{}_engine_stamp//:engine_stamp.json".format(host),
+        ios_usb_artifacts = ios_usb_repos,
+        ios_usb_names = ios_usb_names,
+        tools_cache_inputs = cache_inputs,
         engine_host_dir = "darwin-x64" if host.startswith("macos") else "linux-x64",
         engine_revision = pins["engine_revision"],
         engine_content_hash = pins["engine_content_hash"],
@@ -237,8 +319,8 @@ def _flutter_extension_impl(module_ctx):
         dart_sdk_version = pins["dart_sdk_version"],
         material_fonts_version = pins["material_fonts_version"],
         gradle_wrapper_version = pins["gradle_wrapper_version"],
+        ios_usb_versions = ios_usb_versions,
     )
-    flutter_tools_packages(name = "flutter_tools_packages")
     return module_ctx.extension_metadata(reproducible = True, facts = {tag.version: pins})
 
 

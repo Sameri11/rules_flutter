@@ -1117,6 +1117,30 @@
               "sha256": "0890ca45210e7b43ab430ed4529952119583bdfa8418507abb847699661f4676",
               "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/darwin-arm64/artifacts.zip"
             },
+            "ios_usb_ios-deploy": {
+              "sha256": "bdf617ac854a8db4902ef44d780688e98ef18ffc4d06db41af02f085c328c089",
+              "url": "https://storage.googleapis.com/flutter_infra_release/ios-usb-dependencies/arm64_x86_64/ios-deploy/7a29ab0b6d611f2bf5de4b6f929a82a091866307/ios-deploy.zip"
+            },
+            "ios_usb_libimobiledevice": {
+              "sha256": "366410275af4d7f68defcb98a3997c83863f3e31c0345490ce62159f92260b47",
+              "url": "https://storage.googleapis.com/flutter_infra_release/ios-usb-dependencies/arm64_x86_64/libimobiledevice/0bf0f9e941c85d06ce4b5909d7a61b3a4f2a6a05/libimobiledevice.zip"
+            },
+            "ios_usb_libimobiledeviceglue": {
+              "sha256": "04d4fdea8ca09135ab27cc638adff0ee2693e61d72901a92ef71023f2f55dba6",
+              "url": "https://storage.googleapis.com/flutter_infra_release/ios-usb-dependencies/arm64_x86_64/libimobiledeviceglue/050ff3bf8fdab6ce53a2ddc6ae49b11b1c02a168/libimobiledeviceglue.zip"
+            },
+            "ios_usb_libplist": {
+              "sha256": "fd4909cfa7ea4367732fe745ff9c794ed42c9f1bd4042a1e6ec4c9bcf08e2861",
+              "url": "https://storage.googleapis.com/flutter_infra_release/ios-usb-dependencies/arm64_x86_64/libplist/cf5897a71ea412ea2aeb1e2f6b5ea74d4fabfd8c/libplist.zip"
+            },
+            "ios_usb_libusbmuxd": {
+              "sha256": "0a1d11f950f8b140cbbd365768039028648018dcbe095f4eb6ba0366f3f0d605",
+              "url": "https://storage.googleapis.com/flutter_infra_release/ios-usb-dependencies/arm64_x86_64/libusbmuxd/19d6bec393c9f9b31ccb090059f59268da32e281/libusbmuxd.zip"
+            },
+            "ios_usb_openssl": {
+              "sha256": "f760b25a2c72b4244bd3c1ea90e866239fa3376eff3c23fe1e70504bd4615719",
+              "url": "https://storage.googleapis.com/flutter_infra_release/ios-usb-dependencies/arm64_x86_64/openssl/22dbb176deef7d9a80f5c94f57a4b518ea935f50/openssl.zip"
+            },
             "material_fonts": {
               "sha256": "e56fa8e9bb4589fde964be3de451f3e5b251e4a1eafb1dc98d94add034dd5a86",
               "url": "https://storage.googleapis.com/flutter_infra_release/flutter/fonts/3012db47f3130e62f7cc0beabff968a33cbec8d8/fonts.zip"
@@ -1126,6 +1150,14 @@
               "url": "https://storage.googleapis.com/flutter_infra_release/flutter/51379e6df48ea8ee7205623b90fe66491cad8df3/sky_engine.zip"
             }
           }
+        },
+        "ios_usb_versions": {
+          "ios-deploy": "7a29ab0b6d611f2bf5de4b6f929a82a091866307",
+          "libimobiledevice": "0bf0f9e941c85d06ce4b5909d7a61b3a4f2a6a05",
+          "libimobiledeviceglue": "050ff3bf8fdab6ce53a2ddc6ae49b11b1c02a168",
+          "libplist": "cf5897a71ea412ea2aeb1e2f6b5ea74d4fabfd8c",
+          "libusbmuxd": "19d6bec393c9f9b31ccb090059f59268da32e281",
+          "openssl": "22dbb176deef7d9a80f5c94f57a4b518ea935f50"
         },
         "material_fonts_version": "flutter_infra_release/flutter/fonts/3012db47f3130e62f7cc0beabff968a33cbec8d8/fonts.zip",
         "schema": 1,

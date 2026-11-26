@@ -387,7 +387,8 @@ def _pub_hub_impl(rctx):
         }
     root_pubspec = rctx.read(rctx.attr.pubspec)
     workspace_members = []
-    for member_path in pubspec_workspace(root_pubspec):
+    workspace_paths = pubspec_workspace(root_pubspec) if rctx.attr.include_workspace_members else []
+    for member_path in workspace_paths:
         member_dir = project_dir.get_child(*_segments(member_path))
         member_pubspec = member_dir.get_child("pubspec.yaml")
         if not member_pubspec.exists:
@@ -612,6 +613,7 @@ pub_hub = repository_rule(
     attrs = {
         "lock": attr.label(allow_single_file = True, mandatory = True),
         "pubspec": attr.label(allow_single_file = True, mandatory = True),
+        "include_workspace_members": attr.bool(default = True),
         "hosted": attr.label_keyed_string_dict(allow_files = True),
         "git": attr.label_keyed_string_dict(allow_files = True),
         "sdk": attr.string_list(),
@@ -672,6 +674,7 @@ def _pub_impl(mctx):
                 hosted = hosted,
                 git = git,
                 sdk = [package["name"] for package in resolved["sdk"]],
+                include_workspace_members = lock.include_workspace_members,
                 test_deps_exclude = lock.test_deps_exclude,
                 lock_name = lock.name,
                 composition_bzl = str(Label("//flutter:composition.bzl")),
@@ -689,6 +692,7 @@ _lock_tag = tag_class(
             allow_single_file = True,
             doc = "The project's pubspec.lock. pubspec.yaml must sit beside it.",
         ),
+        "include_workspace_members": attr.bool(default = True),
         "test_deps_exclude": attr.string_list(
             doc = "Packages to leave out of the test deps kernel, by name. A direct package whose libraries do not compile there fails the build naming it; list it here, and each test that imports it compiles it itself.",
         ),

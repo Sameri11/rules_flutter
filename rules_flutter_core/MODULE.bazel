@@ -30,11 +30,15 @@ test_metadata_parser_src(
     version_file = "@flutter_sdk//:flutter.version.json",
 )
 
-use_repo(
-    flutter,
-    "flutter_sdk",
-    "flutter_tools_packages",
+use_repo(flutter, "flutter_sdk")
+
+flutter_tools = use_extension("//flutter:extensions.bzl", "pub")
+flutter_tools.lock(
+    name = "flutter_tools",
+    lock = "@flutter_sdk//:pubspec.lock",
+    include_workspace_members = False,
 )
+use_repo(flutter_tools, "flutter_tools")
 
 flutter_toolchains = use_extension("//flutter/private:toolchain_repo.bzl", "flutter_toolchains")
 use_repo(flutter_toolchains, "flutter_toolchains")
