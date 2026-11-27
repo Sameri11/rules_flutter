@@ -41,4 +41,3 @@ sdk_android_piece = repository_rule(
         "failure_message": attr.string(),
     },
 )
-
