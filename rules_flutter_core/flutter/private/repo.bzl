@@ -202,9 +202,64 @@ filegroup(
 )
 """
 
+def _flutter_sdk_stub(ctx):
+    ctx.file("pubspec.lock", "packages: {}\nsdks: {}\n")
+    ctx.file("pubspec.yaml", "name: flutter_tools\n")
+    ctx.file("packages/flutter_tools/bin/flutter_tools.dart", "")
+    build = """load(%s, "flutter_sdk_missing")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["pubspec.lock", "pubspec.yaml", "packages/flutter_tools/bin/flutter_tools.dart"])
+""" % repr(str(Label("//flutter:sdk_failure.bzl")))
+    for target in [
+        "dart",
+        "dart_sdk_revision",
+        "dartaotruntime",
+        "vm_platform_strong.dill",
+        "flutter",
+        "frontend_server.snapshot",
+        "flutter.version.json",
+        "engine_stamp.json",
+        "vm_isolate_snapshot.bin",
+        "isolate_snapshot.bin",
+        "flutter_tester",
+        "icudtl.dat",
+        "impellerc",
+        "dart_sdk_files",
+        "platform_product",
+        "platform_debug",
+        "sdk_packages",
+        "framework_tools_lib",
+        "flutter_tools_cache_state",
+        "framework_source_root",
+        "dart_sdk_root",
+        "patched_sdk_root",
+        "patched_sdk_product_root",
+        "sky_engine_root",
+        "flutter_gpu_root",
+        "host_artifacts_root",
+        "font_subset_root",
+        "material_fonts_root",
+        "gradle_wrapper_root",
+        "ios_usb_libimobiledevice_root",
+        "ios_usb_libusbmuxd_root",
+        "ios_usb_libplist_root",
+        "ios_usb_openssl_root",
+        "ios_usb_libimobiledeviceglue_root",
+        "ios_usb_ios_deploy_root",
+    ]:
+        build += """flutter_sdk_missing(
+    name = %s,
+    message = "The root module must declare flutter.sdk(version = \\"X.Y.Z\\") or flutter.host_sdk(version = \\"X.Y.Z\\") to build Flutter targets.",
+)
+""" % repr(target)
+    ctx.file("BUILD.bazel", build)
+
 def _flutter_sdk_impl(ctx):
     if not ctx.attr.version:
-        fail("The root module must declare flutter.sdk(version = \"X.Y.Z\") to build Flutter targets.")
+        _flutter_sdk_stub(ctx)
+        return
     root = _resolve_flutter_root(ctx)
     version_file = "{}/bin/cache/flutter.version.json".format(root)
     actual = json.decode(ctx.read(version_file))

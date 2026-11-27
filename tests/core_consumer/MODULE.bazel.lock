@@ -465,25 +465,6 @@
         }
       }
     },
-    "@@sameri11_rules_flutter_core+//flutter:extensions.bzl%flutter": {
-      "general": {
-        "bzlTransitiveDigest": "gWAiOpMTK++R2Q86lailqhG80Xu+JcNdxYVcA1NfwHA=",
-        "usagesDigest": "M9zv5xCGzmNUd7ho3lam884NDO9+c0DK/RoIPwdODYA=",
-        "recordedInputs": [],
-        "generatedRepoSpecs": {
-          "flutter_sdk": {
-            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_sdk",
-            "attributes": {
-              "version": ""
-            }
-          },
-          "flutter_tools_packages": {
-            "repoRuleId": "@@sameri11_rules_flutter_core+//flutter/private:repo.bzl%flutter_tools_packages",
-            "attributes": {}
-          }
-        }
-      }
-    },
     "@@sameri11_rules_flutter_core+//flutter/private:toolchain_repo.bzl%flutter_toolchains": {
       "general": {
         "bzlTransitiveDigest": "VYXSJyUy+fg49VC4uQo7cEm4X57ktEMcOns+dR2TG5Q=",

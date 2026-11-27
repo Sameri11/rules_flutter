@@ -1042,7 +1042,6 @@
         "engine_content_hash": "51379e6df48ea8ee7205623b90fe66491cad8df3",
         "engine_revision": "4d35714800b9266b6693a58e1225ecd7e9e45ed7",
         "framework_commit": "ae9b586f34a8443573f82ef57c3bf914a908cbf7",
-        "framework_commit_date": "2026-11-19T01:01:07Z",
         "gradle_wrapper_version": "flutter_infra_release/gradle-wrapper/fd5c1f2c013565a3bea56ada6df9d2b8e96d56aa/gradle-wrapper.tgz",
         "hosts": {
           "linux-x64": {

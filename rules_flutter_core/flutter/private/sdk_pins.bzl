@@ -61,7 +61,7 @@ _SCHEMA = 1
 def _valid_metadata(value, version):
     if type(value) != "dict" or value.get("schema") != _SCHEMA or value.get("version") != version:
         return False
-    for field in ("framework_commit", "framework_commit_date", "dart_sdk_version", "engine_revision", "engine_content_hash", "material_fonts_version", "gradle_wrapper_version"):
+    for field in ("framework_commit", "dart_sdk_version", "engine_revision", "engine_content_hash", "material_fonts_version", "gradle_wrapper_version"):
         if type(value.get(field)) != "string" or not value[field]:
             return False
     usb_versions = value.get("ios_usb_versions")
@@ -73,7 +73,7 @@ def _valid_metadata(value, version):
     return True
 
 def _valid_pin(value, version):
-    if not _valid_metadata(value, version):
+    if not _valid_metadata(value, version) or "framework_commit_date" in value:
         return False
     hosts = value.get("hosts")
     if type(hosts) != "dict" or sorted(hosts.keys()) != sorted(_HOSTS.keys()):
@@ -117,7 +117,6 @@ def _release_commit(ctx, version, host):
 def _pin_version(ctx, version, overrides, existing):
     if _valid_metadata(existing, version):
         commit = existing["framework_commit"]
-        framework_date = existing["framework_commit_date"]
         dart_sdk_version = existing["dart_sdk_version"]
         engine_revision = existing["engine_revision"]
         engine_hash = existing["engine_content_hash"]
@@ -151,12 +150,6 @@ def _pin_version(ctx, version, overrides, existing):
             "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/gradle_wrapper.version".format(commit),
             "gradle_wrapper.version",
         ).strip()
-        framework_info = json.decode(_read_download(
-            ctx,
-            "https://api.github.com/repos/flutter/flutter/commits/{}".format(commit),
-            "framework_commit.json",
-        ))
-        framework_date = framework_info["commit"]["author"]["date"]
         usb_versions = {}
 
     for name in ("libimobiledevice", "libusbmuxd", "libplist", "openssl", "libimobiledeviceglue", "ios-deploy"):
@@ -235,7 +228,6 @@ def _pin_version(ctx, version, overrides, existing):
         "schema": _SCHEMA,
         "version": version,
         "framework_commit": commit,
-        "framework_commit_date": framework_date,
         "dart_sdk_version": dart_sdk_version,
         "engine_revision": engine_revision,
         "engine_content_hash": engine_hash,
@@ -262,6 +254,19 @@ def _flutter_extension_impl(module_ctx):
         if module.is_root:
             sdk_tags = module.tags.sdk
             host_tags = module.tags.host_sdk
+    if not sdk_tags and not host_tags:
+        flutter_sdk(name = "flutter_sdk", version = "")
+        flutter_tools_packages(name = "flutter_tools_packages")
+        message = "The root module must declare flutter.sdk(version = \"X.Y.Z\") or flutter.host_sdk(version = \"X.Y.Z\") to build Flutter targets."
+        for android_host in _HOSTS:
+            for piece in _ANDROID_PIECES:
+                sdk_android_piece(
+                    name = "flutter_android_{}_{}".format(piece, android_host.replace("-", "_")),
+                    urls = [],
+                    sha256 = "",
+                    failure_message = message,
+                )
+        return module_ctx.extension_metadata(reproducible = True)
     if sdk_tags and host_tags:
         fail("Declare either flutter.sdk or flutter.host_sdk, not both.")
     if len(sdk_tags) + len(host_tags) != 1:
@@ -313,7 +318,6 @@ def _flutter_extension_impl(module_ctx):
         engine_content_hash = pins["engine_content_hash"],
         framework_version = pins["version"],
         framework_commit = pins["framework_commit"],
-        framework_commit_date = pins["framework_commit_date"],
         dart_sdk_version = pins["dart_sdk_version"],
         material_fonts_version = pins["material_fonts_version"],
         gradle_wrapper_version = pins["gradle_wrapper_version"],
