@@ -30,7 +30,7 @@ FILES = {
     "composition": "flutter/composition.bzl",
     "sdk_pins": "flutter/private/sdk_pins.bzl",
     "sdk_tree": "flutter/private/sdk_tree.bzl",
-    "sdk_android_piece": "flutter/private/sdk_android_piece.bzl",
+    "engine_artifact": "flutter/private/engine_artifact.bzl",
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
@@ -114,7 +114,8 @@ class Checker:
             "sdk_pins": (
                 'getattr(module_ctx, "facts", {})',
                 'facts = {tag.version: pins}',
-                '"flutter_android_{}_{}".format(piece, android_host.replace("-", "_"))',
+                "_pin_engine_artifacts",
+                'tag_classes = {"sdk": _sdk_tag, "engine_artifact": _engine_artifact_tag}',
             ),
             "sdk_tree": (
                 "block = False",
@@ -123,7 +124,7 @@ class Checker:
                 '"bin/cache/artifacts/engine/common/flutter_patched_sdk_product"',
                 '"bin/cache/flutter.version.json"',
             ),
-            "sdk_android_piece": ("ctx.download_and_extract(", "sha256 = ctx.attr.sha256"),
+            "engine_artifact": ("ctx.download_and_extract(", "sha256 = ctx.attr.sha256", 'name = "files"'),
         }
         for name, fragments in expected.items():
             source = self.sources.get(name, "")
@@ -403,6 +404,16 @@ class Checker:
             for call in staged_calls
         ):
             self.fail("D", "FlutterAssets must derive FLUTTER_ROOT from its staged SDK tree")
+
+        staged_command = _staged_command(tree)
+        required = (
+            'export PATH="/usr/bin:/bin"',
+            'export FLUTTER_ALREADY_LOCKED="true"',
+            'export HOME="$STAGE/home"',
+            "{bundle_guard}",
+        )
+        if staged_command is None or any(token not in staged_command for token in required):
+            self.fail("D", "staged FlutterAssets must isolate PATH, lock state, HOME, and check the bundle pubspec")
 
         tester = _function(tree, "_flutter_test_assets_impl")
         if tester is None:

@@ -1,0 +1,5 @@
+alias(
+    name = "engine_artifact_files",
+    actual = "@consumer_fake_engine_artifact//:files",
+    visibility = ["//visibility:public"],
+)

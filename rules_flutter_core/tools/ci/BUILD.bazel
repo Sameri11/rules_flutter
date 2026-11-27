@@ -22,7 +22,7 @@ genrule(
         "//flutter/private:pub_workspace.bzl",
         "//flutter/private:sdk_pins.bzl",
         "//flutter/private:sdk_tree.bzl",
-        "//flutter/private:sdk_android_piece.bzl",
+        "//flutter/private:engine_artifact.bzl",
     ],
     outs = ["key_portability_check.checked"],
     cmd = """set -euo pipefail

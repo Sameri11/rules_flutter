@@ -1,24 +1,27 @@
 """Implementation of the Flutter rules.
 
 Nothing here is supported API: consumers load //flutter:defs.bzl and
-//flutter:extensions.bzl; hand-wired targets load //flutter:composition.bzl. The `.bzl` files beside this file declare
-`visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
-allows it to be loaded from the ruleset's root MODULE.bazel only, and
-`hook_packages.bzl`, whose public visibility allows generated pub hub
-repositories to load its private metadata rule.
+//flutter:extensions.bzl; hand-wired targets load //flutter:composition.bzl.
+The `.bzl` files beside this file declare
+`visibility(["//flutter", "//flutter:__subpackages__"])`, except
+`toolchain_repo.bzl`, whose `//` visibility allows it to be loaded from the
+ruleset's root MODULE.bazel only, and `hook_packages.bzl`, whose public
+visibility allows generated pub hub repositories to load its private metadata
+rule.
 
-Two mechanical exceptions need a label, and only those:
+Mechanical exceptions that need labels:
 
-  * The Python helpers are attribute defaults of rules defined here. Bazel
+  * Python helpers are attribute defaults of rules defined here. Bazel
     resolves an implicit dependency against the package of the `.bzl` that
     defines the rule, so `//flutter:__subpackages__` is enough even though the
     rules are instantiated in another module's packages.
-  * The `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
-    That guard parses their source for action-key portability contracts, which
+  * `sdk_failure.bzl` is loaded from generated repositories through a label
+    created in core, so its file is exported explicitly.
+  * The `.bzl` files //tools/ci:key_portability_check reads as `srcs`. That
+    guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
-`repo.bzl` is loaded through the public module extension. The generated
-host-compatible registration points at the public static toolchain target.
+The generated registration points at the public static toolchain target.
 """
 
 load(":flutter_tools_snapshot.bzl", "flutter_tools_kernel")
@@ -39,6 +42,11 @@ exports_files(
         "tester_assets.dart",
     ],
     visibility = ["//flutter:__subpackages__"],
+)
+
+exports_files(
+    ["sdk_failure.bzl"],
+    visibility = ["//visibility:public"],
 )
 
 flutter_tools_kernel(
@@ -93,7 +101,7 @@ exports_files(
         "test_kernel_driver.bzl",
         "sdk_pins.bzl",
         "sdk_tree.bzl",
-        "sdk_android_piece.bzl",
+        "engine_artifact.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
 )

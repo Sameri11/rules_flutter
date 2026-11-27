@@ -526,7 +526,7 @@
     },
     "@@sameri11_rules_flutter_android+//flutter/private:target_toolchain_repo.bzl%flutter_android_toolchains": {
       "general": {
-        "bzlTransitiveDigest": "mkULXEDf3oDtm7ZxLHnajc7YN92SRpJTMqAM6Xgdc8A=",
+        "bzlTransitiveDigest": "f+HQKYdhsTiGWN9fOTGWwI06Bit41vpC6T/on15xCrk=",
         "usagesDigest": "2WhXsIhHLINViYFxmWfqIy1rlYxnWFK11LB9vSRc2M0=",
         "recordedInputs": [
           "REPO_MAPPING:sameri11_rules_flutter_android+,platforms platforms",
@@ -546,24 +546,24 @@
             "repoRuleId": "@@sameri11_rules_flutter_android+//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot",
             "attributes": {
               "engine_dir": "android-arm64-release",
-              "macos_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm64_release_macos_arm64//:gen_snapshot",
-              "linux_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm64_release_linux_x64//:gen_snapshot"
+              "macos_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm64_release_macos_arm64//:files",
+              "linux_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm64_release_linux_x64//:files"
             }
           },
           "flutter_gen_snapshot_x86_64": {
             "repoRuleId": "@@sameri11_rules_flutter_android+//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot",
             "attributes": {
               "engine_dir": "android-x64-release",
-              "macos_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_x64_release_macos_arm64//:gen_snapshot",
-              "linux_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_x64_release_linux_x64//:gen_snapshot"
+              "macos_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_x64_release_macos_arm64//:files",
+              "linux_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_x64_release_linux_x64//:files"
             }
           },
           "flutter_gen_snapshot_armeabi_v7a": {
             "repoRuleId": "@@sameri11_rules_flutter_android+//flutter/private:gen_snapshot_repo.bzl%flutter_gen_snapshot",
             "attributes": {
               "engine_dir": "android-arm-release",
-              "macos_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm_release_macos_arm64//:gen_snapshot",
-              "linux_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm_release_linux_x64//:gen_snapshot"
+              "macos_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm_release_macos_arm64//:files",
+              "linux_artifact": "@@sameri11_rules_flutter_core++flutter+flutter_android_android_gen_android_arm_release_linux_x64//:files"
             }
           },
           "flutter_android_target_toolchains": {

@@ -128,28 +128,6 @@ filegroup(name = "flutter_tools_cache_state", srcs = [
         repr(globs),
         repr(["bin/cache/{}.stamp".format(name) for name in ctx.attr.ios_usb_names]),
     )
-    for name in [
-        "framework_source_root",
-        "dart_sdk_root",
-        "patched_sdk_root",
-        "patched_sdk_product_root",
-        "sky_engine_root",
-        "flutter_gpu_root",
-        "host_artifacts_root",
-        "font_subset_root",
-        "material_fonts_root",
-        "gradle_wrapper_root",
-    ]:
-        build += "filegroup(name = %s, srcs = [\"flutter.version.json\"])\n" % repr(name)
-    for name in ("libimobiledevice", "libusbmuxd", "libplist", "openssl", "libimobiledeviceglue", "ios-deploy"):
-        target = "ios_usb_" + name.replace("-", "_") + "_root"
-        if name in ctx.attr.ios_usb_names:
-            marker = "pieces/ios_usb_" + name + "/.bazel_root"
-            ctx.file(marker, "")
-            srcs = [marker]
-        else:
-            srcs = []
-        build += "filegroup(name = %s, srcs = %s)\n" % (repr(target), repr(srcs))
     ctx.file("BUILD.bazel", build)
     ctx.symlink("bin/cache/dart-sdk/bin/dart", "dart")
     ctx.symlink("bin/cache/dart-sdk/bin/dartaotruntime", "dartaotruntime")

@@ -1,6 +1,6 @@
 """pubspec.lock -> Bazel repositories: hosted and git packages, SDK packages, and package configs.
 
-The `pub` module extension reads a consumer's `pubspec.lock` and creates
+visibility(["//flutter", "//flutter:__subpackages__"])
 
   * one repository per hosted package, downloaded through Bazel's downloader from
     `<server>/api/archives/<name>-<version>.tar.gz` and pinned to the sha256 the
@@ -152,6 +152,12 @@ def _relpath(base, target):
 
 def _segments(path):
     return [s for s in str(path).split("/") if s]
+
+def execroot_package_segments(package_dir, repo_name, workspace_root, external_root):
+    path_segments = _segments(package_dir)
+    if repo_name:
+        return ["external"] + path_segments[len(_segments(external_root)):]
+    return path_segments[len(_segments(workspace_root)):]
 
 def _test_deps_libraries(rctx, name, lib, sdk):
     """The `package:` libraries one direct package adds to the hub's test deps kernel.
@@ -357,7 +363,12 @@ def _pub_hub_impl(rctx):
                     path_segs.append(seg)
             package_dir = rctx.path(rctx.attr.path_package_root).dirname.get_child(*path_segs)
             pubspec = package_dir.get_child("pubspec.yaml")
-            dirsegs = ["external"] + _segments(package_dir)[len(external):]
+            dirsegs = execroot_package_segments(
+                package_dir,
+                rctx.attr.path_package_root.repo_name,
+                rctx.workspace_root,
+                hub_dir.dirname,
+            )
         else:
             # `../app_store/x` relative to the project dir, normalized to a workspace-relative
             # segment list. A `..` may not climb above the lock's own repository: the
@@ -402,7 +413,7 @@ def _pub_hub_impl(rctx):
         }
     root_pubspec = rctx.read(rctx.attr.pubspec)
     workspace_members = []
-    workspace_paths = pubspec_workspace(root_pubspec) if rctx.attr.include_workspace_members else []
+    workspace_paths = pubspec_workspace(root_pubspec)
     for member_path in workspace_paths:
         member_dir = project_dir.get_child(*_segments(member_path))
         member_pubspec = member_dir.get_child("pubspec.yaml")
@@ -629,7 +640,6 @@ pub_hub = repository_rule(
         "lock": attr.label(allow_single_file = True, mandatory = True),
         "pubspec": attr.label(allow_single_file = True, mandatory = True),
         "path_package_root": attr.label(allow_single_file = True),
-        "include_workspace_members": attr.bool(default = True),
         "hosted": attr.label_keyed_string_dict(allow_files = True),
         "git": attr.label_keyed_string_dict(allow_files = True),
         "sdk": attr.string_list(),
@@ -691,7 +701,6 @@ def _pub_impl(mctx):
                 path_package_root = lock.path_package_root,
                 git = git,
                 sdk = [package["name"] for package in resolved["sdk"]],
-                include_workspace_members = lock.include_workspace_members,
                 test_deps_exclude = lock.test_deps_exclude,
                 lock_name = lock.name,
                 composition_bzl = str(Label("//flutter:composition.bzl")),
@@ -713,7 +722,6 @@ _lock_tag = tag_class(
             allow_single_file = True,
             doc = "File label whose directory resolves relative path packages in the lock, instead of the directory containing the lock.",
         ),
-        "include_workspace_members": attr.bool(default = True),
         "test_deps_exclude": attr.string_list(
             doc = "Packages to leave out of the test deps kernel, by name. A direct package whose libraries do not compile there fails the build naming it; list it here, and each test that imports it compiles it itself.",
         ),

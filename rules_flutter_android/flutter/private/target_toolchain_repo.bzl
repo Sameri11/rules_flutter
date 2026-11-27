@@ -83,8 +83,8 @@ def _android_toolchains_extension_impl(_ctx):
         flutter_gen_snapshot(
             name = "flutter_gen_snapshot_" + suffix,
             engine_dir = engine_dir,
-            macos_artifact = Label("@flutter_android_{}_macos_arm64//:gen_snapshot".format(piece)),
-            linux_artifact = Label("@flutter_android_{}_linux_x64//:gen_snapshot".format(piece)),
+            macos_artifact = Label("@flutter_android_{}_macos_arm64//:files".format(piece)),
+            linux_artifact = Label("@flutter_android_{}_linux_x64//:files".format(piece)),
         )
         toolchain_targets[abi] = str(Label("//flutter:target_toolchain_" + suffix))
         aot_toolchain_targets[abi] = str(Label("@flutter_gen_snapshot_" + suffix + "//:aot_toolchain"))

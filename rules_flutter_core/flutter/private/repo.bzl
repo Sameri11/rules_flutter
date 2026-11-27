@@ -8,6 +8,7 @@ def _flutter_sdk_stub(ctx):
     ctx.file("pubspec.lock", "packages: {}\nsdks: {}\n")
     ctx.file("pubspec.yaml", "name: flutter_tools\n")
     ctx.file("packages/flutter_tools/bin/flutter_tools.dart", "")
+    message = ctx.attr.failure_message or "The root module must declare flutter.sdk(version = \"X.Y.Z\") to build Flutter targets."
     build = """load(%s, "flutter_sdk_missing")
 
 package(default_visibility = ["//visibility:public"])
@@ -34,42 +35,21 @@ exports_files(["pubspec.lock", "pubspec.yaml", "packages/flutter_tools/bin/flutt
         "sdk_packages",
         "framework_tools_lib",
         "flutter_tools_cache_state",
-        "framework_source_root",
-        "dart_sdk_root",
-        "patched_sdk_root",
-        "patched_sdk_product_root",
-        "sky_engine_root",
-        "flutter_gpu_root",
-        "host_artifacts_root",
-        "font_subset_root",
-        "material_fonts_root",
-        "gradle_wrapper_root",
-        "ios_usb_libimobiledevice_root",
-        "ios_usb_libusbmuxd_root",
-        "ios_usb_libplist_root",
-        "ios_usb_openssl_root",
-        "ios_usb_libimobiledeviceglue_root",
-        "ios_usb_ios_deploy_root",
     ]:
         build += """flutter_sdk_missing(
     name = %s,
-    message = "The root module must declare flutter.sdk(version = \\"X.Y.Z\\") to build Flutter targets.",
+    message = %s,
 )
-""" % repr(target)
+""" % (repr(target), repr(message))
     ctx.file("BUILD.bazel", build)
 
 flutter_sdk = repository_rule(
     implementation = _flutter_sdk_stub,
-    attrs = {
-        "version": attr.string(mandatory = True),
-    },
+    attrs = {"failure_message": attr.string()},
 )
 
 def _flutter_tools_lockfile_impl(ctx):
-    if ctx.attr.source:
-        ctx.file("pubspec.lock", ctx.read(ctx.attr.source))
-        ctx.file("pubspec.yaml", ctx.read(ctx.attr.pubspec_source))
-    elif ctx.attr.url:
+    if ctx.attr.url:
         if not ctx.attr.sha256:
             fail("A Flutter tools lockfile URL requires a sha256.")
         ctx.download(
@@ -93,8 +73,6 @@ def _flutter_tools_lockfile_impl(ctx):
 flutter_sdk_lockfile = repository_rule(
     implementation = _flutter_tools_lockfile_impl,
     attrs = {
-        "source": attr.label(allow_single_file = True),
-        "pubspec_source": attr.label(allow_single_file = True),
         "url": attr.string(),
         "sha256": attr.string(),
     },

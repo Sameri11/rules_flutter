@@ -1607,13 +1607,11 @@ def _flutter_assets_impl(ctx):
     # Code assets belong in platform native libraries, not the asset tree.
     # Packaging recipes install them in native library directories; discard
     # flutter_tools' duplicate. NativeAssetsManifest.json stays beside the bundle for runtime lookup.
-    ios_usb_links = "\n".join([
-        'ln -s "$SDK_ROOT/pieces/ios_usb_{}" "$ROOT/bin/cache/artifacts/{}"'.format(
-            name,
-            name,
-        )
-        for name in sorted(toolchain.ios_usb_roots)
-    ])
+    ios_usb_links = """for item in "$SDK_ROOT"/pieces/ios_usb_*; do
+    [ -d "$item" ] || continue
+    name="${item##*/ios_usb_}"
+    ln -s "$item" "$ROOT/bin/cache/artifacts/$name"
+done"""
     cmd = staged.command + """ROOT="$STAGE/sdk"
 SDK_ROOT="$EXECROOT/{sdk_root}"
 ENGINE_HOST=darwin-x64
@@ -1667,9 +1665,6 @@ for stamp in "$SDK_ROOT"/bin/cache/*.stamp; do
     cp -L "$stamp" "$ROOT/bin/cache/$(basename "$stamp")"
 done
 cp -L "$SDK_ROOT/pieces/engine_stamp.json" "$ROOT/bin/cache/engine_stamp.json"
-export FLUTTER_ALREADY_LOCKED=true
-export HOME="$STAGE/home"
-mkdir -p "$HOME"
 # flutter_tools takes the project directory as two levels above --target.
 mkdir -p .flutter_bazel
 printf 'void main() {{}}\\n' > .flutter_bazel/stub.dart
@@ -1682,16 +1677,6 @@ flutter_tool() {{
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         sdk_root = toolchain.sdk_version.dirname,
-        framework_root = toolchain.framework_root,
-        dart_sdk_root = toolchain.dart_sdk_root,
-        common_sdk_root = toolchain.common_sdk_root,
-        product_sdk_root = toolchain.product_sdk_root,
-        host_engine_root = toolchain.host_engine_root,
-        font_subset_root = toolchain.font_subset_root,
-        sky_engine_root = toolchain.sky_engine_root,
-        flutter_gpu_root = toolchain.flutter_gpu_root,
-        material_fonts_root = toolchain.material_fonts_root,
-        gradle_wrapper_root = toolchain.gradle_wrapper_root,
         ios_usb_links = ios_usb_links,
         dart = toolchain.dart.path,
         package_config = toolchain.tools_package_config.path,
@@ -1718,8 +1703,8 @@ python3 "$EXECROOT/{merger}" {merge_args}
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = staged.files + toolchain.piece_roots + toolchain.tools_packages.to_list() + toolchain.tools_cache_state.to_list() + [staged.manifest, toolchain.sdk_version, toolchain.dart, toolchain.tools_package_config, ctx.file._merger, ctx.file._bundle_guard, toolchain.tools_snapshot],
-            transitive = [build_env.files] if build_env else [],
+            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.dart, toolchain.tools_package_config, ctx.file._merger, ctx.file._bundle_guard, toolchain.tools_snapshot],
+            transitive = [toolchain.tools_packages, toolchain.tools_cache_state] + ([build_env.files] if build_env else []),
         ),
         outputs = [out],
         mnemonic = "FlutterAssets",

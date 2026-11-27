@@ -57,6 +57,24 @@ per-piece SHA-256 overrides are available on the tag, and
 `--downloader_config` can redirect downloads through mirrors (useful for slow
 or blocked GitHub access).
 
+The `flutter.sdk` tag's `sha256` and `urls` dictionaries are keyed by SDK piece:
+`dart-sdk`, `flutter_patched_sdk`, `flutter_patched_sdk_product`, `sky_engine`,
+`flutter_gpu`, `host_artifacts`, `font_subset`, `material_fonts`,
+`gradle_wrapper`, `engine_stamp`, `framework_source`,
+`ios_usb_libimobiledevice`, `ios_usb_libusbmuxd`, `ios_usb_libplist`,
+`ios_usb_openssl`, `ios_usb_libimobiledeviceglue`, and `ios_usb_ios-deploy`.
+They also accept names declared by `flutter.engine_artifact` tags (for example,
+the six `flutter_android_android_gen_*_release_{macos_arm64,linux_x64}` names
+declared by `rules_flutter_android`). An override can pin an alternate source:
+
+```starlark
+flutter.sdk(
+    version = "3.50.1",
+    base_url = "https://mirror.example",
+    urls = {"framework_source": ["https://mirror.example/flutter-archive.tar.gz"]},
+)
+```
+
 The host Flutter installation remains useful for IDE workflows, `pub get`, and
 `build_runner`, but Bazel builds use the pinned SDK. Android SDK/NDK are local
 prerequisites; use Android SDK platform 36, build-tools 36.0.0, and NDK 28 or

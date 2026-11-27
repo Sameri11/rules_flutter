@@ -1,8 +1,8 @@
-"""Lazy repositories for Android target artifacts from a pinned Flutter engine."""
+"""Lazy repositories for engine artifacts declared by platform rulesets."""
 
-visibility(["//flutter/private:__pkg__"])
+visibility(["//flutter"])
 
-def _android_piece_impl(ctx):
+def _engine_artifact_impl(ctx):
     if ctx.attr.failure_message:
         ctx.file("BUILD.bazel", """load(%s, "flutter_sdk_missing")
 
@@ -12,13 +12,8 @@ flutter_sdk_missing(
     name = "files",
     message = %s,
 )
-flutter_sdk_missing(
-    name = "gen_snapshot",
-    message = %s,
-)
 """ % (
             repr(str(Label("//flutter/private:sdk_failure.bzl"))),
-            repr(ctx.attr.failure_message),
             repr(ctx.attr.failure_message),
         ))
         return
@@ -33,8 +28,8 @@ filegroup(name = \"files\", srcs = glob([\"**\"], allow_empty = True))
 exports_files(glob([\"**\"], allow_empty = True))
 """)
 
-sdk_android_piece = repository_rule(
-    implementation = _android_piece_impl,
+engine_artifact_repo = repository_rule(
+    implementation = _engine_artifact_impl,
     attrs = {
         "urls": attr.string_list(mandatory = True),
         "sha256": attr.string(mandatory = True),
