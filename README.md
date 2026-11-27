@@ -38,18 +38,18 @@ bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name 
 
 archive_override(
     module_name = "sameri11_rules_flutter_core",
-    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
-    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_core",
+    sha256 = "4de150f68bd24f31a5c67ce79b4fdf29d3a430526d775189ec58536d7c557c3c",
+    strip_prefix = "Sameri11-rules_flutter-1b6b8a6/rules_flutter_core",
     type = "tar.gz",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/1b6b8a679f2c19a49f6b6e81be40f8a40f958362"],
 )
 
 archive_override(
     module_name = "sameri11_rules_flutter_android",
-    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
-    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_android",
+    sha256 = "4de150f68bd24f31a5c67ce79b4fdf29d3a430526d775189ec58536d7c557c3c",
+    strip_prefix = "Sameri11-rules_flutter-1b6b8a6/rules_flutter_android",
     type = "tar.gz",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/1b6b8a679f2c19a49f6b6e81be40f8a40f958362"],
 )
 ```
 
@@ -58,11 +58,13 @@ No local rules checkout is needed.
 Root `BUILD.bazel`:
 
 ```python
+load("@rules_flutter_android//flutter:defs.bzl", "FLUTTER_ANDROID")
 load("@rules_flutter_core//flutter:defs.bzl", "flutter_core")
 
 flutter_core(
     name = "core",
     native_build_env = "@rules_flutter_android//flutter:native_build_env",
+    platforms = [FLUTTER_ANDROID],
     pub = "@pub",
     visibility = ["//android/app:__pkg__"],
 )

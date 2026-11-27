@@ -10,7 +10,7 @@ module(
 # toolchain.
 bazel_dep(name = "apple_support", version = "1.24.5")
 
-# Both ruleset modules come from one immutable commit archive. The two
+# Both ruleset modules come from the same immutable commit archive. The two
 # overrides below are the module's only source of rules; a local checkout is
 # substituted with --override_module on the command line, never in this file.
 bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
@@ -20,19 +20,20 @@ bazel_dep(name = "sameri11_rules_flutter_android", version = "0.1.0", repo_name 
 # directory inside the extracted tree.
 archive_override(
     module_name = "sameri11_rules_flutter_core",
-    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
-    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_core",
+    sha256 = "4de150f68bd24f31a5c67ce79b4fdf29d3a430526d775189ec58536d7c557c3c",
+    strip_prefix = "Sameri11-rules_flutter-1b6b8a6/rules_flutter_core",
     type = "tar.gz",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/1b6b8a679f2c19a49f6b6e81be40f8a40f958362"],
 )
 
 archive_override(
     module_name = "sameri11_rules_flutter_android",
-    sha256 = "06d5307ebfe9622aaa12173c6486fe5a9edadb25315cff1398947d50996ae691",
-    strip_prefix = "Sameri11-rules_flutter-42c9011/rules_flutter_android",
+    sha256 = "4de150f68bd24f31a5c67ce79b4fdf29d3a430526d775189ec58536d7c557c3c",
+    strip_prefix = "Sameri11-rules_flutter-1b6b8a6/rules_flutter_android",
     type = "tar.gz",
-    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/42c9011f4f44fff205f122c4583aa39198564aea"],
+    urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/1b6b8a679f2c19a49f6b6e81be40f8a40f958362"],
 )
+
 
 # The root owns the Android platform, SDK and Maven wiring: a stripped module
 # archive cannot carry the repository's shared .bazelrc or root module.
