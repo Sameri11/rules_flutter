@@ -34,7 +34,6 @@ archive_override(
     urls = ["https://api.github.com/repos/Sameri11/rules_flutter/tarball/1b6b8a679f2c19a49f6b6e81be40f8a40f958362"],
 )
 
-
 # The root owns the Android platform, SDK and Maven wiring: a stripped module
 # archive cannot carry the repository's shared .bazelrc or root module.
 bazel_dep(name = "rules_android", version = "0.7.3")
