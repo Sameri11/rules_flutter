@@ -11,6 +11,7 @@ rule.
 
 Mechanical exceptions that need labels:
 
+
   * Python helpers are attribute defaults of rules defined here. Bazel
     resolves an implicit dependency against the package of the `.bzl` that
     defines the rule, so `//flutter:__subpackages__` is enough even though the
@@ -21,7 +22,8 @@ Mechanical exceptions that need labels:
     guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
-The generated registration points at the public static toolchain target.
+`repo.bzl` is loaded through the public module extension. The generated
+registration points at the public static toolchain target.
 """
 
 load(":flutter_tools_snapshot.bzl", "flutter_tools_kernel")

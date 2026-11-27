@@ -1,4 +1,4 @@
-"""Host-platform repositories assembling gen_snapshot from generic engine archives."""
+"""Host-platform repositories exposing Android gen_snapshot from pinned engine archives."""
 
 def _gen_snapshot_file_impl(ctx):
     files = ctx.attr.files[DefaultInfo].files.to_list()

@@ -109,7 +109,7 @@ class Checker:
         return self.failures
 
     def check_sdk_provisioning(self):
-        """Keep provisioning Facts and assembled-tree contracts visible."""
+        """Keep SDK provisioning Facts and assembled-tree contracts visible."""
         expected = {
             "sdk_pins": (
                 'getattr(module_ctx, "facts", {})',
