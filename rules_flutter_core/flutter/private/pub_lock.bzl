@@ -344,22 +344,37 @@ def _pub_hub_impl(rctx):
         }
 
     for package in lock["path"]:
-        # `../app_store/x` relative to the project dir, normalized to a workspace-relative
-        # segment list. A `..` may not climb above the lock's own repository: the
-        # main repository's root, or `external/<repo>` for another module's lock,
-        # whose parent is a sibling repository.
-        floor = 2 if lock_label.repo_name else 0
-        dirsegs = list(project)
-        for seg in package["path"].split("/"):
-            if seg in ["", "."]:
-                continue
-            if seg == "..":
-                if len(dirsegs) <= floor:
-                    fail("pub hub {}: path package {} escapes the workspace: {}".format(rctx.attr.name, package["name"], package["path"]))
-                dirsegs.pop()
-            else:
-                dirsegs.append(seg)
-        pubspec = workspace_root.get_child(*(dirsegs + ["pubspec.yaml"]))
+        if rctx.attr.path_package_root:
+            path_segs = []
+            for seg in package["path"].split("/"):
+                if seg in ["", "."]:
+                    continue
+                if seg == "..":
+                    if not path_segs:
+                        fail("pub hub {}: path package {} escapes the package root: {}".format(rctx.attr.name, package["name"], package["path"]))
+                    path_segs.pop()
+                else:
+                    path_segs.append(seg)
+            package_dir = rctx.path(rctx.attr.path_package_root).dirname.get_child(*path_segs)
+            pubspec = package_dir.get_child("pubspec.yaml")
+            dirsegs = ["external"] + _segments(package_dir)[len(external):]
+        else:
+            # `../app_store/x` relative to the project dir, normalized to a workspace-relative
+            # segment list. A `..` may not climb above the lock's own repository: the
+            # main repository's root, or `external/<repo>` for another module's lock,
+            # whose parent is a sibling repository.
+            floor = 2 if lock_label.repo_name else 0
+            dirsegs = list(project)
+            for seg in package["path"].split("/"):
+                if seg in ["", "."]:
+                    continue
+                if seg == "..":
+                    if len(dirsegs) <= floor:
+                        fail("pub hub {}: path package {} escapes the workspace: {}".format(rctx.attr.name, package["name"], package["path"]))
+                    dirsegs.pop()
+                else:
+                    dirsegs.append(seg)
+            pubspec = workspace_root.get_child(*(dirsegs + ["pubspec.yaml"]))
 
         # Not a label (a path package may have no BUILD file): watched by path.
         rctx.watch(pubspec)
@@ -613,6 +628,7 @@ pub_hub = repository_rule(
     attrs = {
         "lock": attr.label(allow_single_file = True, mandatory = True),
         "pubspec": attr.label(allow_single_file = True, mandatory = True),
+        "path_package_root": attr.label(allow_single_file = True),
         "include_workspace_members": attr.bool(default = True),
         "hosted": attr.label_keyed_string_dict(allow_files = True),
         "git": attr.label_keyed_string_dict(allow_files = True),
@@ -672,6 +688,7 @@ def _pub_impl(mctx):
                 lock = lock.lock,
                 pubspec = lock.lock.same_package_label(lock.lock.name.rpartition("/")[0] + "/pubspec.yaml" if "/" in lock.lock.name else "pubspec.yaml"),
                 hosted = hosted,
+                path_package_root = lock.path_package_root,
                 git = git,
                 sdk = [package["name"] for package in resolved["sdk"]],
                 include_workspace_members = lock.include_workspace_members,
@@ -691,6 +708,10 @@ _lock_tag = tag_class(
             mandatory = True,
             allow_single_file = True,
             doc = "The project's pubspec.lock. pubspec.yaml must sit beside it.",
+        ),
+        "path_package_root": attr.label(
+            allow_single_file = True,
+            doc = "File label whose directory resolves relative path packages in the lock, instead of the directory containing the lock.",
         ),
         "include_workspace_members": attr.bool(default = True),
         "test_deps_exclude": attr.string_list(

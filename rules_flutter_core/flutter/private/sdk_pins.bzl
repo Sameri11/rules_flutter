@@ -1,6 +1,6 @@
 """Resolves and locks the per-host files in a Flutter SDK."""
 
-load(":repo.bzl", "flutter_sdk", "flutter_sdk_lockfile", "flutter_tools_packages")
+load(":repo.bzl", "flutter_sdk", "flutter_sdk_lockfile")
 load(":sdk_android_piece.bzl", "sdk_android_piece")
 load(":sdk_tree.bzl", "sdk_tree")
 
@@ -79,7 +79,7 @@ def _valid_metadata(value, version):
     return True
 
 def _valid_pin(value, version):
-    if not _valid_metadata(value, version) or "framework_commit_date" in value:
+    if not _valid_metadata(value, version):
         return False
     hosts = value.get("hosts")
     if type(hosts) != "dict" or sorted(hosts.keys()) != sorted(_HOSTS.keys()):
@@ -259,21 +259,32 @@ def _host_key(module_ctx):
         fail("Flutter SDK provisioning does not support host {} {}.".format(module_ctx.os.name, module_ctx.os.arch))
     return key
 
+def _unsupported_sdk_download_version(version):
+    version_without_build = version.split("+")[0]
+    is_prerelease = "-" in version_without_build
+    parts = version_without_build.split("-")[0].split(".")
+    if len(parts) != 3 or not all([part.isdigit() for part in parts]):
+        return False
+    major, minor = [int(part) for part in parts[:2]]
+    return (
+        is_prerelease or
+        major < 3 or
+        (major == 3 and minor < 47)
+    )
+
 def _flutter_extension_impl(module_ctx):
     sdk_tags = []
-    host_tags = []
     for module in module_ctx.modules:
         if module.is_root:
             sdk_tags = module.tags.sdk
-            host_tags = module.tags.host_sdk
-    if not sdk_tags and not host_tags:
+    if not sdk_tags:
         flutter_sdk(name = "flutter_sdk", version = "")
         flutter_sdk_lockfile(
             name = "flutter_tools_lockfile",
             source = Label("@flutter_sdk//:pubspec.lock"),
+            pubspec_source = Label("@flutter_sdk//:pubspec.yaml"),
         )
-        flutter_tools_packages(name = "flutter_tools_packages")
-        message = "The root module must declare flutter.sdk(version = \"X.Y.Z\") or flutter.host_sdk(version = \"X.Y.Z\") to build Flutter targets."
+        message = "The root module must declare flutter.sdk(version = \"X.Y.Z\") to build Flutter targets."
         for android_host in _HOSTS:
             for piece in _ANDROID_PIECES:
                 sdk_android_piece(
@@ -283,19 +294,14 @@ def _flutter_extension_impl(module_ctx):
                     failure_message = message,
                 )
         return module_ctx.extension_metadata(reproducible = True)
-    if sdk_tags and host_tags:
-        fail("Declare either flutter.sdk or flutter.host_sdk, not both.")
-    if len(sdk_tags) + len(host_tags) != 1:
-        fail("The root module must declare exactly one flutter.sdk(version = \"X.Y.Z\") or flutter.host_sdk(version = \"X.Y.Z\") tag.")
-    if host_tags:
-        flutter_sdk(name = "flutter_sdk", version = host_tags[0].version)
-        flutter_sdk_lockfile(
-            name = "flutter_tools_lockfile",
-            source = Label("@flutter_sdk//:pubspec.lock"),
-        )
-        flutter_tools_packages(name = "flutter_tools_packages")
-        return module_ctx.extension_metadata(reproducible = True)
+    if len(sdk_tags) != 1:
+        fail("The root module must declare exactly one flutter.sdk(version = \"X.Y.Z\") tag.")
+
     tag = sdk_tags[0]
+
+    if _unsupported_sdk_download_version(tag.version):
+        fail("Flutter SDK version {} is unsupported; pin version 3.47.0 or newer.".format(tag.version))
+
     facts = getattr(module_ctx, "facts", {})
     pins = facts.get(tag.version)
     if not _valid_pin(pins, tag.version):
@@ -363,15 +369,17 @@ def _flutter_extension_impl(module_ctx):
 
     return module_ctx.extension_metadata(reproducible = True, facts = {tag.version: pins})
 
-_sdk_tag = tag_class(attrs = {
-    "version": attr.string(mandatory = True),
-    "sha256": attr.string_dict(),
-    "urls": attr.string_list_dict(),
-    "base_url": attr.string(),
-})
-_host_sdk_tag = tag_class(attrs = {"version": attr.string(mandatory = True)})
+_sdk_tag = tag_class(
+    doc = "Provisions a stable Flutter SDK at version 3.47.0 or newer.",
+    attrs = {
+        "version": attr.string(mandatory = True),
+        "sha256": attr.string_dict(),
+        "urls": attr.string_list_dict(),
+        "base_url": attr.string(),
+    },
+)
 
 flutter_sdk_extension = module_extension(
     implementation = _flutter_extension_impl,
-    tag_classes = {"sdk": _sdk_tag, "host_sdk": _host_sdk_tag},
+    tag_classes = {"sdk": _sdk_tag},
 )

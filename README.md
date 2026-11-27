@@ -13,9 +13,10 @@ Flutter project.
 
 Install Bazel 9.2.0, Android SDK platform 36 and build-tools 36.0.0, and
 Android NDK 28 or newer. `flutter.sdk(version = "3.50.1")` provisions the SDK
-through Bazel; the first resolution pins its Facts in `MODULE.bazel.lock`, which
-must be committed. `flutter.host_sdk(version = "...")` opts into a locally
-installed Flutter SDK. Set `ANDROID_HOME` and `ANDROID_NDK_HOME`.
+through Bazel; downloads require stable Flutter 3.47.0 or newer. Pre-release
+versions are unsupported.
+The first resolution pins its Facts in `MODULE.bazel.lock`, which must be
+committed. Set `ANDROID_HOME` and `ANDROID_NDK_HOME`.
 
 The `flutter create` command below is a host Flutter command.
 

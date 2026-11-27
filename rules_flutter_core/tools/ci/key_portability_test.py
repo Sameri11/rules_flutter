@@ -170,87 +170,13 @@ class Checker:
         if tree is None:
             return
 
-        resolve = _function(tree, "_resolve_flutter_root")
-        if resolve is None:
-            self.fail("A", "repo.bzl must define _resolve_flutter_root")
-        else:
-            root_assignment = None
-            root_lookup = None
-            for node in ast.walk(resolve):
-                if not isinstance(node, (ast.Assign, ast.AnnAssign)) or node.value is None:
-                    continue
-                for child in ast.walk(node.value):
-                    if not isinstance(child, ast.Call):
-                        continue
-                    if _call_path(child) != ["ctx", "os", "environ", "get"]:
-                        continue
-                    if child.args and _string(child.args[0]) == "FLUTTER_ROOT":
-                        root_assignment = node
-                        root_lookup = child
-                        break
-                if root_lookup is not None:
-                    break
-            if root_assignment is None:
-                self.fail("A", "_resolve_flutter_root must read FLUTTER_ROOT from ctx.os.environ")
-            which_calls = [
-                node
-                for node in ast.walk(resolve)
-                if isinstance(node, ast.Call)
-                and _call_path(node) == ["ctx", "which"]
-                and node.args
-                and _string(node.args[0]) == "flutter"
-            ]
-            if not which_calls:
-                self.fail("A", "_resolve_flutter_root must fall back to ctx.which(\"flutter\")")
-            if root_lookup is not None and which_calls:
-                if root_lookup.lineno >= min(node.lineno for node in which_calls):
-                    self.fail("A", "_resolve_flutter_root must check FLUTTER_ROOT before PATH lookup")
-
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or _call_path(node) is None:
-                continue
-            path = _call_path(node)
-            if len(path) >= 3 and path[-2:] == ["environ", "get"]:
-                args = node.args
-                if not args or _string(args[0]) != "FLUTTER_ROOT":
-                    self.fail("A", "repo.bzl may capture only FLUTTER_ROOT from ctx.os.environ")
-        for token in ("FLUTTER_ENV", "sdk.bzl", "ANDROID_HOME", "ANDROID_SDK_ROOT", "HOME", "PUB_CACHE"):
-            if _contains_string(tree, token):
-                self.fail("A", "repo.bzl must not capture generated SDK or {} environment state".format(token))
-
-        sdk_rule = _named_call(tree, "flutter_sdk")
-        if sdk_rule is None or _call_path(sdk_rule) != ["repository_rule"]:
-            self.fail("A", "repo.bzl must define flutter_sdk with repository_rule")
-        else:
-            environ = _keyword(sdk_rule, "environ")
-            values = _string_list(environ)
-            if values != ["FLUTTER_ROOT", "PATH"]:
-                self.fail("A", "flutter_sdk repository environ must be exactly [\"FLUTTER_ROOT\", \"PATH\"]")
-            for keyword in sdk_rule.keywords:
-                if keyword.arg == "environ":
-                    continue
-                if any(
-                    isinstance(node, ast.Constant)
-                    and isinstance(node.value, str)
-                    and any(token in node.value for token in ("FLUTTER_ENV", "sdk.bzl", "ANDROID_HOME", "ANDROID_SDK_ROOT", "HOME", "PUB_CACHE"))
-                    for node in ast.walk(keyword.value)
-                ):
-                    self.fail("A", "flutter_sdk repository must not capture generated SDK or unrelated environment state")
-                    break
-
-        # Every repository rule in repo.bzl reads the same environment, so none
-        # captures HOME or PUB_CACHE.
-        environ_calls = [
-            node
+        if _contains_string(tree, "FLUTTER_ROOT"):
+            self.fail("A", "repo.bzl must not read a host Flutter SDK from FLUTTER_ROOT")
+        if any(
+            isinstance(node, ast.Call) and _call_path(node) == ["ctx", "which"]
             for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and _keyword(node, "environ") is not None
-        ]
-        if not environ_calls:
-            self.fail("A", "repo.bzl must declare repository environments")
-        for call in environ_calls:
-            if _string_list(_keyword(call, "environ")) != ["FLUTTER_ROOT", "PATH"]:
-                self.fail("A", "every repository rule in repo.bzl must declare environ [\"FLUTTER_ROOT\", \"PATH\"]")
+        ):
+            self.fail("A", "repo.bzl must not resolve a host Flutter SDK from PATH")
 
     def check_b(self):
         for name in ("defs", "android", "test", "test_driver", "core", "android_inputs", "apk_check"):

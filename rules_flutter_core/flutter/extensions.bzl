@@ -1,8 +1,9 @@
 """Supported module-extension API for Flutter Consumer Modules.
 
-Consumers declare the expected host SDK version with the `flutter.sdk` tag.
-The extension stays independent of the host SDK; version validation happens
-when the local SDK repository is fetched.
+Consumers declare the expected Flutter SDK version with the `flutter.sdk` tag.
+Downloads support stable Flutter 3.47.0 or newer. Pre-release versions are not
+supported. The extension checks the download minimum during evaluation and
+validates the installed SDK when its repository is fetched.
 
 Platform-specific extensions load from their owning ruleset.
 """

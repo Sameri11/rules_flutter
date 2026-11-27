@@ -49,20 +49,20 @@ extensions, Android SDK/NDK toolchain registration, Maven installation, and pub
 lock. Archive module trees do not supply a root module or a shared `.bazelrc`.
 There are no settings inherited from a rules checkout.
 
-A Bazel-provisioned Flutter SDK is the default: declare
-`flutter.sdk(version = "X.Y.Z")`. The first extension resolution downloads
-artifacts to pin them in Facts in `MODULE.bazel.lock`; review and commit that
-lock before using `--lockfile_mode=error`. Artifact URLs and per-piece SHA-256
-overrides are available on the tag, and `--downloader_config` can redirect
-downloads through mirrors (useful for slow or blocked GitHub access).
+`flutter.sdk(version = "X.Y.Z")` with stable version 3.47.0 or newer. Older
+versions and pre-releases are unsupported. The first extension resolution
+downloads artifacts to pin them in Facts in `MODULE.bazel.lock`; review and
+commit that lock before using `--lockfile_mode=error`. Artifact URLs and
+per-piece SHA-256 overrides are available on the tag, and
+`--downloader_config` can redirect downloads through mirrors (useful for slow
+or blocked GitHub access).
 
-`flutter.host_sdk(version = "X.Y.Z")` opts into local Flutter discovered from
-`FLUTTER_ROOT` or `PATH`.
-Host Flutter remains necessary for IDE workflows, `pub get`, and `build_runner`.
-Both modes also require Android SDK/NDK as applicable; use Android SDK platform
-36, build-tools 36.0.0, and NDK 28 or newer. Set `ANDROID_HOME` and
-`ANDROID_NDK_HOME`. SDK provisioning requires `bash`, `python3`, and `tar`.
-Commit `pubspec.lock` and generated `MODULE.bazel.lock`.
+The host Flutter installation remains useful for IDE workflows, `pub get`, and
+`build_runner`, but Bazel builds use the pinned SDK. Android SDK/NDK are local
+prerequisites; use Android SDK platform 36, build-tools 36.0.0, and NDK 28 or
+newer. Set `ANDROID_HOME` and `ANDROID_NDK_HOME`. SDK provisioning requires
+`bash`, `python3`, and `tar`. Commit `pubspec.lock` and generated
+`MODULE.bazel.lock`.
 
 The archive consumer has a checked lockfile and can build with
 `--lockfile_mode=error`. A new consumer must initially resolve dependencies with

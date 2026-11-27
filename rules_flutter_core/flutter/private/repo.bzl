@@ -1,206 +1,8 @@
-"""Repository rule exposing a Flutter SDK's build tools as Bazel targets.
+"""Repository rules for the provisioned Flutter SDK."""
 
-This locates an *existing* Flutter SDK (via the FLUTTER_ROOT env var, or by
-resolving the `flutter` binary on PATH) and symlinks the handful of artifacts
-the build actually needs. It deliberately does not download the SDK: Flutter's
-artifacts are fetched lazily by `flutter precache`, so a fully hermetic
-download rule is a separate concern. See README for that tradeoff.
-"""
-
-load(":sdk_packages.bzl", "sdk_package_root")
+load(":pub_lock_parser.bzl", "parse_pubspec_lock")
 
 visibility(["//flutter"])
-
-_BUILD_TEMPLATE = """
-package(default_visibility = ["//visibility:public"])
-
-# Binaries and the frontend_server snapshot are referenced as files directly.
-# They are deliberately not wrapped in filegroups: a filegroup sharing a name
-# with the file it wraps produces a self-edge in the dependency graph.
-exports_files([
-    "pubspec.yaml",
-    "pubspec.lock",
-    "dart_sdk_revision",
-    "dart",
-    "vm_platform_strong.dill",
-    "dartaotruntime",
-    "flutter",
-    "flutter_tools.snapshot",
-    "frontend_server.snapshot",
-    "vm_isolate_snapshot.bin",
-    "isolate_snapshot.bin",
-    "flutter_tester",
-    "icudtl.dat",
-    "flutter.version.json",
-])
-
-filegroup(
-    name = "dart_sdk_files",
-    srcs = glob(["dart-sdk/**"], allow_empty = True),
-)
-
-# Patched SDK containing platform_strong.dill. `--sdk-root` wants the directory,
-# so the whole tree is exposed as one filegroup.
-filegroup(
-    name = "platform_product",
-    srcs = glob(["flutter_patched_sdk_product/**"]),
-)
-
-filegroup(
-    name = "platform_debug",
-    srcs = glob(["flutter_patched_sdk/**"]),
-)
-
-# The SDK's own Dart packages, declared as files so a compile can list them as
-# inputs instead of reaching into the SDK by path. Each package contributes its
-# packageUri tree (lib/), its pubspec.yaml, and the license files the bundle's
-# NOTICES collector reads -- not the whole tree, so unrelated SDK edits (tests,
-# docs) do not enter an action key. The package list is discovered at fetch time.
-filegroup(
-    name = "sdk_packages",
-    srcs = glob({sdk_globs}, allow_empty = True),
-)
-"""
-
-_HOST_ARCHES = {
-    "aarch64": "arm64",
-    "amd64": "x64",
-    "arm64": "arm64",
-    "riscv64": "riscv64",
-    "x86_64": "x64",
-}
-
-def _host_platform_name(ctx):
-    """The engine's name for this host, e.g. `darwin-arm64` or `linux-x64`."""
-    name = ctx.os.name.lower()
-    if name.startswith("mac os"):
-        host_os = "darwin"
-    elif name.startswith("linux"):
-        host_os = "linux"
-    elif name.startswith("windows"):
-        host_os = "windows"
-    else:
-        fail("Unsupported host OS for a Flutter build: '{}'.".format(ctx.os.name))
-
-    arch = _HOST_ARCHES.get(ctx.os.arch.lower())
-    if arch == None:
-        fail("Unsupported host architecture for a Flutter build: '{}'.".format(ctx.os.arch))
-
-    return "{}-{}".format(host_os, arch)
-
-def _host_engine_dir(ctx):
-    """Host directory of the universal engine artifacts: debug snapshots, flutter_tester and icudtl.dat.
-
-    flutter_cache.dart:267-282 unpacks `darwin-$arch/artifacts.zip` into
-    `darwin-x64` on macOS whatever the arch, and `linux-$arch` on Linux.
-    """
-    host = _host_platform_name(ctx)
-    return "darwin-x64" if host.startswith("darwin-") else host
-
-def _resolve_flutter_root(ctx):
-    """Locate the SDK from FLUTTER_ROOT, else from `flutter` on PATH."""
-    root = ctx.os.environ.get("FLUTTER_ROOT", "").strip()
-    if root:
-        return root
-
-    flutter = ctx.which("flutter")
-    if flutter == None:
-        fail(
-            "Could not locate a Flutter SDK. Set FLUTTER_ROOT, or put " +
-            "`flutter` on PATH.",
-        )
-
-    # `flutter` on PATH is usually a shim (fvm, asdf) whose parent is
-    # <sdk>/bin, so walk up one level from the resolved binary.
-    return str(flutter.realpath.dirname.dirname)
-
-def _sdk_package_names(ctx, root):
-    """Names of the Dart packages this SDK ships, by the layout convention.
-
-    Every `packages/<name>` holding a pubspec.yaml, plus `sky_engine` from the
-    engine artifacts. Whichever a lock's `source: sdk` entry names must be among
-    them; the pub extension reports a missing one by name.
-    """
-    packages = ctx.path("{}/packages".format(root))
-    if not packages.exists:
-        fail("Flutter SDK at {} has no packages/ directory.".format(root))
-    names = [
-        child.basename
-        for child in packages.readdir()
-        if ctx.path("{}/{}/pubspec.yaml".format(root, sdk_package_root(child.basename))).exists
-    ]
-    if ctx.path("{}/{}/pubspec.yaml".format(root, sdk_package_root("sky_engine"))).exists:
-        names.append("sky_engine")
-    return sorted(names)
-
-def _run(ctx, args):
-    result = ctx.execute(args)
-    if result.return_code != 0:
-        fail("{} failed:\n{}".format(" ".join(args), result.stderr))
-
-# flutter_tools' Dart packages, in their own repository so only the test-asset
-# builder fetches them. The SDK's package config names directories under the
-# pub cache of the machine that ran `flutter --version`, which no action may
-# read, so each package is copied and the generated config points at the copies.
-def _flutter_tools_packages_impl(ctx):
-    root = _resolve_flutter_root(ctx)
-
-    # A new SDK or a re-resolved closure must refetch the copies.
-    ctx.read("{}/bin/cache/flutter.version.json".format(root))
-    tool = "{}/packages/flutter_tools".format(root)
-    config_dir = "{}/.dart_tool".format(tool)
-    config = "{}/package_config.json".format(config_dir)
-    remedy = "Run `flutter pub get` in {}.".format(tool)
-    if not ctx.path(config).exists:
-        fail("flutter_tools package config missing at {}.\n{}".format(config, remedy))
-    packages = []
-    for package in json.decode(ctx.read(config))["packages"]:
-        name = package["name"]
-        package_uri = package.get("packageUri", "lib/").rstrip("/")
-        root_uri = package["rootUri"]
-        if root_uri.startswith("file://"):
-            source = root_uri[len("file://"):]
-        else:
-            source = "{}/{}".format(config_dir, root_uri)
-        if "%" in source:
-            fail("percent-encoded package root is not supported: {}".format(source))
-        if not ctx.path(source).exists:
-            fail("flutter_tools package {} is missing at {}.\n{}".format(name, source, remedy))
-        dest = "flutter_tools_packages/{}/{}".format(name, package_uri)
-        _run(ctx, ["mkdir", "-p", dest])
-        if ctx.path("{}/{}".format(source, package_uri)).exists:
-            _run(ctx, ["cp", "-RL", "{}/{}/.".format(source, package_uri), dest])
-        entry = {
-            "name": name,
-            "rootUri": "flutter_tools_packages/{}/".format(name),
-            "packageUri": package_uri + "/",
-        }
-        if "languageVersion" in package:
-            entry["languageVersion"] = package["languageVersion"]
-        packages.append(entry)
-    ctx.file(
-        "flutter_tools_package_config.json",
-        json.encode_indent({"configVersion": 2, "packages": packages}) + "\n",
-    )
-    ctx.file("BUILD.bazel", _FLUTTER_TOOLS_PACKAGES_BUILD)
-
-flutter_tools_packages = repository_rule(
-    implementation = _flutter_tools_packages_impl,
-    doc = "flutter_tools' Dart closure, copied from the local SDK for the test-asset builder.",
-    local = True,
-    environ = ["FLUTTER_ROOT", "PATH"],
-)
-
-_FLUTTER_TOOLS_PACKAGES_BUILD = """
-package(default_visibility = ["//visibility:public"])
-
-exports_files(["flutter_tools_package_config.json"])
-
-filegroup(
-    name = "flutter_tools_packages",
-    srcs = glob(["flutter_tools_packages/**"], allow_empty = True),
-)
-"""
 
 def _flutter_sdk_stub(ctx):
     ctx.file("pubspec.lock", "packages: {}\nsdks: {}\n")
@@ -251,137 +53,22 @@ exports_files(["pubspec.lock", "pubspec.yaml", "packages/flutter_tools/bin/flutt
     ]:
         build += """flutter_sdk_missing(
     name = %s,
-    message = "The root module must declare flutter.sdk(version = \\"X.Y.Z\\") or flutter.host_sdk(version = \\"X.Y.Z\\") to build Flutter targets.",
+    message = "The root module must declare flutter.sdk(version = \\"X.Y.Z\\") to build Flutter targets.",
 )
 """ % repr(target)
     ctx.file("BUILD.bazel", build)
 
-def _flutter_sdk_impl(ctx):
-    if not ctx.attr.version:
-        _flutter_sdk_stub(ctx)
-        return
-    root = _resolve_flutter_root(ctx)
-    version_file = "{}/bin/cache/flutter.version.json".format(root)
-    actual = json.decode(ctx.read(version_file))
-    if actual["frameworkVersion"] != ctx.attr.version:
-        fail(
-            "Flutter SDK version mismatch: Consumer declared Flutter {}, but host SDK is Flutter {} at {}.".format(
-                ctx.attr.version,
-                actual["frameworkVersion"],
-                root,
-            ),
-        )
-
-    cache = "{}/bin/cache".format(root)
-    engine = "{}/artifacts/engine".format(cache)
-
-    # Fail early with a useful message rather than a broken symlink later.
-    if not ctx.path(engine).exists:
-        fail(
-            "Flutter engine artifacts missing at {}.\n".format(engine) +
-            "Run `flutter precache` first.",
-        )
-
-    ctx.symlink("{}/dart-sdk".format(cache), "dart-sdk")
-    ctx.symlink(
-        "{}/dart-sdk/bin/dartaotruntime".format(cache),
-        "dartaotruntime",
-    )
-    ctx.symlink(
-        "{}/dart-sdk/bin/dart".format(cache),
-        "dart",
-    )
-
-    # The test-kernel driver is compiled against this platform, and its build checks the revision.
-    ctx.symlink(
-        "{}/dart-sdk/lib/_internal/vm_platform_strong.dill".format(cache),
-        "vm_platform_strong.dill",
-    )
-    ctx.symlink(
-        "{}/dart-sdk/revision".format(cache),
-        "dart_sdk_revision",
-    )
-
-    # Declared as an input so the action key hashes the launcher's content,
-    # not this machine's SDK path.
-    ctx.symlink(
-        "{}/bin/flutter".format(root),
-        "flutter",
-    )
-
-    # The assets action executes this snapshot from here, so its content keys
-    # the action even when the SDK version (flutter.version.json) is unchanged.
-    ctx.symlink(
-        "{}/flutter_tools.snapshot".format(cache),
-        "flutter_tools.snapshot",
-    )
-    ctx.symlink(
-        "{}/dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot".format(cache),
-        "frontend_server.snapshot",
-    )
-    ctx.symlink(
-        "{}/common/flutter_patched_sdk_product".format(engine),
-        "flutter_patched_sdk_product",
-    )
-
-    # Debug kernels compile against the non-product patched SDK (asserts and
-    # service protocol retained).
-    ctx.symlink(
-        "{}/common/flutter_patched_sdk".format(engine),
-        "flutter_patched_sdk",
-    )
-
-    # Platform rulesets own their target AOT payload repositories.
-
-    # The host-engine files: the debug snapshots the debug overlay ships as
-    # vm_snapshot_data and isolate_snapshot_data, and the test runtime
-    # flutter_tester with its ICU data. They are declared as files of this
-    # repository so consumers never reach the SDK through FLUTTER_ROOT.
-    host_engine = _host_engine_dir(ctx)
-    for name in ("vm_isolate_snapshot.bin", "isolate_snapshot.bin", "flutter_tester", "icudtl.dat"):
-        path = "{}/{}/{}".format(engine, host_engine, name)
-        if not ctx.path(path).exists:
-            fail(
-                "{} missing at {}.\n".format(name, path) +
-                "Run `flutter precache` on this host.",
-            )
-        ctx.symlink(path, name)
-
-    # Identity of the *active* SDK: frameworkRevision is a git commit hash, so
-    # it moves on framework-only commits that leave engine artifacts identical.
-    # Not to be confused with a project's .metadata, which records the revision
-    # the project was scaffolded with and is never updated by ordinary SDK use.
-    ctx.symlink("{}/pubspec.yaml".format(root), "pubspec.yaml")
-    ctx.symlink("{}/pubspec.lock".format(root), "pubspec.lock")
-    ctx.symlink(version_file, "flutter.version.json")
-
-    # Directory symlinks, so a package config can point at
-    # `<repo>/<sdk-relative root>/`. The SDK is only read; nothing is written
-    # through these links.
-    sdk_package_roots = [sdk_package_root(name) for name in _sdk_package_names(ctx, root)]
-    for pkg_root in sdk_package_roots:
-        ctx.symlink("{}/{}".format(root, pkg_root), pkg_root)
-
-    # The bundle action collects package-root LICENSE and NOTICES files; keep them
-    # declared so the SDK's third-party notices reach the final bundle.
-    ctx.file("BUILD.bazel", _BUILD_TEMPLATE.format(
-        sdk_globs = repr(
-            ["{}/lib/**".format(r) for r in sdk_package_roots] +
-            ["{}/pubspec.yaml".format(r) for r in sdk_package_roots] +
-            ["{}/LICENSE*".format(r) for r in sdk_package_roots] +
-            ["{}/NOTICES*".format(r) for r in sdk_package_roots] +
-            [
-                "packages/**/packages/**/lib/**",
-                "packages/**/packages/**/pubspec.yaml",
-                "packages/**/packages/**/LICENSE*",
-                "packages/**/packages/**/NOTICES*",
-            ],
-        ),
-    ))
+flutter_sdk = repository_rule(
+    implementation = _flutter_sdk_stub,
+    attrs = {
+        "version": attr.string(mandatory = True),
+    },
+)
 
 def _flutter_tools_lockfile_impl(ctx):
     if ctx.attr.source:
         ctx.file("pubspec.lock", ctx.read(ctx.attr.source))
+        ctx.file("pubspec.yaml", ctx.read(ctx.attr.pubspec_source))
     elif ctx.attr.url:
         if not ctx.attr.sha256:
             fail("A Flutter tools lockfile URL requires a sha256.")
@@ -390,64 +77,25 @@ def _flutter_tools_lockfile_impl(ctx):
             output = "pubspec.lock",
             sha256 = ctx.attr.sha256,
         )
+        lock = parse_pubspec_lock(ctx.read("pubspec.lock"))
+        dart_constraint = lock["sdks"].get("dart")
+        if not dart_constraint:
+            fail("The Flutter tools lockfile has no Dart SDK constraint.")
+        ctx.file(
+            "pubspec.yaml",
+            "name: _flutter_packages\nenvironment:\n  sdk: \"{}\"\n".format(dart_constraint),
+        )
     else:
         ctx.file("pubspec.lock", "packages: {}\nsdks: {}\n")
-    ctx.file("BUILD.bazel", "exports_files([\"pubspec.lock\"])\n")
+        ctx.file("pubspec.yaml", "name: flutter_tools\n")
+    ctx.file("BUILD.bazel", "exports_files([\"pubspec.lock\", \"pubspec.yaml\"])\n")
 
 flutter_sdk_lockfile = repository_rule(
     implementation = _flutter_tools_lockfile_impl,
     attrs = {
         "source": attr.label(allow_single_file = True),
+        "pubspec_source": attr.label(allow_single_file = True),
         "url": attr.string(),
         "sha256": attr.string(),
     },
-)
-
-flutter_sdk = repository_rule(
-    implementation = _flutter_sdk_impl,
-    doc = "Exposes the declared Flutter SDK's host tools to Bazel.",
-    attrs = {
-        "version": attr.string(mandatory = True),
-    },
-    local = True,
-    # PATH is needed when FLUTTER_ROOT is unset. HOME and PUB_CACHE are not read.
-    environ = ["FLUTTER_ROOT", "PATH"],
-)
-
-def _flutter_impl(ctx):
-    declared_version = ""
-    for module in ctx.modules:
-        if module.is_root:
-            sdk_tags = module.tags.sdk
-            host_sdk_tags = module.tags.host_sdk
-            if sdk_tags and host_sdk_tags:
-                fail("Declare either flutter.sdk or flutter.host_sdk, not both.")
-            tags = sdk_tags or host_sdk_tags
-            if len(tags) != 1:
-                fail("The root module must declare exactly one flutter.sdk(version = \"X.Y.Z\") or flutter.host_sdk(version = \"X.Y.Z\") tag.")
-            declared_version = tags[0].version
-            break
-
-    flutter_sdk(
-        name = "flutter_sdk",
-        version = declared_version,
-    )
-
-    flutter_tools_packages(name = "flutter_tools_packages")
-
-_sdk_tag = tag_class(
-    attrs = {
-        "version": attr.string(mandatory = True),
-    },
-)
-
-_host_sdk_tag = tag_class(
-    attrs = {
-        "version": attr.string(mandatory = True),
-    },
-)
-
-flutter = module_extension(
-    implementation = _flutter_impl,
-    tag_classes = {"sdk": _sdk_tag, "host_sdk": _host_sdk_tag},
 )
