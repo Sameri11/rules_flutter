@@ -141,14 +141,15 @@ filegroup(name = "flutter_tools_cache_state", srcs = [
         "gradle_wrapper_root",
     ]:
         build += "filegroup(name = %s, srcs = [\"flutter.version.json\"])\n" % repr(name)
-    for name in ctx.attr.ios_usb_names:
-        piece = "ios_usb_" + name
-        marker = "pieces/" + piece + "/.bazel_root"
-        ctx.file(marker, "")
-        build += "filegroup(name = %s, srcs = [%s])\n" % (
-            repr("ios_usb_" + name.replace("-", "_") + "_root"),
-            repr(marker),
-        )
+    for name in ("libimobiledevice", "libusbmuxd", "libplist", "openssl", "libimobiledeviceglue", "ios-deploy"):
+        target = "ios_usb_" + name.replace("-", "_") + "_root"
+        if name in ctx.attr.ios_usb_names:
+            marker = "pieces/ios_usb_" + name + "/.bazel_root"
+            ctx.file(marker, "")
+            srcs = [marker]
+        else:
+            srcs = []
+        build += "filegroup(name = %s, srcs = %s)\n" % (repr(target), repr(srcs))
     ctx.file("BUILD.bazel", build)
     ctx.symlink("bin/cache/dart-sdk/bin/dart", "dart")
     ctx.symlink("bin/cache/dart-sdk/bin/dartaotruntime", "dartaotruntime")
