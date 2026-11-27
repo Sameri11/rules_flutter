@@ -102,6 +102,7 @@ jobs:
 
       - uses: ./.github/actions/flutter-bazel
         with:
+          flutter-sdk: host
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
@@ -295,6 +296,7 @@ jobs:
 
       - uses: ./.github/actions/flutter-bazel
         with:
+          flutter-sdk: host
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
