@@ -362,12 +362,13 @@ class Checker:
                 self.fail("D", "FlutterAssets inputs must declare the generated stage manifest")
             if not _contains_attr(inputs, ["staged", "files"]):
                 self.fail("D", "FlutterAssets inputs must declare every staged file (staged.files)")
-            for name in ("_merger",):
+            for name in ("_merger", "_stage_sdk"):
                 expected = ["ctx", "file", name]
                 if not _contains_attr(inputs, expected):
                     self.fail("D", "FlutterAssets inputs must declare ctx.file.{}".format(name))
-            if not _contains_attr(inputs, ["toolchain", "sdk_version"]):
-                self.fail("D", "FlutterAssets inputs must declare toolchain.sdk_version")
+            for name in ("sdk_version", "sdk_layout"):
+                if not _contains_attr(inputs, ["toolchain", name]):
+                    self.fail("D", "FlutterAssets inputs must declare toolchain.{}".format(name))
             if _contains_attr(inputs, ["toolchain", "flutter"]):
                 self.fail("D", "FlutterAssets must use its staged SDK root, not the host launcher path")
             if not _contains_attr(inputs, ["build_env", "files"]):

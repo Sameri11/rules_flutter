@@ -1512,9 +1512,9 @@ def _stage_flutter_assets(ctx, toolchain, platform_env, use_staged_sdk = False):
         flutter_root = """export FLUTTER_ROOT="$STAGE/sdk"
 """.format()
     else:
-        flutter_root = """FLUTTER_REAL="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{launcher}")"
-export FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_REAL")")"
-""".format(launcher = toolchain.flutter.path)
+        flutter_root = """FLUTTER_VERSION="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$EXECROOT/{sdk_version}")"
+export FLUTTER_ROOT="$(dirname "$(dirname "$(dirname "$FLUTTER_VERSION")")")"
+""".format(sdk_version = toolchain.sdk_version.path)
 
     command = """set -euo pipefail
 EXECROOT="$PWD"

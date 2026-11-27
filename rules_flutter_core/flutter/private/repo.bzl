@@ -35,6 +35,7 @@ exports_files(["pubspec.lock", "pubspec.yaml", "packages/flutter_tools/bin/flutt
         "sdk_packages",
         "framework_tools_lib",
         "flutter_tools_cache_state",
+        "sdk_layout.json",
     ]:
         build += """flutter_sdk_missing(
     name = %s,

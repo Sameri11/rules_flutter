@@ -7,16 +7,16 @@ void main() {
       (await rootBundle.loadString('assets/images/logo.txt')).trim(),
       'hello-asset-one',
     );
-    expect(
-      (await rootBundle.load('assets/images/pixel.bin')).lengthInBytes,
-      1,
-    );
+    expect((await rootBundle.load('assets/images/pixel.bin')).lengthInBytes, 1);
   });
 
-  testWidgets('framework shaders load through the root bundle', (tester) async {
-    expect(
-      (await rootBundle.load('shaders/ink_sparkle.frag')).lengthInBytes,
-      greaterThan(0),
-    );
+  testWidgets('framework assets load through the root bundle', (tester) async {
+    for (final asset in [
+      'fonts/MaterialIcons-Regular.otf',
+      'shaders/ink_sparkle.frag',
+      'shaders/stretch_effect.frag',
+    ]) {
+      expect((await rootBundle.load(asset)).lengthInBytes, greaterThan(0));
+    }
   });
 }
