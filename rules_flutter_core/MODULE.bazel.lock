@@ -491,6 +491,7 @@
         "dart_sdk_version": "3.14.0",
         "engine_content_hash": "51379e6df48ea8ee7205623b90fe66491cad8df3",
         "engine_revision": "4d35714800b9266b6693a58e1225ecd7e9e45ed7",
+        "flutter_tools_lock_sha256": "9c61653df6b9cb6098b072a28d56ceefe586005a9b2dbd1bb764bb465fb98b15",
         "framework_commit": "ae9b586f34a8443573f82ef57c3bf914a908cbf7",
         "gradle_wrapper_version": "flutter_infra_release/gradle-wrapper/fd5c1f2c013565a3bea56ada6df9d2b8e96d56aa/gradle-wrapper.tgz",
         "hosts": {

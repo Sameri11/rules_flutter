@@ -379,6 +379,30 @@ def _flutter_sdk_impl(ctx):
         ),
     ))
 
+def _flutter_tools_lockfile_impl(ctx):
+    if ctx.attr.source:
+        ctx.file("pubspec.lock", ctx.read(ctx.attr.source))
+    elif ctx.attr.url:
+        if not ctx.attr.sha256:
+            fail("A Flutter tools lockfile URL requires a sha256.")
+        ctx.download(
+            url = ctx.attr.url,
+            output = "pubspec.lock",
+            sha256 = ctx.attr.sha256,
+        )
+    else:
+        ctx.file("pubspec.lock", "packages: {}\nsdks: {}\n")
+    ctx.file("BUILD.bazel", "exports_files([\"pubspec.lock\"])\n")
+
+flutter_sdk_lockfile = repository_rule(
+    implementation = _flutter_tools_lockfile_impl,
+    attrs = {
+        "source": attr.label(allow_single_file = True),
+        "url": attr.string(),
+        "sha256": attr.string(),
+    },
+)
+
 flutter_sdk = repository_rule(
     implementation = _flutter_sdk_impl,
     doc = "Exposes the declared Flutter SDK's host tools to Bazel.",

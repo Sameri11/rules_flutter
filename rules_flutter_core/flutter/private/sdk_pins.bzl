@@ -1,6 +1,6 @@
 """Resolves and locks the per-host files in a Flutter SDK."""
 
-load(":repo.bzl", "flutter_sdk", "flutter_tools_packages")
+load(":repo.bzl", "flutter_sdk", "flutter_sdk_lockfile", "flutter_tools_packages")
 load(":sdk_android_piece.bzl", "sdk_android_piece")
 load(":sdk_tree.bzl", "sdk_tree")
 
@@ -61,8 +61,14 @@ _SCHEMA = 1
 def _valid_metadata(value, version):
     if type(value) != "dict" or value.get("schema") != _SCHEMA or value.get("version") != version:
         return False
-    for field in ("framework_commit", "dart_sdk_version", "engine_revision", "engine_content_hash", "material_fonts_version", "gradle_wrapper_version"):
+    for field in ("framework_commit", "dart_sdk_version", "engine_revision", "engine_content_hash", "material_fonts_version", "gradle_wrapper_version", "flutter_tools_lock_sha256"):
         if type(value.get(field)) != "string" or not value[field]:
+            return False
+    lock_sha = value["flutter_tools_lock_sha256"]
+    if len(lock_sha) != 64:
+        return False
+    for index in range(len(lock_sha)):
+        if lock_sha[index] not in "0123456789abcdef":
             return False
     usb_versions = value.get("ios_usb_versions")
     if type(usb_versions) != "dict":
@@ -122,6 +128,7 @@ def _pin_version(ctx, version, overrides, existing):
         engine_hash = existing["engine_content_hash"]
         material = existing["material_fonts_version"]
         gradle = existing["gradle_wrapper_version"]
+        flutter_tools_lock_sha = existing["flutter_tools_lock_sha256"]
         usb_versions = dict(existing["ios_usb_versions"])
     else:
         releases = {host: _release_commit(ctx, version, host) for host in _HOSTS}
@@ -150,8 +157,12 @@ def _pin_version(ctx, version, overrides, existing):
             "https://raw.githubusercontent.com/flutter/flutter/{}/bin/internal/gradle_wrapper.version".format(commit),
             "gradle_wrapper.version",
         ).strip()
+        flutter_tools_lock_sha = _download(
+            ctx,
+            "https://raw.githubusercontent.com/flutter/flutter/{}/pubspec.lock".format(commit),
+            "flutter_tools.pubspec.lock",
+        )
         usb_versions = {}
-
     for name in ("libimobiledevice", "libusbmuxd", "libplist", "openssl", "libimobiledeviceglue", "ios-deploy"):
         if name not in usb_versions:
             usb_versions[name] = _read_download(
@@ -233,6 +244,7 @@ def _pin_version(ctx, version, overrides, existing):
         "engine_content_hash": engine_hash,
         "material_fonts_version": material,
         "gradle_wrapper_version": gradle,
+        "flutter_tools_lock_sha256": flutter_tools_lock_sha,
         "ios_usb_versions": usb_versions,
         "hosts": hosts,
     }
@@ -256,6 +268,10 @@ def _flutter_extension_impl(module_ctx):
             host_tags = module.tags.host_sdk
     if not sdk_tags and not host_tags:
         flutter_sdk(name = "flutter_sdk", version = "")
+        flutter_sdk_lockfile(
+            name = "flutter_tools_lockfile",
+            source = Label("@flutter_sdk//:pubspec.lock"),
+        )
         flutter_tools_packages(name = "flutter_tools_packages")
         message = "The root module must declare flutter.sdk(version = \"X.Y.Z\") or flutter.host_sdk(version = \"X.Y.Z\") to build Flutter targets."
         for android_host in _HOSTS:
@@ -273,9 +289,12 @@ def _flutter_extension_impl(module_ctx):
         fail("The root module must declare exactly one flutter.sdk(version = \"X.Y.Z\") or flutter.host_sdk(version = \"X.Y.Z\") tag.")
     if host_tags:
         flutter_sdk(name = "flutter_sdk", version = host_tags[0].version)
+        flutter_sdk_lockfile(
+            name = "flutter_tools_lockfile",
+            source = Label("@flutter_sdk//:pubspec.lock"),
+        )
         flutter_tools_packages(name = "flutter_tools_packages")
         return module_ctx.extension_metadata(reproducible = True)
-
     tag = sdk_tags[0]
     facts = getattr(module_ctx, "facts", {})
     pins = facts.get(tag.version)
@@ -322,6 +341,11 @@ def _flutter_extension_impl(module_ctx):
         material_fonts_version = pins["material_fonts_version"],
         gradle_wrapper_version = pins["gradle_wrapper_version"],
         ios_usb_versions = ios_usb_versions,
+    )
+    flutter_sdk_lockfile(
+        name = "flutter_tools_lockfile",
+        url = "https://raw.githubusercontent.com/flutter/flutter/{}/pubspec.lock".format(pins["framework_commit"]),
+        sha256 = pins["flutter_tools_lock_sha256"],
     )
 
     for android_host in _HOSTS:
