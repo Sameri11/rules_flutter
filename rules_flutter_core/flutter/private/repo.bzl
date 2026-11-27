@@ -211,7 +211,7 @@ def _flutter_sdk_stub(ctx):
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["pubspec.lock", "pubspec.yaml", "packages/flutter_tools/bin/flutter_tools.dart"])
-""" % repr(str(Label("//flutter:sdk_failure.bzl")))
+""" % repr(str(Label("//flutter/private:sdk_failure.bzl")))
     for target in [
         "dart",
         "dart_sdk_revision",

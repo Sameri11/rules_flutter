@@ -17,7 +17,7 @@ flutter_sdk_missing(
     message = %s,
 )
 """ % (
-            repr(str(Label("//flutter:sdk_failure.bzl"))),
+            repr(str(Label("//flutter/private:sdk_failure.bzl"))),
             repr(ctx.attr.failure_message),
             repr(ctx.attr.failure_message),
         ))

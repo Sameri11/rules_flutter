@@ -98,6 +98,11 @@ exports_files(
     visibility = ["//tools/ci:__pkg__"],
 )
 
+exports_files(
+    ["sdk_failure.bzl"],
+    visibility = ["//visibility:public"],
+)
+
 flutter_toolchain(
     name = "flutter_toolchain",
     visibility = ["//visibility:public"],

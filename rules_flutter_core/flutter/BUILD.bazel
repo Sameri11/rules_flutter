@@ -8,7 +8,6 @@ exports_files([
     "composition.bzl",
     "extensions.bzl",
     "target_toolchain.bzl",
-    "sdk_failure.bzl",
 ])
 
 # The Flutter SDK toolchain type, for rules outside this module. The type is
