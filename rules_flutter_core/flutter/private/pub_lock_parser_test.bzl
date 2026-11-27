@@ -7,6 +7,7 @@ shapes instead of producing a repository that fetches unverified content.
 
 load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
 load(":dart_registrant.bzl", "render_dart_registrant")
+load(":pub_lock.bzl", "execroot_package_segments")
 load(":pub_lock_parser.bzl", "git_package_path_segments", "language_version", "pubspec_dart_plugins", "pubspec_dependencies", "pubspec_flutter_plugins", "resolve_lock")
 
 visibility(["//flutter"])
@@ -88,6 +89,24 @@ def _classifies_each_source_impl(ctx):
     return unittest.end(env)
 
 _classifies_each_source_test = unittest.make(_classifies_each_source_impl)
+
+def _execroot_package_segments_impl(ctx):
+    env = unittest.begin(ctx)
+    asserts.equals(env, ["packages", "greeter"], execroot_package_segments(
+        "/output/execroot/_main/packages/greeter",
+        "",
+        "/output/execroot/_main",
+        "/output/execroot/_main/" + "external",
+    ))
+    asserts.equals(env, ["external", "flutter_sdk", "packages", "greeter"], execroot_package_segments(
+        "/output/execroot/_main/" + "external/flutter_sdk/packages/greeter",
+        "flutter_sdk",
+        "/output/execroot/_main",
+        "/output/execroot/_main/" + "external",
+    ))
+    return unittest.end(env)
+
+_execroot_package_segments_test = unittest.make(_execroot_package_segments_impl)
 
 def _empty_lock_impl(ctx):
     env = unittest.begin(ctx)
@@ -215,6 +234,7 @@ def pub_lock_parser_test_suite(name):
         _classifies_each_source_test,
         _empty_lock_test,
         _pubspec_readers_test,
+        _execroot_package_segments_test,
     )
     tests = [name + "_reads"]
     for case, lock, message in [

@@ -1,41 +1,41 @@
-"""Repositories exposing cached Android gen_snapshot payloads per ABI."""
+"""Host-platform repositories assembling gen_snapshot from generic engine archives."""
 
-visibility(["//:__pkg__"])
+def _gen_snapshot_file_impl(ctx):
+    files = ctx.attr.files[DefaultInfo].files.to_list()
+    candidates = [file for file in files if file.basename == "gen_snapshot"]
+    if len(candidates) != 1:
+        fail("Pinned engine archive for {} contains {} gen_snapshot files; expected exactly one.".format(ctx.attr.engine_dir, len(candidates)))
+    output = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.symlink(output = output, target_file = candidates[0], is_executable = True)
+    return [DefaultInfo(files = depset([output]), executable = output)]
 
-def _snapshot_path(ctx):
-    version_file = ctx.path(ctx.attr.version_file).realpath
-    sdk_root = version_file.dirname.dirname.dirname
-    host_os = ctx.os.name.lower()
-    host_arch = {
-        "aarch64": "arm64",
-        "amd64": "x64",
-        "arm64": "arm64",
-        "riscv64": "riscv64",
-        "x86_64": "x64",
-    }.get(ctx.os.arch.lower())
-    if host_arch == None:
-        fail("Unsupported host architecture for a Flutter build: '{}'.".format(ctx.os.arch))
-    if host_os.startswith("mac os"):
-        host = "darwin-x64"
-    elif host_os.startswith("linux"):
-        host = "linux-" + host_arch
-    elif host_os.startswith("windows"):
-        host = "windows-" + host_arch
-    else:
-        fail("Unsupported host OS for a Flutter build: '{}'.".format(ctx.os.name))
-
-    # Flutter currently stores Android gen_snapshot in the x64 engine directory on macOS.
-    return sdk_root.get_child("bin/cache/artifacts/engine").get_child(ctx.attr.engine_dir).get_child(host).get_child("gen_snapshot")
+gen_snapshot_file = rule(
+    implementation = _gen_snapshot_file_impl,
+    executable = True,
+    attrs = {
+        "engine_dir": attr.string(mandatory = True),
+        "files": attr.label(mandatory = True),
+    },
+)
 
 def _gen_snapshot_impl(ctx):
-    path = _snapshot_path(ctx)
-    if path.exists:
-        ctx.symlink(path, "gen_snapshot")
-        ctx.file("BUILD.bazel", """load("@rules_flutter_core//flutter:target_toolchain.bzl", "flutter_aot_toolchain")
+    host_os = ctx.os.name.lower()
+    if host_os.startswith("mac os"):
+        artifact = ctx.attr.macos_artifact
+    elif host_os.startswith("linux"):
+        artifact = ctx.attr.linux_artifact
+    else:
+        fail("Unsupported host OS for a Flutter build: '{}'.".format(ctx.os.name))
+    ctx.file("BUILD.bazel", """load(%s, "gen_snapshot_file")
+load("@rules_flutter_core//flutter:target_toolchain.bzl", "flutter_aot_toolchain")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["gen_snapshot"])
+gen_snapshot_file(
+    name = "gen_snapshot",
+    files = %s,
+    engine_dir = %s,
+)
 
 flutter_aot_toolchain(
     name = "aot_toolchain",
@@ -46,15 +46,17 @@ flutter_aot_toolchain(
     output_flag = "--elf=",
     strip_flag = "--strip",
 )
-""")
-    else:
-        fail("No cached Android gen_snapshot for {}. Run `flutter precache --android` to install the missing payload.".format(ctx.attr.engine_dir))
+""" % (
+        repr(str(Label("//flutter/private:gen_snapshot_repo.bzl"))),
+        repr(str(artifact)),
+        repr(ctx.attr.engine_dir),
+    ))
 
 flutter_gen_snapshot = repository_rule(
     implementation = _gen_snapshot_impl,
     attrs = {
         "engine_dir": attr.string(mandatory = True),
-        "version_file": attr.label(allow_single_file = True, default = Label("@flutter_sdk//:flutter.version.json")),
+        "macos_artifact": attr.label(mandatory = True),
+        "linux_artifact": attr.label(mandatory = True),
     },
-    local = True,
 )

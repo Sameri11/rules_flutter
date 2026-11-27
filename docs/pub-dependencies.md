@@ -54,6 +54,10 @@ pub.lock(name = "pub", lock = "//:pubspec.lock")
 use_repo(pub, "pub")
 ```
 
+For a lock whose relative path packages are rooted elsewhere, set
+`path_package_root` to a file label in that repository; its containing directory
+is used as the path root.
+
 Set `pub = "@pub"` on each `flutter_core` or `flutter_package`. Workspace
 membership does not add source files to Bazel actions: list member sources as
 `path_deps` on every package that imports them. The workspace app's core selects

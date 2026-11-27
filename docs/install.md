@@ -49,10 +49,34 @@ extensions, Android SDK/NDK toolchain registration, Maven installation, and pub
 lock. Archive module trees do not supply a root module or a shared `.bazelrc`.
 There are no settings inherited from a rules checkout.
 
-A Flutter SDK and Android SDK/NDK are local, non-hermetic prerequisites. Use
-Android SDK platform 36, build-tools 36.0.0, and NDK 28 or newer. Set
-`FLUTTER_ROOT` or put `flutter` on `PATH`, and set `ANDROID_HOME` and
-`ANDROID_NDK_HOME`. Commit `pubspec.lock` and the generated
+`flutter.sdk(version = "X.Y.Z")` accepts stable versions 3.47.0 or newer.
+Older versions and pre-releases are unsupported. The first extension resolution
+downloads canonical artifacts and writes their pins to Facts in
+`MODULE.bazel.lock`; review and commit that lock before using
+`--lockfile_mode=error`.
+
+To use a mirror, set `base_url` to redirect Flutter Storage downloads, or
+override single pieces with `urls` and `sha256`, keyed by the piece names
+recorded in the lock. Overrides never change the lock.
+Fetching can reach GitHub even after the SDK version is pinned: the tools
+lockfile comes from `raw.githubusercontent.com` on each resolution, and the
+default `framework_source` comes from `github.com` when the SDK is fetched.
+If either host is blocked, rewrite `github.com` and
+`raw.githubusercontent.com` with Bazel's `--downloader_config`.
+
+```starlark
+flutter.sdk(
+    version = "3.50.1",
+    base_url = "https://mirror.example",
+    urls = {"framework_source": ["https://mirror.example/flutter-archive.tar.gz"]},
+)
+```
+
+The host Flutter installation remains useful for IDE workflows, `pub get`, and
+`build_runner`, but Bazel builds use the pinned SDK. Android SDK/NDK are local
+prerequisites; use Android SDK platform 36, build-tools 36.0.0, and NDK 28 or
+newer. Set `ANDROID_HOME` and `ANDROID_NDK_HOME`. SDK provisioning requires
+`bash`, `python3`, and `tar`. Commit `pubspec.lock` and generated
 `MODULE.bazel.lock`.
 
 The archive consumer has a checked lockfile and can build with

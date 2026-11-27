@@ -18,6 +18,12 @@ load(
 
 package(default_visibility = ["//visibility:private"])
 
+alias(
+    name = "fake_platform_engine_artifacts",
+    actual = "@consumer_fake_platform//:engine_artifact_files",
+    visibility = ["//visibility:public"],
+)
+
 flutter_plugin_deps_guards(
     name = "fake_plugin_deps",
     committed = "fixtures/plugin_deps.MODULE.bazel",

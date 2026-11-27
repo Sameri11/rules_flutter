@@ -153,6 +153,12 @@ def _relpath(base, target):
 def _segments(path):
     return [s for s in str(path).split("/") if s]
 
+def execroot_package_segments(package_dir, repo_name, workspace_root, external_root):
+    path_segments = _segments(package_dir)
+    if repo_name:
+        return ["external"] + path_segments[len(_segments(external_root)):]
+    return path_segments[len(_segments(workspace_root)):]
+
 def _test_deps_libraries(rctx, name, lib, sdk):
     """The `package:` libraries one direct package adds to the hub's test deps kernel.
 
@@ -344,22 +350,42 @@ def _pub_hub_impl(rctx):
         }
 
     for package in lock["path"]:
-        # `../app_store/x` relative to the project dir, normalized to a workspace-relative
-        # segment list. A `..` may not climb above the lock's own repository: the
-        # main repository's root, or `external/<repo>` for another module's lock,
-        # whose parent is a sibling repository.
-        floor = 2 if lock_label.repo_name else 0
-        dirsegs = list(project)
-        for seg in package["path"].split("/"):
-            if seg in ["", "."]:
-                continue
-            if seg == "..":
-                if len(dirsegs) <= floor:
-                    fail("pub hub {}: path package {} escapes the workspace: {}".format(rctx.attr.name, package["name"], package["path"]))
-                dirsegs.pop()
-            else:
-                dirsegs.append(seg)
-        pubspec = workspace_root.get_child(*(dirsegs + ["pubspec.yaml"]))
+        if rctx.attr.path_package_root:
+            path_segs = []
+            for seg in package["path"].split("/"):
+                if seg in ["", "."]:
+                    continue
+                if seg == "..":
+                    if not path_segs:
+                        fail("pub hub {}: path package {} escapes the package root: {}".format(rctx.attr.name, package["name"], package["path"]))
+                    path_segs.pop()
+                else:
+                    path_segs.append(seg)
+            package_dir = rctx.path(rctx.attr.path_package_root).dirname.get_child(*path_segs)
+            pubspec = package_dir.get_child("pubspec.yaml")
+            dirsegs = execroot_package_segments(
+                package_dir,
+                rctx.attr.path_package_root.repo_name,
+                rctx.workspace_root,
+                hub_dir.dirname,
+            )
+        else:
+            # `../app_store/x` relative to the project dir, normalized to a workspace-relative
+            # segment list. A `..` may not climb above the lock's own repository: the
+            # main repository's root, or `external/<repo>` for another module's lock,
+            # whose parent is a sibling repository.
+            floor = 2 if lock_label.repo_name else 0
+            dirsegs = list(project)
+            for seg in package["path"].split("/"):
+                if seg in ["", "."]:
+                    continue
+                if seg == "..":
+                    if len(dirsegs) <= floor:
+                        fail("pub hub {}: path package {} escapes the workspace: {}".format(rctx.attr.name, package["name"], package["path"]))
+                    dirsegs.pop()
+                else:
+                    dirsegs.append(seg)
+            pubspec = workspace_root.get_child(*(dirsegs + ["pubspec.yaml"]))
 
         # Not a label (a path package may have no BUILD file): watched by path.
         rctx.watch(pubspec)
@@ -387,7 +413,8 @@ def _pub_hub_impl(rctx):
         }
     root_pubspec = rctx.read(rctx.attr.pubspec)
     workspace_members = []
-    for member_path in pubspec_workspace(root_pubspec):
+    workspace_paths = pubspec_workspace(root_pubspec)
+    for member_path in workspace_paths:
         member_dir = project_dir.get_child(*_segments(member_path))
         member_pubspec = member_dir.get_child("pubspec.yaml")
         if not member_pubspec.exists:
@@ -612,6 +639,7 @@ pub_hub = repository_rule(
     attrs = {
         "lock": attr.label(allow_single_file = True, mandatory = True),
         "pubspec": attr.label(allow_single_file = True, mandatory = True),
+        "path_package_root": attr.label(allow_single_file = True),
         "hosted": attr.label_keyed_string_dict(allow_files = True),
         "git": attr.label_keyed_string_dict(allow_files = True),
         "sdk": attr.string_list(),
@@ -670,6 +698,7 @@ def _pub_impl(mctx):
                 lock = lock.lock,
                 pubspec = lock.lock.same_package_label(lock.lock.name.rpartition("/")[0] + "/pubspec.yaml" if "/" in lock.lock.name else "pubspec.yaml"),
                 hosted = hosted,
+                path_package_root = lock.path_package_root,
                 git = git,
                 sdk = [package["name"] for package in resolved["sdk"]],
                 test_deps_exclude = lock.test_deps_exclude,
@@ -688,6 +717,10 @@ _lock_tag = tag_class(
             mandatory = True,
             allow_single_file = True,
             doc = "The project's pubspec.lock. pubspec.yaml must sit beside it.",
+        ),
+        "path_package_root": attr.label(
+            allow_single_file = True,
+            doc = "File label whose directory resolves relative path packages in the lock, instead of the directory containing the lock.",
         ),
         "test_deps_exclude": attr.string_list(
             doc = "Packages to leave out of the test deps kernel, by name. A direct package whose libraries do not compile there fails the build naming it; list it here, and each test that imports it compiles it itself.",

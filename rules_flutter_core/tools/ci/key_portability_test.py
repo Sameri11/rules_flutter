@@ -28,6 +28,9 @@ FILES = {
     "native_strip": "flutter/private/native_strip.bzl",
     "android_integration_test": "flutter/private/integration_test_runner.bzl",
     "composition": "flutter/composition.bzl",
+    "sdk_pins": "flutter/private/sdk_pins.bzl",
+    "sdk_tree": "flutter/private/sdk_tree.bzl",
+    "engine_artifact": "flutter/private/engine_artifact.bzl",
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
@@ -101,7 +104,33 @@ class Checker:
         self.check_s()
         self.check_t()
         self.check_android_private()
+        if self.root is not None:
+            self.check_sdk_provisioning()
         return self.failures
+
+    def check_sdk_provisioning(self):
+        """Keep SDK provisioning Facts and assembled-tree contracts visible."""
+        expected = {
+            "sdk_pins": (
+                'getattr(module_ctx, "facts", {})',
+                'facts = {tag.version: pins}',
+                "_pin_engine_artifacts",
+                'tag_classes = {"sdk": _sdk_tag, "engine_artifact": _engine_artifact_tag}',
+            ),
+            "sdk_tree": (
+                "block = False",
+                "download.wait()",
+                '"bin/cache/artifacts/engine/common/flutter_patched_sdk"',
+                '"bin/cache/artifacts/engine/common/flutter_patched_sdk_product"',
+                '"bin/cache/flutter.version.json"',
+            ),
+            "engine_artifact": ("ctx.download_and_extract(", "sha256 = ctx.attr.sha256", 'name = "files"'),
+        }
+        for name, fragments in expected.items():
+            source = self.sources.get(name, "")
+            for fragment in fragments:
+                if fragment not in source:
+                    self.fail("SDK", "{} must retain {}".format(FILES[name], fragment))
 
     def check_android_private(self):
         if self.android_root is None:
@@ -142,87 +171,13 @@ class Checker:
         if tree is None:
             return
 
-        resolve = _function(tree, "_resolve_flutter_root")
-        if resolve is None:
-            self.fail("A", "repo.bzl must define _resolve_flutter_root")
-        else:
-            root_assignment = None
-            root_lookup = None
-            for node in ast.walk(resolve):
-                if not isinstance(node, (ast.Assign, ast.AnnAssign)) or node.value is None:
-                    continue
-                for child in ast.walk(node.value):
-                    if not isinstance(child, ast.Call):
-                        continue
-                    if _call_path(child) != ["ctx", "os", "environ", "get"]:
-                        continue
-                    if child.args and _string(child.args[0]) == "FLUTTER_ROOT":
-                        root_assignment = node
-                        root_lookup = child
-                        break
-                if root_lookup is not None:
-                    break
-            if root_assignment is None:
-                self.fail("A", "_resolve_flutter_root must read FLUTTER_ROOT from ctx.os.environ")
-            which_calls = [
-                node
-                for node in ast.walk(resolve)
-                if isinstance(node, ast.Call)
-                and _call_path(node) == ["ctx", "which"]
-                and node.args
-                and _string(node.args[0]) == "flutter"
-            ]
-            if not which_calls:
-                self.fail("A", "_resolve_flutter_root must fall back to ctx.which(\"flutter\")")
-            if root_lookup is not None and which_calls:
-                if root_lookup.lineno >= min(node.lineno for node in which_calls):
-                    self.fail("A", "_resolve_flutter_root must check FLUTTER_ROOT before PATH lookup")
-
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or _call_path(node) is None:
-                continue
-            path = _call_path(node)
-            if len(path) >= 3 and path[-2:] == ["environ", "get"]:
-                args = node.args
-                if not args or _string(args[0]) != "FLUTTER_ROOT":
-                    self.fail("A", "repo.bzl may capture only FLUTTER_ROOT from ctx.os.environ")
-        for token in ("FLUTTER_ENV", "sdk.bzl", "ANDROID_HOME", "ANDROID_SDK_ROOT", "HOME", "PUB_CACHE"):
-            if _contains_string(tree, token):
-                self.fail("A", "repo.bzl must not capture generated SDK or {} environment state".format(token))
-
-        sdk_rule = _named_call(tree, "flutter_sdk")
-        if sdk_rule is None or _call_path(sdk_rule) != ["repository_rule"]:
-            self.fail("A", "repo.bzl must define flutter_sdk with repository_rule")
-        else:
-            environ = _keyword(sdk_rule, "environ")
-            values = _string_list(environ)
-            if values != ["FLUTTER_ROOT", "PATH"]:
-                self.fail("A", "flutter_sdk repository environ must be exactly [\"FLUTTER_ROOT\", \"PATH\"]")
-            for keyword in sdk_rule.keywords:
-                if keyword.arg == "environ":
-                    continue
-                if any(
-                    isinstance(node, ast.Constant)
-                    and isinstance(node.value, str)
-                    and any(token in node.value for token in ("FLUTTER_ENV", "sdk.bzl", "ANDROID_HOME", "ANDROID_SDK_ROOT", "HOME", "PUB_CACHE"))
-                    for node in ast.walk(keyword.value)
-                ):
-                    self.fail("A", "flutter_sdk repository must not capture generated SDK or unrelated environment state")
-                    break
-
-        # Every repository rule in repo.bzl reads the same environment, so none
-        # captures HOME or PUB_CACHE.
-        environ_calls = [
-            node
+        if _contains_string(tree, "FLUTTER_ROOT"):
+            self.fail("A", "repo.bzl must not read a host Flutter SDK from FLUTTER_ROOT")
+        if any(
+            isinstance(node, ast.Call) and _call_path(node) == ["ctx", "which"]
             for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and _keyword(node, "environ") is not None
-        ]
-        if not environ_calls:
-            self.fail("A", "repo.bzl must declare repository environments")
-        for call in environ_calls:
-            if _string_list(_keyword(call, "environ")) != ["FLUTTER_ROOT", "PATH"]:
-                self.fail("A", "every repository rule in repo.bzl must declare environ [\"FLUTTER_ROOT\", \"PATH\"]")
+        ):
+            self.fail("A", "repo.bzl must not resolve a host Flutter SDK from PATH")
 
     def check_b(self):
         for name in ("defs", "android", "test", "test_driver", "core", "android_inputs", "apk_check"):
@@ -407,17 +362,24 @@ class Checker:
                 self.fail("D", "FlutterAssets inputs must declare the generated stage manifest")
             if not _contains_attr(inputs, ["staged", "files"]):
                 self.fail("D", "FlutterAssets inputs must declare every staged file (staged.files)")
-            for name in ("_merger",):
+            for name in ("_merger", "_stage_sdk"):
                 expected = ["ctx", "file", name]
                 if not _contains_attr(inputs, expected):
                     self.fail("D", "FlutterAssets inputs must declare ctx.file.{}".format(name))
-            for name in ("sdk_version", "flutter"):
+            for name in ("sdk_version", "sdk_layout"):
                 if not _contains_attr(inputs, ["toolchain", name]):
                     self.fail("D", "FlutterAssets inputs must declare toolchain.{}".format(name))
+            if _contains_attr(inputs, ["toolchain", "flutter"]):
+                self.fail("D", "FlutterAssets must use its staged SDK root, not the host launcher path")
             if not _contains_attr(inputs, ["build_env", "files"]):
                 self.fail("D", "FlutterAssets inputs must declare the native build environment's files (build_env.files)")
             if _keyword(action, "tools") is not None:
-                self.fail("D", "FlutterAssets must not declare tools: it runs the host flutter tool, an undeclared input (see _ASSETS_EXEC)")
+                self.fail("D", "FlutterAssets must invoke the declared SDK tool tree, not a separate tools set")
+            execution = _keyword(action, "execution_requirements")
+            if isinstance(execution, ast.Name):
+                execution = _named_value(tree, execution.id)
+            if "no-remote-exec" in (_string_dict(execution) or {}):
+                self.fail("D", "FlutterAssets must remain eligible for remote execution")
             for path in (
                 ["toolchain", "frontend_server"],
                 ["toolchain", "platform_product"],
@@ -430,28 +392,29 @@ class Checker:
             ):
                 if _contains_attr(function, path):
                     self.fail("D", "FlutterAssets must not reference {}: the bundle takes no kernel or entrypoint".format(".".join(path)))
-            execution = _keyword(action, "execution_requirements")
-            if _name(execution) != "_ASSETS_EXEC":
-                self.fail("D", "FlutterAssets action must use _ASSETS_EXEC")
-        if _string_dict(_named_value(tree, "_ASSETS_EXEC")) != {"no-remote-exec": "1"}:
-            self.fail("D", "_ASSETS_EXEC must require only no-remote-exec: the action is sandboxed and cacheable")
+
+
+        staged_calls = [
+            node
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call) and _call_path(node) == ["_stage_flutter_assets"]
+        ]
+        if not any(
+            isinstance(_keyword(call, "use_staged_sdk"), ast.Constant) and
+            _keyword(call, "use_staged_sdk").value is True
+            for call in staged_calls
+        ):
+            self.fail("D", "FlutterAssets must derive FLUTTER_ROOT from its staged SDK tree")
 
         staged_command = _staged_command(tree)
-        flutter_root = _formatted_template(_named_value(staging, "flutter_root"))
-        if staged_command is None or flutter_root is None:
-            self.fail("D", "the staged shell environment must be a format template")
-        else:
-            required = (
-                (staged_command, 'export PATH="/usr/bin:/bin"', "fixed PATH"),
-                (staged_command, 'export FLUTTER_ALREADY_LOCKED="true"', "FLUTTER_ALREADY_LOCKED export"),
-                (staged_command, 'export HOME="$STAGE/home"', "stage-local HOME"),
-                (staged_command, "$EXECROOT/{bundle_guard}", "the pubspec guard invocation"),
-            )
-            for text, token, description in required:
-                if token not in text:
-                    self.fail("D", "FlutterAssets shell must contain {}".format(description))
-            if "realpath" not in flutter_root or "dirname" not in flutter_root:
-                self.fail("D", "FlutterAssets must derive FLUTTER_ROOT from the flutter launcher's realpath")
+        required = (
+            'export PATH="/usr/bin:/bin"',
+            'export FLUTTER_ALREADY_LOCKED="true"',
+            'export HOME="$STAGE/home"',
+            "{bundle_guard}",
+        )
+        if staged_command is None or any(token not in staged_command for token in required):
+            self.fail("D", "staged FlutterAssets must isolate PATH, lock state, HOME, and check the bundle pubspec")
 
         tester = _function(tree, "_flutter_test_assets_impl")
         if tester is None:
@@ -461,6 +424,9 @@ class Checker:
                 self.fail("D", "the test assets bundle must not depend on ABIs")
             if any(isinstance(node, ast.Constant) and isinstance(node.value, str) and "ANDROID" in node.value for node in ast.walk(tester)):
                 self.fail("D", "the test assets bundle must not set an Android environment")
+            test_action = _action_call(tester, "run_shell")
+            if test_action is None or _string_dict(_keyword(test_action, "execution_requirements")) != {"no-remote-exec": "1"}:
+                self.fail("D", "FlutterTestAssets must retain no-remote-exec until its own portability gates pass")
 
         if _function(tree, "_kernel_blob_command") is not None:
             self.fail("D", "_kernel_blob_command must not exist: the overlay adds kernel_blob.bin, flutter_assets does not")
@@ -480,6 +446,7 @@ class Checker:
         for target, expected in (
             ("_merger", "//flutter/private:merge_native_assets.py"),
             ("_bundle_guard", "//flutter/private:check_bundle_pubspec.py"),
+            ("_stage_sdk", "//flutter/private:stage_flutter_sdk.py"),
         ):
             if not _rule_attr_default(tree, "flutter_assets", target, expected):
                 self.fail("D", "flutter_assets must retain {} default {}".format(target, expected))

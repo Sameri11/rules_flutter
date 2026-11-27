@@ -1,26 +1,31 @@
 """Implementation of the Flutter rules.
 
 Nothing here is supported API: consumers load //flutter:defs.bzl and
-//flutter:extensions.bzl; hand-wired targets load //flutter:composition.bzl. The `.bzl` files beside this file declare
-`visibility(["//flutter"])`, except `toolchain_repo.bzl`, whose `//` visibility
-allows it to be loaded from the ruleset's root MODULE.bazel only, and
-`hook_packages.bzl`, whose public visibility allows generated pub hub
-repositories to load its private metadata rule.
+//flutter:extensions.bzl; hand-wired targets load //flutter:composition.bzl.
+The `.bzl` files beside this file declare
+`visibility(["//flutter", "//flutter:__subpackages__"])`, except
+`toolchain_repo.bzl`, whose `//` visibility allows it to be loaded from the
+ruleset's root MODULE.bazel only, and `hook_packages.bzl`, whose public
+visibility allows generated pub hub repositories to load its private metadata
+rule.
 
-Two mechanical exceptions need a label, and only those:
+Mechanical exceptions that need labels:
 
-  * The Python helpers are attribute defaults of rules defined here. Bazel
+  * Python helpers are attribute defaults of rules defined here. Bazel
     resolves an implicit dependency against the package of the `.bzl` that
     defines the rule, so `//flutter:__subpackages__` is enough even though the
     rules are instantiated in another module's packages.
-  * The `.bzl` files //tools/ci:key_portability_check reads as `srcs`.
-    That guard parses their source for action-key portability contracts, which
+  * `sdk_failure.bzl` is loaded from generated repositories through a label
+    created in core, so its file is exported explicitly.
+  * The `.bzl` files //tools/ci:key_portability_check reads as `srcs`. That
+    guard parses their source for action-key portability contracts, which
     requires a label, not a load.
 
 `repo.bzl` is loaded through the public module extension. The generated
-host-compatible registration points at the public static toolchain target.
+registration points at the public static toolchain target.
 """
 
+load(":flutter_tools_snapshot.bzl", "flutter_tools_kernel")
 load(":hook_packages_test.bzl", "staged_hook_packages_test")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":rules.bzl", "flutter_target_slice")
@@ -35,25 +40,47 @@ exports_files(
         "lib_entry.py",
         "merge_native_assets.py",
         "read_pubspec.py",
+        "stage_flutter_sdk.py",
         "tester_assets.dart",
     ],
     visibility = ["//flutter:__subpackages__"],
 )
 
-# The test-asset builder, compiled once per SDK from the flutter_tools closure in
-# its own repository. Test bundles run this dill, so no action compiles
-# flutter_tools or reads the pub cache. frontend_server names every source
-# through the execroot scheme, so the dill carries no machine-specific paths.
+exports_files(
+    ["sdk_failure.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+flutter_tools_kernel(
+    name = "flutter_tools_snapshot",
+    dart = "@flutter_sdk//:dart",
+    dartaotruntime = "@flutter_sdk//:dartaotruntime",
+    framework_tools = "@flutter_sdk//:packages/flutter_tools/bin/flutter_tools.dart",
+    frontend_server = "@flutter_sdk//:frontend_server.snapshot",
+    inputs = [
+        "@flutter_sdk//:dart_sdk_files",
+        "@flutter_sdk//:sdk_packages",
+        "@flutter_tools//:lib",
+    ],
+    package_config = "@flutter_tools//:package_config.json",
+    visibility = ["//visibility:public"],
+    vm_platform = "@flutter_sdk//:vm_platform_strong.dill",
+)
+
+# The test-asset builder uses frontend_server directly, so no action compiles
+# flutter_tools or reads the pub cache. The dill carries no machine-specific paths.
 genrule(
     name = "tester_assets_dill",
     srcs = [
         "tester_assets.dart",
-        "@flutter_tools_packages//:flutter_tools_package_config.json",
-        "@flutter_tools_packages",
+        "@flutter_tools//:package_config.json",
+        "@flutter_tools//:lib",
+        "@flutter_sdk//:framework_tools_lib",
+        "@flutter_sdk//:sdk_packages",
         "@flutter_sdk//:vm_platform_strong.dill",
     ],
     outs = ["tester_assets.dill"],
-    cmd = "d=$$PWD/$$(dirname $(execpath @flutter_sdk//:vm_platform_strong.dill)) && $(execpath @flutter_sdk//:dartaotruntime) $(execpath @flutter_sdk//:frontend_server.snapshot) --target=vm --sdk-root=$$d/ --platform=$$d/vm_platform_strong.dill --filesystem-root . --filesystem-scheme org-dartlang-root --packages=org-dartlang-root:///$(execpath @flutter_tools_packages//:flutter_tools_package_config.json) --no-print-incremental-dependencies --output-dill=$@ org-dartlang-root:///$(execpath tester_assets.dart)",
+    cmd = "d=$$PWD/$$(dirname $(execpath @flutter_sdk//:vm_platform_strong.dill)) && $(execpath @flutter_sdk//:dartaotruntime) $(execpath @flutter_sdk//:frontend_server.snapshot) --target=vm --sdk-root=$$d/ --platform=$$d/vm_platform_strong.dill --filesystem-root . --filesystem-scheme org-dartlang-root --packages=org-dartlang-root:///$(execpath @flutter_tools//:package_config.json) --no-print-incremental-dependencies --output-dill=$@ org-dartlang-root:///$(execpath tester_assets.dart)",
     tools = [
         "@flutter_sdk//:dartaotruntime",
         "@flutter_sdk//:frontend_server.snapshot",
@@ -72,9 +99,18 @@ exports_files(
         "pub_workspace.bzl",
         "repo.bzl",
         "rules.bzl",
+        "flutter_tools_snapshot.bzl",
         "test_kernel_driver.bzl",
+        "sdk_pins.bzl",
+        "sdk_tree.bzl",
+        "engine_artifact.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
+)
+
+exports_files(
+    ["sdk_failure.bzl"],
+    visibility = ["//visibility:public"],
 )
 
 flutter_toolchain(

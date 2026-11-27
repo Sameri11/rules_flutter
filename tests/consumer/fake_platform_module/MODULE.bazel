@@ -1,0 +1,13 @@
+module(
+    name = "consumer_fake_platform",
+    version = "0.0.1",
+)
+
+bazel_dep(name = "sameri11_rules_flutter_core", version = "0.1.0", repo_name = "rules_flutter_core")
+
+flutter = use_extension("@rules_flutter_core//flutter:extensions.bzl", "flutter")
+flutter.engine_artifact(
+    name = "consumer_fake_engine_artifact",
+    path = "android-arm64-release/darwin-x64.zip",
+)
+use_repo(flutter, "consumer_fake_engine_artifact")
