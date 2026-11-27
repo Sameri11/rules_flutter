@@ -28,51 +28,67 @@ def _sdk_tree_impl(ctx):
                 type = ctx.attr.archive_types[piece],
                 strip_prefix = ctx.attr.strip_prefixes[piece],
             )
+    layout = []
 
-    framework = ctx.path("pieces/framework_source")
-    dart_archive = ctx.path("pieces/dart-sdk")
-    dart = dart_archive.get_child("dart-sdk")
-    patched = ctx.path("pieces/flutter_patched_sdk")
-    patched_product = ctx.path("pieces/flutter_patched_sdk_product")
-    sky = ctx.path("pieces/sky_engine")
-    gpu = ctx.path("pieces/flutter_gpu")
-    host = ctx.path("pieces/host_artifacts")
-    fonts = ctx.path("pieces/material_fonts")
-    gradle = ctx.path("pieces/gradle_wrapper")
-    engine_stamp = ctx.path("pieces/engine_stamp.json")
-    ctx.symlink(framework, "framework")
-    ctx.symlink("framework/pubspec.yaml", "pubspec.yaml")
-    ctx.symlink("framework/pubspec.lock", "pubspec.lock")
-    ctx.symlink(dart, "bin/cache/dart-sdk")
-    ctx.symlink("bin/cache/dart-sdk", "dart-sdk")
-    ctx.file(
-        "bin/flutter",
-        "#!/bin/sh\nFLUTTER_ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\nexport FLUTTER_ROOT\nexec \"$FLUTTER_ROOT/framework/bin/flutter\" \"$@\"\n",
-        executable = True,
-    )
-    ctx.symlink("framework/packages", "packages")
-    ctx.symlink(patched.get_child("flutter_patched_sdk"), "bin/cache/artifacts/engine/common/flutter_patched_sdk")
-    ctx.symlink(patched_product.get_child("flutter_patched_sdk_product"), "bin/cache/artifacts/engine/common/flutter_patched_sdk_product")
-    ctx.symlink(sky.get_child("sky_engine"), "bin/cache/pkg/sky_engine")
-    ctx.symlink(gpu, "bin/cache/pkg/flutter_gpu")
-    ctx.symlink(host, "bin/cache/artifacts/engine/{}".format(ctx.attr.engine_host_dir))
-    ctx.symlink(fonts, "bin/cache/artifacts/material_fonts")
-    ctx.symlink(gradle, "bin/cache/artifacts/gradle_wrapper")
+    def add_layout(destination, source):
+        layout.append({"destination": destination, "source": source})
+
+    add_layout("framework", "framework_source")
+    framework_names = [entry.basename for entry in ctx.path("pieces/framework_source").readdir()]
+    for name in framework_names:
+        if name != "bin" and name != "packages":
+            add_layout(name, "framework_source/" + name)
+    for entry in ctx.path("pieces/framework_source/bin").readdir():
+        if entry.basename not in ("cache", "flutter"):
+            add_layout("bin/" + entry.basename, "framework_source/bin/" + entry.basename)
+    for entry in ctx.path("pieces/framework_source/packages").readdir():
+        if entry.basename != "flutter_tools":
+            add_layout("packages/" + entry.basename, "framework_source/packages/" + entry.basename)
+    for entry in ctx.path("pieces/framework_source/packages/flutter_tools").readdir():
+        add_layout("packages/flutter_tools/" + entry.basename, "framework_source/packages/flutter_tools/" + entry.basename)
+    for destination, source in [
+        ("bin/cache/dart-sdk", "dart-sdk/dart-sdk"),
+        ("dart-sdk", "dart-sdk/dart-sdk"),
+        ("bin/cache/artifacts/engine/common/flutter_patched_sdk", "flutter_patched_sdk/flutter_patched_sdk"),
+        ("bin/cache/artifacts/engine/common/flutter_patched_sdk_product", "flutter_patched_sdk_product/flutter_patched_sdk_product"),
+        ("bin/cache/artifacts/engine/" + ctx.attr.engine_host_dir, "host_artifacts"),
+        ("bin/cache/pkg/sky_engine", "sky_engine/sky_engine"),
+        ("bin/cache/pkg/flutter_gpu", "flutter_gpu"),
+        ("bin/cache/artifacts/material_fonts", "material_fonts"),
+        ("bin/cache/engine_stamp.json", "engine_stamp.json"),
+        ("vm_isolate_snapshot.bin", "host_artifacts/vm_isolate_snapshot.bin"),
+        ("isolate_snapshot.bin", "host_artifacts/isolate_snapshot.bin"),
+        ("flutter_tester", "host_artifacts/flutter_tester"),
+        ("icudtl.dat", "host_artifacts/icudtl.dat"),
+        ("impellerc", "host_artifacts/impellerc"),
+        ("bin/cache/artifacts/gradle_wrapper", "gradle_wrapper"),
+    ]:
+        add_layout(destination, source)
     for artifact in ctx.attr.ios_usb_names:
-        piece = "ios_usb_" + artifact
-        ctx.symlink(ctx.path("pieces/" + piece), "bin/cache/artifacts/" + artifact)
-        ctx.file("bin/cache/{}.stamp".format(artifact), ctx.attr.ios_usb_versions[artifact])
-
-    ctx.symlink(engine_stamp, "bin/cache/artifacts/engine/engine_stamp.json")
-    for name in ("vm_isolate_snapshot.bin", "isolate_snapshot.bin", "flutter_tester", "icudtl.dat", "impellerc"):
-        ctx.symlink(host.get_child(name), name)
-
+        add_layout("bin/cache/artifacts/" + artifact, "ios_usb_" + artifact)
+        ctx.file("pieces/generated/" + artifact + ".stamp", ctx.attr.ios_usb_versions[artifact])
+        add_layout("bin/cache/" + artifact + ".stamp", "generated/" + artifact + ".stamp")
     revision = ctx.attr.engine_revision
     for name in ("engine.stamp", "engine_stamp.stamp", "flutter_sdk.stamp", "font-subset.stamp"):
-        ctx.file("bin/cache/" + name, revision + "\n" if name == "engine.stamp" else revision)
-    ctx.file("bin/cache/material_fonts.stamp", ctx.attr.material_fonts_version)
-    ctx.file("bin/cache/gradle_wrapper.stamp", ctx.attr.gradle_wrapper_version)
-    ctx.file("bin/cache/engine.realm", "\n")
+        ctx.file("pieces/generated/" + name, revision + "\n" if name == "engine.stamp" else revision)
+        add_layout("bin/cache/" + name, "generated/" + name)
+    for name, value in (("material_fonts.stamp", ctx.attr.material_fonts_version),):
+        ctx.file("pieces/generated/" + name, value)
+        add_layout("bin/cache/" + name, "generated/" + name)
+    ctx.file("pieces/generated/gradle_wrapper.stamp", ctx.attr.gradle_wrapper_version)
+    add_layout("bin/cache/gradle_wrapper.stamp", "generated/gradle_wrapper.stamp")
+    ctx.file("pieces/generated/flutter", "#!/bin/sh\nFLUTTER_ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\nexport FLUTTER_ROOT\nexec \"$FLUTTER_ROOT/framework/bin/flutter\" \"$@\"\n", executable = True)
+    add_layout("bin/flutter", "generated/flutter")
+    ctx.file("pieces/generated/engine.realm", "\n")
+    add_layout("bin/cache/engine.realm", "generated/engine.realm")
+    ctx.file("sdk_layout.json", json.encode(layout) + "\n")
+
+    dart = ctx.path("pieces/dart-sdk/dart-sdk")
+    engine_stamp = ctx.path("pieces/engine_stamp.json")
+    for entry in layout:
+        ctx.symlink(ctx.path("pieces/" + entry["source"]), entry["destination"])
+
+    revision = ctx.attr.engine_revision
     devtools = json.decode(ctx.read(dart.get_child("bin/resources/devtools/version.json")))["version"]
     engine_metadata = json.decode(ctx.read(engine_stamp))
     ctx.file("bin/cache/flutter.version.json", json.encode({
@@ -107,7 +123,8 @@ def _sdk_tree_impl(ctx):
     ])
 
     build = """package(default_visibility = [\"//visibility:public\"])
-exports_files([\"pubspec.yaml\", \"pubspec.lock\", \"packages/flutter_tools/bin/flutter_tools.dart\", \"dart\", \"dart_sdk_revision\", \"dartaotruntime\", \"vm_platform_strong.dill\", \"flutter\", \"frontend_server.snapshot\", \"flutter.version.json\", \"engine_stamp.json\", \"vm_isolate_snapshot.bin\", \"isolate_snapshot.bin\", \"flutter_tester\", \"icudtl.dat\", \"impellerc\"])
+exports_files(["sdk_layout.json"])
+exports_files(["pubspec.yaml", "pubspec.lock", "packages/flutter_tools/bin/flutter_tools.dart", "dart", "dart_sdk_revision", "dartaotruntime", "vm_platform_strong.dill", "flutter", "frontend_server.snapshot", "flutter.version.json", "engine_stamp.json", "vm_isolate_snapshot.bin", "isolate_snapshot.bin", "flutter_tester", "icudtl.dat", "impellerc"])
 filegroup(name = "dart_sdk_files", srcs = glob(["dart-sdk/**"], allow_empty = True))
 filegroup(name = "platform_product", srcs = glob(["flutter_patched_sdk_product/**"]))
 filegroup(name = "platform_debug", srcs = glob(["flutter_patched_sdk/**"]))
@@ -122,7 +139,7 @@ filegroup(name = "flutter_tools_cache_state", srcs = [
     "bin/cache/gradle_wrapper.stamp",
     "bin/cache/engine.realm",
     "bin/cache/flutter.version.json",
-    "bin/cache/artifacts/engine/engine_stamp.json",
+    "bin/cache/engine_stamp.json",
 ] + glob(["pieces/**"], allow_empty = True) + %s)
 """ % (
         repr(globs),
@@ -135,7 +152,7 @@ filegroup(name = "flutter_tools_cache_state", srcs = [
     ctx.symlink("bin/cache/dart-sdk/lib/_internal/vm_platform_strong.dill", "vm_platform_strong.dill")
     ctx.symlink("bin/cache/dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot", "frontend_server.snapshot")
     ctx.symlink("bin/cache/flutter.version.json", "flutter.version.json")
-    ctx.symlink("bin/cache/artifacts/engine/engine_stamp.json", "engine_stamp.json")
+    ctx.symlink("bin/cache/engine_stamp.json", "engine_stamp.json")
     ctx.symlink("bin/flutter", "flutter")
     ctx.symlink("bin/cache/artifacts/engine/common/flutter_patched_sdk", "flutter_patched_sdk")
     ctx.symlink("bin/cache/artifacts/engine/common/flutter_patched_sdk_product", "flutter_patched_sdk_product")

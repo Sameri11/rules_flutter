@@ -18,6 +18,7 @@ FlutterToolchainInfo = provider(
         "icu_data": "ICU data file that flutter_tester loads.",
         "sdk_version": "Flutter SDK identity JSON file.",
         "platform_product": "Product patched SDK files.",
+        "sdk_layout": "SDK layout manifest mapping staged destinations to pinned piece paths.",
         "platform_debug": "Debug patched SDK files.",
         "sdk_packages": "Depset of the SDK's Dart package files: every `packages/<name>` package plus sky_engine, as lib/, pubspec.yaml and license files.",
         "dart": "Dart SDK executable file, used to run the test-kernel driver.",
@@ -43,6 +44,7 @@ def _flutter_toolchain_impl(ctx):
         flutter_tester = ctx.executable._flutter_tester,
         icu_data = ctx.file._icu_data,
         sdk_version = ctx.file._sdk_version,
+        sdk_layout = ctx.file._sdk_layout,
         platform_product = ctx.files._platform_product,
         platform_debug = ctx.files._platform_debug,
         sdk_packages = depset(ctx.files._sdk_packages),
@@ -68,6 +70,7 @@ def _toolchain_attrs():
         "_platform_product": attr.label(default = "@flutter_sdk//:platform_product", allow_files = True),
         "_platform_debug": attr.label(default = "@flutter_sdk//:platform_debug", allow_files = True),
         "_sdk_packages": attr.label(default = "@flutter_sdk//:sdk_packages", allow_files = True),
+        "_sdk_layout": attr.label(default = "@flutter_sdk//:sdk_layout.json", allow_single_file = True),
     }
 
 flutter_toolchain = rule(

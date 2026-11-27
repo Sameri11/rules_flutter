@@ -1607,63 +1607,14 @@ def _flutter_assets_impl(ctx):
     # Code assets belong in platform native libraries, not the asset tree.
     # Packaging recipes install them in native library directories; discard
     # flutter_tools' duplicate. NativeAssetsManifest.json stays beside the bundle for runtime lookup.
-    ios_usb_links = """for item in "$SDK_ROOT"/pieces/ios_usb_*; do
-    [ -d "$item" ] || continue
-    name="${item##*/ios_usb_}"
-    ln -s "$item" "$ROOT/bin/cache/artifacts/$name"
-done"""
     cmd = staged.command + """ROOT="$STAGE/sdk"
 SDK_ROOT="$EXECROOT/{sdk_root}"
-ENGINE_HOST=darwin-x64
-if [ "$(uname -s)" = "Linux" ]; then ENGINE_HOST=linux-x64; fi
-mkdir -p "$ROOT/bin/cache/artifacts/engine/common" "$ROOT/bin/cache/artifacts/engine/$ENGINE_HOST" "$ROOT/bin/cache/pkg"
-for item in "$SDK_ROOT/pieces/framework_source"/*; do
-    name="$(basename "$item")"
-    if [ "$name" != "bin" ] && [ "$name" != "packages" ]; then ln -s "$item" "$ROOT/$name"; fi
-done
-for item in "$SDK_ROOT/pieces/framework_source/bin"/*; do
-    name="$(basename "$item")"
-    if [ "$name" != "cache" ]; then ln -s "$item" "$ROOT/bin/$name"; fi
-done
-mkdir -p "$ROOT/packages"
-for item in "$SDK_ROOT/pieces/framework_source/packages"/*; do
-    name="$(basename "$item")"
-    if [ "$name" != "flutter_tools" ]; then ln -s "$item" "$ROOT/packages/$name"; fi
-done
-mkdir -p "$ROOT/packages/flutter_tools/.dart_tool"
-for item in "$SDK_ROOT/pieces/framework_source/packages/flutter_tools"/*; do
-    ln -s "$item" "$ROOT/packages/flutter_tools/$(basename "$item")"
-done
-python3 - "$EXECROOT/{package_config}" "$ROOT/packages/flutter_tools/.dart_tool/package_config.json" "$EXECROOT" <<'PY'
-import json
-import os
-import pathlib
-import sys
-
-source, target, execroot = sys.argv[1:]
-with open(source, encoding="utf-8") as stream:
-    config = json.load(stream)
-for package in config["packages"]:
-    package_path = os.path.normpath(os.path.join(os.path.dirname(source), package["rootUri"]))
-    if not os.path.isabs(package_path):
-        package_path = os.path.join(execroot, package_path)
-    package["rootUri"] = pathlib.Path(package_path).as_uri()
-with open(target, "w", encoding="utf-8") as stream:
-    json.dump(config, stream, separators=(",", ":"))
-PY
-ln -s "$SDK_ROOT/pieces/dart-sdk/dart-sdk" "$ROOT/bin/cache/dart-sdk"
-ln -s "$SDK_ROOT/pieces/flutter_patched_sdk/flutter_patched_sdk" "$ROOT/bin/cache/artifacts/engine/common/flutter_patched_sdk"
-ln -s "$SDK_ROOT/pieces/flutter_patched_sdk_product/flutter_patched_sdk_product" "$ROOT/bin/cache/artifacts/engine/common/flutter_patched_sdk_product"
-for item in "$SDK_ROOT/pieces/host_artifacts"/*; do ln -s "$item" "$ROOT/bin/cache/artifacts/engine/$ENGINE_HOST/$(basename "$item")"; done
-ln -s "$SDK_ROOT/pieces/sky_engine/sky_engine" "$ROOT/bin/cache/pkg/sky_engine"
-ln -s "$SDK_ROOT/pieces/flutter_gpu" "$ROOT/bin/cache/pkg/flutter_gpu"
-ln -s "$SDK_ROOT/pieces/material_fonts" "$ROOT/bin/cache/artifacts/material_fonts"
-ln -s "$SDK_ROOT/pieces/gradle_wrapper" "$ROOT/bin/cache/artifacts/gradle_wrapper"
-{ios_usb_links}
-for stamp in "$SDK_ROOT"/bin/cache/*.stamp; do
-    cp -L "$stamp" "$ROOT/bin/cache/$(basename "$stamp")"
-done
-cp -L "$SDK_ROOT/pieces/engine_stamp.json" "$ROOT/bin/cache/engine_stamp.json"
+python3 "$EXECROOT/{stager}" \
+    --sdk-root "$SDK_ROOT" \
+    --layout "$EXECROOT/{layout}" \
+    --root "$ROOT" \
+    --package-config "$EXECROOT/{package_config}" \
+    --execroot "$EXECROOT"
 # flutter_tools takes the project directory as two levels above --target.
 mkdir -p .flutter_bazel
 printf 'void main() {{}}\\n' > .flutter_bazel/stub.dart
@@ -1676,7 +1627,8 @@ flutter_tool() {{
 python3 "$EXECROOT/{merger}" {merge_args}
 """.format(
         sdk_root = toolchain.sdk_version.dirname,
-        ios_usb_links = ios_usb_links,
+        layout = toolchain.sdk_layout.path,
+        stager = ctx.file._stage_sdk.path,
         dart = toolchain.dart.path,
         package_config = toolchain.tools_package_config.path,
         snapshot = toolchain.tools_snapshot.path,
@@ -1702,7 +1654,7 @@ python3 "$EXECROOT/{merger}" {merge_args}
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.dart, toolchain.tools_package_config, ctx.file._merger, ctx.file._bundle_guard, toolchain.tools_snapshot],
+            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.sdk_layout, toolchain.dart, toolchain.tools_package_config, ctx.file._merger, ctx.file._bundle_guard, ctx.file._stage_sdk, toolchain.tools_snapshot],
             transitive = [toolchain.tools_packages, toolchain.tools_cache_state] + ([build_env.files] if build_env else []),
         ),
         outputs = [out],
@@ -1784,6 +1736,7 @@ build that has no native SDK.""",
             default = "//flutter/private:check_bundle_pubspec.py",
             allow_single_file = True,
         ),
+        "_stage_sdk": attr.label(default = "//flutter/private:stage_flutter_sdk.py", allow_single_file = True),
     },
     toolchains = ["//flutter/private:flutter_toolchain_type"],
 )
