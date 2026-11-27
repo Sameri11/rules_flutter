@@ -28,6 +28,9 @@ FILES = {
     "native_strip": "flutter/private/native_strip.bzl",
     "android_integration_test": "flutter/private/integration_test_runner.bzl",
     "composition": "flutter/composition.bzl",
+    "sdk_pins": "flutter/private/sdk_pins.bzl",
+    "sdk_tree": "flutter/private/sdk_tree.bzl",
+    "sdk_android_piece": "flutter/private/sdk_android_piece.bzl",
 }
 
 # Owned by rules_flutter_android: checked only when --android-root names that module.
@@ -101,7 +104,32 @@ class Checker:
         self.check_s()
         self.check_t()
         self.check_android_private()
+        if self.root is not None:
+            self.check_sdk_provisioning()
         return self.failures
+
+    def check_sdk_provisioning(self):
+        """Keep provisioning Facts and assembled-tree contracts visible."""
+        expected = {
+            "sdk_pins": (
+                'getattr(module_ctx, "facts", {})',
+                'facts = {tag.version: pins}',
+                '"flutter_android_{}_{}".format(piece, android_host.replace("-", "_"))',
+            ),
+            "sdk_tree": (
+                "block = False",
+                "download.wait()",
+                '"bin/cache/artifacts/engine/common/flutter_patched_sdk"',
+                '"bin/cache/artifacts/engine/common/flutter_patched_sdk_product"',
+                '"bin/cache/flutter.version.json"',
+            ),
+            "sdk_android_piece": ("ctx.download_and_extract(", "sha256 = ctx.attr.sha256"),
+        }
+        for name, fragments in expected.items():
+            source = self.sources.get(name, "")
+            for fragment in fragments:
+                if fragment not in source:
+                    self.fail("SDK", "{} must retain {}".format(FILES[name], fragment))
 
     def check_android_private(self):
         if self.android_root is None:

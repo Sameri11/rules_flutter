@@ -11,9 +11,13 @@ Flutter project.
 
 ## First build (Android example)
 
-Install Flutter 3.47.3, Bazel 9.2.0, Android SDK platform 36 and build-tools
-36.0.0, and Android NDK 28 or newer. Set `FLUTTER_ROOT` or put `flutter` on
-`PATH`; set `ANDROID_HOME` and `ANDROID_NDK_HOME`.
+Install Bazel 9.2.0, Android SDK platform 36 and build-tools 36.0.0, and
+Android NDK 28 or newer. `flutter.sdk(version = "3.50.1")` provisions the SDK
+through Bazel; the first resolution pins its Facts in `MODULE.bazel.lock`, which
+must be committed. `flutter.host_sdk(version = "...")` opts into a locally
+installed Flutter SDK. Set `ANDROID_HOME` and `ANDROID_NDK_HOME`.
+
+The `flutter create` command below is a host Flutter command.
 
 ```sh
 flutter create --empty --org com.example --platforms android hello_bazel

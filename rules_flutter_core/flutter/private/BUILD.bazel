@@ -91,6 +91,9 @@ exports_files(
         "rules.bzl",
         "flutter_tools_snapshot.bzl",
         "test_kernel_driver.bzl",
+        "sdk_pins.bzl",
+        "sdk_tree.bzl",
+        "sdk_android_piece.bzl",
     ],
     visibility = ["//tools/ci:__pkg__"],
 )

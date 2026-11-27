@@ -1,9 +1,11 @@
 name: Flutter and Bazel environment
 description: >
-  Installs a checksum-verified Flutter SDK and Bazelisk, prefetches Android
-  engine artifacts, and configures Bazel and the NDK.
-
+  Configures the selected Flutter SDK mode, Bazelisk, Bazel cache, and NDK.
 inputs:
+  flutter-sdk:
+    description: Install host Flutter (`host`) or use only the Bazel-provisioned SDK (`none`).
+    required: false
+    default: none
   flutter-version:
     description: Flutter SDK version; engine artifact URLs derive from it.
     required: true
@@ -39,7 +41,22 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Validate Flutter SDK mode
+      shell: bash
+      env:
+        FLUTTER_SDK_MODE: ${{ inputs.flutter-sdk }}
+      run: |
+        set -euo pipefail
+        case "$FLUTTER_SDK_MODE" in
+          host|none) ;;
+          *) echo "flutter-sdk must be 'host' or 'none', got: $FLUTTER_SDK_MODE" >&2; exit 1 ;;
+        esac
+        if [[ "$FLUTTER_SDK_MODE" == "none" ]] && command -v flutter >/dev/null 2>&1; then
+          echo "flutter-sdk=none requires Flutter to be absent from PATH before Bazel." >&2
+          exit 1
+        fi
     - name: Install the Flutter SDK
+      if: inputs.flutter-sdk == 'host'
       shell: bash
       run: |
         set -euo pipefail
@@ -73,6 +90,7 @@ runs:
 
     # Rules require a pre-existing SDK with Android engine artifacts.
     - name: Precache engine artifacts
+      if: inputs.flutter-sdk == 'host'
       shell: bash
       run: |
         flutter --version
