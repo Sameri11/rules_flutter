@@ -368,7 +368,7 @@ def _flutter_extension_impl(module_ctx):
     pins = existing
     if not _valid_pin(pins, tag.version):
         pins = _pin_version(module_ctx, tag.version, tag.base_url, pins if type(pins) == "dict" else {})
-    engine_artifacts = {} if host == None else _pin_engine_artifacts(
+    engine_artifacts = _pin_engine_artifacts(
         module_ctx,
         artifact_tags,
         pins["engine_content_hash"],

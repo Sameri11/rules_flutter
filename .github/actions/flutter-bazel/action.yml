@@ -7,7 +7,7 @@ inputs:
     required: false
     default: none
   flutter-version:
-    description: Minimum Flutter SDK version provisioned by rules_flutter.
+    description: 'Flutter version installed on the host when `flutter-sdk: host` (stock-oracle jobs).'
     required: true
   flutter-sha256:
     description: SHA-256 of the Flutter archive for the current runner platform.
@@ -88,7 +88,7 @@ runs:
         echo "FLUTTER_SUPPRESS_ANALYTICS=true" >> "$GITHUB_ENV"
         echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
 
-    # Rules provision Flutter SDK artifacts through Bazel.
+    # Stock-Flutter oracle jobs need Android engine artifacts in the host SDK; Bazel builds do not use them.
     - name: Precache engine artifacts
       if: inputs.flutter-sdk == 'host'
       shell: bash

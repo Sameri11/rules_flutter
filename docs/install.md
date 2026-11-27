@@ -49,23 +49,29 @@ extensions, Android SDK/NDK toolchain registration, Maven installation, and pub
 lock. Archive module trees do not supply a root module or a shared `.bazelrc`.
 There are no settings inherited from a rules checkout.
 
-`flutter.sdk(version = "X.Y.Z")` with stable version 3.47.0 or newer. Older
-versions and pre-releases are unsupported. The first extension resolution
-downloads artifacts to pin them in Facts in `MODULE.bazel.lock`; review and
-commit that lock before using `--lockfile_mode=error`. Artifact URLs and
-per-piece SHA-256 overrides are available on the tag, and
-`--downloader_config` can redirect downloads through mirrors (useful for slow
-or blocked GitHub access).
+`flutter.sdk(version = "X.Y.Z")` accepts stable versions 3.47.0 or newer.
+Older versions and pre-releases are unsupported. The first extension resolution
+downloads canonical artifacts and writes their pins to Facts in
+`MODULE.bazel.lock`; review and commit that lock before using
+`--lockfile_mode=error`.
+
+The tag's `urls` and `sha256` dictionaries override where locked pieces are
+fetched from, but are never written to the lock. `base_url` also redirects
+Flutter Storage URLs while pinning, including release metadata and the engine
+stamp. Pin-time framework and version files still come from GitHub and
+`raw.githubusercontent.com`; if GitHub is blocked, use Bazel's
+`--downloader_config` to rewrite both `github.com` and
+`raw.githubusercontent.com` URLs to accessible mirrors.
 
 The `flutter.sdk` tag's `sha256` and `urls` dictionaries are keyed by SDK piece:
 `dart-sdk`, `flutter_patched_sdk`, `flutter_patched_sdk_product`, `sky_engine`,
-`flutter_gpu`, `host_artifacts`, `font_subset`, `material_fonts`,
-`gradle_wrapper`, `engine_stamp`, `framework_source`,
-`ios_usb_libimobiledevice`, `ios_usb_libusbmuxd`, `ios_usb_libplist`,
-`ios_usb_openssl`, `ios_usb_libimobiledeviceglue`, and `ios_usb_ios-deploy`.
-They also accept names declared by `flutter.engine_artifact` tags (for example,
-the six `flutter_android_android_gen_*_release_{macos_arm64,linux_x64}` names
-declared by `rules_flutter_android`). An override can pin an alternate source:
+`flutter_gpu`, `host_artifacts`, `material_fonts`, `gradle_wrapper`,
+`engine_stamp`, `framework_source`, `ios_usb_libimobiledevice`,
+`ios_usb_libusbmuxd`, `ios_usb_libplist`, `ios_usb_openssl`,
+`ios_usb_libimobiledeviceglue`, and `ios_usb_ios-deploy`. They also accept names
+declared by `flutter.engine_artifact` tags (for example, the six
+`flutter_android_android_gen_*_release_{macos_arm64,linux_x64}` names declared
+by `rules_flutter_android`).
 
 ```starlark
 flutter.sdk(

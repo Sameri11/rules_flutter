@@ -1655,7 +1655,6 @@ ln -s "$SDK_ROOT/pieces/dart-sdk/dart-sdk" "$ROOT/bin/cache/dart-sdk"
 ln -s "$SDK_ROOT/pieces/flutter_patched_sdk/flutter_patched_sdk" "$ROOT/bin/cache/artifacts/engine/common/flutter_patched_sdk"
 ln -s "$SDK_ROOT/pieces/flutter_patched_sdk_product/flutter_patched_sdk_product" "$ROOT/bin/cache/artifacts/engine/common/flutter_patched_sdk_product"
 for item in "$SDK_ROOT/pieces/host_artifacts"/*; do ln -s "$item" "$ROOT/bin/cache/artifacts/engine/$ENGINE_HOST/$(basename "$item")"; done
-ln -s "$SDK_ROOT/pieces/font_subset" "$ROOT/bin/cache/artifacts/engine/$ENGINE_HOST/font-subset"
 ln -s "$SDK_ROOT/pieces/sky_engine/sky_engine" "$ROOT/bin/cache/pkg/sky_engine"
 ln -s "$SDK_ROOT/pieces/flutter_gpu" "$ROOT/bin/cache/pkg/flutter_gpu"
 ln -s "$SDK_ROOT/pieces/material_fonts" "$ROOT/bin/cache/artifacts/material_fonts"

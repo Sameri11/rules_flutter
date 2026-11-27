@@ -1,6 +1,6 @@
 """pubspec.lock -> Bazel repositories: hosted and git packages, SDK packages, and package configs.
 
-visibility(["//flutter", "//flutter:__subpackages__"])
+The `pub` module extension reads a consumer's `pubspec.lock` and creates
 
   * one repository per hosted package, downloaded through Bazel's downloader from
     `<server>/api/archives/<name>-<version>.tar.gz` and pinned to the sha256 the
