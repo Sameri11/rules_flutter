@@ -57,6 +57,7 @@ downloads canonical artifacts and writes their pins to Facts in
 
 To use a mirror, set `base_url` to redirect Flutter Storage downloads, or
 override single pieces with `urls` and `sha256`, keyed by the piece names
+recorded in the lock. Overrides never change the lock.
 Fetching can reach GitHub even after the SDK version is pinned: the tools
 lockfile comes from `raw.githubusercontent.com` on each resolution, and the
 default `framework_source` comes from `github.com` when the SDK is fetched.

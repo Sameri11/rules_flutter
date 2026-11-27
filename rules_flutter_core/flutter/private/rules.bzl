@@ -1758,7 +1758,7 @@ def _flutter_test_assets_impl(ctx):
     ctx.actions.run_shell(
         command = cmd,
         inputs = depset(
-            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.flutter, toolchain.dart, toolchain.dart_sdk_revision, toolchain.vm_platform_strong, ctx.file._bundle_guard, ctx.file._builder_dill],
+            direct = staged.files + [staged.manifest, toolchain.sdk_version, toolchain.dart, toolchain.dart_sdk_revision, toolchain.vm_platform_strong, ctx.file._bundle_guard, ctx.file._builder_dill],
         ),
         outputs = [out],
         mnemonic = "FlutterTestAssets",

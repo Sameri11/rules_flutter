@@ -446,6 +446,7 @@ class Checker:
         for target, expected in (
             ("_merger", "//flutter/private:merge_native_assets.py"),
             ("_bundle_guard", "//flutter/private:check_bundle_pubspec.py"),
+            ("_stage_sdk", "//flutter/private:stage_flutter_sdk.py"),
         ):
             if not _rule_attr_default(tree, "flutter_assets", target, expected):
                 self.fail("D", "flutter_assets must retain {} default {}".format(target, expected))

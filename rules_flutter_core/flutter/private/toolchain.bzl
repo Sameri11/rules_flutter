@@ -5,7 +5,6 @@ visibility(["//flutter"])
 FlutterToolchainInfo = provider(
     doc = "Flutter SDK files used by compiler, AOT, and asset rules.",
     fields = {
-        "flutter": "Flutter command launcher file.",
         "tools_snapshot": "flutter_tools snapshot file.",
         "tools_package_config": "flutter_tools Dart package configuration.",
         "tools_packages": "Dart source and resources for flutter_tools packages.",
@@ -29,7 +28,6 @@ FlutterToolchainInfo = provider(
 
 def _flutter_toolchain_impl(ctx):
     return [platform_common.ToolchainInfo(flutter = FlutterToolchainInfo(
-        flutter = ctx.file._flutter,
         tools_snapshot = ctx.file._tools_snapshot,
         tools_package_config = ctx.file._tools_package_config,
         tools_packages = ctx.attr._tools_packages[DefaultInfo].files,
@@ -52,7 +50,6 @@ def _flutter_toolchain_impl(ctx):
 
 def _toolchain_attrs():
     return {
-        "_flutter": attr.label(default = "@flutter_sdk//:flutter", allow_single_file = True),
         "_tools_snapshot": attr.label(default = "//flutter/private:flutter_tools_snapshot", allow_single_file = True),
         "_tools_package_config": attr.label(default = "@flutter_tools//:package_config.json", allow_single_file = True),
         "_tools_packages": attr.label(default = "@flutter_tools//:lib", allow_files = True),
