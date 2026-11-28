@@ -163,3 +163,9 @@ dev_tool(
     tool = "link",
     visibility = ["//visibility:public"],
 )
+
+dev_tool(
+    name = "flutter_tools",
+    tool = "flutter_tools",
+    visibility = ["//visibility:public"],
+)
