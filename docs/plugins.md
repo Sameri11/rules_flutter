@@ -1,8 +1,11 @@
 # Pub plugins and generated state
 
-For a standard Android plugin project, add the plugin to `pubspec.yaml`, run
-`flutter pub get`, and commit the updated `pubspec.lock`. Configure the rules and
-Android toolchains as described in [installation](install.md), then define one
+For a standard Android plugin project, add the plugin to `pubspec.yaml`, run:
+
+`bazel run @rules_flutter_core//flutter -- pub get`
+
+Commit the updated `pubspec.lock`. Configure the rules and Android toolchains as
+described in [installation](install.md), then define one
 plugin hub for the pub lock in the Consumer Module's Android config. The
 [pub_plugins example](../examples/pub_plugins/) shows a complete working setup.
 

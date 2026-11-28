@@ -104,6 +104,7 @@ Output: `bazel-bin/android/app/app_unsigned.apk`. Commit the generated
 ## Guides
 
 - [Install and configure the rules](docs/install.md)
+- [Run Dart and Flutter developer tools](docs/developer-tools.md)
 - [Configure an Android app without plugins](docs/android-app.md)
 - [Add Flutter plugins](docs/plugins.md)
 - [Use path and Git dependencies or Pub workspaces](docs/pub-dependencies.md)

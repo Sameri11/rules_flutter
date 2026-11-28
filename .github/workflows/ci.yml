@@ -93,6 +93,26 @@ jobs:
           set -euo pipefail
           python3 tools/ci/committed_lock_guard.py
 
+  stock-flutter:
+    name: Stock Flutter oracles
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/stock-flutter
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
+
+      - name: Conformance oracles recapture
+        working-directory: rules_flutter_core
+        run: python3 tests/flutter_test_conformance/rebaseline.py --check
+
+      - name: Registrant parity recapture
+        working-directory: rules_flutter_android
+        run: python3 tests/registrant_parity/capture.py --check
+
   core:
     name: Core module and consumers
     runs-on: ubuntu-latest
@@ -102,7 +122,7 @@ jobs:
 
       - uses: ./.github/actions/flutter-bazel
         with:
-          flutter-sdk: host
+          flutter-sdk: none
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
@@ -118,10 +138,21 @@ jobs:
           set -o pipefail
           env -u ANDROID_HOME -u ANDROID_NDK_HOME bazel test //... --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} 2>&1 | tee ../bazel_test_core.log
 
-      # An SDK change that moves a conformance case outcome fails here.
-      - name: Conformance oracles recapture
-        working-directory: rules_flutter_core
-        run: python3 tests/flutter_test_conformance/rebaseline.py --check
+      - name: Consumer pub get through the SDK wrapper
+        working-directory: tests/consumer
+        run: |
+          set -euo pipefail
+          bazel run @rules_flutter_core//flutter -- pub get
+          git diff --exit-code -- pubspec.lock
+
+      - name: Dart code generation through the SDK wrapper
+        working-directory: rules_flutter_core/tests/developer_tools/build_runner_fixture
+        run: |
+          set -euo pipefail
+          bazel run //flutter:dart -- pub get
+          bazel run //flutter:dart -- run build_runner build
+          git diff --exit-code -- pubspec.lock lib/model.g.dart
+
 
       # The core output base is not read by later steps; release it before the consumer builds.
       - name: Release core output base
@@ -296,7 +327,7 @@ jobs:
 
       - uses: ./.github/actions/flutter-bazel
         with:
-          flutter-sdk: host
+          flutter-sdk: none
           flutter-version: ${{ env.FLUTTER_VERSION }}
           flutter-sha256: ${{ env.FLUTTER_SHA256_LINUX_X64 }}
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
@@ -316,11 +347,6 @@ jobs:
         working-directory: rules_flutter_android
         run: bazel test --@rules_flutter_core//flutter:mode=debug --lockfile_mode=${{ env.BAZEL_LOCKFILE_MODE }} //tests/registrant_parity:all
 
-      # The registrant parity goldens, recaptured from this Flutter SDK, must
-      # still match: a template change in flutter_tools fails here.
-      - name: Registrant parity recapture
-        working-directory: rules_flutter_android
-        run: python3 tests/registrant_parity/capture.py --check
 
       - name: Report cache statistics
         if: always()

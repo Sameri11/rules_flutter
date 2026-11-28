@@ -55,47 +55,11 @@ runs:
           echo "flutter-sdk=none requires Flutter to be absent from PATH before Bazel." >&2
           exit 1
         fi
-    - name: Install the Flutter SDK
+    - uses: ./.github/actions/stock-flutter
       if: inputs.flutter-sdk == 'host'
-      shell: bash
-      run: |
-        set -euo pipefail
-        case "$RUNNER_OS/$RUNNER_ARCH" in
-          macOS/ARM64)
-            platform="macos"
-            archive="flutter_macos_arm64_${{ inputs.flutter-version }}-stable.zip"
-            ;;
-          Linux/X64)
-            platform="linux"
-            archive="flutter_linux_${{ inputs.flutter-version }}-stable.tar.xz"
-            ;;
-          *)
-            echo "unsupported Flutter runner: $RUNNER_OS/$RUNNER_ARCH" >&2
-            exit 1
-            ;;
-        esac
-        curl -fsSL -o "$RUNNER_TEMP/$archive" \
-          "https://storage.googleapis.com/flutter_infra_release/releases/stable/$platform/$archive"
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          echo "${{ inputs.flutter-sha256 }}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
-          unzip -q "$RUNNER_TEMP/$archive" -d "$HOME"
-        else
-          echo "${{ inputs.flutter-sha256 }}  $RUNNER_TEMP/$archive" | sha256sum -c -
-          tar -xJf "$RUNNER_TEMP/$archive" -C "$HOME"
-        fi
-        rm "$RUNNER_TEMP/$archive"
-        echo "FLUTTER_ROOT=$HOME/flutter" >> "$GITHUB_ENV"
-        echo "FLUTTER_SUPPRESS_ANALYTICS=true" >> "$GITHUB_ENV"
-        echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
-
-    # Stock-Flutter oracle jobs need Android engine artifacts in the host SDK; Bazel builds do not use them.
-    - name: Precache engine artifacts
-      if: inputs.flutter-sdk == 'host'
-      shell: bash
-      run: |
-        flutter --version
-        flutter precache --android
-
+      with:
+        flutter-version: ${{ inputs.flutter-version }}
+        flutter-sha256: ${{ inputs.flutter-sha256 }}
     - name: Install bazelisk
       shell: bash
       run: |

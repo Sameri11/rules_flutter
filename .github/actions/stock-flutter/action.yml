@@ -1,0 +1,51 @@
+name: Install stock Flutter
+description: Installs the selected host Flutter SDK and Android artifacts.
+inputs:
+  flutter-version:
+    description: Flutter stable release to install.
+    required: true
+  flutter-sha256:
+    description: SHA-256 of the runner's Flutter archive.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install the Flutter SDK
+      shell: bash
+      env:
+        FLUTTER_VERSION: ${{ inputs.flutter-version }}
+        FLUTTER_SHA256: ${{ inputs.flutter-sha256 }}
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS/$RUNNER_ARCH" in
+          macOS/ARM64)
+            platform="macos"
+            archive="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
+            ;;
+          Linux/X64)
+            platform="linux"
+            archive="flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
+            ;;
+          *)
+            echo "unsupported Flutter runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+            exit 1
+            ;;
+        esac
+        curl -fsSL -o "$RUNNER_TEMP/$archive" \
+          "https://storage.googleapis.com/flutter_infra_release/releases/stable/$platform/$archive"
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/$archive" -d "$HOME"
+        else
+          echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$HOME"
+        fi
+        rm "$RUNNER_TEMP/$archive"
+        echo "FLUTTER_ROOT=$HOME/flutter" >> "$GITHUB_ENV"
+        echo "FLUTTER_SUPPRESS_ANALYTICS=true" >> "$GITHUB_ENV"
+        echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+    - name: Precache Android artifacts
+      shell: bash
+      run: |
+        flutter --version
+        flutter precache --android

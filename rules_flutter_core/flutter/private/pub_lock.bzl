@@ -336,7 +336,7 @@ def _pub_hub_impl(rctx):
         pubspec = rctx.path(Label("@flutter_sdk//:{}/pubspec.yaml".format(sdk_package_root(name))))
         if not pubspec.exists:
             fail(("pub hub {}: pubspec.lock names SDK package `{}`, but the Flutter SDK " +
-                  "has no {}/pubspec.yaml. Run `flutter pub get` with the SDK this build uses.").format(
+                  "has no {}/pubspec.yaml. Run `bazel run @rules_flutter_core//flutter -- pub get` before building.").format(
                 rctx.attr.name,
                 name,
                 sdk_package_root(name),

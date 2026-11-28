@@ -72,8 +72,8 @@ flutter.sdk(
 )
 ```
 
-The host Flutter installation remains useful for IDE workflows, `pub get`, and
-`build_runner`, but Bazel builds use the pinned SDK. Android SDK/NDK are local
+Host Flutter is needed only for IDE setup; run `pub get` and code generators
+with the [provisioned developer tools](developer-tools.md). Android SDK/NDK are
 prerequisites; use Android SDK platform 36, build-tools 36.0.0, and NDK 28 or
 newer. Set `ANDROID_HOME` and `ANDROID_NDK_HOME`. SDK provisioning requires
 `bash`, `python3`, and `tar`. Commit `pubspec.lock` and generated

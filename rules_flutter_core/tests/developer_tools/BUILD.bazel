@@ -1,0 +1,21 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+sh_test(
+    name = "developer_tools_test",
+    srcs = ["//:tests/developer_tools_test.sh"],
+    args = [
+        "$(location //flutter:flutter)",
+        "$(location //flutter:dart)",
+        "$(location :offline_fixture)",
+    ],
+    data = [
+        "//flutter:flutter",
+        "//flutter:dart",
+        ":offline_fixture",
+    ],
+)
+
+filegroup(
+    name = "offline_fixture",
+    srcs = ["offline_fixture/pubspec.yaml"],
+)
