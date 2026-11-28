@@ -26,6 +26,8 @@ registration points at the public static toolchain target.
 """
 
 load(":flutter_tools_snapshot.bzl", "flutter_tools_kernel")
+load(":dev_tools.bzl", "dev_tool")
+
 load(":hook_packages_test.bzl", "staged_hook_packages_test")
 load(":pub_lock_parser_test.bzl", "pub_lock_parser_test_suite")
 load(":rules.bzl", "flutter_target_slice")
@@ -143,3 +145,21 @@ flutter_target_slice(
 pub_lock_parser_test_suite(name = "pub_lock_parser_test")
 
 staged_hook_packages_test(name = "staged_hook_packages_test")
+
+dev_tool(
+    name = "dart",
+    tool = "dart",
+    visibility = ["//visibility:public"],
+)
+
+dev_tool(
+    name = "flutter",
+    tool = "bin/flutter",
+    visibility = ["//visibility:public"],
+)
+
+dev_tool(
+    name = "sdk_link",
+    tool = "link",
+    visibility = ["//visibility:public"],
+)
